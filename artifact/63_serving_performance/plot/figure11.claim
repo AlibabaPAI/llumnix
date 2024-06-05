@@ -1,0 +1,13 @@
+Llumnix vs. INFaaS++
+Request Latency(s):
+Request Mean outperforms up to: 1.65x
+Request P99 outperforms up to: 2.59x
+Prefill Latency(s):
+Prefill Mean outperforms up to: 6.10x
+Prefill P99 outperforms up to: 15.63x
+Decode Latency(s):
+Decode Mean outperforms up to: 1.16x
+Decode P99 outperforms up to: 1.61x
+Preemption Loss(s):
+Preemption Loss average reduction ratio: 99.98%
+Preemption Loss average reduction values: 4.15s

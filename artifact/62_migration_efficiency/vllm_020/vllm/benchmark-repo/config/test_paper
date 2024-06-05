@@ -1,0 +1,53 @@
+PORT=1032
+new_session_ratio=1.0
+session_0_ratio=0.5
+load_metric="consumed_speed"
+migrate_strategy="LCFS"
+priority_ratio=0.0
+
+# Run real test
+
+model=/mnt/data/models/huggingface-models/llama-trained/llama-7b/
+num_prompts=10000
+
+# oranges=("32" "128" "512" "1536")
+# max_batch_total_tokens_vals=("8700" "7500" "8100" "8100")
+# oranges=("1560")
+oranges=("6144")
+max_batch_total_tokens_vals=("12800")
+
+instance_parallel_size=8
+tensor_parallel_size=1
+
+enable_load_control_prefill=1
+dispatch_mode=local
+global_dispatch_strategy=BE
+need_dispatch_frequency=1
+dispatch_strategy=load
+
+need_migrate_frequency=4
+migrate_out_threshold=3
+migrate_in_threshold=3
+
+
+scale_threshold=10
+scale_strategy=avg_load
+scale_up_threshold=$(echo "$scale_threshold" | bc -l)
+scale_down_threshold=$(echo "$scale_threshold + 50" | bc -l)
+min_replicas=8
+max_replicas=8
+
+imean=128
+irange=6144
+omean=128
+# "uniform", "exponential", "capped_exponential"
+odist=zipf
+idist=zipf
+qps=$1
+# "burst", "uniform", "poisson", "gamma"
+query_distribution=poisson
+coefficient_variation=3
+enable_migrate=$2
+migrate_backend="gloo"
+results_path="0306_test"
+dataset="/mnt/data/huangziming/artifact/vllm_020/vllm/benchmark-repo/sharegpt_gpt4.jsonl"

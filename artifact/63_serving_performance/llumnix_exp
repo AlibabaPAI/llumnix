@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+
+# 0: config
+# 1: qps, 2: query_distribution, 3: coefficient_variation
+# 4: imean, 5: omean
+# 6: dispatch_strategy, 7: enable_migrate, 8: enable_defrag, 9: migrate_threshold
+# 10: log_dirname
+
+source $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} ${11}
+script_args=("$@")
+
+# Run real test
+
+if [ ! -d "./log/"$log_path ]; then
+    mkdir -p "./log/"$log_path
+fi
+
+config=$1
+config_filepath=$(readlink -f "$config")
+
+function start_model_server_migrate {
+    local max_num_batched_tokens=$1
+    declare -g output_filename="./log/"$log_path"/"enable_migrate_$(date '+%Y-%m-%d_%H:%M:%S').log
+    config_backup_filepath="${output_filename%.log}.config"
+    cp "$config_filepath" "$config_backup_filepath"
+
+    echo "" >> $config_backup_filepath
+    echo "shell params: " >> $config_backup_filepath
+    printf "%s " "${script_args[@]}" >> $config_backup_filepath
+
+    echo "enable migrate"
+
+    ulimit -n 65536 && RAY_DEDUP_LOGS=0 && CUDA_VISIBLE_DEVICES=0,1,2,3 \
+    python -m vllm.entrypoints.api_server \
+        --port $PORT \
+        --model /mnt/data/models/huggingface-models/llama-trained/llama-7b/ \
+        --swap-space 16 \
+        --engine-use-ray \
+        --worker-use-ray \
+        --instance-parallel-size $instance_parallel_size \
+        --use-np-weights \
+        --max-num-batched-tokens $max_num_batched_tokens \
+        --dispatch-strategy $dispatch_strategy \
+        --enable-load-control-prefill $enable_defrag \
+        --need-migrate-frequency $need_migrate_frequency \
+        --migrate-out-threshold $migrate_threshold \
+        --migrate-in-threshold $migrate_threshold \
+        --disable-log-requests-engine \
+        --results-filename $output_filename \
+        --enable-migrate \
+        --async-migrate \
+        2>&1 | tee $output_filename &
+
+    while [ "$(curl -s http://localhost:${PORT}/is_ready | grep true | wc -l)" -eq 0 ]; do
+        sleep 1
+    done
+    echo "model server started on port $PORT"
+}
+
+function start_model_server {
+    local max_num_batched_tokens=$1
+    declare -g output_filename="./log/"$log_path"/"disable_migrate_$(date '+%Y-%m-%d_%H:%M:%S').log
+    config_backup_filepath="${output_filename%.log}.config"
+    cp "$config_filepath" "$config_backup_filepath"
+
+    echo "" >> $config_backup_filepath
+    echo "shell params: " >> $config_backup_filepath
+    printf "%s " "${script_args[@]}" >> $config_backup_filepath
+
+    echo "disable migrate"
+
+    ulimit -n 65536 && RAY_DEDUP_LOGS=0 && CUDA_VISIBLE_DEVICES=0,1,2,3 \
+    python -m vllm.entrypoints.api_server \
+        --port $PORT \
+        --model /mnt/data/models/huggingface-models/llama-trained/llama-7b/ \
+        --swap-space 16 \
+        --engine-use-ray \
+        --worker-use-ray \
+        --instance-parallel-size $instance_parallel_size \
+        --use-np-weights \
+        --max-num-batched-tokens $max_num_batched_tokens \
+        --dispatch-strategy $dispatch_strategy \
+        --enable-load-control-prefill $enable_defrag \
+        --need-migrate-frequency $need_migrate_frequency \
+        --migrate-out-threshold $migrate_threshold \
+        --migrate-in-threshold $migrate_threshold \
+        --disable-log-requests-engine \
+        --results-filename $output_filename \
+        2>&1 | tee $output_filename &
+
+    while [ "$(curl -s http://localhost:${PORT}/is_ready | grep true | wc -l)" -eq 0 ]; do
+        sleep 1
+    done
+    echo "model server started on port $PORT"
+}
+
+function kill_model_server {
+    echo 'killing model server'
+    ps aux | grep 'vllm.entrypoints.api_server ' | grep -v 'vim' | awk '{print $2}' | xargs kill -9
+    wait
+}
+
+trap kill_model_server EXIT
+
+# Run real test
+for i in ${!oranges[@]}; do
+    orange=${oranges[$i]}
+    max_num_batched_tokens=${max_batch_total_tokens_vals[$i]}
+
+    declare -g output_filename="./log/"$log_path"/disable_migrate_$(date '+%Y-%m-%d_%H:%M:%S').log"
+
+    if [ $enable_migrate -gt 0 ]; then
+        start_model_server_migrate $max_num_batched_tokens
+    else
+        start_model_server $max_num_batched_tokens
+    fi
+
+    ulimit -n 65536 && python ../../benchmarks-repo/benchmark_throughput.py \
+        --port $PORT \
+        --backend vLLM \
+        --tokenizer /mnt/data/models/huggingface-models/llama-trained/llama-7b/ \
+        --random_prompt_lens_mean $imean \
+        --random_prompt_lens_range $irange \
+        --variable_prompt_lens_distribution $idist \
+        --random_prompt_count $num_prompts \
+        --gen_random_prompts \
+        --variable_response_lens_mean $omean \
+        --variable_response_lens_range $orange \
+        --variable_response_lens_distribution $odist \
+        --allow_variable_generation_length \
+        --gen_random_session_id \
+        --new_session_ratio 1.0 \
+        --session_0_ratio 0.5 \
+        --qps $qps \
+        --distribution $query_distribution \
+        --coefficient_variation $coefficient_variation \
+        --log_latencies \
+        --fail_on_response_failure \
+        --results_filename $output_filename \
+        2>&1 | tee -a $output_filename
+
+    kill_model_server
+done
+
+python ./plot/process_log.py --log-filename $output_filename

@@ -1,0 +1,14 @@
+Figure 10, the downtime of migration is nearly constant with
+increasing sequence lengths (roughly 20-30 ms), even shorter
+than a single decode step. In comparison, the downtimes of
+baselines increase with the sequence lengths, reaching up
+to 111× that of migration. For example, recomputing an 8k
+sequence for LLaMA-30B takes 3.5s, which translates to a
+service stall similar to 54 decode steps.
+Figure 10 also compares the per-step decode times during
+migration on the source instance with that during normal execution (results on the destination are mostly similar). We
+observe up to 1% performance differences for both LLaMA7B and LLaMA-30B, showing the negligible migration overhead. Also note that such overhead exists only when there are
+requests being migrated (in or out) on an instance. We find
+that in all the serving experiments in the following sections,
+the average fraction of time span with ongoing migration for
+each instance is only roughly 10%.

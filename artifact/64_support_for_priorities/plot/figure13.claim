@@ -1,0 +1,24 @@
+Llumnix vs. Llumnix-base
+Normal Reqeust:
+Request Mean increase up to: 1.03x
+Request P99 increase up to: 1.08x
+Prefill Latency(s):
+Prefill Mean increase up to: 1.03x
+Prefill P99 increase up to: 1.12x
+Decode Latency(s):
+Decode Mean increase up to: 1.04x
+Decode P99 increase up to: 1.04x
+Decode Execution Time(s):
+Decode Execution Time(s) increase up to: 1.04x
+High Priority Reqeust:
+Request Latency(s):
+Request Mean outperforms up to: 1.51x
+Request P99 outperforms up to: 1.15x
+Prefill Latency(s):
+Prefill Mean outperforms up to: 11.24x
+Prefill P99 outperforms up to: 16.16x
+Decode Latency(s):
+Decode Mean outperforms up to: 1.44x
+Decode P99 outperforms up to: 1.69x
+Decode Execution Time(s):
+Decode Execution Time(s) outperforms up to: 1.31x

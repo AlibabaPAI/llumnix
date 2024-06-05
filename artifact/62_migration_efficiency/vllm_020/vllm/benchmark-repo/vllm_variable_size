@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+source $1 $2 $3
+# Run real test
+
+if [ ! -d "./results/"$results_path ]; then
+    mkdir -p "./results/"$results_path
+fi
+
+config=$1
+config_filepath=$(readlink -f "$config")
+config_basename=$(basename "$config")
+target_filepath="./results/"$results_path"/"$config_basename"_$(date '+%Y-%m-%d_%H:%M:%S').config"
+cp "$config_filepath" "$target_filepath"
+echo "cp $config_filepath to $target_filepath"
+
+# export PYTHONPATH=$PYTHONPATH:/mnt/wencong.xwc/huangziming/vllm
+
+function start_model_server_nsys {
+    local max_num_batched_tokens=$1
+    local output_filename=$2
+    ulimit -n 65536 && RAY_DEDUP_LOGS=0 \
+    nsys profile --trace=cuda,nvtx -y 5 -d 60 --sample=none --cpuctxsw=none -o $output_filename  python -m vllm.entrypoints.api_server \
+        --port $PORT \
+        --model $model \
+        --swap-space 16 \
+        --engine-use-ray \
+        --worker-use-ray \
+        --instance-parallel-size $instance_parallel_size \
+        --max-model-len 12500 \
+        --tensor-parallel-size $tensor_parallel_size \
+        --max-num-batched-tokens $max_num_batched_tokens \
+        --load-metric $load_metric \
+        --enable-load-control-prefill $enable_load_control_prefill \
+        --prefill-SLO 5 \
+        --dispatch-strategy $dispatch_strategy \
+        --need-migrate-frequency $need_migrate_frequency \
+        --migrate-out-threshold $migrate_out_threshold \
+        --migrate-in-threshold $migrate_in_threshold \
+        --migrate-backend $migrate_backend \
+        --enable-scaling \
+        --scale-strategy $scale_strategy \
+        --scale-up-threshold $scale_up_threshold \
+        --scale-down-threshold $scale_down_threshold \
+        --min-replicas $min_replicas \
+        --max-replicas $max_replicas \
+        --gpu-memory-utilization 0.9 \
+        --disable-log-requests-engine \
+        --results-filename $output_filename \
+        --enable-migrate \
+        --async-migrate \
+        --dispatch-mode $dispatch_mode \
+        --need-dispatch-frequency $need_dispatch_frequency \
+        --global-dispatch-strategy $global_dispatch_strategy \
+        --migrate-strategy $migrate_strategy \
+        2>&1 | tee $output_filename &
+
+    while [ "$(curl -s http://localhost:${PORT}/is_ready | grep true | wc -l)" -eq 0 ]; do
+        sleep 1
+    done
+    echo "model server started on port $PORT"
+}
+
+function start_model_server_migrate {
+    local max_num_batched_tokens=$1
+    local output_filename=$2
+
+    ulimit -n 65536 && export RAY_DEDUP_LOGS=0 && export CUDA_VISIBLE_DEVICES=0,1,2,3 && \
+    python -m vllm.entrypoints.api_server \
+        --port $PORT \
+        --model $model \
+        --swap-space 16 \
+        --engine-use-ray \
+        --worker-use-ray \
+        --instance-parallel-size $instance_parallel_size \
+        --tensor-parallel-size $tensor_parallel_size \
+        --max-model-len $max_num_batched_tokens \
+        --max-num-batched-tokens $max_num_batched_tokens \
+        --load-metric $load_metric \
+        --enable-load-control-prefill $enable_load_control_prefill \
+        --prefill-SLO 5 \
+        --dispatch-strategy $dispatch_strategy \
+        --need-migrate-frequency $need_migrate_frequency \
+        --migrate-out-threshold $migrate_out_threshold \
+        --migrate-in-threshold $migrate_in_threshold \
+        --migrate-backend $migrate_backend \
+        --enable-scaling \
+        --scale-strategy $scale_strategy \
+        --scale-up-threshold $scale_up_threshold \
+        --scale-down-threshold $scale_down_threshold \
+        --min-replicas $min_replicas \
+        --max-replicas $max_replicas \
+        --gpu-memory-utilization 0.9 \
+        --disable-log-requests-engine \
+        --results-filename $output_filename \
+        --enable-migrate \
+        --async-migrate \
+        --dispatch-mode $dispatch_mode \
+        --need-dispatch-frequency $need_dispatch_frequency \
+        --global-dispatch-strategy $global_dispatch_strategy \
+        --migrate-strategy $migrate_strategy \
+        2>&1 | tee $output_filename &
+        # --tokenizer 'facebook/opt-13b' \
+        # --enable-migrate \
+        # --async-migrate \
+
+    while [ "$(curl -s http://localhost:${PORT}/is_ready | grep true | wc -l)" -eq 0 ]; do
+        sleep 1
+    done
+    echo "model server started on port $PORT"
+}
+
+function start_model_server {
+    local max_num_batched_tokens=$1
+    local output_filename=$2
+
+    echo "disable migrate"
+
+    ulimit -n 65536 && RAY_DEDUP_LOGS=0 && CUDA_VISIBLE_DEVICES=0,1,2,3 \
+    python -m vllm.entrypoints.api_server \
+        --port $PORT \
+        --model $model \
+        --swap-space 16 \
+        --engine-use-ray \
+        --worker-use-ray \
+        --instance-parallel-size $instance_parallel_size \
+        --tensor-parallel-size $tensor_parallel_size \
+        --max-model-len $max_num_batched_tokens \
+        --max-num-batched-tokens $max_num_batched_tokens \
+        --load-metric $load_metric \
+        --enable-load-control-prefill $enable_load_control_prefill \
+        --prefill-SLO 5 \
+        --dispatch-strategy $dispatch_strategy \
+        --need-migrate-frequency $need_migrate_frequency \
+        --migrate-out-threshold $migrate_out_threshold \
+        --migrate-in-threshold $migrate_in_threshold \
+        --migrate-backend $migrate_backend \
+        --enable-scaling \
+        --scale-strategy $scale_strategy \
+        --scale-up-threshold $scale_up_threshold \
+        --scale-down-threshold $scale_down_threshold \
+        --min-replicas $min_replicas \
+        --max-replicas $max_replicas \
+        --gpu-memory-utilization 0.9 \
+        --disable-log-requests-engine \
+        --results-filename $output_filename \
+        --dispatch-mode $dispatch_mode \
+        --need-dispatch-frequency $need_dispatch_frequency \
+        --global-dispatch-strategy $global_dispatch_strategy \
+        --migrate-strategy $migrate_strategy \
+        2>&1 | tee $output_filename &
+        # --tokenizer 'facebook/opt-13b' \
+
+    while [ "$(curl -s http://localhost:${PORT}/is_ready | grep true | wc -l)" -eq 0 ]; do
+        sleep 1
+    done
+    echo "model server started on port $PORT"
+}
+
+function kill_model_server {
+    echo 'killing model server'
+    ps aux | grep 'vllm.entrypoints.api_server ' | grep -v 'vim' | awk '{print $2}' | xargs kill -9
+    wait
+}
+
+trap kill_model_server EXIT
+
+# # Catch OOMs early.
+# for i in ${!ranges[@]}; do
+#     range=${ranges[$i]}
+#     max_num_batched_tokens=${max_batch_total_tokens_vals[$i]}
+#     echo "range $range, max_num_batched_tokens $max_num_batched_tokens"
+
+#     # start_model_server $max_num_batched_tokens
+
+#     ./benchmark_throughput.py \
+#         --port $PORT \
+#         --backend vLLM  \
+#         --random_prompt_lens_mean 512 \
+#         --random_prompt_lens_range 0 \
+#         --random_prompt_count 30 \
+#         --gen_random_prompts \
+#         --fixed_max_tokens $range
+#     kill_model_server
+
+# done
+
+# Run real test
+for i in ${!oranges[@]}; do
+    orange=${oranges[$i]}
+    max_num_batched_tokens=${max_batch_total_tokens_vals[$i]}
+    if [ $enable_migrate -gt 0 ]; then
+        results_filename="./results/"$results_path"/enable_migrate_$(date '+%Y-%m-%d_%H:%M:%S').log"
+        start_model_server_migrate $max_num_batched_tokens $results_filename
+
+    else
+        results_filename="./results/"$results_path"/disable_migrate_$(date '+%Y-%m-%d_%H:%M:%S').log"
+        start_model_server $max_num_batched_tokens $results_filename
+    fi
+    touch $results_filename
+    config=$1
+    config_filepath=$(readlink -f "$config")
+    config_basename=$(basename "$config")
+    target_filepath="./sim_results/"$results_path"/"$config_basename"_$(date '+%Y-%m-%d_%H:%M:%S').config"
+    cp "$config_filepath" "$target_filepath"
+    echo "cp $config_filepath to $target_filepath"
+    echo "max-num-batched-tokens $max_num_batched_tokens" >> $results_filename
+    echo "instance-parallel-size $instance_parallel_size" >> $results_filename
+    echo "load-metric $load_metric, enable-load-control-prefill $enable_load_control_prefill" >> $results_filename
+    echo "dispatch-strategy $dispatch_strategy, need-migrate-frequency $need_migrate_frequency, migrate-out-threshold $migrate_out_threshold, migrate-in-threshold $migrate_in_threshold" >> $results_filename
+
+    echo "random_prompt_count $num_prompts, random_prompt_lens_mean $imean, random_prompt_lens_range $irange, variable_prompt_lens_distribution $idist" >> $results_filename
+    echo "variable_response_lens_mean $omean, variable_response_lens_range $orange, variable_response_lens_distribution $odist" >> $results_filename
+
+    echo "new_session_ratio $new_session_ratio, session_0_ratio $session_0_ratio" >> $results_filename
+    echo "qps $qps, query_distribution $query_distribution" >> $results_filename
+
+    ulimit -n 65536 && python ./benchmark_throughput.py \
+        --port $PORT \
+        --backend vLLM \
+        --tokenizer /mnt/data/models/huggingface-models/llama-trained/llama-7b/ \
+        --random_prompt_lens_mean $imean \
+        --random_prompt_lens_range $irange \
+        --variable_prompt_lens_distribution $idist \
+        --random_prompt_count $num_prompts \
+        --variable_response_lens_mean $omean \
+        --variable_response_lens_range $orange \
+        --variable_response_lens_distribution $odist \
+        --allow_variable_generation_length \
+        --gen_random_session_id \
+        --new_session_ratio $new_session_ratio \
+        --session_0_ratio $session_0_ratio \
+        --qps $qps \
+        --distribution $query_distribution \
+        --coefficient_variation $coefficient_variation \
+        --prefill_SLO 5 \
+        --priority_ratio $priority_ratio \
+        --log_latencies \
+        --fail_on_response_failure \
+        --gen_random_prompts \
+        --results_filename $results_filename \
+        --enable_migrate $enable_migrate \
+        2>&1 | tee -a $results_filename
+    # --tokenizer 'facebook/opt-13b' \
+    kill_model_server
+
+done
+
+python plot_utils.py --log-file1 $results_filename

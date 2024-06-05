@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+# 1: qps, 2: query_distribution, 3: coefficient_variation
+# 4: imean, 5: omean
+# 6: dispatch_strategy, 7: enable_migrate, 8: enable_defrag, 9: scaling_threshold
+# 10: log_dirname
+
+instance_parallel_size=8
+max_batch_total_tokens_vals=("12000")
+export PORT=1032
+
+num_prompts=10000
+qps=$1
+# burst, uniform, poisson, gamma
+query_distribution=$2
+coefficient_variation=$3
+
+# idist: uniform, exponential, capped_exponential, zipf
+idist=zipf
+imean=$4
+irange=6144
+# odist: uniform, exponential, capped_exponential, zipf
+odist=zipf
+omean=$5
+oranges=6144
+
+# dispatch_strategy: balanced, load
+dispatch_strategy=$6
+enable_migrate=$7
+enable_defrag=$8
+need_migrate_frequency=4
+migrate_threshold=3
+
+scale_threshold=$9
+scale_strategy=avg_load
+scale_up_threshold=$(echo "$scale_threshold" | bc -l)
+scale_down_threshold=$(echo "$scale_threshold + 50" | bc -l)
+min_replicas=1
+max_replicas=16
+
+
+log_dirname=${10}
+
+# TODO(yiwang): keep directory name unchanged temporarily
+log_path="qps${qps}_prompts${num_prompts}_${query_distribution}_cv${coefficient_variation}_imean${imean}_omean${omean}_${dispatch_strategy}_migrate${enable_migrate}_defrag${enable_defrag}_scale${scale_threshold}"
+if [ -n $log_dirname ]; then
+    log_path=$log_dirname"/"$log_path
+fi

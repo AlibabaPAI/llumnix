@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+
+source $1 $2 $3
+# Run real test
+
+
+if [ ! -d "./sim_results/"$results_path ]; then
+    mkdir -p "./sim_results/"$results_path
+fi
+config=$1
+config_filepath=$(readlink -f "$config")
+config_basename=$(basename "$config")
+target_filepath="./sim_results/"$results_path"/"$config_basename"_$(date '+%Y-%m-%d_%H:%M:%S').config"
+cp "$config_filepath" "$target_filepath"
+
+function start_model_server_migrate {
+    args_enable_migrate
+    for i in ${!oranges[@]}; do
+        orange=${oranges[$i]}
+        max_num_batched_tokens=${max_batch_total_tokens_vals[$i]}
+        
+        results_filename="./sim_results/"$results_path"/vllm_maxtok_${max_num_batched_tokens}_idist_${idist}_imean_${imean}_irange_${irange}_odist_${odist}_omean_${omean}_orange_${orange}_$(date '+%Y-%m-%d_%H:%M:%S').log"
+        declare -g output_filename="./sim_results/"$results_path"/enable_migrate_$(date '+%Y-%m-%d_%H:%M:%S').log"
+        touch $results_filename
+        echo "enable migrate"
+
+        echo "max-num-batched-tokens $max_num_batched_tokens" >> $results_filename
+        echo "instance-parallel-size $instance_parallel_size" >> $results_filename
+        echo "load-metric $load_metric, enable-load-control-prefill $enable_load_control_prefill" >> $results_filename
+        echo "dispatch-strategy $dispatch_strategy, need-migrate-frequency $need_migrate_frequency, migrate-out-threshold $migrate_out_threshold, migrate-in-threshold $migrate_in_threshold" >> $results_filename
+        echo "min-replicas $min_replicas, max-replicas $max_replicas, scale-up-threshold $scale_up_threshold, scale-down-threshold $scale_down_threshold" >> $results_filename
+ 
+        echo "random_prompt_count $num_prompts, random_prompt_lens_mean $imean, random_prompt_lens_range $irange" >> $results_filename
+        echo "variable_response_lens_mean $omean, variable_response_lens_range $orange, variable_response_lens_distribution $odist" >> $results_filename
+        
+        echo "new_session_ratio $new_session_ratio, session_0_ratio $session_0_ratio" >> $results_filename
+        echo "qps $qps, query_distribution $query_distribution, coefficient_variation $coefficient_variation" >> $results_filename
+        
+        ulimit -n 65536 && python ./benchmark_throughput_sim.py \
+            --port $PORT \
+            --backend vLLM \
+            --tokenizer /mnt/wencong.xwc/models/huggingface-models/llama-trained/llama-7b/ \
+            --random_prompt_lens_mean $imean \
+            --random_prompt_lens_range $irange \
+            --variable_prompt_lens_distribution $idist \
+            --random_prompt_count $num_prompts \
+            --gen_random_prompts \
+            --variable_response_lens_mean $omean \
+            --variable_response_lens_range $orange \
+            --variable_response_lens_distribution $odist \
+            --allow_variable_generation_length \
+            --gen_random_session_id \
+            --new_session_ratio $new_session_ratio \
+            --session_0_ratio $session_0_ratio \
+            --qps $qps \
+            --distribution $query_distribution \
+            --coefficient_variation $coefficient_variation \
+            --log_latencies \
+            --fail_on_response_failure \
+            --model /mnt/wencong.xwc/models/huggingface-models/llama-trained/llama-7b/ \
+            --swap-space 16 \
+            --instance-parallel-size $instance_parallel_size \
+            --use-np-weights \
+            --max-num-batched-tokens $max_num_batched_tokens \
+            --load-metric $load_metric \
+            --enable-load-control-prefill $enable_load_control_prefill \
+            --prefill_SLO 5 \
+            --dispatch-strategy $dispatch_strategy \
+            --need-migrate-frequency $need_migrate_frequency \
+            --migrate-out-threshold $migrate_out_threshold \
+            --migrate-in-threshold $migrate_in_threshold \
+            --scale-strategy $scale_strategy \
+            --scale-up-threshold $scale_up_threshold \
+            --scale-down-threshold $scale_down_threshold \
+            --min-replicas $min_replicas \
+            --max-replicas $max_replicas \
+            --disable-log-requests-engine \
+            --enable-migrate \
+            --async-migrate \
+            --enable-scaling \
+            --profiling-result-file-path /mnt/wencong.xwc/huangziming/vllm/vllm/simulator/profiling_result_new.pkl \
+            --results-filename $output_filename \
+            --dispatch-mode $dispatch_mode \
+            --priority_ratio $priority_ratio \
+            --need-dispatch-frequency $need_dispatch_frequency \
+            --global-dispatch-strategy $global_dispatch_strategy \
+            --migrate-strategy $migrate_strategy \
+            2>&1 | tee -a $output_filename
+            # --enable-scaling \
+            # --tokenizer 'facebook/opt-13b' \
+
+    done
+}
+
+function start_model_server {
+    args_disable_migrate
+    for i in ${!oranges[@]}; do
+        orange=${oranges[$i]}
+        max_num_batched_tokens=${max_batch_total_tokens_vals[$i]}
+        
+        results_filename="./sim_results/"$results_path"/vllm_maxtok_${max_num_batched_tokens}_imean_${imean}_irange_${irange}_omean${omean}_orange${orange}_$(date '+%Y-%m-%d_%H:%M:%S').log"
+        declare -g output_filename="./sim_results/"$results_path"/disable_migrate_$(date '+%Y-%m-%d_%H:%M:%S').log"
+        touch $results_filename
+
+        echo "disable migrate"
+        
+        ulimit -n 65536 && python ./benchmark_throughput_sim.py \
+            --port $PORT \
+            --backend vLLM \
+            --tokenizer /mnt/wencong.xwc/models/huggingface-models/llama-trained/llama-7b/ \
+            --random_prompt_lens_mean $imean \
+            --random_prompt_lens_range $irange \
+            --variable_prompt_lens_distribution $idist \
+            --random_prompt_count $num_prompts \
+            --gen_random_prompts \
+            --variable_response_lens_mean $omean \
+            --variable_response_lens_range $orange \
+            --variable_response_lens_distribution $odist \
+            --allow_variable_generation_length \
+            --gen_random_session_id \
+            --new_session_ratio $new_session_ratio \
+            --session_0_ratio $session_0_ratio \
+            --qps $qps \
+            --distribution $query_distribution \
+            --coefficient_variation $coefficient_variation \
+            --log_latencies \
+            --fail_on_response_failure \
+            --model /mnt/wencong.xwc/models/huggingface-models/llama-trained/llama-7b/ \
+            --swap-space 16 \
+            --instance-parallel-size $instance_parallel_size \
+            --use-np-weights \
+            --max-num-batched-tokens $max_num_batched_tokens \
+            --load-metric $load_metric \
+            --enable-load-control-prefill $enable_load_control_prefill \
+            --prefill_SLO 5 \
+            --dispatch-strategy $dispatch_strategy \
+            --need-migrate-frequency $need_migrate_frequency \
+            --migrate-out-threshold $migrate_out_threshold \
+            --migrate-in-threshold $migrate_in_threshold \
+            --scale-strategy $scale_strategy \
+            --scale-up-threshold $scale_up_threshold \
+            --scale-down-threshold $scale_down_threshold \
+            --min-replicas $min_replicas \
+            --max-replicas $max_replicas \
+            --enable-scaling \
+            --disable-log-requests-engine \
+            --profiling-result-file-path /mnt/wencong.xwc/huangziming/vllm/vllm/simulator/profiling_result_new.pkl \
+            --results-filename $output_filename \
+            --dispatch-mode $dispatch_mode \
+            --priority_ratio $priority_ratio \
+            --need-dispatch-frequency $need_dispatch_frequency \
+            --global-dispatch-strategy $global_dispatch_strategy \
+            --migrate-strategy $migrate_strategy \
+            2>&1 | tee -a $output_filename
+            # --enable-scaling \
+            # --tokenizer 'facebook/opt-13b' \
+
+    done
+}
+
+
+if [ $enable_migrate -gt 0 ]
+    then
+        start_model_server_migrate
+    else
+        start_model_server
+    fi
+
+python plot_utils.py --log-file1 $output_filename

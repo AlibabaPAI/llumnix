@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+export PORT=1031
+
+num_prompts=1000
+idist=uniform
+imean=512
+irange=64
+# uniform, exponential, capped_exponential
+odist=capped_exponential
+omean=512
+oranges=("4096")
+# oranges=("32" "128" "512" "1536")
+
+new_session_ratio=1.0
+session_0_ratio=0.5
+
+instance_parallel_size=4
+max_batch_total_tokens_vals=("4096")
+# max_batch_total_tokens_vals=("8700" "7500" "8100" "8100")
+
+load_metric=consumed_speed
+enable_load_control_prefill=0
+dispatch_strategy=load
+need_migrate_frequency=4
+migrate_out_threshold=3
+migrate_in_threshold=3
+
+dispatch_mode=global
+need_dispatch_frequency=1
+# FCFS, FFIT, BE, SJF, LJF
+global_dispatch_strategy=FFIT
+
+qps=1.6
+# burst, uniform, poisson, gamma
+query_distribution=gamma
+coefficient_variation=$1
+enable_migrate=$2
+
+results_path="qps${qps}_prompts${num_prompts}_${query_distribution}_cv${coefficient_variation}_migrate${enable_migrate}_${dispatch_mode}"
+if [ $enable_migrate = '1' ]; then
+    results_path=$results_path"_prefill${enable_load_control_prefill}"
+fi
+if [ $dispatch_mode = 'global' ]; then
+    results_path=$results_path"_${global_dispatch_strategy}"
+fi

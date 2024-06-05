@@ -1,0 +1,11 @@
+Llumnix consistently
+achieves latency improvements across all request rates, e.g.,
+up to 12.2× for P99 prefill latency. We also measure the
+resource cost in terms of average instances used, shown in the
+rightmost column. Llumnix saves costs by up to 16%, because
+Llumnix increases the auto-scaling efficiency by saturating
+or draining out instances more quickly. We also test different
+workload burstiness with varying CVs of Gamma distribution
+(request rate = 2). As shown in the second row, Llumnix
+shows similar improvements in latencies and costs, e.g., up to
+11× for P99 prefill latency and 18% for the cost.

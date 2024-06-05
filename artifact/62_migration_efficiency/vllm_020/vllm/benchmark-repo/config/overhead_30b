@@ -1,0 +1,53 @@
+PORT=1032
+new_session_ratio=1.0
+session_0_ratio=0.5
+load_metric="consumed_speed"
+migrate_strategy="LCFS"
+priority_ratio=0.0
+
+# Run real test
+
+model=/mnt/data/models/huggingface-models/llama-trained/llama-30b/
+num_prompts=$1
+
+# oranges=("32" "128" "512" "1536")
+# max_batch_total_tokens_vals=("8700" "7500" "8100" "8100")
+# oranges=("1560")
+oranges=("0")
+max_batch_total_tokens_vals=("11800")
+
+instance_parallel_size=2
+tensor_parallel_size=4
+
+enable_load_control_prefill=1
+dispatch_strategy=load
+dispatch_mode=local
+global_dispatch_strategy=BE
+need_dispatch_frequency=1
+dispatch_strategy=unbalanced
+
+need_migrate_frequency=4
+migrate_out_threshold=1.5
+migrate_in_threshold=3
+
+
+scale_threshold=10
+scale_strategy=avg_load
+scale_up_threshold=$(echo "$scale_threshold" | bc -l)
+scale_down_threshold=$(echo "$scale_threshold + 50" | bc -l)
+min_replicas=2
+max_replicas=2
+
+imean=$(echo "scale=0;8192/$num_prompts - 8" | bc -l)
+irange=0
+omean=64
+# "uniform", "exponential", "capped_exponential"
+odist=uniform
+idist=uniform
+qps=1
+# "burst", "uniform", "poisson", "gamma"
+query_distribution=burst
+coefficient_variation=3
+enable_migrate=$2
+migrate_backend="gloo"
+results_path="0410_overhead_30b"

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+export PORT=1032
+
+num_prompts=2000
+idist=zipf
+imean=$1
+irange=$((imean*2))
+# irange=0
+# uniform, exponential, capped_exponential
+odist=capped_exponential
+omean=$2
+# oranges=("32" "128" "512" "1536")
+# oranges=$((omean*2))
+# oranges=$((omean/2))
+oranges=2048
+
+new_session_ratio=1.0
+session_0_ratio=0.5
+
+instance_parallel_size=16
+max_batch_total_tokens_vals=("12000")
+# max_batch_total_tokens_vals=("8700" "7500" "8100" "8100")
+
+load_metric=consumed_speed
+enable_load_control_prefill=$3
+dispatch_strategy=load
+need_migrate_frequency=4
+migrate_out_threshold=3
+migrate_in_threshold=3
+
+dispatch_mode=$4
+need_dispatch_frequency=1
+# FCFS, FFIT, BE, SJF, LJF
+global_dispatch_strategy=$5
+
+qps=$6
+# burst, uniform, poisson, gamma
+query_distribution=$7
+coefficient_variation=$8
+enable_migrate=$9
+
+results_path="qps${qps}_prompts${num_prompts}_${query_distribution}_cv${coefficient_variation}_${idist}_imean${imean}_${odist}_omean${omean}_migrate${enable_migrate}_${dispatch_mode}"
+if [ $enable_migrate = '1' ]; then
+    results_path=$results_path"_prefill${enable_load_control_prefill}"
+fi
+if [ $dispatch_mode = 'global' ]; then
+    results_path=$results_path"_${global_dispatch_strategy}"
+fi
+
+function args_disable_migrate(){
+    scale_strategy=avg_load
+    scale_up_threshold=8
+    scale_down_threshold=100
+    min_replicas=8
+    max_replicas=8
+}
+
+function args_enable_migrate(){
+    scale_strategy=avg_load
+    scale_up_threshold=1.5
+    scale_down_threshold=100
+    min_replicas=8
+    max_replicas=8
+}

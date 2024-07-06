@@ -1,0 +1,7 @@
+vllm == 0.4.2
+ray >= 2.9.0
+pyarrow  # Required for Ray data.
+aiohttp
+scipy
+pandas
+matplotlib

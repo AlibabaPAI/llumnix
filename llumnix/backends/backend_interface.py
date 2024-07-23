@@ -13,9 +13,8 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Iterable, List, Optional, Union, Tuple
+from typing import Any, Iterable, List, Optional, Union
 
-from llumnix.instance_info import InstanceInfo
 from llumnix.llumlet.migrating_request import MigratingRequest
 from llumnix.server_info import ServerInfo
 
@@ -63,14 +62,8 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def step(self) -> Tuple[Any, InstanceInfo]:
-        """Performs one inference iteration and returns the generated request outputs and instance info.
-
-        Returns:
-            A tuple containing request outputs and instance information after one iteration.
-            request_outputs: Results of one iteration, which include metadata such as output token indices,
-                             output texts, etc.
-            instance_info: An `InstanceInfo` object representing the backend engine state after one iteration.
+    def _start_engine_loop(self) -> None:
+        """Start step loop of backend engine.
         """
         raise NotImplementedError
 

@@ -12,10 +12,13 @@
 # limitations under the License.
 
 import time
-from typing import List, Optional, Tuple, Dict, Union, Iterable, Any
+from typing import List, Optional, Dict, Union, Iterable, Any
+from collections import defaultdict
+import threading
 import ray
 # pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
+from ray.util.queue import Queue as RayQueue
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
@@ -40,12 +43,21 @@ logger = init_logger(__name__)
 
 
 class LLMEngineLlumnix(LLMEngine):
+    def __init__(self, instance_id: str, *arg, **kwargs) -> None:
+        super().__init__(*arg, **kwargs)
+        self.instance_id = instance_id
+        self.step_counter = Counter()
+        self.instance_info = None
+        self.scaling_down = False
+        self.request_server_info: Dict[str, ServerInfo] = {}
+
     # pylint: disable=W0221
     @classmethod
     def from_engine_args(
         cls,
         engine_args: EngineArgs,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
+        instance_id: str = None,
         placement_group: Optional["PlacementGroup"] = None,
         latency_mem: Optional[LatencyMemData] = None
     ) -> "LLMEngineLlumnix":
@@ -67,6 +79,7 @@ class LLMEngineLlumnix(LLMEngine):
             raise ValueError('unimplemented executor backend')
         # Create the LLM engine.
         engine = cls(
+            instance_id=instance_id,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -98,90 +111,12 @@ class LLMEngineLlumnix(LLMEngine):
                 seq_group_metadata_list = new_seq_group_metadata_list
             return super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
 
-class BackendVLLM(BackendInterface):
-    def __init__(
-        self,
-        instance_id: int,
-        migration_config: MigrationConfig,
-        engine_args: EngineArgs,
-        placement_group: "PlacementGroup"
-    ) -> None:
-        assert migration_config.migration_backend == "rpc", "Gloo support will be released later."
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args, placement_group=placement_group)
-        # multi-instance args
-        self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
-        self.engine.output_processor.scheduler = self.engine.scheduler
-        self.instance_id = instance_id
-        self.step_counter = Counter()
-        self.scaling_down = False
-        self.worker_handle_list = self.engine.model_executor.workers.copy()
-        if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
-            self.worker_handle_list.insert(0, ray.get_actor(f"instance_{self.instance_id}", namespace="llumnix"))
-        self._run_workers("init_migration", num_migration_cache_blocks=migration_config.migration_cache_blocks,\
-                                                      src_worker_handle_list=self.worker_handle_list,
-                                                      placement_group=placement_group)
-        self.request_server_info: Dict[str, ServerInfo] = {}
-
-    def send_cpu_cache(self, *args, **kwargs):
-        # driver worker migration interface
-        return self.engine.model_executor.driver_worker.execute_method("send_cpu_cache", *args, **kwargs)
-
-    def stop_shutdown(self) -> None:
-        self.scaling_down = False
-
-    def shutdown_workers(self):
-        migrated_requests = []
-
-        self.scaling_down = True
-        while self.has_unfinished_requests() and self.scaling_down:
-            time.sleep(1)
-        time.sleep(0.1)
-        if self.scaling_down:
-            self._run_workers(
-                "shutdown",
-                )
-        return migrated_requests
-
-    def restart_workers(self) -> None:
-        self._run_workers(
-            "restart",
-            )
-        self.scaling_down = False
-
-    def add_request(self,
-                    request_id: str,
-                    server_info: ServerInfo,
-                    *args,
-                    **kwargs) -> None:
-        # When manager is unavailable, api server might dispatch the request that has already been dispatched.
-        if request_id in self.request_server_info:
-            return
-        # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        self.request_server_info[request_id] = server_info
-        self.engine.add_request(request_id, *args, **kwargs)
-
-    def commit_dst_request(self, backend_request: SequenceGroup, server_info: ServerInfo) -> None:
-        seq = backend_request.get_seqs()[0]
-        seq.seq_id = next(self.engine.seq_counter)
-        logger.info("add seq {} to block table".format(seq.seq_id))
-        pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
-        self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
-        self.add_running_request(backend_request)
-        self.request_server_info[backend_request.request_id] = server_info
-
-    def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
-        ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",
-                                                           "migrate_gpu_cache_ray_rpc",
-                                                           dst_blocks=dst_blocks,
-                                                           src_blocks=src_blocks,
-                                                           src_worker_handle_list=self.worker_handle_list))
-
-    def step(self) -> Tuple[List[RequestOutput], InstanceInfo, List[ServerInfo]]:
+    def step(self) -> None:
         t0_inference_begin = time.time()
-        output_list = self.engine.step()
+        output_list = super().step()
         t1_inference_end = time.time()
 
-        instance_info: InstanceInfo = self.engine.scheduler.get_record_instance_info()
+        instance_info: InstanceInfo = self.scheduler.get_record_instance_info()
 
         if self.scaling_down:
             instance_info.num_running_request = 1
@@ -192,22 +127,135 @@ class BackendVLLM(BackendInterface):
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
         instance_info.latency = (t1_inference_end - t0_inference_begin)*1000
-        seq_groups = self.engine.scheduler.running
+        seq_groups = self.scheduler.running
         if seq_groups:
             tot_blocks = []
             for seq in seq_groups[-1].get_seqs(SequenceStatus.RUNNING):
-                blocks = self.engine.scheduler.block_manager.get_block_table(seq)
+                blocks = self.scheduler.block_manager.get_block_table(seq)
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
             instance_info.num_block_last_running_request = len(tot_blocks)
 
-        server_info_list = []
-        for output in output_list:
-            server_info_list.append(self.request_server_info[output.request_id])
-
         self.free_request_states(instance_info.finished_request_ids)
 
-        return output_list, instance_info, server_info_list
+        if len(output_list) > 0:
+            server_info_list = []
+            for output in output_list:
+                server_info_list.append(self.request_server_info[output.request_id])
+            self._put_request_output_to_server(output_list, server_info_list)
+        self.instance_info = instance_info
+
+    def _put_request_output_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
+        server_request_outputs = defaultdict(list)
+        server_queue: Dict[str, RayQueue] = {}
+        # Reorganize data in orther to put request output to queue in batch at one time.
+        for request_output, server_info in zip(request_outputs, server_infos):
+            server_id = server_info.server_id
+            request_output_queue = server_info.request_output_queue
+            server_request_outputs[server_id].append(request_output)
+            if server_id not in server_queue:
+                server_queue[server_id] = request_output_queue
+        for server_id, req_outputs in server_request_outputs.items():
+            try:
+                server_queue[server_id].actor.put_nowait_batch.remote(req_outputs)
+            except ray.exceptions.RayActorError:
+                logger.info("Server {} is dead".format(server_id))
+                request_ids = [req_output.request_id for req_output in req_outputs]
+                self.abort(request_ids)
+
+    def free_request_states(self, request_id: Union[str, Iterable[str]]) -> None:
+        if isinstance(request_id, str):
+            request_id = (request_id,)
+        request_ids = set(request_id)
+        for req_id in request_ids:
+            if req_id in self.request_server_info:
+                del self.request_server_info[req_id]
+            if req_id in self.scheduler.last_preemption_time_dict:
+                del self.scheduler.last_preemption_time_dict[req_id]
+
+class BackendVLLM(BackendInterface):
+    def __init__(
+        self,
+        instance_id: int,
+        migration_config: MigrationConfig,
+        engine_args: EngineArgs,
+        placement_group: "PlacementGroup"
+    ) -> None:
+        assert migration_config.migration_backend == "rpc", "Gloo support will be released later."
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args, instance_id=instance_id,
+                                                                          placement_group=placement_group)
+        # multi-instance args
+        self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
+        self.engine.output_processor.scheduler = self.engine.scheduler
+        self.instance_id = instance_id
+        self.worker_handle_list = self.engine.model_executor.workers.copy()
+        if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
+            self.worker_handle_list.insert(0, ray.get_actor(f"instance_{self.instance_id}", namespace="llumnix"))
+        self._run_workers("init_migration", num_migration_cache_blocks=migration_config.migration_cache_blocks,\
+                                                      src_worker_handle_list=self.worker_handle_list,
+                                                      placement_group=placement_group)
+        self._thread = threading.Thread(
+            target=self._start_engine_loop, args=(), daemon=True, name="engine_loop"
+        )
+        self._thread.start()
+
+    def _start_engine_loop(self) -> None:
+        while True:
+            self.engine.step()
+
+    def send_cpu_cache(self, *args, **kwargs):
+        # driver worker migration interface
+        return self.engine.model_executor.driver_worker.execute_method("send_cpu_cache", *args, **kwargs)
+
+    def stop_shutdown(self) -> None:
+        self.engine.scaling_down = False
+
+    def shutdown_workers(self):
+        migrated_requests = []
+
+        self.engine.scaling_down = True
+        while self.has_unfinished_requests() and self.engine.scaling_down:
+            time.sleep(1)
+        time.sleep(0.1)
+        if self.engine.scaling_down:
+            self._run_workers(
+                "shutdown",
+                )
+        return migrated_requests
+
+    def restart_workers(self) -> None:
+        self._run_workers(
+            "restart",
+            )
+        self.engine.scaling_down = False
+
+    def add_request(self,
+                    request_id: str,
+                    server_info: ServerInfo,
+                    *args,
+                    **kwargs) -> None:
+        # When manager is unavailable, api server might dispatch the request that has already been dispatched.
+        if request_id in self.engine.request_server_info:
+            return
+        # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
+        self.engine.request_server_info[request_id] = server_info
+        self.engine.add_request(request_id, *args, **kwargs)
+
+    def commit_dst_request(self, backend_request: SequenceGroup, server_info: ServerInfo) -> None:
+        seq = backend_request.get_seqs()[0]
+        seq.seq_id = next(self.engine.seq_counter)
+        logger.info("add seq {} to block table".format(seq.seq_id))
+        pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
+        self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
+        self.add_running_request(backend_request)
+        self.engine.request_server_info[backend_request.request_id] = server_info
+
+    def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+        ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",
+                                                           "migrate_gpu_cache_ray_rpc",
+                                                           dst_blocks=dst_blocks,
+                                                           src_blocks=src_blocks,
+                                                           src_worker_handle_list=self.worker_handle_list))
 
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access
@@ -223,15 +271,8 @@ class BackendVLLM(BackendInterface):
         self.free_request_states(request_ids)
         return self.engine.abort_request(request_ids)
 
-    def free_request_states(self, request_id: Union[str, Iterable[str]]):
-        if isinstance(request_id, str):
-            request_id = (request_id,)
-        request_ids = set(request_id)
-        for req_id in request_ids:
-            if req_id in self.request_server_info:
-                del self.request_server_info[req_id]
-            if req_id in self.engine.scheduler.last_preemption_time_dict:
-                del self.engine.scheduler.last_preemption_time_dict[req_id]
+    def free_request_states(self, request_id: Union[str, Iterable[str]]) -> None:
+        return self.engine.free_request_states(request_id)
 
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.get_request_incremental_blocks(*args, **kwargs)
@@ -276,7 +317,7 @@ class BackendVLLM(BackendInterface):
         return self.engine.scheduler.get_shortest_running_request()
 
     def get_request_server_info(self, request_id: str) -> ServerInfo:
-        return self.request_server_info[request_id]
+        return self.engine.request_server_info[request_id]
 
     def get_all_request_ids(self) -> List[str]:
         return self.engine.scheduler.get_all_request_ids()

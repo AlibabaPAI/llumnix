@@ -36,6 +36,7 @@ logger = init_logger(__name__)
 class LlumnixRayGPUExecutor(RayGPUExecutor):
     def _init_workers_ray(self, placement_group: "PlacementGroup",
                           **ray_remote_kwargs):
+        self.last_inference_latency = 0
         if self.parallel_config.tensor_parallel_size == 1:
             # For single GPU case, we use a ray worker with constrained memory.
             num_gpus = self.cache_config.gpu_memory_utilization
@@ -73,7 +74,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
                 num_cpus=0,
                 num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
-                max_concurrency=4,
+                max_concurrency=2,
                 **ray_remote_kwargs,
             )(RayWorkerWrapper).remote(
                 worker_module_name="llumnix.backends.vllm.worker",
@@ -146,10 +147,18 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
                           max_concurrent_workers=self.parallel_config.
                           max_parallel_loading_workers)
 
+    def execute_model(self, *args, **kwargs):
+        t0 = time.time()
+        outputs = super().execute_model(*args, **kwargs)
+        t1 = time.time()
+        self.last_inference_latency = (t1 - t0) * 1000
+        return outputs
+
 class SimGPUExecutor(GPUExecutor):
     latency_mem: LatencyMemData = None
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        self.last_inference_latency = 0
         self.migration_bandwidth = self.latency_mem.migration_bandwidth
         # TODO(ziming) add swap bandwidth
 
@@ -187,10 +196,13 @@ class SimGPUExecutor(GPUExecutor):
         decode_bs = _pad_to_alignment(decode_bs, 8)
         latency = 0
         if prefill_seq_len:
-            latency += model_prefill(prefill_seq_len, *self.latency_mem.prefill_model_params) / 1000
+            latency += self.latency_mem.prefill_latency[prefill_seq_len][0] if prefill_seq_len in self.latency_mem.prefill_latency \
+                       else model_prefill(prefill_seq_len, *self.latency_mem.prefill_model_params)
         if decode_bs:
-            latency += model_decode((decode_bs, decode_seq_len), *self.latency_mem.decode_model_params) / 1000
-        time.sleep(latency)
+            decode_meta_data = (decode_bs, decode_seq_len)
+            latency += self.latency_mem.decode_latency[decode_meta_data][0] if decode_meta_data in self.latency_mem.decode_latency \
+                       else model_decode((decode_bs, decode_seq_len), *self.latency_mem.decode_model_params)
+        time.sleep(latency/1000)
         sampler_outputs = []
         for meta_data in execute_model_req.seq_group_metadata_list:
             samples = []

@@ -32,9 +32,8 @@ def init_backend_engine(instance_id: str, backend_type: BackendType, *args, **kw
         raise ValueError(f'unimplemented backend {backend_type}')
     return backend_engine
 
-def initialize_cluster(
-    world_size: int = 1,
-    ray_address: Optional[str] = None,
+def get_placement_group(
+    world_size: int = 1
 ) -> Tuple[str, Optional["PlacementGroup"]]:
     """Initialize the distributed cluster probably with Ray.
 
@@ -54,8 +53,6 @@ def initialize_cluster(
         raise ImportError(
             "Ray is not installed. Please install Ray to use distributed "
             "serving.")
-    # Connect to a ray cluster.
-    ray.init(address=ray_address, ignore_reinit_error=True)
 
     # Create placement group for worker processes
     current_placement_group = ray.util.get_current_placement_group()

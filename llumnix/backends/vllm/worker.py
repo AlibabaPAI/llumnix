@@ -11,37 +11,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import Dict, List
+import math
+import os
 import ray
 import torch
 
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
+from vllm.config import CacheConfig, ModelConfig, ParallelConfig
+from vllm.worker.cache_engine import CacheEngine
 
 from llumnix.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 
+from llumnix.backends.vllm.migrate_backend import get_migrate_backend
+from llumnix.config import MigrationConfig
+
 logger = init_logger(__name__)
 NUMPY_SUPPORT_DTYPES = [torch.float32, torch.float16]
-
-@ray.remote(num_cpus=0)
-class RecvActor:
-    def recv_cpu_cache(self, src_worker_handle, src_blocks, is_driver_worker):
-        """
-        Args:
-            src_worker_handle: src worker actor handle
-            blocks: block to send
-        """
-        try:
-            if is_driver_worker:
-                migration_cache = ray.get(src_worker_handle.execute_engine_method.remote("send_cpu_cache", src_blocks))
-            else:
-                migration_cache = ray.get(src_worker_handle.execute_method.remote("send_cpu_cache", src_blocks))
-        # pylint: disable=try-except-raise
-        except:
-            raise
-        return migration_cache
 
 class MigrationWorker(Worker):
     def __init__(self, *args, **kwargs) -> None:
@@ -49,13 +38,42 @@ class MigrationWorker(Worker):
         # pylint: disable=import-outside-toplevel
         import vllm.model_executor.layers.sampler
         vllm.model_executor.layers.sampler._sample_with_torch = _sample_with_torch
+
+        backend = os.environ.get("MIGRATE_BACKEND", "rpc")
+        migrate_size = int(os.environ.get("MIGRATE_CACHE_SIZE", 32))
+
+        parallel_config: ParallelConfig = kwargs["parallel_config"]
+        pp_or_tp_enabled = parallel_config.world_size > 1
+
+        if backend == "nccl" and (not pp_or_tp_enabled):
+            model_config: ModelConfig = kwargs["model_config"]
+            cache_config: CacheConfig = kwargs["cache_config"]
+            total_size = migrate_size * CacheEngine.get_cache_block_size(
+                cache_config, model_config, parallel_config) # for nccl backend gpu cache
+
+            device = torch.device(f"cuda:{kwargs['local_rank']}")
+            _, total_memory = torch.cuda.mem_get_info(device)
+            migrate_ratio = math.ceil(total_size / total_memory * 100) / 100
+            cache_config.gpu_memory_utilization -= migrate_ratio
+
+            if cache_config.gpu_memory_utilization < 0:
+                raise RuntimeError("nccl migration backend take {} gpu memory, which is greater than gpu_memory_utilization {}. " \
+                                    "try to increase gpu_memory_utilization or reduce migration-cache-blocks."
+                                    .format(migrate_ratio, cache_config.gpu_memory_utilization))
+
+            logger.info("nccl migration backend take {} gpu memory, left gpu_memory_utilization {} for kv cache." \
+                        .format(migrate_ratio, cache_config.gpu_memory_utilization))
+
         super().__init__(*args, **kwargs)
 
     def load_model(self):
         torch.cuda.set_device(self.device)
         return super().load_model()
 
-    def init_migration(self, num_migration_cache_blocks: int, src_worker_handle_list, placement_group=None) -> None:
+    def get_ray_rank(self):
+        return self.ray_rank
+
+    def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list, placement_group=None) -> None:
         if placement_group:
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
@@ -66,135 +84,63 @@ class MigrationWorker(Worker):
                 node_id=ray.get_runtime_context().get_node_id(),
                 soft=False,
             )
-        self.recv_actor = RecvActor.options(scheduling_strategy=scheduling_strategy).remote()
 
-        self.migration_stream = torch.cuda.Stream()
-        self.default_stream = torch.cuda.current_stream()
-        self.num_migration_cache_blocks = num_migration_cache_blocks
-        assert self.migration_stream != self.default_stream
         pin_memory = is_pin_memory_available()
         if not pin_memory:
             # Pinning memory in WSL is not supported.
             # https://docs.nvidia.com/cuda/wsl-user-guide/index.html#known-limitations-for-linux-cuda-applications
             logger.warning("Using 'pin_memory=False' as WSL is detected. "
-                           "This may slow down the performance.")
-        migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
+                            "This may slow down the performance.")
+
+        num_migration_cache_blocks = migration_config.migration_cache_blocks
+        self.num_migration_cache_blocks = num_migration_cache_blocks
+
         self.rpc_dtype = self.cache_engine.dtype
         if self.cache_engine.dtype in NUMPY_SUPPORT_DTYPES:
             self.rpc_dtype = self.cache_engine.dtype
         else:
             self.rpc_dtype = torch.float32
             logger.warning("Detecting numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine.dtype))
-        # self.migration_cache = torch.zeros(
-        #     size=(self.cache_engine.num_layers, 2, self.num_migration_cache_blocks, migration_cache_size),
-        #     dtype=self.cache_engine.dtype,
-        #     pin_memory=pin_memory,
-        # )
-        self.migration_key_cache = torch.empty(
-            size=(self.num_migration_cache_blocks, self.cache_engine.num_layers, migration_cache_size),
-            dtype=self.cache_engine.dtype,
-            pin_memory=pin_memory,
-        )
-        self.migration_value_cache = torch.empty(
-            size=(self.num_migration_cache_blocks, self.cache_engine.num_layers, migration_cache_size),
-            dtype=self.cache_engine.dtype,
-            pin_memory=pin_memory,
-        )
-        # do dummy rpc
-        src_worker_handle = src_worker_handle_list[self.rank]
-        self.recv_actor.recv_cpu_cache.remote(src_worker_handle, [0], self.is_driver_worker)
 
-    def send_cpu_cache(self, blocks: List[int]):
-        num_blocks = len(blocks)
-        dummy_key_cpu = self.migration_key_cache[:num_blocks]
-        dummy_value_cpu = self.migration_value_cache[:num_blocks]
-        with torch.cuda.stream(self.migration_stream):
-            for layer_idx in range(self.cache_engine.num_layers):
-                for idx, block_num in enumerate(blocks):
-                    dummy_key_cpu[idx][layer_idx].copy_(self.gpu_cache[layer_idx][0][block_num])
-                    dummy_value_cpu[idx][layer_idx].copy_(self.gpu_cache[layer_idx][1][block_num])
-        torch.cuda.Stream.synchronize(self.migration_stream)
-        return (dummy_key_cpu.to(self.rpc_dtype).numpy(), dummy_value_cpu.to(self.rpc_dtype).numpy())
+        self.instance_id = instance_id
+        self.migration_config = migration_config
+        num_instance = len(migration_config.instance_rank_map)
+        self.ray_world_size = num_instance * self.parallel_config.world_size
+        self.ray_rank = self.rank + migration_config.instance_rank_map[self.instance_id] * self.parallel_config.world_size
+        self.migrate_backend = get_migrate_backend(migrate_config=migration_config,
+                                                  cache_engine=self.cache_engine,
+                                                  worker_handle_list=src_worker_handle_list,
+                                                  scheduling_strategy=scheduling_strategy,
+                                                  dtype=self.rpc_dtype,
+                                                  is_driver_worker=self.is_driver_worker,
+                                                  gpu_cache=self.gpu_cache,
+                                                  ray_world_size=self.ray_world_size,
+                                                  ray_rank=self.ray_rank,
+                                                  worker_rank=self.rank,
+                                                  local_rank=self.local_rank)
 
-    def recv_cpu_cache(self, blocks: List[int], rpc_numpy_cache):
-        num_blocks = len(blocks)
-        dummy_key = self.migration_key_cache[:num_blocks]
-        dummy_value = self.migration_value_cache[:num_blocks]
-        k = rpc_numpy_cache[0]
-        v = rpc_numpy_cache[1]
-        dummy_key.copy_(torch.from_numpy(k))
-        dummy_value.copy_(torch.from_numpy(v))
-        with torch.cuda.stream(self.migration_stream):
-            for layer_idx in range(self.cache_engine.num_layers):
-                for idx, block_num in enumerate(blocks):
-                    self.gpu_cache[layer_idx][0][block_num].copy_(dummy_key[idx][layer_idx])
-                    self.gpu_cache[layer_idx][1][block_num].copy_(dummy_value[idx][layer_idx])
-        torch.cuda.Stream.synchronize(self.migration_stream)
-
-    def send_cpu_cache_v2(self, blocks: List[int]):
-        src_to_dst = dict(enumerate(blocks))
-        with torch.cuda.stream(self.migration_stream):
-            for layer_idx in range(self.cache_engine.num_layers):
-                self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], self.migration_cache[layer_idx], src_to_dst)
-        torch.cuda.Stream.synchronize(self.migration_stream)
-        return self.migration_cache.to(self.rpc_dtype).numpy()
-
-    def recv_cpu_cache_v2(self, blocks: List[int], rpc_numpy_cache):
-        with torch.cuda.stream(self.migration_stream):
-            self.migration_cache.copy_(torch.from_numpy(rpc_numpy_cache))
-            src_to_dst = dict(enumerate(blocks))
-            for layer_idx in range(self.cache_engine.num_layers):
-                self.cache_engine.attn_backend.swap_blocks(self.migration_cache[layer_idx], self.gpu_cache[layer_idx],src_to_dst)
-        torch.cuda.Stream.synchronize(self.migration_stream)
-
-
-    def migrate_gpu_cache_ray_rpc(self, src_worker_handle_list, src_blocks: List[int], dst_blocks: List[int]):
+    def migrate_cache(self, src_worker_handle_list, src_blocks: List[int], dst_blocks: List[int]):
         try:
             src_worker_handle = src_worker_handle_list[self.rank]
-            tot_blocks = len(src_blocks)
-            rpc_numpy_cache = None
-            for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
-                # send/recv num_migration_cache_blocks per iter
-                offset = min(self.num_migration_cache_blocks, tot_blocks - start_idx)
-                send_blocks = src_blocks[start_idx:start_idx+offset]
-                ray_obj = self.recv_actor.recv_cpu_cache.remote(src_worker_handle, send_blocks, self.is_driver_worker)
-                if rpc_numpy_cache is not None:
-                    self.recv_cpu_cache(recv_blocks, rpc_numpy_cache)
-                rpc_numpy_cache = ray.get(ray_obj)
-                recv_blocks = dst_blocks[start_idx:start_idx+offset]
-            self.recv_cpu_cache(recv_blocks, rpc_numpy_cache)
+            self.migrate_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks)
         except ray.exceptions.RayActorError:
-            logger.info("[migrate_gpu_cache_ray_rpc] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+            logger.info("[migrate_cache] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
 
-    # def send_gpu_cache_ray(self,rank_offset:int, blocks:List[int]):
-    #     with torch.cuda.stream(self.migration_stream):
-    #         dst_rank = self.ray_rank + rank_offset
-    #         num_blocks = len(blocks)
-    #         dummy_key_cpu = self.dummy_key_cpu[:num_blocks]
-    #         dummy_value_cpu = self.dummy_value_cpu[:num_blocks]
-    #         with torch.cuda.stream(self.migration_stream):
-    #             for i in range(self.cache_engine.num_layers):
-    #                 for idx,block_num in enumerate(blocks):
-    #                     dummy_key_cpu[idx].copy_(self.gpu_cache[i][0][block_num])
-    #                     dummy_value_cpu[idx].copy_(self.gpu_cache[i][1][block_num])
-    #                 col.send(dummy_key_cpu, dst_rank)
-    #                 col.send(dummy_value_cpu, dst_rank)
+    def do_recv(self, src_handle, blocks: List[int]):
+        return self.migrate_backend.do_recv(src_handle, blocks=blocks)
 
-    #     torch.cuda.Stream.synchronize(self.migration_stream)
+    def do_send(self, dst_handle, blocks: List[int]):
+        return self.migrate_backend.do_send(dst_handle, blocks=blocks)
 
-    # def recv_gpu_cache_ray(self,rank_offset:int, blocks):
-    #     with torch.cuda.stream(self.migration_stream):
-    #         src_rank = self.ray_rank + rank_offset
-    #         num_blocks = len(blocks)
-    #         dummy_key = self.dummy_key_cpu[:num_blocks]
-    #         dummy_value = self.dummy_value_cpu[:num_blocks]
-    #         for i in range(self.cache_engine.num_layers):
-    #             col.recv(dummy_key, src_rank)
-    #             col.recv(dummy_value, src_rank)
-    #             for idx,block_num in enumerate(blocks):
-    #                 self.gpu_cache[i][0][block_num].copy_(dummy_key[idx])
-    #                 self.gpu_cache[i][1][block_num].copy_(dummy_value[idx])
-    #     torch.cuda.Stream.synchronize(self.migration_stream)
+    def rebuild_migrate_backend(self, id_rank_map: Dict[str, int], group_name: str) -> None:
+        self.migrate_backend.destory_col()
+        num_instance = len(id_rank_map)
+        self.ray_world_size = num_instance * self.parallel_config.world_size
+        self.ray_rank = self.rank + id_rank_map[self.instance_id] * self.parallel_config.world_size
+        return self.migrate_backend.init_col(group_name, self.ray_world_size, self.ray_rank)
+
+    def warmup(self):
+        self.migrate_backend.warmup()
 
     def shutdown(self) -> None:
         torch.cuda.synchronize()
@@ -207,21 +153,3 @@ class MigrationWorker(Worker):
     def restart(self) -> None:
         self.init_model()
         self.init_cache_engine(self.cache_config)
-
-    # instance_id is changed from int to str, this function should be modified if used
-    # def init_migration_dist_ray(self, num_instance, instance_id):
-    #     self.ray_world_size = num_instance * self.parallel_config.world_size
-    #     self.ray_rank = self.rank + instance_id * self.parallel_config.world_size
-    #     logger.info(f"{self.ray_world_size, self.ray_rank}")
-    #     # col.init_collective_group(world_size=self.ray_world_size, rank=self.ray_rank , backend="gloo")
-    #     # rpc.init_rpc(f"worker_{self.ray_rank}", rank=self.ray_rank, world_size=self.ray_world_size)
-
-
-    # def run_migration_warmup(self):
-    #     if self.ray_world_size > 1:
-    #         if self.ray_rank % 2:
-    #             self.recv_gpu_cache_ray(1 if self.ray_rank + 1 < self.ray_world_size else 1-self.ray_world_size,[0])
-    #             self.send_gpu_cache_ray(-1 if self.ray_rank > 0 else self.ray_world_size-1,[0])
-    #         else:
-    #             self.send_gpu_cache_ray(-1 if self.ray_rank > 0 else self.ray_world_size-1,[0])
-    #             self.recv_gpu_cache_ray(1 if self.ray_rank + 1 < self.ray_world_size else 1-self.ray_world_size,[0])

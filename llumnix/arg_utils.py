@@ -70,13 +70,15 @@ class EngineManagerArgs:
         return global_scheduler_config
 
     def create_migration_configs(
-        self,
+        self, instance_rank_map, pp_or_tp_enabled
     ) -> MigrationConfig:
         migration_config = MigrationConfig(self.migrate_policy,
                                            self.migration_backend,
                                            self.migration_cache_blocks,
                                            self.last_stage_max_blocks,
-                                           self.max_stages)
+                                           self.max_stages,
+                                           instance_rank_map,
+                                           pp_or_tp_enabled)
         return migration_config
 
     @classmethod
@@ -107,7 +109,7 @@ class EngineManagerArgs:
         parser.add_argument('--dispatch-policy',
                             type=str,
                             default=EngineManagerArgs.dispatch_policy,
-                            choices=['balanced', 'load', 'queue'],
+                            choices=['balanced', 'load', 'queue', 'flood'],
                             help='dispatch policy')
 
         parser.add_argument('--enable-migrate',
@@ -192,9 +194,9 @@ class EngineManagerArgs:
         parser.add_argument('--migration-backend',
                             type=str,
                             default=EngineManagerArgs.migration_backend,
-                            choices=['gloo','rpc'],
+                            choices=['gloo','nccl','rpc'],
                             help='communication backend during migration')
-        parser.add_argument('--migration-cache_blocks',
+        parser.add_argument('--migration-cache-blocks',
                             type=int,
                             default=EngineManagerArgs.migration_cache_blocks,
                             help='cache blocks num during migration')

@@ -20,7 +20,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType
-from llumnix.backends.utils import init_backend_engine, initialize_cluster
+from llumnix.backends.utils import init_backend_engine, get_placement_group
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
@@ -63,7 +63,7 @@ class Llumlet:
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         if backend_type == backend_type.VLLM:
             if not fixed_node_init:
-                placement_group = initialize_cluster(world_size)
+                placement_group = get_placement_group(world_size)
                 kwargs["placement_group"] = placement_group
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",

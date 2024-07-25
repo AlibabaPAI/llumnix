@@ -15,6 +15,7 @@ import asyncio
 import time
 import csv
 import os
+import uuid
 from typing import Dict, List, Tuple, Union, Iterable
 from collections import defaultdict
 import traceback
@@ -68,6 +69,7 @@ class LLMEngineManager:
 
         self.instances: Dict[str, Llumlet] = {}
         self.instance_migrating: Dict[str, bool] = {}
+        self.pending_rebuild_migrate_instances = 0
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
         # When manager starts, it automatically connects to all existing instances.
         self._connect_to_instances()
@@ -248,27 +250,102 @@ class LLMEngineManager:
             logger.error("unexpected exception occurs: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
+    async def rebuild_migrate_backend(self) -> None:
+        # wait for all instances to finish migration
+        while any(self.instance_migrating.values()):
+            await asyncio.sleep(0.1)
+
+        # when rebuild migrate backend, disable migrate
+        origin_config = self.enable_migrate
+        self.enable_migrate = False
+
+        async def run_task(alive_instances: List[str], task: str, *args, **kwargs) -> List:
+            tasks = []
+            for instance_name in alive_instances:
+                llumlet_handle = self.instances[instance_name]
+                tasks.append(llumlet_handle.execute_engine_method.remote(
+                    "_run_workers", task, *args, **kwargs))
+
+            rets = await asyncio.gather(*tasks, return_exceptions=True)
+            dead_instances = []
+            for instance_name, ret in zip(alive_instances, rets):
+                if isinstance(ret, ray.exceptions.RayActorError):
+                    self.scale_down(instance_name, rebuild_migrate_backend=False)
+                    dead_instances.append(instance_name)
+                    logger.info("{} fail, {}: {}".format(task, instance_name, ret))
+
+            return dead_instances
+
+        alive_instances = sorted(self.instances.keys())
+        pending_task = self.pending_rebuild_migrate_instances
+
+        while len(alive_instances) > 0 and self.pending_rebuild_migrate_instances > 0:
+            logger.info("rebuild migrate backend doing, pending_rebuild_migrate_instances: {}"
+                        .format(self.pending_rebuild_migrate_instances))
+
+            group_name = str(uuid.uuid4().hex)
+            id_rank_map = {instance_id: index for index, instance_id in enumerate(alive_instances)}
+
+            dead_instances = await run_task(alive_instances, "rebuild_migrate_backend", id_rank_map, group_name)
+
+            if len(dead_instances) == 0:
+                dead_instances.extend(await run_task(alive_instances, "warmup"))
+
+            if len(dead_instances) == 0:
+                self.pending_rebuild_migrate_instances -= pending_task
+
+            alive_instances = sorted(self.instances.keys())
+            pending_task = self.pending_rebuild_migrate_instances
+
+        if len(alive_instances) > 0:
+            logger.info("rebuild {} migrate backend done, group_name: {}, alive instance ({}): {}"
+                        .format(self.engine_manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
+
+        # restore migrate config
+        self.enable_migrate = origin_config
+
     def scale_up(self, instance_id: Union[str, Iterable[str]], llumlet_actor_handles: List["ray.actor.ActorHandle"]) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
+
+        indeed_update = False
+        no_pending_instance = self.pending_rebuild_migrate_instances == 0
+
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
+                indeed_update = True
                 self.instances[ins_id] = llumlet_actor_handles[idx]
                 self.instance_migrating[ins_id] = False
+                self.pending_rebuild_migrate_instances += 1
         self.global_scheduler.scale_up(instance_ids)
         self.num_instance = len(self.instances)
 
-    def scale_down(self, instance_id: Union[str, Iterable[str]]) -> None:
+        # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migrate_instances != 0,
+        # a coroutine is already handling the membership change. And the coroutine will account for the membership changes
+        # caused by this scale-up (see rebuild_migrate_backend for details). Therefore, we simply return in this case.
+        if indeed_update and no_pending_instance:
+            asyncio.create_task(self.rebuild_migrate_backend())
+
+    def scale_down(self, instance_id: Union[str, Iterable[str]], rebuild_migrate_backend: bool = True) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
+
+        indeed_update = False
+        no_pending_instance = self.pending_rebuild_migrate_instances == 0
+
         for ins_id in instance_ids:
             if ins_id in self.instances:
+                indeed_update = True
                 del self.instances[ins_id]
                 del self.instance_migrating[ins_id]
+                self.pending_rebuild_migrate_instances += 1
         self.global_scheduler.scale_down(instance_ids)
         self.num_instance = len(self.instances)
+
+        if indeed_update and no_pending_instance and rebuild_migrate_backend:
+            asyncio.create_task(self.rebuild_migrate_backend())
 
     def _connect_to_instances(self):
         actor_names_dict = ray.util.list_named_actors(True)
@@ -307,7 +384,8 @@ class LLMEngineManager:
                                    max_restarts=-1,
                                    name=MANAGER_ACTOR_NAME,
                                    namespace='llumnix',
-                                   lifetime="detached")(cls)
+                                   lifetime="detached"
+                                   )(cls)
         engine_manager = manager_class.remote(engine_manager_args,
                                               global_scheduler_config,
                                               os.getcwd(),

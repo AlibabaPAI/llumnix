@@ -30,7 +30,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--polling-interval POLLING_INTERVAL]
             [--migration-backend {gloo,rpc}]
-            [--migration-cache_blocks MIGRATION_CACHE_BLOCKS]
+            [--migration-cache-blocks MIGRATION_CACHE_BLOCKS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
 ```

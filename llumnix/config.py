@@ -18,12 +18,16 @@ class MigrationConfig:
             migration_backend: str,
             migration_cache_blocks: int,
             last_stage_max_blocks: int,
-            max_stages: int,) -> None:
+            max_stages: int,
+            instance_rank_map: dict,
+            pp_or_tp_enabled: bool) -> None:
         self.migrate_policy = migrate_policy
         self.migration_backend = migration_backend
         self.migration_cache_blocks = migration_cache_blocks
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
+        self.instance_rank_map = instance_rank_map
+        self.pp_or_tp_enabled = pp_or_tp_enabled
 
 class GlobalSchedulerConfig:
     def __init__(
@@ -49,3 +53,4 @@ class GlobalSchedulerConfig:
         self.scale_policy = scale_policy
         self.scale_up_threshold = scale_up_threshold*(-1)
         self.scale_down_threshold = scale_down_threshold*(-1)
+    

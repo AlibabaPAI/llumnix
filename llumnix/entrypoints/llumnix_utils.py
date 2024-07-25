@@ -4,11 +4,11 @@ import os
 import time
 from typing import List, Tuple
 import asyncio
+import uuid
 import ray
+
 from ray.util.queue import Queue as RayQueue
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
-
-from vllm.utils import random_uuid
 from vllm.engine.arg_utils import AsyncEngineArgs
 
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
@@ -122,15 +122,21 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
     parallel_config = engine_config.parallel_config
     instance_ids: List[str] = []
     llumlets: List[Llumlet] = []
-    for _ in range(engine_manager_args.initial_instances):
-        instance_id = random_uuid()
+
+    instance_ids = [str(uuid.uuid4().hex) for _ in range(engine_manager_args.initial_instances)]
+    id_rank_map = {instance_id: index for index, instance_id in enumerate(instance_ids)}
+    pp_or_tp_enabled = parallel_config.world_size > 1
+    migration_configs = engine_manager_args.create_migration_configs(id_rank_map, pp_or_tp_enabled)
+
+    for idx in range(engine_manager_args.initial_instances):
+        instance_id = instance_ids[idx]
         if not engine_manager_args.profiling_result_file_path:
             llumlet = Llumlet.from_args(
                 engine_manager_args.fixed_node_init,
                 instance_id,
                 BackendType.VLLM,
                 parallel_config.world_size,
-                engine_manager_args.create_migration_configs(),
+                migration_configs,
                 engine_args,
             )
         else:
@@ -139,12 +145,11 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
                 instance_id,
                 BackendType.SIM_VLLM,
                 parallel_config.world_size,
-                engine_manager_args.create_migration_configs(),
+                migration_configs,
                 engine_manager_args.profiling_result_file_path,
                 engine_manager_args.gpu_type,
                 engine_args,
             )
-        instance_ids.append(instance_id)
         llumlets.append(llumlet)
     return instance_ids, llumlets
 

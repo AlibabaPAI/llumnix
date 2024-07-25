@@ -86,6 +86,13 @@ class DispatchPolicy(ABC):
                  sorted_instance_infos: List[InstanceInfo]) -> int:
         pass
 
+class Flood(DispatchPolicy):
+    def dispatch(self,
+                 instance_num_request: Dict[str, int],
+                 sorted_instance_infos: List[InstanceInfo]) -> str:
+        instance_id = max(instance_num_request, key=instance_num_request.get)
+        return instance_id
+
 class Balanced(DispatchPolicy):
     def dispatch(self,
                  instance_num_request: Dict[str, int],
@@ -117,6 +124,7 @@ class Queue(DispatchPolicy):
 
 class DispatchPolicyFactory:
     _POLICY_REGISTRY = {
+        'flood': Flood,
         'balanced': Balanced,
         'load': Load,
         'queue': Queue,

@@ -177,9 +177,7 @@ class BackendVLLM(BackendInterface):
                                                            src_worker_handle_list=self.worker_handle_list))
 
     def step(self) -> Tuple[List[RequestOutput], InstanceInfo, List[ServerInfo]]:
-        t0_inference_begin = time.time()
         output_list = self.engine.step()
-        t1_inference_end = time.time()
 
         instance_info: InstanceInfo = self.engine.scheduler.get_record_instance_info()
 
@@ -191,7 +189,7 @@ class BackendVLLM(BackendInterface):
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
-        instance_info.latency = (t1_inference_end - t0_inference_begin)*1000
+        instance_info.latency = self.engine.model_executor.last_inference_latency
         seq_groups = self.engine.scheduler.running
         if seq_groups:
             tot_blocks = []

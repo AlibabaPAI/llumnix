@@ -18,14 +18,15 @@ import time
 from typing import List, Tuple
 import asyncio
 import ray
+
 from ray.util.queue import Queue as RayQueue
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
-from llumnix.utils import random_uuid
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.backend_interface import BackendType
 from llumnix.logger import init_logger
+from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 
 
@@ -79,8 +80,11 @@ def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
                     logger.info("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
                     sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
-    ray.init(address=f"{head_node_ip}:{ray_cluster_port}", ignore_reinit_error=True, namespace='llumnix')
     return result
+
+def connect_to_ray_cluster(port: int, namespace="llumnix") -> None:
+    head_node_ip = os.getenv('HEAD_NODE_IP')
+    ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace)
 
 def is_gpu_available() -> bool:
     try:
@@ -134,33 +138,36 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
     parallel_config = engine_config.parallel_config
     instance_ids: List[str] = []
     llumlets: List[Llumlet] = []
-    for _ in range(engine_manager_args.initial_instances):
-        instance_id = random_uuid()
+
+    instance_ids = [random_uuid() for _ in range(engine_manager_args.initial_instances)]
+    migration_configs = engine_manager_args.create_migration_config()
+
+    for idx in range(engine_manager_args.initial_instances):
+        instance_id = instance_ids[idx]
         if not engine_manager_args.profiling_result_file_path:
             llumlet = Llumlet.from_args(
-                engine_manager_args.fixed_node_init_instance,
+                engine_manager_args.disable_fixed_node_init_instance,
                 False,
                 node_id,
                 instance_id,
                 BackendType.VLLM,
                 parallel_config.world_size,
-                engine_manager_args.create_migration_configs(),
+                migration_configs,
                 engine_args,
             )
         else:
             llumlet = Llumlet.from_args(
-                engine_manager_args.fixed_node_init_instance,
+                engine_manager_args.disable_fixed_node_init_instance,
                 False,
                 node_id,
                 instance_id,
                 BackendType.SIM_VLLM,
                 parallel_config.world_size,
-                engine_manager_args.create_migration_configs(),
+                migration_configs,
                 engine_manager_args.profiling_result_file_path,
                 engine_manager_args.gpu_type,
                 engine_args,
             )
-        instance_ids.append(instance_id)
         llumlets.append(llumlet)
     return instance_ids, llumlets
 
@@ -180,23 +187,37 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
             ("In Llumnix, engine and worker must be ray actor in orther to run step and migrate concurrently.")
     engine_manager = init_manager(engine_manager_args)
     # TODO(s5u13b): Add arguments checker for Llumnix.
-    if not engine_manager_args.init_instance_by_manager:
+    if engine_manager_args.disable_init_instance_by_manager:
         assert engine_manager_args.migration_backend != 'gloo', \
             ("Llumlet should be initialized by manager when using gloo as migration backend for auto-scaling, "
-             "please set --init-instance-by-manager argument.")
+             "please do not set --disable-init-instance-by-manager argument.")
         instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id)
-        retry_manager_method_sync(engine_manager.scale_up.remote, 'scale_up', instance_ids, llumlets)
     else:
         instance_ids, llumlets = retry_manager_method_sync(engine_manager.init_llumlets.remote, 'init_llumlets', engine_args, node_id)
-    request_output_queue = init_request_output_queue()
-    try:
-        ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
-    except ray.exceptions.RayActorError:
-        for idx, llumlet in enumerate(llumlets):
-            try:
-                ray.get(llumlet.is_ready.remote())
-            except ray.exceptions.RayActorError:
-                retry_manager_method_sync(engine_manager.scale_down.remote, 'scale_down', instance_ids[idx])
-    logger.info("Init Llumnix components done")
 
-    return engine_manager, instance_ids, llumlets, request_output_queue
+    available_instance_ids = []
+    dead_instance_ids = []
+    available_llumlets = []
+
+    ready_tasks = [llumlet.is_ready.remote() for llumlet in llumlets]
+
+    for idx, task in enumerate(ready_tasks):
+        try:
+            ray.get(task)
+            available_instance_ids.append(instance_ids[idx])
+            available_llumlets.append(llumlets[idx])
+        except ray.exceptions.RayActorError:
+            dead_instance_ids.append(instance_ids[idx])
+
+    if len(dead_instance_ids) > 0:
+        retry_manager_method_sync(engine_manager.scale_down.remote, 'scale_down', dead_instance_ids)
+
+    if len(available_instance_ids) > 0:
+        retry_manager_method_sync(engine_manager.scale_up.remote, 'scale_up',
+                                  available_instance_ids, available_llumlets)
+        logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
+                    .format(len(available_instance_ids), available_instance_ids))
+
+    request_output_queue = init_request_output_queue()
+
+    return engine_manager, available_instance_ids, available_llumlets, request_output_queue

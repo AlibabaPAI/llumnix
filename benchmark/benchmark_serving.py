@@ -652,6 +652,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tokenizer", type=str, required=True,
                         help="Name or path of the tokenizer.")
+    parser.add_argument('--trust_remote_code',
+                    action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('--backend', type=GenerationBackend,
                         choices=[e.name for e in GenerationBackend], default='vLLM')
@@ -701,7 +703,7 @@ def main():
         assert args.random_prompt_count is not None
 
     backend = GenerationBackend[args.backend]
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, trust_remote_code=args.trust_remote_code)
     print(tokenizer)
 
     if args.dataset_type:

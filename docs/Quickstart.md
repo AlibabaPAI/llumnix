@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Llumnix is currently built on top of vLLM (version 0.4.2). Therefore, the installation requirements are almost identical to those of vLLM. You can view the specific installation requirements for vLLM at the following link:
+Llumnix requires python `3.8.1~3.10.0` and is currently built on top of vLLM (version 0.4.2). Therefore, the installation requirements are almost identical to those of vLLM. You can view the specific installation requirements for vLLM at the following link:
 
 [vLLM Installation](https://docs.vllm.ai/en/v0.4.2/getting_started/installation.html)
 
@@ -12,8 +12,12 @@ You can build and install Llumnix from source:
 ```
 git clone https://github.com/AlibabaPAI/llumnix.git
 cd llumnix
-pip install -e .
+make install
 ```
+
+If you want to use gloo as migration backend, please install [Bazel](https://github.com/bazelbuild/bazel) >= 5.1.0. Then, run `make pygloo` to install [pygloo](https://github.com/ZeldaHuang/pygloo). 
+
+Note: Using conda is not recommended, as it cannot properly handle pygloo's dependency on gcc libstdc++.so.6: version GLIBCXX_3.4.30.
 
 We will provide official releases through pypi soon.
 

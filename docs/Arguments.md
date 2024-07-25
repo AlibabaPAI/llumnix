@@ -6,8 +6,8 @@ Note: since Llumnix is still in alpha stage, the interface and arguments are *su
 
 ```
 usage: -m llumnix.entrypoints.vllm.api_server [-h]
-            [--fixed-node-init-instance]
-            [--init-instance-by-manager]
+            [--disable-fixed-node-init-instance]
+            [--disable-init-instance-by-manager]
             [--initial-instances INITIAL_INSTANCES]
             [--load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
@@ -30,17 +30,20 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--log-filename LOG_FILENAME]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
-            [--migration-backend {gloo,rpc}]
-            [--migration-cache_blocks MIGRATION_CACHE_BLOCKS]
+            [--polling-interval POLLING_INTERVAL]
+            [--migration-backend {gloo,nccl,rpc}]
+            [--migration-cache-blocks MIGRATION_CACHE_BLOCKS]
+            [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
+            [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
 ```
 
-`--fixed-node-init-instance`
-- Fix the placement of instance to current node.
+`--disable-fixed-node-init-instance`
+- Disable fixing the instance's placement to the current node.
 
-`--init-instance-by-manager`
-- initialize instance by manager.
+`--disable-init-instance-by-manager`
+- Disable the initialization of instance by the manager.
 
 `--initial-instances`
 - Number of model instances created at initialization.
@@ -137,6 +140,14 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--migration-cache-blocks`
 - Number of cache blocks in migration.
 - Default: 512
+
+`--migration-backend-init-timeout`
+- Timeout(s) for initializing migration backend.
+- Default: 10.0
+
+`--migration-num-layers`
+- number of kv-cache layers to transfer in each round during migration
+- Default: 1
 
 `--last-stage-max-blocks`
 - If the number of remaining blocks < last_stage_max_blocks, do last stage migration.

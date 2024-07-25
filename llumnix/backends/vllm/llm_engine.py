@@ -41,7 +41,6 @@ from llumnix.config import MigrationConfig
 
 logger = init_logger(__name__)
 
-
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self, instance_id: str, *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
@@ -56,6 +55,7 @@ class LLMEngineLlumnix(LLMEngine):
     def from_engine_args(
         cls,
         engine_args: EngineArgs,
+        migration_config: MigrationConfig,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
         placement_group: Optional["PlacementGroup"] = None,
@@ -76,6 +76,7 @@ class LLMEngineLlumnix(LLMEngine):
         elif engine_config.parallel_config.worker_use_ray:
             from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor
             executor_class = LlumnixRayGPUExecutor
+            executor_class.migration_config = migration_config
         else:
             raise ValueError('unimplemented executor backend')
         # TODO(s5u13b): Do not hack here.
@@ -178,14 +179,14 @@ class LLMEngineLlumnix(LLMEngine):
 class BackendVLLM(BackendInterface):
     def __init__(
         self,
-        instance_id: int,
+        instance_id: str,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
         placement_group: "PlacementGroup" = None,
         node_id: str = None
     ) -> None:
-        assert migration_config.migration_backend == "rpc", "Gloo support will be released later."
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
+                                                                          migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           node_id=node_id)
@@ -196,10 +197,9 @@ class BackendVLLM(BackendInterface):
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
             self.worker_handle_list.insert(0, ray.get_actor(f"instance_{self.instance_id}", namespace="llumnix"))
-        self._run_workers("init_migration", num_migration_cache_blocks=migration_config.migration_cache_blocks,\
-                                            src_worker_handle_list=self.worker_handle_list,
-                                            placement_group=placement_group,
-                                            node_id=node_id)
+        self._run_workers("init_migration", instance_id=instance_id, migration_config=migration_config,\
+                                                      src_worker_handle_list=self.worker_handle_list,
+                                                      placement_group=placement_group, node_id=node_id)
         self._thread = threading.Thread(
             target=self._start_engine_loop, args=(), daemon=True, name="engine_loop"
         )
@@ -209,9 +209,8 @@ class BackendVLLM(BackendInterface):
         while True:
             self.engine.step()
 
-    def send_cpu_cache(self, *args, **kwargs):
-        # driver worker migration interface
-        return self.engine.model_executor.driver_worker.execute_method("send_cpu_cache", *args, **kwargs)
+    def execute_worker_method(self, method, *args, **kwargs):
+        return self.engine.model_executor.driver_worker.execute_method(method, *args, **kwargs)
 
     def stop_shutdown(self) -> None:
         self.engine.scaling_down = False
@@ -258,7 +257,7 @@ class BackendVLLM(BackendInterface):
 
     def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",
-                                                           "migrate_gpu_cache_ray_rpc",
+                                                           "migrate_cache",
                                                            dst_blocks=dst_blocks,
                                                            src_blocks=src_blocks,
                                                            src_worker_handle_list=self.worker_handle_list))

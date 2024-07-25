@@ -17,6 +17,7 @@ import argparse
 import time
 import asyncio
 import json
+import os
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
@@ -214,6 +215,9 @@ async def is_ready():
     ready_status = await engine_manager.is_ready.remote()
     return ready_status
 
+def set_runtime_env(manager_args: EngineManagerArgs):
+    os.environ['MIGRATE_CACHE_SIZE'] = str(manager_args.migration_cache_blocks)
+    os.environ['MIGRATE_BACKEND'] = manager_args.migration_backend
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -236,6 +240,8 @@ if __name__ == "__main__":
     engine_args = AsyncEngineArgs.from_cli_args(args)
 
     logger.info("engine_args: {}".format(engine_args))
+
+    set_runtime_env(engine_manager_args)
 
     if args.launch_ray_cluster:
         # Launch the ray cluster for multi-node serving.

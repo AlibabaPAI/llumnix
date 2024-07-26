@@ -160,7 +160,7 @@ class SimGPUExecutor(GPUExecutor):
         super().__init__(*args, **kwargs)
         self.last_inference_latency = 0
         self.migration_bandwidth = self.latency_mem.migration_bandwidth
-        # TODO(ziming) add swap bandwidth
+        # TODO(ZeldaHuang): add swap bandwidth
 
         self.cache_block_size = get_cache_block_size(
             self.cache_config.block_size, self.model_config, self.parallel_config)

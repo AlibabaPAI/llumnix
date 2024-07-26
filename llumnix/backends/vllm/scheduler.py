@@ -29,7 +29,7 @@ from llumnix.backends.vllm.utils import scheduler_lock
 
 logger = init_logger(__name__)
 
-# TODO(ziming) adapt prefix cache and sliding window, now use v1 manager
+# TODO(ZeldaHuang): adapt prefix cache and sliding window, now use v1 manager
 class BlockManagerLlumnix(BlockSpaceManagerV1):
     def get_free_blocks(self, num_required_blocks: int) -> BlockTable:
         num_free_gpu_blocks = self.gpu_allocator.get_num_free_blocks()
@@ -87,7 +87,7 @@ class SchedulerLlumnix(Scheduler):
 
     @scheduler_lock
     def get_longest_running_request(self) -> Optional[MigratingRequest]:
-        # TODO(ziming) use for loop find request
+        # TODO(ZeldaHuang): use for loop find request
         sorted_running = sorted(self.running, key=lambda seq_group: seq_group.get_seqs()[0].get_len())
         for seq_group in reversed(sorted_running):
             if seq_group not in self.prefilling_seq_groups:

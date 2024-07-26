@@ -19,7 +19,7 @@ from llumnix.arg_utils import EngineManagerArgs
 
 logger = init_logger(__name__)
 
-# TODO(yiwang): Set the values through tests.
+# TODO(s5u13b): Set the values through tests.
 MAX_RESTARTS = 30
 RESTART_INTERVALS = 1
 MAX_TASK_RETRIES = 300

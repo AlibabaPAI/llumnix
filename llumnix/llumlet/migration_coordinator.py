@@ -79,7 +79,7 @@ class MigrationCoordinator:
         # do stage send/recv
         migrate_out_request.stage_timestamps.append(time.time())
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)
-        # TODO(ziming) send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
+        # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
         self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
         if not is_last_stage and self.backend_engine.should_abort_migration(migrate_out_request.backend_request, \
                                                                             migrate_out_request.stage_timestamps[-1]):

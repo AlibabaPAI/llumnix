@@ -182,7 +182,7 @@ def model_decode(x, a, b, c):
 def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingDatabase, gpu_type: str, **backend_args):
     assert BackendType.is_sim_backend(backend_type)
     if backend_type == BackendType.SIM_VLLM:
-        # TODO(ziming) support multi-lora, more device, vision language model
+        # TODO(ZeldaHuang): support multi-lora, more device, vision language model
         model_config = backend_args.get("model_config")
         _ = backend_args.get("cache_config")
         parallel_config = backend_args.get("parallel_config")

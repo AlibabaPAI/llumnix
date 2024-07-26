@@ -187,7 +187,7 @@ async def generate_benchmark(request: Request) -> Response:
 
     global num_finished_request
     if log_requests:
-        # TODO(yiwang): Use logger.
+        # TODO(s5u13b): Use logger.
         print(f"Finished request {request_id}.")
         num_finished_request += 1
         print(f"num_finished_request {num_finished_request}.")

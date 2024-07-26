@@ -72,7 +72,7 @@ class ScaleScheduler:
         dummy_intance_info = InstanceInfo()
         dummy_intance_info.instance_id = -1
         dummy_intance_info.step_id = -1
-        # TODO(yiwang): Should be changed for proactive auto-scaling.
+        # TODO(s5u13b): Should be changed for proactive auto-scaling.
         dummy_intance_info.num_total_gpu_block = np.inf
         dummy_intance_info.num_available_gpu_block = np.inf
         dummy_intance_info.num_free_gpu_block = np.inf

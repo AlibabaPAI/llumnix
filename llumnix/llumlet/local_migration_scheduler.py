@@ -21,7 +21,7 @@ class LocalMigrationScheduler:
         self.backend_engine = backend_engine
 
     def get_migrate_out_request(self) -> Optional[MigratingRequest]:
-        # TODO(yiwang): remove the if-else codes
+        # TODO(s5u13b): remove the if-else codes
         migrate_out_request: MigratingRequest = None
         if self.migrate_policy == 'LCFS':
             migrate_out_request = self.backend_engine.get_last_running_request()

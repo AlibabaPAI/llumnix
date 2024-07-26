@@ -11,11 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Dict, Union, Iterable
+from typing import List, Union, Iterable
 import time
-from collections import defaultdict
 import ray
-from ray.util.queue import Queue as RayQueue
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
@@ -51,7 +49,6 @@ class Llumlet:
         self.migration_scheduler = LocalMigrationScheduler(migration_config.migrate_policy,
                                                            self.backend_engine)
         self.log_requests = True
-        self.instance_info = None
 
     @classmethod
     def from_args(cls,
@@ -94,10 +91,6 @@ class Llumlet:
                                             node_id=ray.get_runtime_context().get_node_id(),
                                             soft=False,))
         llumlet = engine_class.remote(instance_id, backend_type, migration_config, *args, **kwargs)
-        # circular dependency
-        # engine_manager = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
-        # retry_manager_ray_call_by_ray_get(engine_manager.scale_up.remote, 'scale_up', instance_id, llumlet)
-        llumlet.run_engine_loop.remote()
         return llumlet
 
     def migrate_out(self, dst_instance_name: str) -> List[str]:
@@ -129,7 +122,7 @@ class Llumlet:
         return migrated_request_list
 
     def get_instance_info(self) -> InstanceInfo:
-        return self.instance_info
+        return self.backend_engine.engine.instance_info
 
     def get_actor_name(self) -> str:
         return self.actor_name
@@ -159,15 +152,6 @@ class Llumlet:
         request_ids = set(request_id)
         return self.backend_engine.abort_request(request_ids)
 
-    def run_engine_loop(self) -> None:
-        while True:
-            request_outputs, instance_info, server_infos = self.backend_engine.step()
-            self.instance_info = instance_info
-            if len(request_outputs) == 0:
-                time.sleep(0.01)
-            else:
-                self._put_request_output_to_server(request_outputs, server_infos)
-
     def clear_migration_states(self, is_migrate_in: bool) -> None:
         logger.info("instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
@@ -181,24 +165,6 @@ class Llumlet:
             for backend_request in migrating_out_requests_last_stage:
                 logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
                 self.backend_engine.add_running_request(backend_request)
-
-    def _put_request_output_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
-        server_request_outputs = defaultdict(list)
-        server_queue: Dict[str, RayQueue] = {}
-        # Reorganize data in orther to put request output to queue in batch at one time.
-        for request_output, server_info in zip(request_outputs, server_infos):
-            server_id = server_info.server_id
-            request_output_queue = server_info.request_output_queue
-            server_request_outputs[server_id].append(request_output)
-            if server_id not in server_queue:
-                server_queue[server_id] = request_output_queue
-        for server_id, req_outputs in server_request_outputs.items():
-            try:
-                server_queue[server_id].actor.put_nowait_batch.remote(req_outputs)
-            except ray.exceptions.RayActorError:
-                logger.info("Server {} is dead".format(server_id))
-                request_ids = [req_output.request_id for req_output in req_outputs]
-                self.abort(request_ids)
 
     def execute_migration_method(self, method, *args, **kwargs):
         executor = getattr(self.migration_coordinator, method)

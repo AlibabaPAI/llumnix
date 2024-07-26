@@ -49,7 +49,8 @@ WAIT_MANAGER_INTERVAL = 5
 
 async def _background_process_outputs():
     while True:
-        request_outputs = request_output_queue.get_nowait_batch(num_items=request_output_queue.qsize())
+        qsize = await request_output_queue.actor.qsize.remote()
+        request_outputs = await request_output_queue.actor.get_nowait_batch.remote(qsize)
         for request_output in request_outputs:
             request_id = request_output.request_id
             # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
@@ -59,7 +60,6 @@ async def _background_process_outputs():
             if request_output.finished:
                 request_streams[request_id].finish()
                 del request_streams[request_id]
-        await asyncio.sleep(0.01)
 
 # pylint: disable=unused-argument
 @asynccontextmanager

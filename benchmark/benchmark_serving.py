@@ -424,7 +424,7 @@ async def benchmark(
     allow_variable_generation_length: bool,
     verbose: bool,
     results_filename: str,
-    ip_ports: list[int],
+    ip_ports: List[int],
     distribution: str,
     qps: float,
     coefficient_variation: float,

@@ -112,9 +112,7 @@ class LLMEngineLlumnix(LLMEngine):
             return super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
 
     def step(self) -> None:
-        t0_inference_begin = time.time()
         output_list = super().step()
-        t1_inference_end = time.time()
 
         instance_info: InstanceInfo = self.scheduler.get_record_instance_info()
 
@@ -126,7 +124,7 @@ class LLMEngineLlumnix(LLMEngine):
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
-        instance_info.latency = (t1_inference_end - t0_inference_begin)*1000
+        instance_info.latency = self.model_executor.last_inference_latency
         seq_groups = self.scheduler.running
         if seq_groups:
             tot_blocks = []

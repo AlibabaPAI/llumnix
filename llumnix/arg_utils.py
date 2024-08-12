@@ -34,7 +34,7 @@ class EngineManagerArgs:
     pair_migration_frequency: int = 1
     pair_migration_policy: str = 'prefill_constrained'
     migrate_out_threshold: float = 3.0
-    migration_policy: str = 'SJF'
+    request_migration_policy: str = 'SJF'
 
     enable_scaling: bool = False
     min_instances: int = 1
@@ -73,7 +73,7 @@ class EngineManagerArgs:
     def create_migration_configs(
         self,
     ) -> MigrationConfig:
-        migration_config = MigrationConfig(self.migration_policy,
+        migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
                                            self.migration_cache_blocks,
                                            self.last_stage_max_blocks,
@@ -131,11 +131,11 @@ class EngineManagerArgs:
                             type=float,
                             default=EngineManagerArgs.migrate_out_threshold,
                             help='migrate out instance load threshold')
-        parser.add_argument('--migration-policy',
+        parser.add_argument('--request-migration-policy',
                             type=str,
-                            default=EngineManagerArgs.migration_policy,
+                            default=EngineManagerArgs.request_migration_policy,
                             choices=['LCFS', 'SJF', 'LJF'],
-                            help='migration policy')
+                            help='request migration policy')
         parser.add_argument('--enable-defrag',
                             type=bool,
                             default=EngineManagerArgs.enable_defrag,

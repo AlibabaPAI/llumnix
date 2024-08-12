@@ -15,7 +15,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,prefill_constrained,prefill_relaxed}]
             [--migrate-out-threshold MIGRATE_OUT_THRESHOLD]
-            [--migration-policy {LCFS,SJF,LJF}]
+            [--request-migration-policy {LCFS,SJF,LJF}]
             [--enable-defrag ENABLE_DEFRAG]
             [--enable-scaling]
             [--min-instances MIN_INSTANCES]
@@ -70,8 +70,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Migrate out instance load threshold.
 - Default: 3.0
 
-`--migration-policy`
-- Migration policy.
+`--request-migration-policy`
+- Request migration policy.
 - Possible choices: LCFS, SJF, LJF
 - Default: "SJF"
 

@@ -21,6 +21,7 @@ from llumnix.config import GlobalSchedulerConfig, MigrationConfig
 
 @dataclass
 class EngineManagerArgs:
+    launch_ray_cluster: bool = True
     initial_instances: int = 1
     fixed_node_init: bool = False
 

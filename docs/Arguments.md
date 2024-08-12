@@ -25,7 +25,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--scale-up-threshold SCALE_UP_THRESHOLD]
             [--scale-down-threshold SCALE_DOWN_THRESHOLD]
             [--disable-log-requests-manager]
-            [--logging-instance-info]
+            [--log-instance-info]
             [--log-filename LOG_FILENAME]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
@@ -110,7 +110,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--disable-log-requests-manager`
 - Disable logging requests in manager.
 
-`--logging-instance-info`
+`--log-instance-info`
 - Enable logging instance info.
 
 `--log-filename`

@@ -47,7 +47,7 @@ class EngineManagerArgs:
 
     log_filename: str = "server.log"
     disable_log_requests_manager: bool = False
-    logging_instance_info: bool = True
+    log_instance_info: bool = True
     profiling_result_file_path: str = ""
 
     gpu_type: str = "a10"
@@ -174,7 +174,7 @@ class EngineManagerArgs:
         parser.add_argument('--disable-log-requests-manager',
                             action='store_true',
                             help='disable logging requests in manager')
-        parser.add_argument('--logging-instance-info',
+        parser.add_argument('--log-instance-info',
                             action='store_true',
                             help='enable logging instance info')
         parser.add_argument('--log-filename',

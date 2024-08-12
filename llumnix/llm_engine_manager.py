@@ -95,8 +95,8 @@ class LLMEngineManager:
         self.scaling_down = False
         self.last_check_scale_time = time.time() + 100
 
-        self.logging_instance_info = engine_manager_args.logging_instance_info
-        if self.logging_instance_info:
+        self.log_instance_info = engine_manager_args.log_instance_info
+        if self.log_instance_info:
             self._init_instance_info_csv(engine_manager_args)
 
     async def generate(
@@ -183,8 +183,8 @@ class LLMEngineManager:
                 if self.enable_migration and self.num_instance_info_update != 0 \
                     and self.num_instance_info_update % self.pair_migration_frequency == 0:
                     asyncio.create_task(self._migrate())
-                if self.logging_instance_info:
-                    self._logging_instance_infos_to_csv(instance_info_list)
+                if self.log_instance_info:
+                    self._log_instance_infos_to_csv(instance_info_list)
             # pylint: disable=W0703
             except Exception as e:
                 logger.error("unexpected exception occurs: {}".format(e))
@@ -350,7 +350,7 @@ class LLMEngineManager:
             'num_block_all_waiting_request',
             'waiting_time_first_waiting_request'])
 
-    def _logging_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
+    def _log_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
         for instance_info in instance_infos:
             self.instance_info_csv.writerow([
                 instance_info.timestamp,

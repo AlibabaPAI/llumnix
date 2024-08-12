@@ -114,7 +114,7 @@ class LLMEngineLlumnix(LLMEngine):
     def step(self) -> None:
         output_list = super().step()
 
-        instance_info: InstanceInfo = self.scheduler.get_log_instance_info()
+        instance_info: InstanceInfo = self.scheduler.get_instance_info()
 
         if self.scaling_down:
             instance_info.num_running_request = 1

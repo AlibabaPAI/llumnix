@@ -54,13 +54,13 @@ class LLMEngineManager:
         self.log_requests = log_requests
 
         self.num_instance = 0
-        self.enable_migrate = engine_manager_args.enable_migrate
+        self.enable_migration = engine_manager_args.enable_migration
         self.enable_scaling = engine_manager_args.enable_scaling
         self.max_instances = engine_manager_args.max_instances
         self.min_instances = engine_manager_args.min_instances
 
         logger.info("LLMEngineManager starts")
-        logger.info("enable_migrate: {}".format(self.enable_migrate))
+        logger.info("enable_migration: {}".format(self.enable_migration))
         logger.info("num_instance: {}".format(self.num_instance))
         logger.info("max_instances: {}, min_instances: {}".format(self.max_instances, self.min_instances))
 
@@ -76,7 +76,7 @@ class LLMEngineManager:
         asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
 
         # args
-        self.check_migrate_frequency = engine_manager_args.check_migrate_frequency
+        self.pair_migration_frequency = engine_manager_args.pair_migration_frequency
         self.scaling_interval = engine_manager_args.scaling_interval
 
         # request states
@@ -95,8 +95,8 @@ class LLMEngineManager:
         self.scaling_down = False
         self.last_check_scale_time = time.time() + 100
 
-        self.record_instance_info = engine_manager_args.record_instance_info
-        if self.record_instance_info:
+        self.logging_instance_info = engine_manager_args.logging_instance_info
+        if self.logging_instance_info:
             self._init_instance_info_csv(engine_manager_args)
 
     async def generate(
@@ -180,11 +180,11 @@ class LLMEngineManager:
                 self.global_scheduler.update_instance_infos(instance_info_list)
                 self.num_instance_info_update += 1
                 # Push migrate when the instance_info have updated a certain number of times.
-                if self.enable_migrate and self.num_instance_info_update != 0 \
-                    and self.num_instance_info_update % self.check_migrate_frequency == 0:
+                if self.enable_migration and self.num_instance_info_update != 0 \
+                    and self.num_instance_info_update % self.pair_migration_frequency == 0:
                     asyncio.create_task(self._migrate())
-                if self.record_instance_info:
-                    self._record_instance_infos_to_csv(instance_info_list)
+                if self.logging_instance_info:
+                    self._logging_instance_infos_to_csv(instance_info_list)
             # pylint: disable=W0703
             except Exception as e:
                 logger.error("unexpected exception occurs: {}".format(e))
@@ -224,7 +224,7 @@ class LLMEngineManager:
                     call_migrate_instance_pairs[i][0], call_migrate_instance_pairs[i][1], migrate_out_request_ids))
 
     async def _migrate(self) -> None:
-        migrate_instance_pairs = self.global_scheduler.check_migrate()
+        migrate_instance_pairs = self.global_scheduler.pair_migration()
         try:
             migration_tasks = []
             call_migrate_instance_pairs: List[Tuple[str, str]] = []
@@ -327,7 +327,7 @@ class LLMEngineManager:
 
     def _init_instance_info_csv(self, engine_manager_args: EngineManagerArgs) -> None:
         # pylint: disable=consider-using-with
-        self.instance_info_file = open(engine_manager_args.results_filename + '_instance.csv', 'w', encoding='utf-8')
+        self.instance_info_file = open(engine_manager_args.log_filename + '_instance.csv', 'w', encoding='utf-8')
         self.instance_info_csv = csv.writer(self.instance_info_file)
         self.instance_info_csv.writerow([
             'timestamp',
@@ -350,7 +350,7 @@ class LLMEngineManager:
             'num_block_all_waiting_request',
             'waiting_time_first_waiting_request'])
 
-    def _record_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
+    def _logging_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
         for instance_info in instance_infos:
             self.instance_info_csv.writerow([
                 instance_info.timestamp,

@@ -14,12 +14,12 @@
 class MigrationConfig:
     def __init__(
             self,
-            migrate_policy: str,
+            migration_policy: str,
             migration_backend: str,
             migration_cache_blocks: int,
             last_stage_max_blocks: int,
             max_stages: int,) -> None:
-        self.migrate_policy = migrate_policy
+        self.migration_policy = migration_policy
         self.migration_backend = migration_backend
         self.migration_cache_blocks = migration_cache_blocks
         self.last_stage_max_blocks = last_stage_max_blocks
@@ -33,8 +33,8 @@ class GlobalSchedulerConfig:
             dispatch_policy: str,
             check_migirate_policy: str,
             migrate_out_threshold: float,
-            enable_prefill_migrate: bool,
-            scale_policy: str,
+            enable_defrag: bool,
+            scaling_policy: str,
             scale_up_threshold: float,
             scale_down_threshold: float) -> None:
         self.initial_instances = initial_instances
@@ -42,10 +42,10 @@ class GlobalSchedulerConfig:
 
         self.dispatch_policy = dispatch_policy
 
-        self.check_migrate_policy = check_migirate_policy
+        self.pair_migration_policy = check_migirate_policy
         self.migrate_out_load_threshold = migrate_out_threshold*(-1)
-        self.enable_prefill_migrate = enable_prefill_migrate
+        self.enable_defrag = enable_defrag
 
-        self.scale_policy = scale_policy
+        self.scaling_policy = scaling_policy
         self.scale_up_threshold = scale_up_threshold*(-1)
         self.scale_down_threshold = scale_down_threshold*(-1)

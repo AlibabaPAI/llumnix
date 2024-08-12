@@ -96,9 +96,9 @@ class InstanceLoadCalculator:
         self.load_metric = load_metric
         self.enable_defrag = enable_defrag
         self.load_computation_strategies: Dict[str, LoadComputationStrategy] = {
-            'migrate': MigrateLoadComputation(load_metric, enable_defrag),
-            'dispatch': DispatchAndScaleLoadComputation(load_metric, enable_defrag),
-            'scale': DispatchAndScaleLoadComputation(load_metric, enable_defrag),
+            'migrate': MigrationLoadComputation(load_metric, enable_defrag),
+            'dispatch': DispatchAndScalingLoadComputation(load_metric, enable_defrag),
+            'scale': DispatchAndScalingLoadComputation(load_metric, enable_defrag),
         }
 
     def compute_instance_load(self,
@@ -120,7 +120,7 @@ class LoadComputationStrategy(ABC):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
         pass
 
-class MigrateLoadComputation(LoadComputationStrategy):
+class MigrationLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
         assert self.load_metric in ['used_ratio', 'consumed_speed']
         instance_load = -np.inf
@@ -142,7 +142,7 @@ class MigrateLoadComputation(LoadComputationStrategy):
             instance_load = (num_available_gpu_block / num_request)*(-1)
         return instance_load
 
-class DispatchAndScaleLoadComputation(LoadComputationStrategy):
+class DispatchAndScalingLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
         assert self.load_metric in ['used_ratio', 'consumed_speed']
         instance_load = -np.inf

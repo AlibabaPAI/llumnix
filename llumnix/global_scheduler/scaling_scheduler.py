@@ -21,7 +21,7 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 logger = init_logger(__name__)
 
 
-class ScaleScheduler:
+class ScalingScheduler:
     def __init__(self,
                  scale_up_threshold: float,
                  scale_down_threshold: float,

@@ -215,9 +215,10 @@ async def is_ready():
     ready_status = await engine_manager.is_ready.remote()
     return ready_status
 
-def set_runtime_env(manager_args: EngineManagerArgs):
-    os.environ['MIGRATE_CACHE_SIZE'] = str(manager_args.migration_cache_blocks)
-    os.environ['MIGRATE_BACKEND'] = manager_args.migration_backend
+def set_runtime_env(engine_manager_args: EngineManagerArgs):
+    os.environ['MIGRATE_CACHE_SIZE'] = str(engine_manager_args.migration_cache_blocks)
+    os.environ['MIGRATE_NUM_LAYERS'] = str(engine_manager_args.migration_num_layers)
+    os.environ['MIGRATE_BACKEND'] = engine_manager_args.migration_backend
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

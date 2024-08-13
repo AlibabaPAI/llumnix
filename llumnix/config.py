@@ -17,12 +17,14 @@ class MigrationConfig:
             migrate_policy: str,
             migration_backend: str,
             migration_cache_blocks: int,
+            migration_num_layers: int,
             last_stage_max_blocks: int,
             max_stages: int,
             migration_backend_init_timeout: float,
             model_parallelism_enabled: bool) -> None:
         self.migrate_policy = migrate_policy
         self.migration_backend = migration_backend
+        self.migration_num_layers = migration_num_layers
         self.migration_cache_blocks = migration_cache_blocks
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
@@ -53,4 +55,3 @@ class GlobalSchedulerConfig:
         self.scale_policy = scale_policy
         self.scale_up_threshold = scale_up_threshold*(-1)
         self.scale_down_threshold = scale_down_threshold*(-1)
-    

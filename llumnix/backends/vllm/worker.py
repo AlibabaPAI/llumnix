@@ -39,7 +39,8 @@ class MigrationWorker(Worker):
         vllm.model_executor.layers.sampler._sample_with_torch = _sample_with_torch
 
         backend = os.environ.get("MIGRATE_BACKEND", "rpc")
-        migrate_size = int(os.environ.get("MIGRATE_CACHE_SIZE", 32))
+        migrate_cache_size = int(os.environ.get("MIGRATE_CACHE_SIZE", 32))
+        migrate_num_layers =int(os.environ.get("MIGRATE_NUM_LAYERS", 1))
 
         parallel_config: ParallelConfig = kwargs["parallel_config"]
         model_parallelism_enabled = parallel_config.world_size > 1
@@ -47,12 +48,12 @@ class MigrationWorker(Worker):
         if backend == "nccl" and (not model_parallelism_enabled):
             model_config: ModelConfig = kwargs["model_config"]
             cache_config: CacheConfig = kwargs["cache_config"]
-            total_size = migrate_size * CacheEngine.get_cache_block_size(
+            total_size = migrate_num_layers * migrate_cache_size * CacheEngine.get_cache_block_size(
                 cache_config, model_config, parallel_config) # for nccl backend gpu cache
 
             device = torch.device(f"cuda:{kwargs['local_rank']}")
             _, total_memory = torch.cuda.mem_get_info(device)
-            migrate_ratio = math.ceil(total_size / total_memory * 100) / 100
+            migrate_ratio = math.ceil(total_size / total_memory * 10000) / 10000
             cache_config.gpu_memory_utilization -= migrate_ratio
 
             if cache_config.gpu_memory_utilization < 0:
@@ -89,7 +90,7 @@ class MigrationWorker(Worker):
             # Pinning memory in WSL is not supported.
             # https://docs.nvidia.com/cuda/wsl-user-guide/index.html#known-limitations-for-linux-cuda-applications
             logger.warning("Using 'pin_memory=False' as WSL is detected. "
-                            "This may slow down the performance.")
+                           "This may slow down the performance.")
 
         self.instance_id = instance_id
         self.migrate_backend: MigrationBackendBase = get_migrate_backend(migrate_config=migration_config,

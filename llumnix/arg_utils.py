@@ -50,10 +50,11 @@ class EngineManagerArgs:
     record_instance_info: bool = False
     profiling_result_file_path: str = ""
     gpu_type: str = "a10"
-    migration_backend: str = "rpc"
     migration_backend_init_timeout = 5.0
-    migration_cache_blocks: int = 512
-    last_stage_max_blocks: int = 4
+    migration_backend: str = "gloo"
+    migration_cache_blocks: int = 16
+    migration_num_layers: int = 1
+    last_stage_max_blocks: int = 16
     max_stages: int = 3
 
     def create_engine_manager_configs(
@@ -76,6 +77,7 @@ class EngineManagerArgs:
         migration_config = MigrationConfig(self.migrate_policy,
                                            self.migration_backend,
                                            self.migration_cache_blocks,
+                                           self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
                                            migration_backend_init_timeout,
@@ -205,6 +207,10 @@ class EngineManagerArgs:
                             type=int,
                             default=EngineManagerArgs.migration_cache_blocks,
                             help='cache blocks num during migration')
+        parser.add_argument('--migration-num-layers',
+                            type=int,
+                            default=EngineManagerArgs.migration_num_layers,
+                            help='layer-wise send/recv during migration')
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
                             default=EngineManagerArgs.last_stage_max_blocks,

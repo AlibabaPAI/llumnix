@@ -4,7 +4,9 @@ import torch
 from func_timeout import func_set_timeout, FunctionTimedOut
 
 import ray
+import pygloo
 import ray.util.collective as col
+import ray.util.collective.collective_group.gloo_util as gloo_util
 from vllm.logger import init_logger
 from vllm.worker.cache_engine import CacheEngine
 from llumnix.config import MigrationConfig
@@ -157,6 +159,8 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
+        # add bf16 type
+        gloo_util.TORCH_GLOO_DTYPE_MAP[torch.bfloat16] = pygloo.glooDataType_t.glooFloat16
 
         migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
 

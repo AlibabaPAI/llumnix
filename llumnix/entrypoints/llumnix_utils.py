@@ -167,14 +167,17 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
     instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args)
     request_output_queue = init_request_output_queue()
     logger.info("Init request_output_queue done")
-    ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
+    try:
+        ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
+    except ray.exceptions.RayActorError:
+        for idx, llumlet in enumerate(llumlets):
+            try:
+                ray.get(llumlet.is_ready.remote())
+            except ray.exceptions.RayActorError:
+                retry_manager_method_sync(engine_manager.scale_down.remote, 'scale_down', instance_ids[idx])
     logger.info("Init Llumlets done")
     retry_manager_method_sync(engine_manager.scale_up.remote, 'scale_up', instance_ids, llumlets)
-    logger.info("Scale up instance done")
-    # We now call run_engine_loop after llumlet's creation.
-    # for llumlet in llumlets:
-    #     llumlet.run_engine_loop.remote()
-
+    logger.info("Scale up instances done")
     logger.info("Init Llumnix components done")
 
     return engine_manager, instance_ids, llumlets, request_output_queue

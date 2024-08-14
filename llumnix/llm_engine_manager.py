@@ -299,18 +299,6 @@ class LLMEngineManager:
                 results[idx] = True
         return results
 
-    def get_actor_id(self):
-        return ray.get_runtime_context().get_actor_id()
-
-    def get_job_id(self):
-        for instance_id, instance in self.instances.items():
-            instance_job_id = ray.get(instance.get_job_id.remote())
-            print("instance_id: {}, instance_job_id: {}".format(instance_id, instance_job_id))
-        return ray.get_runtime_context().get_job_id()
-
-    def get_node_id(self):
-        return ray.get_runtime_context().get_node_id()
-
     @classmethod
     def from_args(cls,
                   engine_manager_args: EngineManagerArgs,
@@ -322,10 +310,6 @@ class LLMEngineManager:
                                    name=MANAGER_ACTOR_NAME,
                                    namespace='llumnix',
                                    lifetime="detached")(cls)
-        # manager_class = ray.remote(num_cpus=0,
-        #                            name=MANAGER_ACTOR_NAME,
-        #                            namespace='llumnix',
-        #                            lifetime="detached")(cls)
         engine_manager = manager_class.remote(engine_manager_args,
                                               global_scheduler_config,
                                               os.getcwd(),

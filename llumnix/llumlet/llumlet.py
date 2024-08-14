@@ -134,15 +134,6 @@ class Llumlet:
     def get_instance_id(self) -> str:
         return self.instance_id
 
-    def get_actor_id(self):
-        return ray.get_runtime_context().get_actor_id()
-
-    def get_job_id(self):
-        return ray.get_runtime_context().get_job_id()
-
-    def get_node_id(self):
-        return ray.get_runtime_context().get_node_id()
-
     def is_ready(self) -> bool:
         return True
 

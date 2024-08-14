@@ -104,8 +104,6 @@ async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
 
 def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
-    # if 'HEAD_NODE' in os.environ:
-    #     time.sleep(20)
     try:
         engine_manager = LLMEngineManager.from_args(engine_manager_args, None)
         logger.info("Init LLMEngineManager on current node")

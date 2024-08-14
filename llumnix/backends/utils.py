@@ -60,7 +60,6 @@ def initialize_cluster(
     # Create placement group for worker processes
     current_placement_group = ray.util.get_current_placement_group()
     if current_placement_group:
-        print("[initialize_cluster] current_placement_group")
         # We are in a placement group
         bundles = current_placement_group.bundle_specs
         # Verify that we can use the placement group.
@@ -77,7 +76,6 @@ def initialize_cluster(
                 "The number of required GPUs exceeds the total number of "
                 "available GPUs in the placement group.")
     else:
-        print("[initialize_cluster] not current_placement_group")
         num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
         if world_size > num_gpus_in_cluster:
             raise ValueError(
@@ -86,7 +84,7 @@ def initialize_cluster(
         # Create a new placement group
         placement_group_specs = ([{"CPU": 1}] + [{"GPU": 1}] * world_size)
         current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", lifetime="detached")
+            placement_group_specs, "STRICT_PACK")
         # Wait until PG is ready - this will block until all
         # requested resources are available, and will timeout
         # if they cannot be provisioned.

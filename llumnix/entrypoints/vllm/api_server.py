@@ -237,7 +237,6 @@ if __name__ == "__main__":
 
     print("engine_args: {}".format(engine_args))
 
-    args.launch_ray_cluster = False
     if args.launch_ray_cluster:
         # Launch the ray cluster for multi-node serving.
         launch_ray_cluster(args.ray_cluster_port)
@@ -250,7 +249,6 @@ if __name__ == "__main__":
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]
             instance_num_request[ins_id] = 0
-        print("instance_num_request: {}".format(instance_num_request))
         log_requests = not args.disable_log_requests_server
         # Start the api server after all the components of llumnix are ready.
         print(f"Start Api Server on '{args.host}:{args.port}'")

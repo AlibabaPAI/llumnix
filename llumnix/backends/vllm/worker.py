@@ -110,11 +110,11 @@ class MigrationWorker(Worker):
         except ray.exceptions.RayActorError:
             logger.info("[migrate_cache] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
 
-    def do_recv(self, src_handle, blocks: List[int]):
-        return self.migrate_backend.do_recv(src_handle, blocks=blocks)
+    def do_recv(self, *args, **kwargs):
+        return self.migrate_backend.do_recv(*args, **kwargs)
 
-    def do_send(self, dst_handle, blocks: List[int]):
-        return self.migrate_backend.do_send(dst_handle, blocks=blocks)
+    def do_send(self, *args, **kwargs):
+        return self.migrate_backend.do_send(*args, **kwargs)
 
     def rebuild_migrate_backend(self, instance_rank: Dict[str, int], group_name: str):
         self.migrate_backend.destory_col()

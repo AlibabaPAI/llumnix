@@ -81,7 +81,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
 
         self.dummy_cache = torch.empty(
-            size=(2*self.num_migration_cache_blocks, self.num_layers, migration_cache_size),
+            size=(self.num_layers, 2, self.num_migration_cache_blocks, self.migration_cache_size),
             dtype=self.cache_engine.dtype,
             device=self.cache_device,
             pin_memory=True
@@ -96,8 +96,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         logger.info("destory rpc migrate backend successfully.")
 
     def warmup(self) -> None:
-        self_handle = self.worker_handle_list[self.worker_rank]
-        self.actor.exec_method.remote(self.is_driver_worker, self_handle, "do_send", None, [0])
+        self.actor.exec_method.remote(self.is_driver_worker, "do_send", [0])
 
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         tot_blocks = len(src_blocks)
@@ -105,39 +104,38 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
             offset = min(self.num_migration_cache_blocks, tot_blocks - start_idx)
             send_blocks = src_blocks[start_idx:start_idx+offset]
-            ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", None, send_blocks)
+            ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", send_blocks)
             if rpc_numpy_cache is not None:
                 self.do_recv(rpc_numpy_cache, recv_blocks)
             rpc_numpy_cache = ray.get(ray_obj)
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
         self.do_recv(rpc_numpy_cache, recv_blocks)
 
-    def do_send(self, dst_handle, blocks: List[int]):
+    def do_send(self, blocks: List[int]):
         num_blocks = len(blocks)
-        data = self.dummy_cache[:2*num_blocks]
-        dummy_key_cpu = self.dummy_cache[:num_blocks]
-        dummy_value_cpu = self.dummy_cache[num_blocks:2*num_blocks]
+        data = self.dummy_cache[:,:,:num_blocks,:]
+        dummy_key_cpu = self.dummy_cache[:,0,:num_blocks,:]
+        dummy_value_cpu = self.dummy_cache[:,1,:num_blocks,:]
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
                 for idx, block_num in enumerate(blocks):
-                    dummy_key_cpu[idx][layer_idx].copy_(self.gpu_cache[layer_idx][0][block_num], non_blocking=True)
-                    dummy_value_cpu[idx][layer_idx].copy_(self.gpu_cache[layer_idx][1][block_num], non_blocking=True)
+                    dummy_key_cpu[layer_idx][idx].copy_(self.gpu_cache[layer_idx][0][block_num], non_blocking=True)
+                    dummy_value_cpu[layer_idx][idx].copy_(self.gpu_cache[layer_idx][1][block_num], non_blocking=True)
         torch.cuda.Stream.synchronize(self.migration_stream)
         return data.to(self.rpc_dtype).numpy()
 
-    def do_recv(self, src_handle, blocks: List[int]):
+    def do_recv(self, rpc_numpy_cache, blocks: List[int]):
         num_blocks = len(blocks)
-
         # use pin memory dummy_cache to speed up data transfer
-        data = self.dummy_cache[:2*num_blocks].copy_(torch.from_numpy(src_handle))
-        dummy_key = data[:num_blocks]
-        dummy_value = data[num_blocks:2*num_blocks]
+        self.dummy_cache[:,:,:num_blocks,:].copy_(torch.from_numpy(rpc_numpy_cache))
+        dummy_key_cpu = self.dummy_cache[:,0,:num_blocks,:]
+        dummy_value_cpu = self.dummy_cache[:,1,:num_blocks,:]
 
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
                 for idx, block_num in enumerate(blocks):
-                    self.gpu_cache[layer_idx][0][block_num].copy_(dummy_key[idx][layer_idx], non_blocking=True)
-                    self.gpu_cache[layer_idx][1][block_num].copy_(dummy_value[idx][layer_idx], non_blocking=True)
+                    self.gpu_cache[layer_idx][0][block_num].copy_(dummy_key_cpu[layer_idx][idx], non_blocking=True)
+                    self.gpu_cache[layer_idx][1][block_num].copy_(dummy_value_cpu[layer_idx][idx], non_blocking=True)
         torch.cuda.Stream.synchronize(self.migration_stream)
 
 class RayColMigrationBackend(MigrationBackendBase):

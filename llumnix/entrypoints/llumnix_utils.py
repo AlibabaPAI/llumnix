@@ -113,7 +113,8 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
     return engine_manager
 
 def init_llumlets(engine_manager_args: EngineManagerArgs,
-                  engine_args) -> Tuple[List[str], List[Llumlet]]:
+                  engine_args,
+                  node_id: str) -> Tuple[List[str], List[Llumlet]]:
     engine_config = engine_args.create_engine_config()
     parallel_config = engine_config.parallel_config
     instance_ids: List[str] = []
@@ -124,6 +125,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
             llumlet = Llumlet.from_args(
                 engine_manager_args.fixed_node_init_instance,
                 False,
+                node_id,
                 instance_id,
                 BackendType.VLLM,
                 parallel_config.world_size,
@@ -134,6 +136,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
             llumlet = Llumlet.from_args(
                 engine_manager_args.fixed_node_init_instance,
                 False,
+                node_id,
                 instance_id,
                 BackendType.SIM_VLLM,
                 parallel_config.world_size,
@@ -156,7 +159,8 @@ def init_request_output_queue() -> RayQueue:
     return request_output_queue
 
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,
-                            engine_args) -> Tuple[LLMEngineManager, List[Llumlet], RayQueue]:
+                            engine_args,
+                            node_id: str) -> Tuple[LLMEngineManager, List[Llumlet], RayQueue]:
     assert engine_args.engine_use_ray and engine_args.worker_use_ray, \
             ("In Llumnix, engine and worker must be ray actor in orther to run step and migrate concurrently.")
     engine_manager = init_manager(engine_manager_args)
@@ -164,10 +168,10 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
         assert engine_manager_args.migration_backend != 'gloo', \
             ("Llumlet should be initialized in manager when using gloo as migration backend for auto-scaling, "
              "please set --init-instance-in-manager argument.")
-        instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args)
+        instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id)
         retry_manager_method_sync(engine_manager.scale_up.remote, 'scale_up', instance_ids, llumlets)
     else:
-        instance_ids, llumlets = retry_manager_method_sync(engine_manager.init_llumlets.remote, 'init_llumlets', engine_args)
+        instance_ids, llumlets = retry_manager_method_sync(engine_manager.init_llumlets.remote, 'init_llumlets', engine_args, node_id)
     request_output_queue = init_request_output_queue()
     try:
         ray.get([llumlet.is_ready.remote() for llumlet in llumlets])

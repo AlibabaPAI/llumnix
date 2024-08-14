@@ -245,7 +245,8 @@ if __name__ == "__main__":
     if is_gpu_available():
         # Launch the Llumnix componets on current node.
         server_id = random_uuid()
-        engine_manager, instance_ids, llumlets, request_output_queue = init_llumnix_components(engine_manager_args, engine_args)
+        node_id = ray.get_runtime_context().get_node_id()
+        engine_manager, instance_ids, llumlets, request_output_queue = init_llumnix_components(engine_manager_args, engine_args, node_id)
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]
             instance_num_request[ins_id] = 0

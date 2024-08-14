@@ -318,7 +318,9 @@ class LLMEngineManager:
         logger.info("engine_manager_args: {}".format(engine_manager_args))
         return engine_manager
 
-    def init_llumlets(self, engine_args) -> Tuple[List[str], List[Llumlet]]:
+    def init_llumlets(self,
+                      engine_args,
+                      node_id: str) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
         engine_config = engine_args.create_engine_config()
         parallel_config = engine_config.parallel_config
@@ -330,6 +332,7 @@ class LLMEngineManager:
                 llumlet = Llumlet.from_args(
                     engine_manager_args.fixed_node_init_instance,
                     True,
+                    node_id,
                     instance_id,
                     BackendType.VLLM,
                     parallel_config.world_size,
@@ -340,6 +343,7 @@ class LLMEngineManager:
                 llumlet = Llumlet.from_args(
                     engine_manager_args.fixed_node_init_instance,
                     True,
+                    node_id,
                     instance_id,
                     BackendType.SIM_VLLM,
                     parallel_config.world_size,

@@ -54,6 +54,7 @@ class Llumlet:
     def from_args(cls,
                   fixed_node_init_instance: bool,
                   detached: bool,
+                  node_id: str,
                   instance_id: str,
                   backend_type: BackendType,
                   world_size: int,
@@ -64,7 +65,7 @@ class Llumlet:
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         if backend_type == backend_type.VLLM:
             if not fixed_node_init_instance:
-                placement_group = initialize_cluster(world_size)
+                placement_group = initialize_cluster(world_size, detached=detached)
                 kwargs["placement_group"] = placement_group
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
@@ -83,7 +84,7 @@ class Llumlet:
                                           max_concurrency=4,
                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                                    node_id=ray.get_runtime_context().get_node_id(),
+                                                    node_id=node_id,
                                                     soft=False,))
         else: # backend_type == backend_type.SIM_VLLM:
             engine_class = ray.remote(num_cpus=1,
@@ -92,7 +93,7 @@ class Llumlet:
                                       max_concurrency=4,
                                       lifetime=lifetime)(cls).options(
                                         scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                            node_id=ray.get_runtime_context().get_node_id(),
+                                            node_id=node_id,
                                             soft=False,))
         llumlet = engine_class.remote(instance_id, backend_type, migration_config, *args, **kwargs)
         return llumlet

@@ -243,7 +243,7 @@ class RayColMigrationBackend(MigrationBackendBase):
             for layer_idx in range(self.cache_engine.num_layers):
                 cache_idx = layer_idx % self.num_migration_num_layers
                 self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], self.dummy_cache[cache_idx], src_to_dst)
-                if cache_idx + 1 == self.num_migration_num_layers:
+                if cache_idx + 1 == self.num_migration_num_layers or layer_idx + 1 == self.cache_engine.num_layers:
                     col.send(self.dummy_cache, dst_handle, self.group_name)
         torch.cuda.Stream.synchronize(self.migration_stream)
 
@@ -252,7 +252,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.cache_engine.num_layers):
                 cache_idx = layer_idx % self.num_migration_num_layers
-                if cache_idx + 1 == self.num_migration_num_layers:
+                if cache_idx == 0:
                     col.recv(self.dummy_cache, src_handle, self.group_name)
                 self.cache_engine.attn_backend.swap_blocks(self.dummy_cache[cache_idx], self.gpu_cache[layer_idx], src_to_dst)
         torch.cuda.Stream.synchronize(self.migration_stream)

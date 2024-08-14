@@ -48,8 +48,9 @@ class MigrationWorker(Worker):
         if backend == "nccl" and (not model_parallelism_enabled):
             model_config: ModelConfig = kwargs["model_config"]
             cache_config: CacheConfig = kwargs["cache_config"]
+            # for nccl backend gpu cache
             total_size = migrate_num_layers * migrate_cache_size * CacheEngine.get_cache_block_size(
-                cache_config, model_config, parallel_config) # for nccl backend gpu cache
+                cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
 
             device = torch.device(f"cuda:{kwargs['local_rank']}")
             _, total_memory = torch.cuda.mem_get_info(device)

@@ -52,23 +52,25 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
-                  fixed_node_init: bool,
+                  fixed_node_init_instance: bool,
+                  detached: bool,
                   instance_id: str,
                   backend_type: BackendType,
                   world_size: int,
                   migration_config: MigrationConfig,
                   *args,
                   **kwargs):
-        llumlet = None
+        lifetime = "detached" if detached else None
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         if backend_type == backend_type.VLLM:
-            if not fixed_node_init:
+            if not fixed_node_init_instance:
                 placement_group = initialize_cluster(world_size)
                 kwargs["placement_group"] = placement_group
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
                                           namespace='llumnix',
-                                          max_concurrency=4)(cls).options(
+                                          max_concurrency=4,
+                                          lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,
                                                     placement_group_bundle_index=0,))
@@ -78,7 +80,8 @@ class Llumlet:
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
                                           namespace='llumnix',
-                                          max_concurrency=4)(cls).options(
+                                          max_concurrency=4,
+                                          lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                     node_id=ray.get_runtime_context().get_node_id(),
                                                     soft=False,))
@@ -86,7 +89,8 @@ class Llumlet:
             engine_class = ray.remote(num_cpus=1,
                                       name=f"instance_{instance_id}",
                                       namespace='llumnix',
-                                      max_concurrency=4)(cls).options(
+                                      max_concurrency=4,
+                                      lifetime=lifetime)(cls).options(
                                         scheduling_strategy=NodeAffinitySchedulingStrategy(
                                             node_id=ray.get_runtime_context().get_node_id(),
                                             soft=False,))
@@ -129,6 +133,15 @@ class Llumlet:
 
     def get_instance_id(self) -> str:
         return self.instance_id
+
+    def get_actor_id(self):
+        return ray.get_runtime_context().get_actor_id()
+
+    def get_job_id(self):
+        return ray.get_runtime_context().get_job_id()
+
+    def get_node_id(self):
+        return ray.get_runtime_context().get_node_id()
 
     def is_ready(self) -> bool:
         return True

@@ -25,8 +25,8 @@ import ray
 from vllm.sampling_params import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncStream
-from vllm.utils import random_uuid
 
+from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.llumnix_utils import launch_ray_cluster, is_gpu_available, init_llumnix_components
@@ -235,8 +235,9 @@ if __name__ == "__main__":
     engine_manager_args = EngineManagerArgs.from_cli_args(args)
     engine_args = AsyncEngineArgs.from_cli_args(args)
 
-    logger.info("engine_args: {}".format(engine_args))
+    print("engine_args: {}".format(engine_args))
 
+    args.launch_ray_cluster = False
     if args.launch_ray_cluster:
         # Launch the ray cluster for multi-node serving.
         launch_ray_cluster(args.ray_cluster_port)
@@ -249,6 +250,7 @@ if __name__ == "__main__":
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]
             instance_num_request[ins_id] = 0
+        print("instance_num_request: {}".format(instance_num_request))
         log_requests = not args.disable_log_requests_server
         # Start the api server after all the components of llumnix are ready.
         print(f"Start Api Server on '{args.host}:{args.port}'")

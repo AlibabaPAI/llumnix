@@ -149,6 +149,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.cache_engine = cache_engine
         self.backend = migration_config.migration_backend
         self.num_migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine.num_layers)
+        self.num_migration_cache_blocks = migration_config.migration_cache_blocks
 
         self.backend = migration_config.migration_backend
         self.ray_world_size = -1

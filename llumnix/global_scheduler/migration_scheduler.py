@@ -147,7 +147,9 @@ class PrefillRelaxed(PairMigrationPolicy):
         right_instance_infos = list(reversed(sorted_instance_infos))
         migrate_instance_pairs = []
         for i in range(min(len(left_instance_infos), len(right_instance_infos))):
-            migrate_instance_pairs.append((right_instance_infos[i].instance_id, left_instance_infos[i].instance_id))
+            if right_instance_infos[i].num_killed_request != 0 \
+                or right_instance_infos[i].instance_load_migrate > left_instance_infos[i].instance_load_migrate:
+                migrate_instance_pairs.append((right_instance_infos[i].instance_id, left_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
 class PairMigrationPolicyFactory:

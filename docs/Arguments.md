@@ -8,7 +8,7 @@ Note: since Llumnix is still in alpha stage, the interface and arguments are *su
 usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--fixed-node-init]
             [--initial-instances INITIAL_INSTANCES]
-            [--load-metric {consumed_speed,used_ratio}]
+            [--load-metric {remaining_step,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue}]
             [--enable-migration]
@@ -44,8 +44,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--load-metric`
 - Instance load metric.
-- Possible choices: consumed_speed, used_ratio
-- Default: "consumed_speed"
+- Possible choices: remaining_step, usage_ratio
+- Default: "remaining_step"
 
 `--polling-interval`
 - Time interval(s) to update instance info and pair migration.

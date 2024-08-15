@@ -25,7 +25,7 @@ class EngineManagerArgs:
     initial_instances: int = 1
     fixed_node_init: bool = False
 
-    load_metric: str = 'consumed_speed'
+    load_metric: str = 'remaining_step'
     polling_interval: float = 0.05
 
     dispatch_policy: str = 'load'
@@ -103,7 +103,7 @@ class EngineManagerArgs:
         parser.add_argument('--load-metric',
                             type=str,
                             default=EngineManagerArgs.load_metric,
-                            choices=['consumed_speed', 'used_ratio'],
+                            choices=['remaining_step', 'usage_ratio'],
                             help='instance load metric')
         parser.add_argument('--polling-interval',
                             type=float,

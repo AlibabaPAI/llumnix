@@ -41,7 +41,7 @@ class DispatchScheduler:
         if isinstance(self.dispatch_policy, (Load, Queue)):
             self._sort_instance_infos(descending=False)
         dispatch_instance_id = self.dispatch_policy.dispatch(self.instance_num_request,
-                                                    self.sorted_instance_infos)
+                                                             self.sorted_instance_infos)
         self.instance_num_request[dispatch_instance_id] += 1
         if self.num_request % 100 == 0:
             logger.info("self.num_request: {}".format(self.num_request))

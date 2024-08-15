@@ -92,7 +92,7 @@ class InstanceLoadCalculator:
     def __init__(self,
                  load_metric: str,
                  enable_defrag: bool) -> None:
-        assert load_metric in ['consumed_speed', 'used_ratio']
+        assert load_metric in ['remaining_step', 'usage_ratio']
         self.load_metric = load_metric
         self.enable_defrag = enable_defrag
         self.load_computation_strategies: Dict[str, LoadComputationStrategy] = {
@@ -122,11 +122,11 @@ class LoadComputationStrategy(ABC):
 
 class MigrationLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
-        assert self.load_metric in ['used_ratio', 'consumed_speed']
+        assert self.load_metric in ['usage_ratio', 'remaining_step']
         instance_load = -np.inf
-        if self.load_metric == 'used_ratio':
-            instance_load = i.num_used_gpu_block / i.num_total_gpu_block
-        elif self.load_metric == 'consumed_speed':
+        if self.load_metric == 'usage_ratio':
+            instance_load = (i.num_used_gpu_block + i.num_block_first_waiting_request) / i.num_total_gpu_block
+        elif self.load_metric == 'remaining_step':
             if not self.enable_defrag:
                 num_request = i.num_running_request
                 num_available_gpu_block = i.num_available_gpu_block
@@ -144,11 +144,11 @@ class MigrationLoadComputation(LoadComputationStrategy):
 
 class DispatchAndScalingLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
-        assert self.load_metric in ['used_ratio', 'consumed_speed']
+        assert self.load_metric in ['usage_ratio', 'remaining_step']
         instance_load = -np.inf
-        if self.load_metric == 'used_ratio':
+        if self.load_metric == 'usage_ratio':
             instance_load = (i.num_used_gpu_block + i.num_block_all_waiting_request) / i.num_total_gpu_block
-        elif self.load_metric == 'consumed_speed':
+        elif self.load_metric == 'remaining_step':
             num_request = i.num_running_request + i.num_waiting_request
             num_available_gpu_block = i.num_available_gpu_block - i.num_block_all_waiting_request
             if num_request == 0:

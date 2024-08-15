@@ -59,7 +59,6 @@ class Llumlet:
                   migration_config: MigrationConfig,
                   *args,
                   **kwargs):
-        llumlet = None
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         if backend_type == backend_type.VLLM:
             if not fixed_node_init:
@@ -123,12 +122,6 @@ class Llumlet:
 
     def get_instance_info(self) -> InstanceInfo:
         return self.backend_engine.engine.instance_info
-
-    def get_actor_name(self) -> str:
-        return self.actor_name
-
-    def get_instance_id(self) -> str:
-        return self.instance_id
 
     def is_ready(self) -> bool:
         return True

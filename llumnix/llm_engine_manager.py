@@ -140,7 +140,7 @@ class LLMEngineManager:
                 logger.info("[abort] instance {} is dead".format(instance_id))
                 self.scale_down(instance_id)
 
-    async def _get_request_instance(self):
+    async def _get_request_instance(self) -> None:
         logger.info("_get_request_instance:")
         tasks = [instance_actor_handle.get_all_request_ids.remote() for instance_actor_handle in self.instances.values()]
         instance_ids = list(self.instances.keys())
@@ -248,18 +248,24 @@ class LLMEngineManager:
             logger.error("unexpected exception occurs: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
-    def scale_up(self, instance_id: Union[str, Iterable[str]], llumlet_actor_handles: List["ray.actor.ActorHandle"]) -> None:
+    def scale_up(self,
+                 instance_id: Union[str, Iterable[str]],
+                 llumlet_actor_handle: Union["ray.actor.ActorHandle", List["ray.actor.ActorHandle"]]) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
+        if not isinstance(llumlet_actor_handle, list):
+            llumlet_actor_handle = [llumlet_actor_handle,]
+        llumlet_actor_handles = list(llumlet_actor_handle)
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
                 self.instances[ins_id] = llumlet_actor_handles[idx]
                 self.instance_migrating[ins_id] = False
         self.global_scheduler.scale_up(instance_ids)
         self.num_instance = len(self.instances)
+        return self.num_instance
 
-    def scale_down(self, instance_id: Union[str, Iterable[str]]) -> None:
+    def scale_down(self, instance_id: Union[str, Iterable[str]]) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
@@ -269,6 +275,7 @@ class LLMEngineManager:
                 del self.instance_migrating[ins_id]
         self.global_scheduler.scale_down(instance_ids)
         self.num_instance = len(self.instances)
+        return self.num_instance
 
     def _connect_to_instances(self):
         actor_names_dict = ray.util.list_named_actors(True)
@@ -315,9 +322,6 @@ class LLMEngineManager:
                                               profiling_database=profiling_database)
         logger.info("engine_manager_args: {}".format(engine_manager_args))
         return engine_manager
-
-    def get_actor_name(self) -> str:
-        return self.actor_name
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""

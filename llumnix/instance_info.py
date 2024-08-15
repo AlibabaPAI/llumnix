@@ -64,9 +64,9 @@ class InstanceInfo:
         self.finished_request_ids = None
 
         # For record statistics, assigned in backend engine.
-        self.instance_id: None
-        self.step_id: None
-        self.timestamp: None
+        self.instance_id = None
+        self.step_id = None
+        self.timestamp = None
         self.latency = 0.0
 
 class InstanceLoadInfo:

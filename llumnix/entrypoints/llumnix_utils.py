@@ -17,6 +17,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.logger import init_logger
 from llumnix.arg_utils import EngineManagerArgs
 
+
 logger = init_logger(__name__)
 
 # TODO(s5u13b): Set the values through tests.
@@ -31,7 +32,7 @@ def get_ip_address():
     ip_address = result.stdout.decode('utf-8').strip()
     return ip_address
 
-def launch_ray_cluster(ray_cluster_port: int) -> None:
+def launch_ray_cluster(ray_cluster_port: int):
     head_node_ip = os.getenv('HEAD_NODE_IP')
     node_ip_address = get_ip_address()
     try:
@@ -68,6 +69,7 @@ def launch_ray_cluster(ray_cluster_port: int) -> None:
                     sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
     ray.init(address=f"{head_node_ip}:{ray_cluster_port}", ignore_reinit_error=True, namespace='llumnix')
+    return result
 
 def is_gpu_available() -> bool:
     try:

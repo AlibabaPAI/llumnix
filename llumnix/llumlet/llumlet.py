@@ -65,6 +65,8 @@ class Llumlet:
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         if backend_type == backend_type.VLLM:
             if not fixed_node_init_instance:
+                # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
+                assert migration_config.migration_backend != 'gloo', 'When the migration backend is gloo, fixed_node_init_instance must be set.'
                 placement_group = initialize_cluster(world_size, detached=detached)
                 kwargs["placement_group"] = placement_group
                 engine_class = ray.remote(num_cpus=1,

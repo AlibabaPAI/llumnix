@@ -39,7 +39,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Fix the placement of instance to current node.
 
 `--initial-instances`
-- Number of model instance created at initialization.
+- Number of model instances created at initialization.
 - Default: 1
 
 `--load-metric`
@@ -83,11 +83,11 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Enable auto scaling.
 
 `--min-instances`
-- Minimum number of instance.
+- Minimum number of instances.
 - Default: 1
 
 `--max-instances`
-- Maximum number of instance.
+- Maximum number of instances.
 - Default: 1
 
 `--scaling-interval`
@@ -131,7 +131,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: "rpc"
 
 `--migration-cache-blocks`
-- Number of cache block in migration.
+- Number of cache blocks in migration.
 - Default: 512
 
 `--last-stage-max-blocks`

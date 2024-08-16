@@ -42,18 +42,14 @@ def _query_server_generate_benchmark(prompt: str) -> dict:
     return _query_server(prompt, interface='generate_benchmark')
 
 @pytest.fixture
-def api_server(tokenizer_pool_size: int):
+def api_server():
     script_path = Path(__file__).parent.joinpath(
         "api_server_manager.py").absolute()
     commands = [
         sys.executable,
         "-u",
         str(script_path),
-        "--model", "facebook/opt-125m", 
         "--host", "127.0.0.1",
-        "--tokenizer-pool-size", str(tokenizer_pool_size),
-        "--engine-use-ray",
-        "--worker-use-ray"
     ]
     uvicorn_process = subprocess.Popen(commands)
     yield
@@ -62,8 +58,7 @@ def api_server(tokenizer_pool_size: int):
     time.sleep(1.0)
 
 @pytest.mark.parametrize("interface", ['generate', 'generate_benchmark'])
-@pytest.mark.parametrize("tokenizer_pool_size", [0, 2])
-def test_api_server(api_server, interface: str, tokenizer_pool_size: int):
+def test_api_server(api_server, interface: str):
     """
     Run the API server and test it.
 

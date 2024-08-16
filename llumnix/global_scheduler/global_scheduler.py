@@ -38,13 +38,13 @@ class GlobalScheduler:
                                                     self.instance_load_calculator)
         # migrate args
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
-                                                    global_scheduler_config.migrate_out_load_threshold,
-                                                    self.instance_load_calculator)
+                                                      global_scheduler_config.migrate_out_load_threshold,
+                                                      self.instance_load_calculator)
         # auto-scaling args
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
-                                              global_scheduler_config.scale_down_threshold,
-                                              global_scheduler_config.scaling_policy,
-                                              self.instance_load_calculator)
+                                                  global_scheduler_config.scale_down_threshold,
+                                                  global_scheduler_config.scaling_policy,
+                                                  self.instance_load_calculator)
 
         self.num_instance = 0
         self.instance_id_set: Set[str] = set()

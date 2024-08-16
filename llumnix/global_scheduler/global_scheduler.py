@@ -18,7 +18,7 @@ from llumnix.config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
-from llumnix.global_scheduler.scale_scheduler import ScaleScheduler
+from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 
 logger = init_logger(__name__)
 
@@ -29,22 +29,22 @@ class GlobalScheduler:
         self.global_scheduler_config = global_scheduler_config
         # instance load and instance info args
         self.load_metric = global_scheduler_config.load_metric
-        self.enable_prefill_migrate = global_scheduler_config.enable_prefill_migrate
+        self.enable_defrag = global_scheduler_config.enable_defrag
         self.instance_load_calculator = InstanceLoadCalculator(load_metric=self.load_metric,
-                                                               enable_prefill_migrate=self.enable_prefill_migrate)
+                                                               enable_defrag=self.enable_defrag)
         # dispatch args
         self.dispatch_policy = global_scheduler_config.dispatch_policy
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
                                                     self.instance_load_calculator)
         # migrate args
-        self.migrate_scheduler = MigrationScheduler(global_scheduler_config.check_migrate_policy,
-                                                    global_scheduler_config.migrate_out_load_threshold,
-                                                    self.instance_load_calculator)
+        self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
+                                                      global_scheduler_config.migrate_out_load_threshold,
+                                                      self.instance_load_calculator)
         # auto-scaling args
-        self.scale_scheduler = ScaleScheduler(global_scheduler_config.scale_up_threshold,
-                                              global_scheduler_config.scale_down_threshold,
-                                              global_scheduler_config.scale_policy,
-                                              self.instance_load_calculator)
+        self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
+                                                  global_scheduler_config.scale_down_threshold,
+                                                  global_scheduler_config.scaling_policy,
+                                                  self.instance_load_calculator)
 
         self.num_instance = 0
         self.instance_id_set: Set[str] = set()
@@ -63,14 +63,14 @@ class GlobalScheduler:
         instance_id = self.dispatch_scheduler.dispatch()
         return instance_id
 
-    def check_migrate(self) -> List[Tuple[str, str]]:
-        self.migrate_scheduler.update_instance_infos(self.instance_info)
-        migrate_instance_pairs = self.migrate_scheduler.check_migrate()
+    def pair_migration(self) -> List[Tuple[str, str]]:
+        self.migration_scheduler.update_instance_infos(self.instance_info)
+        migrate_instance_pairs = self.migration_scheduler.pair_migration()
         return migrate_instance_pairs
 
     def check_scale(self) -> Tuple[str, str]:
-        self.scale_scheduler.update_instance_infos(self.instance_info)
-        scale_up_num, scale_down_num = self.scale_scheduler.check_scale()
+        self.scaling_scheduler.update_instance_infos(self.instance_info)
+        scale_up_num, scale_down_num = self.scaling_scheduler.check_scale()
         return scale_up_num, scale_down_num
 
     def scale_up(self, instance_id: Union[str, Iterable[str]]) -> None:
@@ -100,16 +100,16 @@ class GlobalScheduler:
     def _add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instance = len(self.instance_id_set)
-        for scheduler in (self.dispatch_scheduler, self.migrate_scheduler, self.scale_scheduler):
+        for scheduler in (self.dispatch_scheduler, self.migration_scheduler, self.scaling_scheduler):
             scheduler.update_instance_infos(self.instance_info)
             scheduler.add_instance(instance_id)
 
     def _remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
         self.num_instance = len(self.instance_id_set)
-        for scheduler in (self.dispatch_scheduler, self.migrate_scheduler, self.scale_scheduler):
+        for scheduler in (self.dispatch_scheduler, self.migration_scheduler, self.scaling_scheduler):
             scheduler.update_instance_infos(self.instance_info)
             scheduler.remove_instance(instance_id)
 
     def _get_empty_instance_info(self) -> InstanceInfo:
-        return self.scale_scheduler.get_empty_instance_info()
+        return self.scaling_scheduler.get_empty_instance_info()

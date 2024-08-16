@@ -9,26 +9,26 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--fixed-node-init]
             [--initial-instances INITIAL_INSTANCES]
             [--load-metric {consumed_speed,used_ratio}]
+            [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue}]
-            [--enable-migrate]
-            [--check-migrate-frequency CHECK_MIGRATE_FREQUENCY]
-            [--check-migrate-policy {balanced,prefill_constrained,prefill_relaxed}]
+            [--enable-migration]
+            [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
+            [--pair-migration-policy {balanced,prefill_constrained,prefill_relaxed}]
             [--migrate-out-threshold MIGRATE_OUT_THRESHOLD]
-            [--migrate-policy {LCFS,SJF,LJF}]
-            [--enable-prefill-migrate ENABLE_PREFILL_MIGRATE]
+            [--request-migration-policy {LCFS,SJF,LJF}]
+            [--enable-defrag ENABLE_DEFRAG]
             [--enable-scaling]
             [--min-instances MIN_INSTANCES]
             [--max-instances MAX_INSTANCES]
             [--scaling-interval SCALING_INTERVAL]
-            [--scale-policy {max_load,avg_load}]
+            [--scaling-policy {max_load,avg_load}]
             [--scale-up-threshold SCALE_UP_THRESHOLD]
             [--scale-down-threshold SCALE_DOWN_THRESHOLD]
             [--disable-log-requests-manager]
-            [--record-instance-info]
-            [--results-filename RESULTS_FILENAME]
-            [--gpu-type GPU_TYPE]
+            [--log-instance-info]
+            [--log-filename LOG_FILENAME]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
-            [--polling-interval POLLING_INTERVAL]
+            [--gpu-type GPU_TYPE]
             [--migration-backend {gloo,rpc}]
             [--migration-cache_blocks MIGRATION_CACHE_BLOCKS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
@@ -36,43 +36,47 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 ```
 
 `--fixed-node-init`
-- Place llumlet and workers on the current node.
+- Fix the placement of instance to current node.
 
 `--initial-instances`
-- Number of model instances.
+- Number of model instances created at initialization.
 - Default: 1
 
 `--load-metric`
-- Load metric.
+- Instance load metric.
 - Possible choices: consumed_speed, used_ratio
 - Default: "consumed_speed"
 
+`--polling-interval`
+- Time interval(s) to update instance info and pair migration.
+- Default: 0.1
+
 `--dispatch-policy`
-- Dispatch policy.
+- Request dispatch policy.
 - Possible choices: balanced, load, queue
 - Default: "load"
 
-`--enable-migrate`
-- Enable migrate request between instances.
+`--enable-migration`
+- Enable migrate requests between instances.
 
-`--check-migrate-frequency`
-- Check migrate frequency.
+`--pair-migration-frequency`
+- Pair migration frequency.
 - Default: 1
 
-`--check-migrate-policy`
-- Check migrate policy.
+`--pair-migration-policy`
+- Pair migration policy.
 
 `--migrate-out-threshold`
-- Migrate out load threshold.
+- Migrate out instance load threshold.
 - Default: 3.0
 
-`--migrate-policy`
-- Migrate policy.
+`--request-migration-policy`
+- Request migration policy.
 - Possible choices: LCFS, SJF, LJF
-- Default: "LCFS"
+- Default: "SJF"
 
-`--enable-prefill-migrate`
-- Enable prefill migrate.
+`--enable-defrag`
+- Enable defragmentation.
 - Default: False
 
 `--enable-scaling`
@@ -90,49 +94,44 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Interval time of check scaling.
 - Default: 10
 
-`--scale-policy`
-- Scale policy.
+`--scaling-policy`
+- Scaling policy.
 - Possible choices: max_load, avg_load
 - default: "max_load"
 
 `--scale-up-threshold`
-- Scaling up threshold.
+- Scale up threshold.
 - Default: 4
 
 `--scale-down-threshold`
-- Scaling down threshold.
+- Scale down threshold.
 - Default: 100
 
 `--disable-log-requests-manager`
 - Disable logging requests in manager.
-- Default: False
 
-`--record-instance-info`
-- Enable recording instance-info data to a csv file.
-- Default: False
+`--log-instance-info`
+- Enable logging instance info.
 
-`--results-filename`
-- Results filename.
-
-`--gpu-type`
-- GPU type specified when using simulator.
-- Default: "a10"
+`--log-filename`
+- Log filename.
+- Default: "server.log"
 
 `--profiling-result-file-path`
 - Profiling result file path.
 - Default: ""
 
-`--polling-interval`
-- Time interval(s) to update instance info/migration.
-- Default: 0.1
+`--gpu-type`
+- GPU type specified when using simulator.
+- Default: "a10"
 
 `--migration-backend`
-- Communication backend during migration.
+- Communication backend of migration.
 - Possible choices: gloo, rpc
 - Default: "rpc"
 
 `--migration-cache-blocks`
-- Cache blocks num during migration.
+- Number of cache blocks in migration.
 - Default: 512
 
 `--last-stage-max-blocks`

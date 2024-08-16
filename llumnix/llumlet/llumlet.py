@@ -46,7 +46,7 @@ class Llumlet:
         self.migration_coordinator = MigrationCoordinator(self.backend_engine,
                                                           migration_config.last_stage_max_blocks,
                                                           migration_config.max_stages)
-        self.migration_scheduler = LocalMigrationScheduler(migration_config.migrate_policy,
+        self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                            self.backend_engine)
         self.log_requests = True
 

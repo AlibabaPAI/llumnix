@@ -21,15 +21,15 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 logger = init_logger(__name__)
 
 
-class ScaleScheduler:
+class ScalingScheduler:
     def __init__(self,
                  scale_up_threshold: float,
                  scale_down_threshold: float,
-                 scale_policy: str,
+                 scaling_policy: str,
                  instance_load_calculator: InstanceLoadCalculator) -> None:
         self.scale_up_threshold = scale_up_threshold
         self.scale_down_threshold = scale_down_threshold
-        self.scale_policy = ScalePolicyFactory.get_policy(scale_policy,
+        self.scaling_policy = ScalePolicyFactory.get_policy(scaling_policy,
                                                           instance_load_calculator=instance_load_calculator)
         self.instance_load_calculator = instance_load_calculator
 
@@ -46,10 +46,10 @@ class ScaleScheduler:
         if len(self.instance_info.keys()) < self.num_instance:
             return scale_up_num, scale_down_num
         now_instances = [self.instance_info[instance_id] for instance_id in self.instance_id_set]
-        load_metric_up = self.scale_policy.compute_load_metric_up(now_instances)
-        load_metric_down = self.scale_policy.compute_load_metric_down(now_instances)
+        load_metric_up = self.scaling_policy.compute_load_metric_up(now_instances)
+        load_metric_down = self.scaling_policy.compute_load_metric_down(now_instances)
         if load_metric_up > self.scale_up_threshold:
-            while self.scale_policy.compute_load_metric_avg(now_instances) > self.scale_up_threshold:
+            while self.scaling_policy.compute_load_metric_avg(now_instances) > self.scale_up_threshold:
                 scale_up_num += 1
                 now_instances.append(self.get_empty_instance_info())
         elif load_metric_down < self.scale_down_threshold:

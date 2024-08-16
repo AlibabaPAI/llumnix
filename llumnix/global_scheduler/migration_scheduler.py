@@ -24,22 +24,22 @@ logger = init_logger(__name__)
 
 class MigrationScheduler:
     def __init__(self,
-                 check_migrate_policy: str,
+                 pair_migration_policy: str,
                  migrate_out_load_threshold: float,
                  instance_load_calculator: InstanceLoadCalculator) -> None:
         self.migrate_out_load_threshold = migrate_out_load_threshold
         self.instance_load_calculator = instance_load_calculator
-        self.enable_prefill_migrate = instance_load_calculator.enable_prefill_migrate
-        if not self.enable_prefill_migrate:
-            self.check_migrate_policy \
-                = CheckMigratePolicyFactory.get_policy("balanced",
-                                                       migrate_out_load_threshold=migrate_out_load_threshold,
-                                                       instance_load_calculator=instance_load_calculator)
+        self.enable_defrag = instance_load_calculator.enable_defrag
+        if not self.enable_defrag:
+            self.pair_migration_policy \
+                = PairMigrationPolicyFactory.get_policy("balanced",
+                                                        migrate_out_load_threshold=migrate_out_load_threshold,
+                                                        instance_load_calculator=instance_load_calculator)
         else:
-            self.check_migrate_policy \
-                = CheckMigratePolicyFactory.get_policy(check_migrate_policy,
-                                                       migrate_out_load_threshold=migrate_out_load_threshold,
-                                                       instance_load_calculator=instance_load_calculator)
+            self.pair_migration_policy \
+                = PairMigrationPolicyFactory.get_policy(pair_migration_policy,
+                                                        migrate_out_load_threshold=migrate_out_load_threshold,
+                                                        instance_load_calculator=instance_load_calculator)
 
         self.num_instance = 0
         self.instance_id_set: Set[str] = set()
@@ -47,9 +47,9 @@ class MigrationScheduler:
         self.instance_info: Dict[str, InstanceInfo] = None
         self.sorted_instance_infos: List[InstanceInfo] = None
 
-    def check_migrate(self) -> List[Tuple[str, str]]:
+    def pair_migration(self) -> List[Tuple[str, str]]:
         self._sort_instance_infos(descending=False)
-        return self.check_migrate_policy.check_migrate(self.sorted_instance_infos)
+        return self.pair_migration_policy.pair_migration(self.sorted_instance_infos)
 
     def update_instance_infos(self,
                               instance_info: Dict[str, InstanceInfo]) -> None:
@@ -73,7 +73,7 @@ class MigrationScheduler:
             reverse=descending
         )
 
-class CheckMigratePolicy(ABC):
+class PairMigrationPolicy(ABC):
     def __init__(self,
                  migrate_out_load_threshold: float,
                  instance_load_calculator: InstanceLoadCalculator) -> None:
@@ -81,15 +81,15 @@ class CheckMigratePolicy(ABC):
         self.instance_load_calculator = instance_load_calculator
 
     @abstractmethod
-    def check_migrate(self,
+    def pair_migration(self,
                       sorted_instance_infos: List[InstanceInfo]
                       ) -> List[Tuple[str, str]]:
         raise NotImplementedError
 
-class Balanced(CheckMigratePolicy):
-    def check_migrate(self,
-                      sorted_instance_infos: List[InstanceInfo]
-                      ) -> List[Tuple[str, str]]:
+class Balanced(PairMigrationPolicy):
+    def pair_migration(self,
+                       sorted_instance_infos: List[InstanceInfo]
+                       ) -> List[Tuple[str, str]]:
         # migrate in instances
         left_instance_infos = [i for i in sorted_instance_infos
                                if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
@@ -120,10 +120,10 @@ class Balanced(CheckMigratePolicy):
             instance_info_after_migrate.num_free_gpu_block += num_block_last_running_request
         return self.instance_load_calculator.compute_instance_load(instance_info_after_migrate, action='migrate')
 
-class PrefillConstrained(CheckMigratePolicy):
-    def check_migrate(self,
-                      sorted_instance_infos: List[InstanceInfo]
-                      ) -> List[Tuple[str, str]]:
+class PrefillConstrained(PairMigrationPolicy):
+    def pair_migration(self,
+                       sorted_instance_infos: List[InstanceInfo]
+                       ) -> List[Tuple[str, str]]:
         # migrate in instances
         left_instance_infos = [i for i in sorted_instance_infos
                                if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
@@ -136,10 +136,10 @@ class PrefillConstrained(CheckMigratePolicy):
             migrate_instance_pairs.append((right_instance_infos[i].instance_id, left_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
-class PrefillRelaxed(CheckMigratePolicy):
-    def check_migrate(self,
-                      sorted_instance_infos: List[InstanceInfo]
-                      ) -> List[Tuple[str, str]]:
+class PrefillRelaxed(PairMigrationPolicy):
+    def pair_migration(self,
+                       sorted_instance_infos: List[InstanceInfo]
+                       ) -> List[Tuple[str, str]]:
         # migrate in instances
         left_instance_infos = [i for i in sorted_instance_infos
                                if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
@@ -150,7 +150,7 @@ class PrefillRelaxed(CheckMigratePolicy):
             migrate_instance_pairs.append((right_instance_infos[i].instance_id, left_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
-class CheckMigratePolicyFactory:
+class PairMigrationPolicyFactory:
     _POLICY_REGISTRY = {
         'balanced': Balanced,
         'prefill_constrained': PrefillConstrained,
@@ -158,5 +158,5 @@ class CheckMigratePolicyFactory:
     }
 
     @classmethod
-    def get_policy(cls, policy_name: str, **kwargs) -> CheckMigratePolicy:
+    def get_policy(cls, policy_name: str, **kwargs) -> PairMigrationPolicy:
         return cls._POLICY_REGISTRY[policy_name](**kwargs)

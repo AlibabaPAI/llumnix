@@ -240,8 +240,8 @@ def calculate_cdf(latencies):
     print(f"{hist=}")
     print(f"{cumsum=}")
 
-def plot_latency_cdf(req_latencies, prefill_latencies, decode_latencies, results_filename):
-    fig_filename = os.path.splitext(results_filename)[0] + "_latency.png"
+def plot_latency_cdf(req_latencies, prefill_latencies, decode_latencies, log_filename):
+    fig_filename = os.path.splitext(log_filename)[0] + "_latency.png"
     fig, (ax_req, ax_prefill, ax_decode) = plt.subplots(1, 3, figsize=(3*7, 4.8))
 
     def plot_single(ax, latencies, is_prefill=False):
@@ -286,8 +286,8 @@ def plot_latency_cdf(req_latencies, prefill_latencies, decode_latencies, results
     plt.suptitle(fig_filename_title, fontsize=6)
     fig.savefig(fig_filename)
 
-def plot_len_cdf(prompt_lens, response_lens, total_tokens, results_filename):
-    fig_filename = os.path.splitext(results_filename)[0] + "_len.png"
+def plot_len_cdf(prompt_lens, response_lens, total_tokens, log_filename):
+    fig_filename = os.path.splitext(log_filename)[0] + "_len.png"
     fig, (ax_prompt, ax_response, ax_total) = plt.subplots(1, 3, figsize=(3*7, 4.8))
 
     def plot_single(ax, lens, x_label_str, title_str):
@@ -328,8 +328,8 @@ def plot_len_cdf(prompt_lens, response_lens, total_tokens, results_filename):
     plt.suptitle(fig_filename_title, fontsize=6)
     fig.savefig(fig_filename)
 
-def plot_instance(results_filename_0):
-    current_dir = os.path.dirname(os.path.abspath(results_filename_0))
+def plot_instance(log_filename_0):
+    current_dir = os.path.dirname(os.path.abspath(log_filename_0))
     log_files = glob.glob(os.path.join(current_dir, '*.log_instance.csv'))
     log_files.sort(key=os.path.getmtime, reverse=True)
     df_0 = pd.read_csv(log_files[0]).sort_values(by=["timestamp"])
@@ -347,7 +347,7 @@ def plot_instance(results_filename_0):
     fig, ax = plt.subplots()
     ax.plot(timestamp_list_0, instance_num_list_0, color="red", label=f"instance_num(avg {avg_instance_num} /s)")
     ax.legend(loc='upper left')
-    fig_filename = os.path.splitext(results_filename_0)[0] + "_instance.png"
+    fig_filename = os.path.splitext(log_filename_0)[0] + "_instance.png"
     index1 = fig_filename.rfind('/')
     index2 = fig_filename.rfind('/', 0, index1)
     fig_filename_title = fig_filename[index2 + 1:]
@@ -355,7 +355,7 @@ def plot_instance(results_filename_0):
     fig.savefig(fig_filename)
     return avg_instance_num
 
-def save_all_latencies_npy(all_token_latencies:List[np.ndarray], results_filename):
+def save_all_latencies_npy(all_token_latencies:List[np.ndarray], log_filename):
     dtype = [('timestamp',float),('latency',float)]
     all_lat_pairs = []
     for arr in all_token_latencies:
@@ -364,7 +364,7 @@ def save_all_latencies_npy(all_token_latencies:List[np.ndarray], results_filenam
             all_lat_pairs.append((pair[0],pair[1]))
     all_lat_pairs = np.array(all_lat_pairs,dtype=dtype)
     all_lat_pairs = np.sort(all_lat_pairs,order='timestamp')
-    np.save(os.path.splitext(results_filename)[0], all_lat_pairs)
+    np.save(os.path.splitext(log_filename)[0], all_lat_pairs)
 
 class MeasureLatency:
     def __init__(self):
@@ -423,7 +423,7 @@ async def benchmark(
     prompts: List[str],
     allow_variable_generation_length: bool,
     verbose: bool,
-    results_filename: str,
+    log_filename: str,
     ip_ports: List[int],
     distribution: str,
     qps: float,
@@ -475,9 +475,9 @@ async def benchmark(
                                       m._latencies, m._per_token_latencies, m._inference_latencies, m._request_ids, m._decode_latencies, m._request_lens,
                                       log_latencies, fail_on_response_failure)
     calculate_cdf(m._latencies)
-    plot_latency_cdf(m._latencies, m._prefill_token_latencies, m._decode_token_latencies, results_filename)
-    save_all_latencies_npy(m._all_latencies, results_filename)
-    # avg_instance_num = plot_instance(results_filename)
+    plot_latency_cdf(m._latencies, m._prefill_token_latencies, m._decode_token_latencies, log_filename)
+    save_all_latencies_npy(m._all_latencies, log_filename)
+    # avg_instance_num = plot_instance(log_filename)
     avg_instance_num = 0.0
     return throughput, m._prefill_token_latencies, m._decode_token_latencies, m._inference_latencies, avg_instance_num, m._latencies, m._request_ids, m._decode_latencies, m._request_lens, m._all_decode_latencies
 
@@ -655,7 +655,7 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('--backend', type=GenerationBackend,
                         choices=[e.name for e in GenerationBackend], default='vLLM')
-    parser.add_argument('--results_filename', type=str, default='benchmark.log')
+    parser.add_argument('--log_filename', type=str, default='benchmark.log')
     parser.add_argument('--ip_ports', nargs='+', required=True, help='List of ip:port')
     parser.add_argument('--random_prompt_lens_mean', type=int)
     parser.add_argument('--random_prompt_lens_range', type=int)
@@ -692,7 +692,7 @@ def main():
     # parser.add_argument('--calculate_begin_ratio', type=float, default=0.5)
     # parser.add_argument('--calculate_end_ratio', type=float, default=0.8)
 
-    parser.add_argument('--enable_migrate', type=int ,default=0)
+    parser.add_argument('--enable_migration', type=int ,default=0)
     parser.add_argument('--priority_ratio', type=float ,default=0.0)
 
     args = parser.parse_args()
@@ -757,7 +757,7 @@ def main():
 
         print('total tokens', sorted(list(total_tokens)))
 
-    plot_len_cdf(prompt_lens, response_lens, total_tokens, args.results_filename)
+    plot_len_cdf(prompt_lens, response_lens, total_tokens, args.log_filename)
 
     prompts = list(zip(prompts, prompt_lens, response_lens))
 
@@ -767,7 +767,7 @@ def main():
         prompts,
         args.allow_variable_generation_length,
         args.verbose,
-        args.results_filename,
+        args.log_filename,
         args.ip_ports,
         args.distribution,
         args.qps,
@@ -775,11 +775,11 @@ def main():
         args.log_latencies,
         args.fail_on_response_failure,
     ))
-    file_name = os.path.splitext(args.results_filename)[0] + "_latency_info.json"
+    file_name = os.path.splitext(args.log_filename)[0] + "_latency_info.json"
     results = []
     import datetime
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    file_name = os.path.splitext(args.results_filename)[0] + "_latency_info.json"
+    file_name = os.path.splitext(args.log_filename)[0] + "_latency_info.json"
     try:
         with open(file_name, 'r') as f:
             results = json.load(f)

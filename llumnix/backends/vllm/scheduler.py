@@ -186,7 +186,7 @@ class SchedulerLlumnix(Scheduler):
         self.free_seq(seq)
 
     @scheduler_lock
-    def get_record_instance_info(self) -> InstanceInfo:
+    def get_instance_info(self) -> InstanceInfo:
         num_total_gpu_block = self.cache_config.num_gpu_blocks
         num_free_gpu_block = self.block_manager.get_num_free_gpu_blocks()
         num_used_gpu_block = num_total_gpu_block - num_free_gpu_block

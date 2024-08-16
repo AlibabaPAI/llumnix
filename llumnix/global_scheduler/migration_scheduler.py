@@ -88,8 +88,8 @@ class PairMigrationPolicy(ABC):
 
 class Balanced(PairMigrationPolicy):
     def pair_migration(self,
-                      sorted_instance_infos: List[InstanceInfo]
-                      ) -> List[Tuple[str, str]]:
+                       sorted_instance_infos: List[InstanceInfo]
+                       ) -> List[Tuple[str, str]]:
         # migrate in instances
         left_instance_infos = [i for i in sorted_instance_infos
                                if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
@@ -122,8 +122,8 @@ class Balanced(PairMigrationPolicy):
 
 class PrefillConstrained(PairMigrationPolicy):
     def pair_migration(self,
-                      sorted_instance_infos: List[InstanceInfo]
-                      ) -> List[Tuple[str, str]]:
+                       sorted_instance_infos: List[InstanceInfo]
+                       ) -> List[Tuple[str, str]]:
         # migrate in instances
         left_instance_infos = [i for i in sorted_instance_infos
                                if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
@@ -138,8 +138,8 @@ class PrefillConstrained(PairMigrationPolicy):
 
 class PrefillRelaxed(PairMigrationPolicy):
     def pair_migration(self,
-                      sorted_instance_infos: List[InstanceInfo]
-                      ) -> List[Tuple[str, str]]:
+                       sorted_instance_infos: List[InstanceInfo]
+                       ) -> List[Tuple[str, str]]:
         # migrate in instances
         left_instance_infos = [i for i in sorted_instance_infos
                                if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]

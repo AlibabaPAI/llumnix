@@ -102,7 +102,7 @@ class EngineManagerArgs:
         parser.add_argument('--initial-instances',
                             type=int,
                             default=EngineManagerArgs.initial_instances,
-                            help='number of model instance created at initialzation')
+                            help='number of model instances created at initialzation')
 
         parser.add_argument('--load-metric',
                             type=str,
@@ -152,11 +152,11 @@ class EngineManagerArgs:
         parser.add_argument('--min-instances',
                             type=int,
                             default=EngineManagerArgs.min_instances,
-                            help='minimum number of instance')
+                            help='minimum number of instances')
         parser.add_argument('--max-instances',
                             type=int,
                             default=EngineManagerArgs.max_instances,
-                            help='maximum number of instance')
+                            help='maximum number of instances')
         parser.add_argument('--scaling-interval',
                             type=int,
                             default=EngineManagerArgs.scaling_interval,
@@ -203,7 +203,7 @@ class EngineManagerArgs:
         parser.add_argument('--migration-cache_blocks',
                             type=int,
                             default=EngineManagerArgs.migration_cache_blocks,
-                            help='number of cache block in migration')
+                            help='number of cache blocks in migration')
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
                             default=EngineManagerArgs.last_stage_max_blocks,

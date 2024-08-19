@@ -124,9 +124,9 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
     llumlets: List[Llumlet] = []
 
     instance_ids = [str(uuid.uuid4().hex) for _ in range(engine_manager_args.initial_instances)]
-    pp_or_tp_enabled = parallel_config.world_size > 1
+    model_parallelism_enabled = parallel_config.world_size > 1
     migration_configs = engine_manager_args.create_migration_config(
-        engine_manager_args.migration_backend_init_timeout, pp_or_tp_enabled)
+        engine_manager_args.migration_backend_init_timeout, model_parallelism_enabled)
 
     for idx in range(engine_manager_args.initial_instances):
         instance_id = instance_ids[idx]

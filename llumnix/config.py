@@ -20,14 +20,14 @@ class MigrationConfig:
             last_stage_max_blocks: int,
             max_stages: int,
             migration_backend_init_timeout: float,
-            pp_or_tp_enabled: bool) -> None:
+            model_parallelism_enabled: bool) -> None:
         self.migrate_policy = migrate_policy
         self.migration_backend = migration_backend
         self.migration_cache_blocks = migration_cache_blocks
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.migration_backend_init_timeout = migration_backend_init_timeout
-        self.pp_or_tp_enabled = pp_or_tp_enabled
+        self.model_parallelism_enabled = model_parallelism_enabled
 
 class GlobalSchedulerConfig:
     def __init__(

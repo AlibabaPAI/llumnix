@@ -71,7 +71,7 @@ class EngineManagerArgs:
         return global_scheduler_config
 
     def create_migration_config(
-        self, migration_backend_init_timeout, pp_or_tp_enabled
+        self, migration_backend_init_timeout, model_parallelism_enabled
     ) -> MigrationConfig:
         migration_config = MigrationConfig(self.migrate_policy,
                                            self.migration_backend,
@@ -79,7 +79,7 @@ class EngineManagerArgs:
                                            self.last_stage_max_blocks,
                                            self.max_stages,
                                            migration_backend_init_timeout,
-                                           pp_or_tp_enabled)
+                                           model_parallelism_enabled)
         return migration_config
 
     @classmethod

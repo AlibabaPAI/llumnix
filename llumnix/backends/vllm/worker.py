@@ -26,7 +26,7 @@ from vllm.worker.cache_engine import CacheEngine
 from llumnix.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 
-from llumnix.backends.vllm.migrate_backend import MigrateBackendBase, get_migrate_backend
+from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migrate_backend
 from llumnix.config import MigrationConfig
 
 logger = init_logger(__name__)
@@ -42,9 +42,9 @@ class MigrationWorker(Worker):
         migrate_size = int(os.environ.get("MIGRATE_CACHE_SIZE", 32))
 
         parallel_config: ParallelConfig = kwargs["parallel_config"]
-        pp_or_tp_enabled = parallel_config.world_size > 1
+        model_parallelism_enabled = parallel_config.world_size > 1
 
-        if backend == "nccl" and (not pp_or_tp_enabled):
+        if backend == "nccl" and (not model_parallelism_enabled):
             model_config: ModelConfig = kwargs["model_config"]
             cache_config: CacheConfig = kwargs["cache_config"]
             total_size = migrate_size * CacheEngine.get_cache_block_size(
@@ -92,7 +92,7 @@ class MigrationWorker(Worker):
                             "This may slow down the performance.")
 
         self.instance_id = instance_id
-        self.migrate_backend: MigrateBackendBase = get_migrate_backend(migrate_config=migration_config,
+        self.migrate_backend: MigrationBackendBase = get_migrate_backend(migrate_config=migration_config,
                                                   cache_engine=self.cache_engine,
                                                   worker_handle_list=src_worker_handle_list,
                                                   scheduling_strategy=scheduling_strategy,\

@@ -119,7 +119,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             for layer_idx in range(self.num_layers):
                 self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], send_cache[layer_idx], src_to_dst)
         torch.cuda.Stream.synchronize(self.migration_stream)
-        return send_cache.to(self.dtype).numpy()
+        return send_cache.to(self.rpc_dtype).numpy()
 
     def do_recv(self, rpc_numpy_cache, blocks: List[int]):
         num_blocks = len(blocks)

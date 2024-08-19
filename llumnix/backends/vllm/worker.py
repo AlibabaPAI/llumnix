@@ -94,7 +94,7 @@ class MigrationWorker(Worker):
                            "This may slow down the performance.")
 
         self.instance_id = instance_id
-        self.migrate_backend: MigrationBackendBase = get_migrate_backend(migrate_config=migration_config,
+        self.migrate_backend: MigrationBackendBase = get_migrate_backend(migration_config=migration_config,
                                                   cache_engine=self.cache_engine,
                                                   worker_handle_list=src_worker_handle_list,
                                                   scheduling_strategy=scheduling_strategy,\
@@ -125,7 +125,7 @@ class MigrationWorker(Worker):
             self.ray_world_size = num_instance * self.parallel_config.world_size
             self.ray_rank = self.rank + instance_rank[self.instance_id] * self.parallel_config.world_size
             ret = self.migrate_backend.init_col(group_name, self.ray_world_size, self.ray_rank)
-        
+
         return ret
 
     def warmup(self):

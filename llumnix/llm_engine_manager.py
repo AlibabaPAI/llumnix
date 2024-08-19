@@ -170,15 +170,20 @@ class LLMEngineManager:
                 tasks = [instance.get_instance_info.remote() for instance in self.instances.values()]
                 instance_ids = list(self.instances.keys())
                 rets = await asyncio.gather(*tasks, return_exceptions=True)
+
                 instance_info_list = []
+                dead_instances = []
                 for idx, ret in enumerate(rets):
                     if not isinstance(ret, ray.exceptions.RayActorError):
                         if ret is not None:
                             instance_info_list.append(ret)
                     else:
                         instance_id = instance_ids[idx]
-                        logger.info("[_update_instance_info_loop] instance {} is dead".format(instance_id))
-                        self.scale_down(instance_id)
+                        dead_instances.append(instance_id)
+                if len(dead_instances) > 0:
+                    logger.info("[_update_instance_info_loop] dead instances: {}.".format(dead_instances))
+                    self.scale_down(dead_instances)
+
                 self.global_scheduler.update_instance_infos(instance_info_list)
                 self.num_instance_info_update += 1
                 # Push migrate when the instance_info have updated a certain number of times.
@@ -251,57 +256,61 @@ class LLMEngineManager:
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
     async def rebuild_migrate_backend(self) -> None:
-        # wait for all instances to finish migration
+        # Wait for all instances to finish migration
         while any(self.instance_migrating.values()):
             await asyncio.sleep(0.1)
 
-        # when rebuild migrate backend, disable migrate
+        # During rebuilding migrate backend, disable migrate
         origin_config = self.enable_migrate
         self.enable_migrate = False
 
-        async def run_task(alive_instances: List[str], task: str, *args, **kwargs) -> List:
+        async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):
             tasks = []
             for instance_name in alive_instances:
                 llumlet_handle = self.instances[instance_name]
-                tasks.append(llumlet_handle.execute_engine_method.remote(
-                    "_run_workers", task, *args, **kwargs))
+                tasks.append(llumlet_handle.execute_engine_method.remote("_run_workers", task_name, *args, **kwargs))
 
             rets = await asyncio.gather(*tasks, return_exceptions=True)
-            dead_instances = []
+
+            dead_instances = set()
             for instance_name, ret in zip(alive_instances, rets):
                 if isinstance(ret, ray.exceptions.RayActorError):
-                    self.scale_down(instance_name, rebuild_migrate_backend=False)
-                    dead_instances.append(instance_name)
-                    logger.info("{} fail, {}: {}".format(task, instance_name, ret))
+                    dead_instances.add(instance_name)
+
+            if len(dead_instances) > 0:
+                self.scale_down(dead_instances, rebuild_migrate_backend=False)
+                ray.kill(ray.get_actor("gloo_queue", "llumnix"))
 
             return dead_instances
 
         alive_instances = sorted(self.instances.keys())
         pending_task = self.pending_rebuild_migrate_instances
+        group_name = None
 
         while len(alive_instances) > 0 and self.pending_rebuild_migrate_instances > 0:
-            logger.info("rebuild migrate backend doing, pending_rebuild_migrate_instances: {}"
-                        .format(self.pending_rebuild_migrate_instances))
-
+            dead_instances = set()
             group_name = str(uuid.uuid4().hex)
-            id_rank_map = {instance_id: index for index, instance_id in enumerate(alive_instances)}
+            instance_rank = {instance_id: index for index, instance_id in enumerate(alive_instances)}
+            dead_instances = dead_instances.union(await run_task(alive_instances, "rebuild_migrate_backend",
+                                                                  instance_rank, group_name))
 
-            dead_instances = await run_task(alive_instances, "rebuild_migrate_backend", id_rank_map, group_name)
-
-            if len(dead_instances) == 0:
-                dead_instances.extend(await run_task(alive_instances, "warmup"))
+            if len(dead_instances) == 0 and self.pending_rebuild_migrate_instances == pending_task:
+                dead_instances = dead_instances.union(await run_task(alive_instances, "warmup"))
 
             if len(dead_instances) == 0:
                 self.pending_rebuild_migrate_instances -= pending_task
 
-            alive_instances = sorted(self.instances.keys())
+            alive_instances = sorted(set(self.instances.keys()) - dead_instances)
             pending_task = self.pending_rebuild_migrate_instances
 
-        if len(alive_instances) > 0:
-            logger.info("rebuild {} migrate backend done, group_name: {}, alive instance ({}): {}"
-                        .format(self.engine_manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
+        if len(alive_instances) == 0:
+            self.pending_rebuild_migrate_instances = 0
+            group_name = None
 
-        # restore migrate config
+        logger.info("rebuild {} migrate backend done, group_name: {}, alive instance ({}): {}"
+            .format(self.engine_manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
+            
+        # Restore migrate config
         self.enable_migrate = origin_config
 
     def scale_up(self, instance_id: Union[str, Iterable[str]], llumlet_actor_handles: List["ray.actor.ActorHandle"]) -> None:
@@ -322,7 +331,7 @@ class LLMEngineManager:
         self.num_instance = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migrate_instances != 0,
-        # a coroutine is already handling the membership change. And the coroutine will account for the membership changes
+        # a coroutine is already handling the membership change and it will account for the membership changes
         # caused by this scale-up (see rebuild_migrate_backend for details). Therefore, we simply return in this case.
         if indeed_update and no_pending_instance:
             asyncio.create_task(self.rebuild_migrate_backend())
@@ -344,7 +353,9 @@ class LLMEngineManager:
         self.global_scheduler.scale_down(instance_ids)
         self.num_instance = len(self.instances)
 
-        if indeed_update and no_pending_instance and rebuild_migrate_backend:
+        if len(self.instances) == 0:
+            self.pending_rebuild_migrate_instances = 0
+        elif indeed_update and no_pending_instance and rebuild_migrate_backend:
             asyncio.create_task(self.rebuild_migrate_backend())
 
     def _connect_to_instances(self):
@@ -356,7 +367,12 @@ class LLMEngineManager:
         for instance_actor_name, instance_actor_handle in zip(instance_actor_names, instance_actor_handles):
             instance_id = instance_actor_name[len('instance_'):]
             if instance_id not in self.instances:
-                logger.info("connect to instance {}".format(instance_id))
+                try:
+                    ray.get(instance_actor_handle.is_ready.remote())
+                except Exception as e:
+                    logger.info("connect to instance {} abort, which may be not ready or alive.".format(instance_id))
+                    continue
+                logger.info("connect to instance {}.".format(instance_id))
                 scale_up_instance_ids.append(instance_id)
                 scale_up_instance_actor_handles.append(instance_actor_handle)
         # The only function that can add instance actor handles to manager.

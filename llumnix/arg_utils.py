@@ -51,6 +51,7 @@ class EngineManagerArgs:
     profiling_result_file_path: str = ""
     gpu_type: str = "a10"
     migration_backend: str = "rpc"
+    migration_backend_init_timeout = 5.0
     migration_cache_blocks: int = 512
     last_stage_max_blocks: int = 4
     max_stages: int = 3
@@ -69,15 +70,15 @@ class EngineManagerArgs:
                                                         self.scale_down_threshold)
         return global_scheduler_config
 
-    def create_migration_configs(
-        self, instance_rank_map, pp_or_tp_enabled
+    def create_migration_config(
+        self, migration_backend_init_timeout, pp_or_tp_enabled
     ) -> MigrationConfig:
         migration_config = MigrationConfig(self.migrate_policy,
                                            self.migration_backend,
                                            self.migration_cache_blocks,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
-                                           instance_rank_map,
+                                           migration_backend_init_timeout,
                                            pp_or_tp_enabled)
         return migration_config
 
@@ -196,6 +197,10 @@ class EngineManagerArgs:
                             default=EngineManagerArgs.migration_backend,
                             choices=['gloo','nccl','rpc'],
                             help='communication backend during migration')
+        parser.add_argument('--migration-backend-init-timeout',
+                            type=float,
+                            default=EngineManagerArgs.migration_backend_init_timeout,
+                            help='timeout(s) for initializing migration backend')
         parser.add_argument('--migration-cache-blocks',
                             type=int,
                             default=EngineManagerArgs.migration_cache_blocks,

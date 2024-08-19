@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 import torch
+from func_timeout import func_set_timeout, FunctionTimedOut
 
 import ray
 import ray.util.collective as col
@@ -12,7 +13,7 @@ logger = init_logger(__name__)
 
 class MigrateBackendBase(ABC):
     @abstractmethod
-    def init_col(self, name, world_size, rank) -> None:
+    def init_col(self, name, world_size, rank) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -49,9 +50,11 @@ class ProxyActor:
 
         return ret
 
+NUMPY_SUPPORT_DTYPES = [torch.float32, torch.float16]
+
 class RPCMigrateBackend(MigrateBackendBase):
     def __init__(self, migrate_config: MigrationConfig, cache_engine: CacheEngine,  worker_rank, worker_handle_list, \
-                  scheduling_strategy, dtype, is_driver_worker, gpu_cache) -> None:
+                  scheduling_strategy, is_driver_worker, gpu_cache) -> None:
         super().__init__()
 
         self.migrate_config = migrate_config
@@ -61,7 +64,13 @@ class RPCMigrateBackend(MigrateBackendBase):
         self.worker_handle_list = worker_handle_list
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
 
-        self.dtype = dtype
+        self.rpc_dtype = self.cache_engine.dtype
+        if self.cache_engine.dtype in NUMPY_SUPPORT_DTYPES:
+            self.rpc_dtype = self.cache_engine.dtype
+        else:
+            self.rpc_dtype = torch.float32
+            logger.warning("Detecting numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine.dtype))
+
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
 
@@ -78,11 +87,12 @@ class RPCMigrateBackend(MigrateBackendBase):
         )
         self.migration_stream = torch.cuda.Stream()
 
-    def init_col(self, name, world_size, rank) -> None:
-        logger.info("create rpc migrate backend success.")
+    def init_col(self, name, world_size, rank) -> bool:
+        logger.info("create rpc migrate backend successfully.")
+        return True
 
     def destory_col(self) -> None:
-        logger.info("destory rpc migrate backend success.")
+        logger.info("destory rpc migrate backend successfully.")
 
     def warmup(self) -> None:
         self_handle = self.worker_handle_list[self.worker_rank]
@@ -112,7 +122,7 @@ class RPCMigrateBackend(MigrateBackendBase):
                     dummy_key_cpu[idx][layer_idx].copy_(self.gpu_cache[layer_idx][0][block_num], non_blocking=True)
                     dummy_value_cpu[idx][layer_idx].copy_(self.gpu_cache[layer_idx][1][block_num], non_blocking=True)
         torch.cuda.Stream.synchronize(self.migration_stream)
-        return data.to(self.dtype).numpy()
+        return data.to(self.rpc_dtype).numpy()
 
     def do_recv(self, src_handle, blocks: List[int]):
         num_blocks = len(blocks)
@@ -130,8 +140,8 @@ class RPCMigrateBackend(MigrateBackendBase):
         torch.cuda.Stream.synchronize(self.migration_stream)
 
 class RayMigrateBackend(MigrateBackendBase):
-    def __init__(self, migrate_config: MigrationConfig, cache_engine: CacheEngine, ray_world_size, ray_rank, \
-                  local_rank, scheduling_strategy, dtype, is_driver_worker, gpu_cache) -> None:
+    def __init__(self, migrate_config: MigrationConfig, cache_engine: CacheEngine, local_rank, scheduling_strategy, 
+                 is_driver_worker, gpu_cache, backend_init_timeout) -> None:
         super().__init__()
 
         self.migrate_config = migrate_config
@@ -139,13 +149,13 @@ class RayMigrateBackend(MigrateBackendBase):
         self.num_migration_cache_blocks = migrate_config.migration_cache_blocks
 
         self.backend = migrate_config.migration_backend
-        self.ray_world_size = ray_world_size
-        self.ray_rank = ray_rank
+        self.ray_world_size = -1
+        self.ray_rank = -1
         self.group_name = None
+        self.init_timeout = backend_init_timeout
 
         self.local_rank = local_rank
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
-        self.dtype = dtype
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
 
@@ -168,29 +178,48 @@ class RayMigrateBackend(MigrateBackendBase):
 
         self.migration_stream = torch.cuda.Stream()
 
-    def init_col(self, name, world_size, rank) -> None:
-        self.group_name = name
+    def init_col(self, group_name, world_size, rank) -> bool:
+        @func_set_timeout(self.init_timeout)
+        def init_group(world_size, rank, backend, group_name):
+            col.init_collective_group(world_size, rank, backend, group_name)
+
+        try:
+            init_group(world_size, rank, self.backend, group_name)
+        except FunctionTimedOut:
+            logger.info("create ray collective group fail (group_name:{}, world_size: {}, rank: {}, backbend: {})."
+                .format(group_name, world_size, rank, self.backend))
+            return False
+
+        self.group_name = group_name
         self.ray_world_size = world_size
         self.ray_rank = rank
 
-        col.init_collective_group(world_size=self.ray_world_size, rank=self.ray_rank,
-            backend=self.backend, group_name=self.group_name)
-
-        logger.info("create ray collective group success (group_name:{}, world_size: {}, rank: {}, backbend: {})."
+        logger.info("create ray collective group successfully (group_name:{}, world_size: {}, rank: {}, backbend: {})."
                     .format(self.group_name, self.ray_world_size, self.ray_rank, self.backend))
+        return True
 
-    def warmup(self) -> None:
-        if self.ray_world_size > 1:
-            col.allreduce(self.dummy_cache[0], self.group_name)
-
-        logger.info("ray collective group warmup success (group_name:{}, world_size: {}, rank: {}, backbend: {})."
+    def warmup(self):
+        if self.ray_world_size > 1 and self.group_name is not None:
+            try:
+                col.allreduce(self.dummy_cache[0], self.group_name)
+            except Exception as e:
+                logger.info("warmup collective group failed (group_name:{}, world_size: {}, rank: {}, backbend: {})."
                     .format(self.group_name, self.ray_world_size, self.ray_rank, self.backend))
+                return False
+
+        logger.info("ray collective group warmup successfully (group_name:{}, world_size: {}, rank: {}, backbend: {})."
+                    .format(self.group_name, self.ray_world_size, self.ray_rank, self.backend))
+        return True
 
     def destory_col(self) -> None:
         if self.group_name is not None:
-            col.destroy_collective_group(self.group_name)
-            logger.info("destory ray collective group success (group_name:{}, backbend: {})."
-                        .format(self.group_name, self.backend))
+            err_info = None
+            try:
+                col.destroy_collective_group(self.group_name)
+            except Exception as e:
+                err_info = e
+            logger.info("destory ray collective group successfully (group_name:{}, backbend: {}), neet_err: {}."
+                        .format(self.group_name, self.backend, err_info))
             self.group_name = None
 
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
@@ -232,8 +261,8 @@ class RayMigrateBackend(MigrateBackendBase):
                     self.gpu_cache[layer_idx][1][block_num].copy_(dummy_value_cpu[idx][layer_idx], non_blocking=True)
         torch.cuda.Stream.synchronize(self.migration_stream)
 
-def get_migrate_backend(migrate_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy, \
-                           dtype, is_driver_worker, gpu_cache, ray_world_size, ray_rank, worker_rank, local_rank) -> MigrateBackendBase:
+def get_migrate_backend(migrate_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy, 
+                        is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrateBackendBase:
     if migrate_config.pp_or_tp_enabled and migrate_config.migration_backend == 'nccl':
         logger.warning("NCCL backend is not supported for PP or TP enabled model, using gloo instead.")
         migrate_config.migration_backend = 'gloo'
@@ -246,11 +275,11 @@ def get_migrate_backend(migrate_config: MigrationConfig, cache_engine: CacheEngi
     target_col = None
     backend = migrate_config.migration_backend
     if backend in ['nccl', 'gloo']:
-        target_col = RayMigrateBackend(migrate_config, cache_engine, ray_world_size, ray_rank, \
-                                          local_rank, scheduling_strategy, dtype, is_driver_worker, gpu_cache)
+        target_col = RayMigrateBackend(migrate_config, cache_engine, local_rank, scheduling_strategy, is_driver_worker, 
+                                       gpu_cache, migrate_config.migration_backend_init_timeout)
     elif backend == 'rpc':
-        target_col = RPCMigrateBackend(migrate_config, cache_engine, worker_rank, worker_handle_list, scheduling_strategy, \
-                                           dtype, is_driver_worker, gpu_cache)
+        target_col = RPCMigrateBackend(migrate_config, cache_engine, worker_rank, worker_handle_list, scheduling_strategy, 
+                                       is_driver_worker, gpu_cache)
     else:
         raise ValueError(f"Unsupported backend {backend}")
 

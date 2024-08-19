@@ -131,6 +131,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: gloo, rpc
 - Default: "rpc"
 
+`--migration-backend-init-timeout`
+- Timeout(s) for initializing migration backend.
+- Default: 5.0
+
 `--migration-cache-blocks`
 - Cache blocks num during migration.
 - Default: 512

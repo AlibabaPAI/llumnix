@@ -26,11 +26,10 @@ from vllm.worker.cache_engine import CacheEngine
 from llumnix.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 
-from llumnix.backends.vllm.migrate_backend import get_migrate_backend
+from llumnix.backends.vllm.migrate_backend import MigrateBackendBase, get_migrate_backend
 from llumnix.config import MigrationConfig
 
 logger = init_logger(__name__)
-NUMPY_SUPPORT_DTYPES = [torch.float32, torch.float16]
 
 class MigrationWorker(Worker):
     def __init__(self, *args, **kwargs) -> None:
@@ -92,30 +91,13 @@ class MigrationWorker(Worker):
             logger.warning("Using 'pin_memory=False' as WSL is detected. "
                             "This may slow down the performance.")
 
-        num_migration_cache_blocks = migration_config.migration_cache_blocks
-        self.num_migration_cache_blocks = num_migration_cache_blocks
-
-        self.rpc_dtype = self.cache_engine.dtype
-        if self.cache_engine.dtype in NUMPY_SUPPORT_DTYPES:
-            self.rpc_dtype = self.cache_engine.dtype
-        else:
-            self.rpc_dtype = torch.float32
-            logger.warning("Detecting numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine.dtype))
-
         self.instance_id = instance_id
-        self.migration_config = migration_config
-        num_instance = len(migration_config.instance_rank_map)
-        self.ray_world_size = num_instance * self.parallel_config.world_size
-        self.ray_rank = self.rank + migration_config.instance_rank_map[self.instance_id] * self.parallel_config.world_size
-        self.migrate_backend = get_migrate_backend(migrate_config=migration_config,
+        self.migrate_backend: MigrateBackendBase = get_migrate_backend(migrate_config=migration_config,
                                                   cache_engine=self.cache_engine,
                                                   worker_handle_list=src_worker_handle_list,
-                                                  scheduling_strategy=scheduling_strategy,
-                                                  dtype=self.rpc_dtype,
+                                                  scheduling_strategy=scheduling_strategy,\
                                                   is_driver_worker=self.is_driver_worker,
                                                   gpu_cache=self.gpu_cache,
-                                                  ray_world_size=self.ray_world_size,
-                                                  ray_rank=self.ray_rank,
                                                   worker_rank=self.rank,
                                                   local_rank=self.local_rank)
 
@@ -132,15 +114,20 @@ class MigrationWorker(Worker):
     def do_send(self, dst_handle, blocks: List[int]):
         return self.migrate_backend.do_send(dst_handle, blocks=blocks)
 
-    def rebuild_migrate_backend(self, id_rank_map: Dict[str, int], group_name: str) -> None:
+    def rebuild_migrate_backend(self, instance_rank: Dict[str, int], group_name: str):
         self.migrate_backend.destory_col()
-        num_instance = len(id_rank_map)
-        self.ray_world_size = num_instance * self.parallel_config.world_size
-        self.ray_rank = self.rank + id_rank_map[self.instance_id] * self.parallel_config.world_size
-        return self.migrate_backend.init_col(group_name, self.ray_world_size, self.ray_rank)
+
+        ret = True
+        if group_name is not None:
+            num_instance = len(instance_rank)
+            self.ray_world_size = num_instance * self.parallel_config.world_size
+            self.ray_rank = self.rank + instance_rank[self.instance_id] * self.parallel_config.world_size
+            ret = self.migrate_backend.init_col(group_name, self.ray_world_size, self.ray_rank)
+        
+        return ret
 
     def warmup(self):
-        self.migrate_backend.warmup()
+        return self.migrate_backend.warmup()
 
     def shutdown(self) -> None:
         torch.cuda.synchronize()

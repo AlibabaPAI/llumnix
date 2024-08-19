@@ -19,14 +19,14 @@ class MigrationConfig:
             migration_cache_blocks: int,
             last_stage_max_blocks: int,
             max_stages: int,
-            instance_rank_map: dict,
+            migration_backend_init_timeout: float,
             pp_or_tp_enabled: bool) -> None:
         self.migrate_policy = migrate_policy
         self.migration_backend = migration_backend
         self.migration_cache_blocks = migration_cache_blocks
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
-        self.instance_rank_map = instance_rank_map
+        self.migration_backend_init_timeout = migration_backend_init_timeout
         self.pp_or_tp_enabled = pp_or_tp_enabled
 
 class GlobalSchedulerConfig:

@@ -6,7 +6,8 @@ Note: since Llumnix is still in alpha stage, the interface and arguments are *su
 
 ```
 usage: -m llumnix.entrypoints.vllm.api_server [-h]
-            [--fixed-node-init]
+            [--fixed-node-init-instance]
+            [--init-instance-by-manager]
             [--initial-instances INITIAL_INSTANCES]
             [--load-metric {consumed_speed,used_ratio}]
             [--polling-interval POLLING_INTERVAL]
@@ -35,8 +36,11 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--max-stages MAX_STAGES]
 ```
 
-`--fixed-node-init`
+`--fixed-node-init-instance`
 - Fix the placement of instance to current node.
+
+`--init-instance-by-manager`
+- initialize instance by manager.
 
 `--initial-instances`
 - Number of model instances created at initialization.

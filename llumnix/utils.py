@@ -11,12 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ray.util.queue import Queue as RayQueue
+import uuid
 
 
-class ServerInfo:
-    def __init__(self,
-                 server_id: str,
-                 request_output_queue: RayQueue) -> None:
-        self.server_id = server_id
-        self.request_output_queue = request_output_queue
+def random_uuid() -> str:
+    return str(uuid.uuid4().hex)

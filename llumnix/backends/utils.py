@@ -35,6 +35,7 @@ def init_backend_engine(instance_id: str, backend_type: BackendType, *args, **kw
 def initialize_cluster(
     world_size: int = 1,
     ray_address: Optional[str] = None,
+    detached: bool = False,
 ) -> Tuple[str, Optional["PlacementGroup"]]:
     """Initialize the distributed cluster probably with Ray.
 
@@ -55,8 +56,9 @@ def initialize_cluster(
             "Ray is not installed. Please install Ray to use distributed "
             "serving.")
     # Connect to a ray cluster.
-    ray.init(address=ray_address, ignore_reinit_error=True)
+    ray.init(address=ray_address, ignore_reinit_error=True, namespace='llumnix')
 
+    lifetime = "detached" if detached else None
     # Create placement group for worker processes
     current_placement_group = ray.util.get_current_placement_group()
     if current_placement_group:
@@ -84,7 +86,7 @@ def initialize_cluster(
         # Create a new placement group
         placement_group_specs = ([{"CPU": 1}] + [{"GPU": 1}] * world_size)
         current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK")
+            placement_group_specs, "STRICT_PACK", lifetime=lifetime)
         # Wait until PG is ready - this will block until all
         # requested resources are available, and will timeout
         # if they cannot be provisioned.

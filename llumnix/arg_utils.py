@@ -22,7 +22,7 @@ from llumnix.config import GlobalSchedulerConfig, MigrationConfig
 @dataclass
 class EngineManagerArgs:
     launch_ray_cluster: bool = True
-    init_instance_in_manager: bool = True
+    init_instance_by_manager: bool = True
     initial_instances: int = 1
     fixed_node_init_instance: bool = False
 
@@ -96,9 +96,9 @@ class EngineManagerArgs:
         parser.add_argument('--fixed-node-init-instance',
                             action='store_true',
                             help='fix the placement of instance to current node')
-        parser.add_argument('--init-instance-in-manager',
+        parser.add_argument('--init-instance-by-manager',
                             action='store_true',
-                            help='initialize instance in manager')
+                            help='initialize instance by manager')
         parser.add_argument('--initial-instances',
                             type=int,
                             default=EngineManagerArgs.initial_instances,

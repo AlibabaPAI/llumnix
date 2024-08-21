@@ -164,10 +164,10 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
     assert engine_args.engine_use_ray and engine_args.worker_use_ray, \
             ("In Llumnix, engine and worker must be ray actor in orther to run step and migrate concurrently.")
     engine_manager = init_manager(engine_manager_args)
-    if not engine_manager_args.init_instance_in_manager:
+    if not engine_manager_args.init_instance_by_manager:
         assert engine_manager_args.migration_backend != 'gloo', \
-            ("Llumlet should be initialized in manager when using gloo as migration backend for auto-scaling, "
-             "please set --init-instance-in-manager argument.")
+            ("Llumlet should be initialized by manager when using gloo as migration backend for auto-scaling, "
+             "please set --init-instance-by-manager argument.")
         instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id)
         retry_manager_method_sync(engine_manager.scale_up.remote, 'scale_up', instance_ids, llumlets)
     else:

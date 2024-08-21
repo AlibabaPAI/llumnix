@@ -34,6 +34,8 @@ from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_pre
 logger = init_logger(__name__)
 
 class LlumnixRayGPUExecutor(RayGPUExecutor):
+    node_id: str = None
+
     def _init_workers_ray(self, placement_group: "PlacementGroup",
                           **ray_remote_kwargs):
         self.last_inference_latency = 0
@@ -56,7 +58,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
 
         # Create the workers.
         driver_ip = get_ip()
-        node_id = self.parallel_config.node_id
+        node_id = self.node_id
         for rank in range(self.parallel_config.world_size):
             if placement_group:
                 bundle = placement_group.bundle_specs[rank+1]

@@ -67,10 +67,6 @@ class LLMEngineLlumnix(LLMEngine):
         detect_unsupported_feature(engine_args)
         engine_config = engine_args.create_engine_config()
         engine_config.parallel_config.placement_group = placement_group
-        # TODO(s5u13b): Add arguments checker for Llumnix.
-        # TODO(s5u13b): Do not hack here.
-        # Hack to pass node_id to _init_workers_ray function.
-        engine_config.parallel_config.node_id = node_id
         # Initialize the cluster and specify the executor class.
         # pylint: disable=import-outside-toplevel
         if latency_mem is not None:
@@ -82,6 +78,9 @@ class LLMEngineLlumnix(LLMEngine):
             executor_class = LlumnixRayGPUExecutor
         else:
             raise ValueError('unimplemented executor backend')
+        # TODO(s5u13b): Do not hack here.
+        # Hack to pass node_id to _init_workers_ray function.
+        executor_class.node_id = node_id
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,

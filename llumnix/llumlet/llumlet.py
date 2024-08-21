@@ -68,7 +68,7 @@ class Llumlet:
                 # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
                 assert migration_config.migration_backend != 'gloo', 'When the migration backend is gloo, fixed_node_init_instance must be set.'
                 placement_group = initialize_cluster(world_size, detached=detached)
-                kwargs["placement_group"] = placement_group
+                kwargs["placement_group"] = placement_group                
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
                                           namespace='llumnix',
@@ -78,8 +78,7 @@ class Llumlet:
                                                     placement_group=placement_group,
                                                     placement_group_bundle_index=0,))
             else:
-                placement_group = None
-                kwargs["placement_group"] = placement_group
+                kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
                                           namespace='llumnix',

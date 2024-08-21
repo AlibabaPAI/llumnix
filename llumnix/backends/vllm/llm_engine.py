@@ -59,6 +59,7 @@ class LLMEngineLlumnix(LLMEngine):
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
         placement_group: Optional["PlacementGroup"] = None,
+        node_id: str = None,
         latency_mem: Optional[LatencyMemData] = None
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
@@ -66,6 +67,10 @@ class LLMEngineLlumnix(LLMEngine):
         detect_unsupported_feature(engine_args)
         engine_config = engine_args.create_engine_config()
         engine_config.parallel_config.placement_group = placement_group
+        # TODO(s5u13b): Add arguments checker for Llumnix.
+        # TODO(s5u13b): Do not hack here.
+        # Hack to pass node_id to _init_workers_ray function.
+        engine_config.parallel_config.node_id = node_id
         # Initialize the cluster and specify the executor class.
         # pylint: disable=import-outside-toplevel
         if latency_mem is not None:
@@ -177,11 +182,14 @@ class BackendVLLM(BackendInterface):
         instance_id: int,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
-        placement_group: "PlacementGroup"
+        placement_group: "PlacementGroup" = None,
+        node_id: str = None
     ) -> None:
         assert migration_config.migration_backend == "rpc", "Gloo support will be released later."
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args, instance_id=instance_id,
-                                                                          placement_group=placement_group)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args, 
+                                                                          instance_id=instance_id,
+                                                                          placement_group=placement_group,
+                                                                          node_id=node_id)
         # multi-instance args
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.output_processor.scheduler = self.engine.scheduler
@@ -190,8 +198,9 @@ class BackendVLLM(BackendInterface):
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
             self.worker_handle_list.insert(0, ray.get_actor(f"instance_{self.instance_id}", namespace="llumnix"))
         self._run_workers("init_migration", num_migration_cache_blocks=migration_config.migration_cache_blocks,\
-                                                      src_worker_handle_list=self.worker_handle_list,
-                                                      placement_group=placement_group)
+                                            src_worker_handle_list=self.worker_handle_list,
+                                            placement_group=placement_group,
+                                            node_id=node_id)
         self._thread = threading.Thread(
             target=self._start_engine_loop, args=(), daemon=True, name="engine_loop"
         )

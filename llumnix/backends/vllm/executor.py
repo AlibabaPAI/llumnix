@@ -56,6 +56,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
 
         # Create the workers.
         driver_ip = get_ip()
+        node_id = self.parallel_config.node_id
         for rank in range(self.parallel_config.world_size):
             if placement_group:
                 bundle = placement_group.bundle_specs[rank+1]
@@ -67,7 +68,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
                 )
             else:
                 scheduling_strategy = NodeAffinitySchedulingStrategy(
-                    node_id=ray.get_runtime_context().get_node_id(),
+                    node_id=node_id,
                     soft=False,
                 )
             worker = ray.remote(

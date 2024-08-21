@@ -55,7 +55,7 @@ class MigrationWorker(Worker):
         torch.cuda.set_device(self.device)
         return super().load_model()
 
-    def init_migration(self, num_migration_cache_blocks: int, src_worker_handle_list, placement_group=None) -> None:
+    def init_migration(self, num_migration_cache_blocks: int, src_worker_handle_list, placement_group=None, node_id=None) -> None:
         if placement_group:
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
@@ -63,7 +63,7 @@ class MigrationWorker(Worker):
             )
         else:
             scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
+                node_id=node_id,
                 soft=False,
             )
         self.recv_actor = RecvActor.options(scheduling_strategy=scheduling_strategy).remote()

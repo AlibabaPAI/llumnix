@@ -186,7 +186,7 @@ class BackendVLLM(BackendInterface):
         node_id: str = None
     ) -> None:
         assert migration_config.migration_backend == "rpc", "Gloo support will be released later."
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args, 
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           node_id=node_id)

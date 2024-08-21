@@ -164,6 +164,7 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
     assert engine_args.engine_use_ray and engine_args.worker_use_ray, \
             ("In Llumnix, engine and worker must be ray actor in orther to run step and migrate concurrently.")
     engine_manager = init_manager(engine_manager_args)
+    # TODO(s5u13b): Add arguments checker for Llumnix.
     if not engine_manager_args.init_instance_by_manager:
         assert engine_manager_args.migration_backend != 'gloo', \
             ("Llumlet should be initialized by manager when using gloo as migration backend for auto-scaling, "

@@ -148,6 +148,7 @@ class MigrationWorker(Worker):
         torch.cuda.Stream.synchronize(self.migration_stream)
 
     def migrate_gpu_cache_ray_rpc(self, src_worker_handle_list, src_blocks: List[int], dst_blocks: List[int]):
+        # TODO(s5u13b): Raise exception here.
         try:
             src_worker_handle = src_worker_handle_list[self.rank]
             tot_blocks = len(src_blocks)

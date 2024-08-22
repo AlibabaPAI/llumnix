@@ -23,7 +23,7 @@ from tests.global_scheduler.test_llm_engine_manager import get_instance_info_mig
 
 
 def init_global_scheduler():
-    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', 'prefill_constrained', 3.0, True, 'avg_load', 10, 60)
+    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', 'defrag_constrained', 3.0, True, 'avg_load', 10, 60)
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler
 

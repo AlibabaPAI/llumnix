@@ -42,7 +42,7 @@ def test_add_instance_and_remove_instance(migration_scheduler):
     migration_scheduler.remove_instance('instance_2')
     assert migration_scheduler.num_instances == 0
 
-@pytest.mark.parametrize("policy", ['balanced', 'prefill_constrained', 'prefill_relaxed'])
+@pytest.mark.parametrize("policy", ['balanced', 'defrag_constrained', 'defrag_relaxed'])
 def test_pair_migration(policy):
     migration_scheduler = init_migration_scheduler(policy)
     num_tests = 1000
@@ -59,7 +59,7 @@ def test_pair_migration(policy):
         migrate_instance_pairs = migration_scheduler.pair_migration()
         for migrate_out_instance, migrate_in_instance in migrate_instance_pairs:
             assert migrate_out_instance != migrate_in_instance
-            if policy != 'prefill_relaxed':
+            if policy != 'defrag_relaxed':
                 assert instance_info_dict[migrate_out_instance].num_killed_requests > 0 \
                     or instance_info_dict[migrate_out_instance].instance_load_migrate > MIGRATE_OUT_LOAD_THRESHOLD
             assert instance_info_dict[migrate_in_instance].num_killed_requests == 0 \

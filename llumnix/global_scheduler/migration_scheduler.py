@@ -120,7 +120,7 @@ class Balanced(PairMigrationPolicy):
             instance_info_after_migrate.num_free_gpu_blocks += num_blocks_last_running_request
         return self.instance_load_calculator.compute_instance_load(instance_info_after_migrate, action='migrate')
 
-class PrefillConstrained(PairMigrationPolicy):
+class DefragConstrained(PairMigrationPolicy):
     def pair_migration(self,
                        sorted_instance_infos: List[InstanceInfo]
                        ) -> List[Tuple[str, str]]:
@@ -132,11 +132,11 @@ class PrefillConstrained(PairMigrationPolicy):
                                 if i.num_killed_requests > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
         migrate_instance_pairs = []
         for i in range(min(len(migrate_in_instance_infos), len(migrate_out_instance_infos))):
-            # without any constrain in order to make prefill migrate happens as soon as possible
+            # without any constrain in order to make defragmentation migrate happens as soon as possible
             migrate_instance_pairs.append((migrate_out_instance_infos[i].instance_id, migrate_in_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
-class PrefillRelaxed(PairMigrationPolicy):
+class DefragRelaxed(PairMigrationPolicy):
     def pair_migration(self,
                        sorted_instance_infos: List[InstanceInfo]
                        ) -> List[Tuple[str, str]]:
@@ -155,8 +155,8 @@ class PrefillRelaxed(PairMigrationPolicy):
 class PairMigrationPolicyFactory:
     _POLICY_REGISTRY = {
         'balanced': Balanced,
-        'prefill_constrained': PrefillConstrained,
-        'prefill_relaxed': PrefillRelaxed,
+        'defrag_constrained': DefragConstrained,
+        'defrag_relaxed': DefragRelaxed,
     }
 
     @classmethod

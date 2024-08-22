@@ -34,7 +34,7 @@ class EngineManagerArgs:
     enable_migration: bool = True
     enable_defrag: bool = True
     pair_migration_frequency: int = 1
-    pair_migration_policy: str = 'prefill_constrained'
+    pair_migration_policy: str = 'defrag_constrained'
     migrate_out_threshold: float = 3.0
     request_migration_policy: str = 'SJF'
 
@@ -130,7 +130,7 @@ class EngineManagerArgs:
         parser.add_argument('--pair-migration-policy',
                             type=str,
                             default=EngineManagerArgs.pair_migration_policy,
-                            choices=['balanced', 'prefill_constrained', 'prefill_relaxed'],
+                            choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
                             help='pair migration policy')
         parser.add_argument('--migrate-out-threshold',
                             type=float,

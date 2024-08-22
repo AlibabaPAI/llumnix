@@ -36,6 +36,7 @@ logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
 CLEARING_INTERVAL = 3600
+RETRIES_INTERVALS = 5.0
 
 # TODO(yiwang): add unit test for CI
 # TODO(yiwang): Fix the logger when manager failover.
@@ -107,6 +108,10 @@ class LLMEngineManager:
             server_info: ServerInfo,
             *args,
             **kwargs,) -> None:
+        while self.num_instances == 0:
+            logger.info("No instance available temporarily, sleep {}s, "
+                        "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
+            await asyncio.sleep(RETRIES_INTERVALS)
         instance_id = self.global_scheduler.dispatch()
         try:
             await self.instances[instance_id].generate.remote(request_id, server_info, *args, **kwargs)

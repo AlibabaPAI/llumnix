@@ -18,7 +18,6 @@ from fastapi.responses import JSONResponse, Response
 from ray.util.queue import Queue as RayQueue
 
 from vllm.outputs import CompletionOutput, RequestOutput
-from vllm.engine.arg_utils import AsyncEngineArgs
 
 import llumnix.entrypoints.vllm.api_server
 import llumnix.llm_engine_manager

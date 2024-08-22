@@ -28,6 +28,8 @@ from llumnix.config import GlobalSchedulerConfig
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo
+from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import random_uuid
 
 
 logger = init_logger(__name__)
@@ -322,6 +324,48 @@ class LLMEngineManager:
                                               profiling_database=profiling_database)
         logger.info("engine_manager_args: {}".format(engine_manager_args))
         return engine_manager
+
+    def init_llumlets(self,
+                      engine_args,
+                      node_id: str) -> Tuple[List[str], List[Llumlet]]:
+        engine_manager_args = self.engine_manager_args
+        engine_config = engine_args.create_engine_config()
+        parallel_config = engine_config.parallel_config
+        instance_ids: List[str] = []
+        llumlets: List[Llumlet] = []
+        for _ in range(engine_manager_args.initial_instances):
+            instance_id = random_uuid()
+            if not engine_manager_args.profiling_result_file_path:
+                llumlet = Llumlet.from_args(
+                    engine_manager_args.fixed_node_init_instance,
+                    True,
+                    node_id,
+                    instance_id,
+                    BackendType.VLLM,
+                    parallel_config.world_size,
+                    engine_manager_args.create_migration_configs(),
+                    engine_args,
+                )
+            else:
+                llumlet = Llumlet.from_args(
+                    engine_manager_args.fixed_node_init_instance,
+                    True,
+                    node_id,
+                    instance_id,
+                    BackendType.SIM_VLLM,
+                    parallel_config.world_size,
+                    engine_manager_args.create_migration_configs(),
+                    engine_manager_args.profiling_result_file_path,
+                    engine_manager_args.gpu_type,
+                    engine_args,
+                )
+            instance_ids.append(instance_id)
+            llumlets.append(llumlet)
+        self.scale_up(instance_ids, llumlets)
+        return instance_ids, llumlets
+
+    def get_actor_name(self) -> str:
+        return self.actor_name
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""

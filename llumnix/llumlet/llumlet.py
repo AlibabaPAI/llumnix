@@ -52,42 +52,49 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
-                  fixed_node_init: bool,
+                  fixed_node_init_instance: bool,
+                  detached: bool,
+                  node_id: str,
                   instance_id: str,
                   backend_type: BackendType,
                   world_size: int,
                   migration_config: MigrationConfig,
                   *args,
                   **kwargs):
+        lifetime = "detached" if detached else None
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         if backend_type == backend_type.VLLM:
-            if not fixed_node_init:
-                placement_group = initialize_cluster(world_size)
+            if not fixed_node_init_instance:
+                # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
+                assert migration_config.migration_backend != 'gloo', 'When the migration backend is gloo, fixed_node_init_instance must be set.'
+                placement_group = initialize_cluster(world_size, detached=detached)
                 kwargs["placement_group"] = placement_group
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
                                           namespace='llumnix',
-                                          max_concurrency=4)(cls).options(
+                                          max_concurrency=4,
+                                          lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,
                                                     placement_group_bundle_index=0,))
             else:
-                placement_group = None
-                kwargs["placement_group"] = placement_group
+                kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
                                           namespace='llumnix',
-                                          max_concurrency=4)(cls).options(
+                                          max_concurrency=4,
+                                          lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                                    node_id=ray.get_runtime_context().get_node_id(),
+                                                    node_id=node_id,
                                                     soft=False,))
         else: # backend_type == backend_type.SIM_VLLM:
             engine_class = ray.remote(num_cpus=1,
                                       name=f"instance_{instance_id}",
                                       namespace='llumnix',
-                                      max_concurrency=4)(cls).options(
+                                      max_concurrency=4,
+                                      lifetime=lifetime)(cls).options(
                                         scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                            node_id=ray.get_runtime_context().get_node_id(),
+                                            node_id=node_id,
                                             soft=False,))
         llumlet = engine_class.remote(instance_id, backend_type, migration_config, *args, **kwargs)
         return llumlet

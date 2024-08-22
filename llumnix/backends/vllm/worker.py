@@ -55,7 +55,7 @@ class MigrationWorker(Worker):
         torch.cuda.set_device(self.device)
         return super().load_model()
 
-    def init_migration(self, num_migration_cache_blocks: int, src_worker_handle_list, placement_group=None) -> None:
+    def init_migration(self, num_migration_cache_blocks: int, src_worker_handle_list, placement_group=None, node_id=None) -> None:
         if placement_group:
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
@@ -63,7 +63,7 @@ class MigrationWorker(Worker):
             )
         else:
             scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
+                node_id=node_id,
                 soft=False,
             )
         self.recv_actor = RecvActor.options(scheduling_strategy=scheduling_strategy).remote()
@@ -147,8 +147,8 @@ class MigrationWorker(Worker):
                 self.cache_engine.attn_backend.swap_blocks(self.migration_cache[layer_idx], self.gpu_cache[layer_idx],src_to_dst)
         torch.cuda.Stream.synchronize(self.migration_stream)
 
-
     def migrate_gpu_cache_ray_rpc(self, src_worker_handle_list, src_blocks: List[int], dst_blocks: List[int]):
+        # TODO(s5u13b): Raise exception here.
         try:
             src_worker_handle = src_worker_handle_list[self.rank]
             tot_blocks = len(src_blocks)

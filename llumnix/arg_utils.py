@@ -22,8 +22,9 @@ from llumnix.config import GlobalSchedulerConfig, MigrationConfig
 @dataclass
 class EngineManagerArgs:
     launch_ray_cluster: bool = True
+    init_instance_by_manager: bool = True
     initial_instances: int = 1
-    fixed_node_init: bool = False
+    fixed_node_init_instance: bool = False
 
     load_metric: str = 'remaining_step'
     polling_interval: float = 0.05
@@ -92,9 +93,12 @@ class EngineManagerArgs:
     @staticmethod
     def add_cli_args(
             parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        parser.add_argument('--fixed-node-init',
+        parser.add_argument('--fixed-node-init-instance',
                             action='store_true',
                             help='fix the placement of instance to current node')
+        parser.add_argument('--init-instance-by-manager',
+                            action='store_true',
+                            help='initialize instance by manager')
         parser.add_argument('--initial-instances',
                             type=int,
                             default=EngineManagerArgs.initial_instances,

@@ -123,6 +123,8 @@ def test_init_manager(engine_manager):
 def test_init_llumlet(llumlet):
     assert llumlet is not None
     ray.get(llumlet.is_ready.remote())
+    
+# TODO(s5u13b): Add init_llumlets test.
 
 def test_scale_up_and_down(engine_manager):
     initial_instances = 4

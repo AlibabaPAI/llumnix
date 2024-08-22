@@ -38,7 +38,7 @@ def test_add_instance_and_remove_instance(dispatch_scheduler):
     dispatch_scheduler.remove_instance('instance_2')
     assert dispatch_scheduler.num_instances == 0
 
-def test_dispatch():
+def test_dispatch_balanced():
     dispatch_scheduler = init_dispatch_scheduler('balanced')
     num_tests = 100
     for _ in range(num_tests):
@@ -49,7 +49,10 @@ def test_dispatch():
         min_instance_id = next(key for key, value in sorted(instance_num_requests.items(), key=lambda item: item[1]))
         instance_id = dispatch_scheduler.dispatch()
         assert min_instance_id == instance_id
+
+def test_dispatch_load():
     dispatch_scheduler = init_dispatch_scheduler('load')
+    num_tests = 100
     for _ in range(num_tests):
         instance_num_requests = {}
         instance_info_dict = {}
@@ -65,7 +68,10 @@ def test_dispatch():
                                                             key=lambda item: item[1].instance_load_dispatch_scale))
         instance_id = dispatch_scheduler.dispatch()
         assert min_instance_id == instance_id
+
+def test_dispatch_queue():
     dispatch_scheduler = init_dispatch_scheduler('queue')
+    num_tests = 100
     for _ in range(num_tests):
         instance_num_requests = {}
         instance_info_dict = {}

@@ -135,5 +135,3 @@ def test_clear_migration_states():
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
     llumlet.clear_migration_states(is_migrate_in=False)
     assert llumlet.backend_engine.get_last_running_request() is not None
-
-

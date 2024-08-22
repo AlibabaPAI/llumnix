@@ -89,4 +89,3 @@ def test_llm_engine_from_engine_args():
     latency_data = LatencyMemData({},{},{})
     llm_engine = MockEngine.from_engine_args(engine_args, instance_id="0", latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
-

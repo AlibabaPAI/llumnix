@@ -23,7 +23,7 @@ MIGRATE_OUT_LOAD_THRESHOLD = 3.0
 
 
 def init_migration_scheduler(policy='balanced'):
-    instance_load_calculator = InstanceLoadCalculator('remaining_step', True)
+    instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
     migration_scheduler = MigrationScheduler(policy, MIGRATE_OUT_LOAD_THRESHOLD, instance_load_calculator)
     return migration_scheduler
 
@@ -34,37 +34,37 @@ def migration_scheduler():
 
 def test_add_instance_and_remove_instance(migration_scheduler):
     migration_scheduler.add_instance('instance_1')
-    assert migration_scheduler.num_instance == 1
+    assert migration_scheduler.num_instances == 1
     migration_scheduler.add_instance('instance_2')
-    assert migration_scheduler.num_instance == 2
+    assert migration_scheduler.num_instances == 2
     migration_scheduler.remove_instance('instance_1')
-    assert migration_scheduler.num_instance == 1
+    assert migration_scheduler.num_instances == 1
     migration_scheduler.remove_instance('instance_2')
-    assert migration_scheduler.num_instance == 0
+    assert migration_scheduler.num_instances == 0
 
 @pytest.mark.parametrize("policy", ['balanced', 'prefill_constrained', 'prefill_relaxed'])
 def test_pair_migration(policy):
     migration_scheduler = init_migration_scheduler(policy)
-    num_test = 1000
-    for _ in range(num_test):
+    num_tests = 1000
+    for _ in range(num_tests):
         instance_info_dict = {}
         for instance_id in ['instance_1', 'instance_2', 'instance_3', 'instance_4']:
             instance_info = InstanceInfo()
             instance_info.instance_id = instance_id
             instance_info.instance_load_migrate = MIGRATE_OUT_LOAD_THRESHOLD + random.uniform(-1, 1)
-            instance_info.num_killed_request = random.randint(0, 1)
-            instance_info.num_block_last_running_request = random.randint(0, 1) * np.inf
+            instance_info.num_killed_requests = random.randint(0, 1)
+            instance_info.num_blocks_last_running_request = random.randint(0, 1) * np.inf
             instance_info_dict[instance_id] = instance_info
         migration_scheduler.instance_info = instance_info_dict
         migrate_instance_pairs = migration_scheduler.pair_migration()
         for migrate_out_instance, migrate_in_instance in migrate_instance_pairs:
             assert migrate_out_instance != migrate_in_instance
             if policy != 'prefill_relaxed':
-                assert instance_info_dict[migrate_out_instance].num_killed_request > 0 \
+                assert instance_info_dict[migrate_out_instance].num_killed_requests > 0 \
                     or instance_info_dict[migrate_out_instance].instance_load_migrate > MIGRATE_OUT_LOAD_THRESHOLD
-            assert instance_info_dict[migrate_in_instance].num_killed_request == 0 \
+            assert instance_info_dict[migrate_in_instance].num_killed_requests == 0 \
                 and instance_info_dict[migrate_in_instance].instance_load_migrate < MIGRATE_OUT_LOAD_THRESHOLD
             if policy == 'balanced':
-                assert instance_info_dict[migrate_out_instance].num_block_last_running_request == 0
-            if instance_info_dict[migrate_out_instance].num_killed_request == 0:
+                assert instance_info_dict[migrate_out_instance].num_blocks_last_running_request == 0
+            if instance_info_dict[migrate_out_instance].num_killed_requests == 0:
                 assert instance_info_dict[migrate_out_instance].instance_load_migrate > instance_info_dict[migrate_in_instance].instance_load_migrate

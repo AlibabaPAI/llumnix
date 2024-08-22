@@ -19,7 +19,7 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 
 
 def init_dispatch_scheduler(policy='load'):
-    instance_load_calculator = InstanceLoadCalculator('remaining_step', True)
+    instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
     dispatch_scheduler = DispatchScheduler(policy, instance_load_calculator)
     return dispatch_scheduler
 
@@ -30,54 +30,54 @@ def dispatch_scheduler():
 
 def test_add_instance_and_remove_instance(dispatch_scheduler):
     dispatch_scheduler.add_instance('instance_1')
-    assert dispatch_scheduler.num_instance == 1
+    assert dispatch_scheduler.num_instances == 1
     dispatch_scheduler.add_instance('instance_2')
-    assert dispatch_scheduler.num_instance == 2
+    assert dispatch_scheduler.num_instances == 2
     dispatch_scheduler.remove_instance('instance_1')
-    assert dispatch_scheduler.num_instance == 1
+    assert dispatch_scheduler.num_instances == 1
     dispatch_scheduler.remove_instance('instance_2')
-    assert dispatch_scheduler.num_instance == 0
+    assert dispatch_scheduler.num_instances == 0
 
 def test_dispatch():
     dispatch_scheduler = init_dispatch_scheduler('balanced')
-    num_test = 100
-    for _ in range(num_test):
-        instance_num_request = {}
+    num_tests = 100
+    for _ in range(num_tests):
+        instance_num_requests = {}
         for instance_id in ['instance_1', 'instance_2', 'instance_3', 'instance_4']:
-            instance_num_request[instance_id] = random.randint(1, 10)
-        dispatch_scheduler.instance_num_request = instance_num_request
-        min_instance_id = next(key for key, value in sorted(instance_num_request.items(), key=lambda item: item[1]))
+            instance_num_requests[instance_id] = random.randint(1, 10)
+        dispatch_scheduler.instance_num_requests = instance_num_requests
+        min_instance_id = next(key for key, value in sorted(instance_num_requests.items(), key=lambda item: item[1]))
         instance_id = dispatch_scheduler.dispatch()
         assert min_instance_id == instance_id
     dispatch_scheduler = init_dispatch_scheduler('load')
-    for _ in range(num_test):
-        instance_num_request = {}
+    for _ in range(num_tests):
+        instance_num_requests = {}
         instance_info_dict = {}
         for instance_id in ['instance_1', 'instance_2', 'instance_3', 'instance_4']:
-            instance_num_request[instance_id] = 0
+            instance_num_requests[instance_id] = 0
             instance_info = InstanceInfo()
             instance_info.instance_id = instance_id
             instance_info.instance_load_dispatch_scale = random.random()
             instance_info_dict[instance_id] = instance_info
-        dispatch_scheduler.instance_num_request = instance_num_request
+        dispatch_scheduler.instance_num_requests = instance_num_requests
         dispatch_scheduler.instance_info = instance_info_dict
         min_instance_id = next(key for key, value in sorted(instance_info_dict.items(),
                                                             key=lambda item: item[1].instance_load_dispatch_scale))
         instance_id = dispatch_scheduler.dispatch()
         assert min_instance_id == instance_id
     dispatch_scheduler = init_dispatch_scheduler('queue')
-    for _ in range(num_test):
-        instance_num_request = {}
+    for _ in range(num_tests):
+        instance_num_requests = {}
         instance_info_dict = {}
         for instance_id in ['instance_1', 'instance_2', 'instance_3', 'instance_4']:
-            instance_num_request[instance_id] = 0
+            instance_num_requests[instance_id] = 0
             instance_info = InstanceInfo()
             instance_info.instance_id = instance_id
-            instance_info.num_waiting_request = random.randint(1, 10)
+            instance_info.num_waiting_requests = random.randint(1, 10)
             instance_info_dict[instance_id] = instance_info
-        dispatch_scheduler.instance_num_request = instance_num_request
+        dispatch_scheduler.instance_num_requests = instance_num_requests
         dispatch_scheduler.instance_info = instance_info_dict
         min_instance_id = next(key for key, value in sorted(instance_info_dict.items(),
-                                                            key=lambda item: item[1].num_waiting_request))
+                                                            key=lambda item: item[1].num_waiting_requests))
         instance_id = dispatch_scheduler.dispatch()
-        assert instance_info_dict[min_instance_id].num_waiting_request == instance_info_dict[instance_id].num_waiting_request
+        assert instance_info_dict[min_instance_id].num_waiting_requests == instance_info_dict[instance_id].num_waiting_requests

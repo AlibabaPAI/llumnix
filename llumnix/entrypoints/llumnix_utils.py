@@ -30,7 +30,7 @@ def get_ip_address():
     ip_address = result.stdout.decode('utf-8').strip()
     return ip_address
 
-def launch_ray_cluster(ray_cluster_port: int):
+def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
     head_node_ip = os.getenv('HEAD_NODE_IP')
     node_ip_address = get_ip_address()
     try:

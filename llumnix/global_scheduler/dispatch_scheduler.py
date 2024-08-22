@@ -27,26 +27,26 @@ class DispatchScheduler:
                  instance_load_calculator: InstanceLoadCalculator) -> None:
         self.dispatch_policy = DispatchPolicyFactory.get_policy(dispatch_policy)
         self.instance_load_calculator = instance_load_calculator
-        self.num_instance = 0
+        self.num_instances = 0
         self.instance_id_set: Set[str] = set()
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = {}
         self.sorted_instance_infos: List[InstanceInfo] = None
         # statistics
-        self.num_request = 0
-        self.instance_num_request: Dict[str, int] = {}
+        self.num_requests = 0
+        self.instance_num_requests: Dict[str, int] = {}
 
     def dispatch(self) -> str:
-        self.num_request += 1
+        self.num_requests += 1
         if isinstance(self.dispatch_policy, (Load, Queue)):
             self._sort_instance_infos(descending=False)
-        dispatch_instance_id = self.dispatch_policy.dispatch(self.instance_num_request,
+        dispatch_instance_id = self.dispatch_policy.dispatch(self.instance_num_requests,
                                                              self.sorted_instance_infos)
-        self.instance_num_request[dispatch_instance_id] += 1
-        if self.num_request % 100 == 0:
-            logger.info("self.num_request: {}".format(self.num_request))
-            for instance_id, num_request in self.instance_num_request.items():
-                logger.info("Instance {} num_dispatched_request: {}".format(instance_id, num_request))
+        self.instance_num_requests[dispatch_instance_id] += 1
+        if self.num_requests % 100 == 0:
+            logger.info("self.num_requests: {}".format(self.num_requests))
+            for instance_id, num_requests in self.instance_num_requests.items():
+                logger.info("Instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
         return dispatch_instance_id
 
     def update_instance_infos(self,
@@ -55,19 +55,19 @@ class DispatchScheduler:
 
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
-        self.num_instance = len(self.instance_id_set)
-        self.instance_num_request[instance_id] = 0
+        self.num_instances = len(self.instance_id_set)
+        self.instance_num_requests[instance_id] = 0
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
-        self.num_instance = len(self.instance_id_set)
-        del self.instance_num_request[instance_id]
+        self.num_instances = len(self.instance_id_set)
+        del self.instance_num_requests[instance_id]
 
     def _sort_instance_infos(self,
                             descending: bool = True) -> None:
         instance_infos: List[InstanceInfo] = list(self.instance_info.values())
         if isinstance(self.dispatch_policy, Queue):
-            key_attr = 'num_waiting_request'
+            key_attr = 'num_waiting_requests'
         else:
             key_attr = 'instance_load_dispatch_scale'
         self.sorted_instance_infos = sorted(
@@ -82,21 +82,21 @@ class DispatchPolicy(ABC):
 
     @abstractmethod
     def dispatch(self,
-                 instance_num_request: Dict[str, int],
+                 instance_num_requests: Dict[str, int],
                  sorted_instance_infos: List[InstanceInfo]) -> int:
         pass
 
 class Balanced(DispatchPolicy):
     def dispatch(self,
-                 instance_num_request: Dict[str, int],
+                 instance_num_requests: Dict[str, int],
                  sorted_instance_infos: List[InstanceInfo]) -> str:
-        # dispatch request according to the number of request dispatched to instance by manager
-        instance_id = min(instance_num_request, key=instance_num_request.get)
+        # dispatch request according to the number of requests dispatched to instance by manager
+        instance_id = min(instance_num_requests, key=instance_num_requests.get)
         return instance_id
 
 class Load(DispatchPolicy):
     def dispatch(self,
-                 instance_num_request: Dict[str, int],
+                 instance_num_requests: Dict[str, int],
                  sorted_instance_infos: List[InstanceInfo]) -> str:
         instance_id = sorted_instance_infos[0].instance_id
         logger.info("dispatch to {}, load: {}".format(instance_id, sorted_instance_infos[0].instance_load_dispatch_scale))
@@ -104,15 +104,15 @@ class Load(DispatchPolicy):
 
 class Queue(DispatchPolicy):
     def dispatch(self,
-                 instance_num_request: Dict[str, int],
+                 instance_num_requests: Dict[str, int],
                  sorted_instance_infos: List[InstanceInfo]) -> str:
-        min_queue_size = sorted_instance_infos[0].num_waiting_request
+        min_queue_size = sorted_instance_infos[0].num_waiting_requests
         instance_id_list = []
         for instance_info in sorted_instance_infos:
-            if instance_info.num_waiting_request == min_queue_size:
+            if instance_info.num_waiting_requests == min_queue_size:
                 instance_id_list.append(instance_info.instance_id)
         instance_id = random.choice(instance_id_list)
-        logger.info("dispatch to {}, queue size: {}".format(instance_id, sorted_instance_infos[0].num_waiting_request))
+        logger.info("dispatch to {}, queue size: {}".format(instance_id, sorted_instance_infos[0].num_waiting_requests))
         return instance_id
 
 class DispatchPolicyFactory:

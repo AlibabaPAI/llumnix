@@ -71,7 +71,7 @@ class SchedulerLlumnix(Scheduler):
         self.last_preemption_time_dict[seq_group.request_id] = time.time()
         return super()._preempt(seq_group, blocks_to_swap_out, preemption_mode)
 
-    def _get_num_killed_request(self) -> int:
+    def _get_num_killed_requests(self) -> int:
         cnt = len(self.swapped)
         for seq_group in self.waiting:
             if seq_group.request_id in self.last_preemption_time_dict:
@@ -187,44 +187,44 @@ class SchedulerLlumnix(Scheduler):
 
     @scheduler_lock
     def get_instance_info(self) -> InstanceInfo:
-        num_total_gpu_block = self.cache_config.num_gpu_blocks
-        num_free_gpu_block = self.block_manager.get_num_free_gpu_blocks()
-        num_used_gpu_block = num_total_gpu_block - num_free_gpu_block
-        gpu_cache_usage = num_used_gpu_block / num_total_gpu_block
+        num_total_gpu_blocks = self.cache_config.num_gpu_blocks
+        num_free_gpu_blocks = self.block_manager.get_num_free_gpu_blocks()
+        num_used_gpu_blocks = num_total_gpu_blocks - num_free_gpu_blocks
+        gpu_cache_usage = num_used_gpu_blocks / num_total_gpu_blocks
         if self.waiting:
-            num_block_waiting_requests = []
+            num_blocks_waiting_requests = []
             waiting_time_waiting_requests = []
             for seq_group in self.waiting:
-                num_prompt_token = seq_group.get_seqs()[0].get_len()
-                num_block = num_prompt_token / self.cache_config.block_size
+                num_prompt_tokens = seq_group.get_seqs()[0].get_len()
+                num_blocks = num_prompt_tokens / self.cache_config.block_size
                 waiting_time = time.time() - seq_group.metrics.arrival_time
-                num_block_waiting_requests.append(num_block)
+                num_blocks_waiting_requests.append(num_blocks)
                 waiting_time_waiting_requests.append(waiting_time)
-            num_block_first_waiting_request = num_block_waiting_requests[0]
+            num_blocks_first_waiting_request = num_blocks_waiting_requests[0]
             waiting_time_first_waiting_request = waiting_time_waiting_requests[0]
-            num_block_all_waiting_request = sum(num_block_waiting_requests)
+            num_blocks_all_waiting_requests = sum(num_blocks_waiting_requests)
         else:
-            num_block_first_waiting_request = 0
+            num_blocks_first_waiting_request = 0
             waiting_time_first_waiting_request = 0
-            num_block_all_waiting_request = 0
+            num_blocks_all_waiting_requests = 0
         instance_info = InstanceInfo(
-            num_total_gpu_block=num_total_gpu_block,
-            num_watermark_block=self.block_manager.watermark_blocks,
-            num_free_gpu_block=num_free_gpu_block,
-            num_used_gpu_block=num_used_gpu_block,
+            num_total_gpu_blocks=num_total_gpu_blocks,
+            num_watermark_blocks=self.block_manager.watermark_blocks,
+            num_free_gpu_blocks=num_free_gpu_blocks,
+            num_used_gpu_blocks=num_used_gpu_blocks,
             gpu_cache_usage=gpu_cache_usage,
-            num_running_request=len(self.running),
-            num_waiting_request=len(self.waiting),
-            num_killed_request=self._get_num_killed_request(),
-            num_block_first_waiting_request=num_block_first_waiting_request,
+            num_running_requests=len(self.running),
+            num_waiting_requests=len(self.waiting),
+            num_killed_requests=self._get_num_killed_requests(),
+            num_blocks_first_waiting_request=num_blocks_first_waiting_request,
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
-            num_block_all_waiting_request=num_block_all_waiting_request,
+            num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
             inference_type=BackendInferenceType.PREFILL if self.prefilling_seq_groups \
                            else BackendInferenceType.DECODE,
         )
         for seq_group in self.running:
             instance_info.running_seq_lens.extend([seq.get_len() for seq in seq_group.get_seqs()])
-            instance_info.num_seq = len(instance_info.running_seq_lens)
+            instance_info.num_seqs = len(instance_info.running_seq_lens)
         instance_info.num_batched_tokens = sum([seq_group.get_seqs()[0].get_len() for seq_group in self.prefilling_seq_groups])\
                                          if self.prefilling_seq_groups else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]

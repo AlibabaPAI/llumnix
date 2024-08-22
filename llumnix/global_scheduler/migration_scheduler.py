@@ -41,7 +41,7 @@ class MigrationScheduler:
                                                         migrate_out_load_threshold=migrate_out_load_threshold,
                                                         instance_load_calculator=instance_load_calculator)
 
-        self.num_instance = 0
+        self.num_instances = 0
         self.instance_id_set: Set[str] = set()
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
@@ -57,11 +57,11 @@ class MigrationScheduler:
 
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
-        self.num_instance = len(self.instance_id_set)
+        self.num_instances = len(self.instance_id_set)
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
-        self.num_instance = len(self.instance_id_set)
+        self.num_instances = len(self.instance_id_set)
 
     def _sort_instance_infos(self,
                              descending: bool = True) -> None:
@@ -91,33 +91,33 @@ class Balanced(PairMigrationPolicy):
                        sorted_instance_infos: List[InstanceInfo]
                        ) -> List[Tuple[str, str]]:
         # migrate in instances
-        left_instance_infos = [i for i in sorted_instance_infos
-                               if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
+        migrate_in_instance_infos = [i for i in sorted_instance_infos
+                               if i.num_killed_requests == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
         # migrate out instances
-        right_instance_infos = [i for i in reversed(sorted_instance_infos)
-                                if i.num_killed_request > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
+        migrate_out_instance_infos = [i for i in reversed(sorted_instance_infos)
+                                if i.num_killed_requests > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
         migrate_instance_pairs = []
-        for i in range(min(len(left_instance_infos), len(right_instance_infos))):
-            load_diff_before_mig = right_instance_infos[i].instance_load_migrate - left_instance_infos[i].instance_load_migrate
-            left_load_after_mig = self._compute_instance_load_after_migrate(left_instance_infos[i], is_migrate_in=True)
-            right_load_after_mig = self._compute_instance_load_after_migrate(right_instance_infos[i], is_migrate_in=False)
+        for i in range(min(len(migrate_in_instance_infos), len(migrate_out_instance_infos))):
+            load_diff_before_mig = migrate_out_instance_infos[i].instance_load_migrate - migrate_in_instance_infos[i].instance_load_migrate
+            left_load_after_mig = self._compute_instance_load_after_migrate(migrate_in_instance_infos[i], is_migrate_in=True)
+            right_load_after_mig = self._compute_instance_load_after_migrate(migrate_out_instance_infos[i], is_migrate_in=False)
             # Add some constrains to reduce unnecessary migrations
             if left_load_after_mig > self.migrate_out_load_threshold:
                 continue
             load_diff_after_mig = right_load_after_mig - left_load_after_mig
-            if (0 < load_diff_after_mig < load_diff_before_mig) or (left_instance_infos[i].instance_load_migrate == -np.inf):
-                migrate_instance_pairs.append((right_instance_infos[i].instance_id, left_instance_infos[i].instance_id))
+            if (0 < load_diff_after_mig < load_diff_before_mig) or (migrate_in_instance_infos[i].instance_load_migrate == -np.inf):
+                migrate_instance_pairs.append((migrate_out_instance_infos[i].instance_id, migrate_in_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
     def _compute_instance_load_after_migrate(self, instance_info: InstanceInfo, is_migrate_in: bool) -> float:
         instance_info_after_migrate = copy.deepcopy(instance_info)
-        num_block_last_running_request = instance_info_after_migrate.num_block_last_running_request
+        num_blocks_last_running_request = instance_info_after_migrate.num_blocks_last_running_request
         if is_migrate_in:
-            instance_info_after_migrate.num_running_request += 1
-            instance_info_after_migrate.num_free_gpu_block -= num_block_last_running_request
+            instance_info_after_migrate.num_running_requests += 1
+            instance_info_after_migrate.num_free_gpu_blocks -= num_blocks_last_running_request
         else:
-            instance_info_after_migrate.num_running_request -= 1
-            instance_info_after_migrate.num_free_gpu_block += num_block_last_running_request
+            instance_info_after_migrate.num_running_requests -= 1
+            instance_info_after_migrate.num_free_gpu_blocks += num_blocks_last_running_request
         return self.instance_load_calculator.compute_instance_load(instance_info_after_migrate, action='migrate')
 
 class PrefillConstrained(PairMigrationPolicy):
@@ -125,15 +125,15 @@ class PrefillConstrained(PairMigrationPolicy):
                        sorted_instance_infos: List[InstanceInfo]
                        ) -> List[Tuple[str, str]]:
         # migrate in instances
-        left_instance_infos = [i for i in sorted_instance_infos
-                               if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
+        migrate_in_instance_infos = [i for i in sorted_instance_infos
+                               if i.num_killed_requests == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
         # migrate out instances
-        right_instance_infos = [i for i in reversed(sorted_instance_infos)
-                                if i.num_killed_request > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
+        migrate_out_instance_infos = [i for i in reversed(sorted_instance_infos)
+                                if i.num_killed_requests > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
         migrate_instance_pairs = []
-        for i in range(min(len(left_instance_infos), len(right_instance_infos))):
+        for i in range(min(len(migrate_in_instance_infos), len(migrate_out_instance_infos))):
             # without any constrain in order to make prefill migrate happens as soon as possible
-            migrate_instance_pairs.append((right_instance_infos[i].instance_id, left_instance_infos[i].instance_id))
+            migrate_instance_pairs.append((migrate_out_instance_infos[i].instance_id, migrate_in_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
 class PrefillRelaxed(PairMigrationPolicy):
@@ -141,15 +141,15 @@ class PrefillRelaxed(PairMigrationPolicy):
                        sorted_instance_infos: List[InstanceInfo]
                        ) -> List[Tuple[str, str]]:
         # migrate in instances
-        left_instance_infos = [i for i in sorted_instance_infos
-                               if i.num_killed_request == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
+        migrate_in_instance_infos = [i for i in sorted_instance_infos
+                               if i.num_killed_requests == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
         # migrate out instances
-        right_instance_infos = list(reversed(sorted_instance_infos))
+        migrate_out_instance_infos = list(reversed(sorted_instance_infos))
         migrate_instance_pairs = []
-        for i in range(min(len(left_instance_infos), len(right_instance_infos))):
-            if right_instance_infos[i].num_killed_request != 0 \
-                or right_instance_infos[i].instance_load_migrate > left_instance_infos[i].instance_load_migrate:
-                migrate_instance_pairs.append((right_instance_infos[i].instance_id, left_instance_infos[i].instance_id))
+        for i in range(min(len(migrate_in_instance_infos), len(migrate_out_instance_infos))):
+            if migrate_out_instance_infos[i].num_killed_requests != 0 \
+                or migrate_out_instance_infos[i].instance_load_migrate > migrate_in_instance_infos[i].instance_load_migrate:
+                migrate_instance_pairs.append((migrate_out_instance_infos[i].instance_id, migrate_in_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
 class PairMigrationPolicyFactory:

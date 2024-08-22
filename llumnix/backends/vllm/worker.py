@@ -209,8 +209,8 @@ class MigrationWorker(Worker):
         self.init_cache_engine(self.cache_config)
 
     # instance_id is changed from int to str, this function should be modified if used
-    # def init_migration_dist_ray(self, num_instance, instance_id):
-    #     self.ray_world_size = num_instance * self.parallel_config.world_size
+    # def init_migration_dist_ray(self, num_instances, instance_id):
+    #     self.ray_world_size = num_instances * self.parallel_config.world_size
     #     self.ray_rank = self.rank + instance_id * self.parallel_config.world_size
     #     logger.info(f"{self.ray_world_size, self.ray_rank}")
     #     # col.init_collective_group(world_size=self.ray_world_size, rank=self.ray_rank , backend="gloo")

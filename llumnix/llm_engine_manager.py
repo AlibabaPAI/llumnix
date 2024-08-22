@@ -55,7 +55,7 @@ class LLMEngineManager:
 
         self.log_requests = log_requests
 
-        self.num_instance = 0
+        self.num_instances = 0
         self.enable_migration = engine_manager_args.enable_migration
         self.enable_scaling = engine_manager_args.enable_scaling
         self.max_instances = engine_manager_args.max_instances
@@ -63,7 +63,7 @@ class LLMEngineManager:
 
         logger.info("LLMEngineManager starts")
         logger.info("enable_migration: {}".format(self.enable_migration))
-        logger.info("num_instance: {}".format(self.num_instance))
+        logger.info("num_instances: {}".format(self.num_instances))
         logger.info("max_instances: {}, min_instances: {}".format(self.max_instances, self.min_instances))
 
         # TODO(yiwang): refactor auto-scaling
@@ -87,7 +87,7 @@ class LLMEngineManager:
         asyncio.create_task(self._clear_request_instance_loop(self.clearing_interval))
 
         # migrate states
-        self.num_instance_info_update = 0
+        self.num_instance_info_updates = 0
         self.migrating = False
 
         # auto-scaling states
@@ -117,7 +117,7 @@ class LLMEngineManager:
         except (ray.exceptions.RayActorError, KeyError):
             logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
             self.scale_down(instance_id)
-            if self.num_instance != 0:
+            if self.num_instances != 0:
                 asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
@@ -180,10 +180,10 @@ class LLMEngineManager:
                         logger.info("[_update_instance_info_loop] instance {} is dead".format(instance_id))
                         self.scale_down(instance_id)
                 self.global_scheduler.update_instance_infos(instance_info_list)
-                self.num_instance_info_update += 1
+                self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
-                if self.enable_migration and self.num_instance_info_update != 0 \
-                    and self.num_instance_info_update % self.pair_migration_frequency == 0:
+                if self.enable_migration and self.num_instance_info_updates != 0 \
+                    and self.num_instance_info_updates % self.pair_migration_frequency == 0:
                     asyncio.create_task(self._migrate())
                 if self.log_instance_info:
                     self._log_instance_infos_to_csv(instance_info_list)
@@ -264,8 +264,8 @@ class LLMEngineManager:
                 self.instances[ins_id] = llumlet_actor_handles[idx]
                 self.instance_migrating[ins_id] = False
         self.global_scheduler.scale_up(instance_ids)
-        self.num_instance = len(self.instances)
-        return self.num_instance
+        self.num_instances = len(self.instances)
+        return self.num_instances
 
     def scale_down(self, instance_id: Union[str, Iterable[str]]) -> int:
         if isinstance(instance_id, str):
@@ -276,8 +276,8 @@ class LLMEngineManager:
                 del self.instances[ins_id]
                 del self.instance_migrating[ins_id]
         self.global_scheduler.scale_down(instance_ids)
-        self.num_instance = len(self.instances)
-        return self.num_instance
+        self.num_instances = len(self.instances)
+        return self.num_instances
 
     def _connect_to_instances(self):
         actor_names_dict = ray.util.list_named_actors(True)
@@ -382,20 +382,20 @@ class LLMEngineManager:
             'instance_id',
             'step_id',
             'gpu_cache_usage',
-            'num_available_gpu_block',
+            'num_available_gpu_blocks',
             'instance_load',
             'max_tot_tokens',
-            'num_running_request',
-            'num_waiting_request',
-            'num_killed_request',
+            'num_running_requests',
+            'num_waiting_requests',
+            'num_killed_requests',
             'inference_type',
             'bs',
             'latency',
             'seq_lens',
-            'num_instance',
-            'num_seq',
-            'num_block_first_waiting_request',
-            'num_block_all_waiting_request',
+            'num_instances',
+            'num_seqs',
+            'num_blocks_first_waiting_request',
+            'num_blocks_all_waiting_requests',
             'waiting_time_first_waiting_request'])
 
     def _log_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
@@ -405,19 +405,19 @@ class LLMEngineManager:
                 instance_info.instance_id,
                 instance_info.step_id,
                 instance_info.gpu_cache_usage,
-                instance_info.num_available_gpu_block,
+                instance_info.num_available_gpu_blocks,
                 instance_info.instance_load_migrate,
                 instance_info.max_tot_tokens,
-                instance_info.num_running_request,
-                instance_info.num_waiting_request,
-                instance_info.num_killed_request,
+                instance_info.num_running_requests,
+                instance_info.num_waiting_requests,
+                instance_info.num_killed_requests,
                 instance_info.inference_type,
                 instance_info.num_batched_tokens,
                 instance_info.latency,
                 instance_info.running_seq_lens,
-                self.num_instance,
-                instance_info.num_seq,
-                instance_info.num_block_first_waiting_request,
-                instance_info.num_block_all_waiting_request,
+                self.num_instances,
+                instance_info.num_seqs,
+                instance_info.num_blocks_first_waiting_request,
+                instance_info.num_blocks_all_waiting_requests,
                 instance_info.waiting_time_first_waiting_request])
         self.instance_info_file.flush()

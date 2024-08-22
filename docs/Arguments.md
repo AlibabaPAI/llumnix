@@ -9,7 +9,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--fixed-node-init-instance]
             [--init-instance-by-manager]
             [--initial-instances INITIAL_INSTANCES]
-            [--load-metric {remaining_step,usage_ratio}]
+            [--load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue}]
             [--enable-migration]
@@ -48,8 +48,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--load-metric`
 - Instance load metric.
-- Possible choices: remaining_step, usage_ratio
-- Default: "remaining_step"
+- Possible choices: remaining_steps, usage_ratio
+- Default: "remaining_steps"
 
 `--polling-interval`
 - Time interval(s) to update instance info and pair migration.
@@ -139,11 +139,11 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: 512
 
 `--last-stage-max-blocks`
-- If the remaining blocks num < last_stage_max_blocks, do last stage migration.
+- If the number of remaining blocks < last_stage_max_blocks, do last stage migration.
 - Default: 4
 
 `--max-stages`
-- Drop migration if stage num > max_stages.
+- Drop migration if the number of stages > max_stages.
 - Default: 3
 
 # Unsupported vLLM feature options

@@ -46,7 +46,7 @@ class GlobalScheduler:
                                                   global_scheduler_config.scaling_policy,
                                                   self.instance_load_calculator)
 
-        self.num_instance = 0
+        self.num_instances = 0
         self.instance_id_set: Set[str] = set()
         self.instance_info: Dict[str, InstanceInfo] = {}
 
@@ -84,10 +84,10 @@ class GlobalScheduler:
                 new_intance_info.instance_id = ins_id
                 self.instance_info[ins_id] = new_intance_info
                 self._add_instance(ins_id)
-        logger.info("self.num_instance: {}, self.instances: {}".format(self.num_instance, self.instance_id_set))
-        return self.num_instance
+        logger.info("self.num_instances: {}, self.instances: {}".format(self.num_instances, self.instance_id_set))
+        return self.num_instances
 
-    def scale_down(self, instance_id: Union[str, Iterable[str]]) -> None:
+    def scale_down(self, instance_id: Union[str, Iterable[str]]) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
@@ -96,19 +96,19 @@ class GlobalScheduler:
                 logger.info("scale down instance: {}".format(ins_id))
                 del self.instance_info[ins_id]
                 self._remove_instance(ins_id)
-        logger.info("self.num_instance: {}, self.instances: {}".format(self.num_instance, self.instance_id_set))
-        return self.num_instance
+        logger.info("self.num_instances: {}, self.instances: {}".format(self.num_instances, self.instance_id_set))
+        return self.num_instances
 
     def _add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
-        self.num_instance = len(self.instance_id_set)
+        self.num_instances = len(self.instance_id_set)
         for scheduler in (self.dispatch_scheduler, self.migration_scheduler, self.scaling_scheduler):
             scheduler.update_instance_infos(self.instance_info)
             scheduler.add_instance(instance_id)
 
     def _remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
-        self.num_instance = len(self.instance_id_set)
+        self.num_instances = len(self.instance_id_set)
         for scheduler in (self.dispatch_scheduler, self.migration_scheduler, self.scaling_scheduler):
             scheduler.update_instance_infos(self.instance_info)
             scheduler.remove_instance(instance_id)

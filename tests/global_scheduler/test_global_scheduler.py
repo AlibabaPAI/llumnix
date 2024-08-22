@@ -10,7 +10,7 @@ from tests.global_scheduler.test_llm_engine_manager import get_instance_info_mig
 
 
 def init_global_scheduler():
-    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_step', 'load', 'prefill_constrained', 3.0, True, 'avg_load', 10, 60)
+    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', 'prefill_constrained', 3.0, True, 'avg_load', 10, 60)
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler
 
@@ -32,14 +32,14 @@ def test_scale_up_and_scale_down(global_scheduler):
     initial_instances = 4
     instance_infos = init_instance_infos(initial_instances)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    num_instance = global_scheduler.scale_up(instance_ids)
-    assert num_instance == initial_instances
+    num_instances = global_scheduler.scale_up(instance_ids)
+    assert num_instances == initial_instances
     instance_infos = init_instance_infos(initial_instances)
     instance_ids_1 = [instance_info.instance_id for instance_info in instance_infos]
-    num_instance = global_scheduler.scale_down(instance_ids_1)
-    assert num_instance == initial_instances
-    num_instance = global_scheduler.scale_down(instance_ids)
-    assert num_instance == 0
+    num_instances = global_scheduler.scale_down(instance_ids_1)
+    assert num_instances == initial_instances
+    num_instances = global_scheduler.scale_down(instance_ids)
+    assert num_instances == 0
 
 def test_update_instance_infos(global_scheduler):
     initial_instances = 4

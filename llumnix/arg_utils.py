@@ -26,7 +26,7 @@ class EngineManagerArgs:
     initial_instances: int = 1
     fixed_node_init_instance: bool = False
 
-    load_metric: str = 'remaining_step'
+    load_metric: str = 'remaining_steps'
     polling_interval: float = 0.05
 
     dispatch_policy: str = 'load'
@@ -87,8 +87,8 @@ class EngineManagerArgs:
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
-        engine_args = cls(**{attr: getattr(args, attr) for attr in attrs})
-        return engine_args
+        engine_manager_args = cls(**{attr: getattr(args, attr) for attr in attrs})
+        return engine_manager_args
 
     @staticmethod
     def add_cli_args(
@@ -107,7 +107,7 @@ class EngineManagerArgs:
         parser.add_argument('--load-metric',
                             type=str,
                             default=EngineManagerArgs.load_metric,
-                            choices=['remaining_step', 'usage_ratio'],
+                            choices=['remaining_steps', 'usage_ratio'],
                             help='instance load metric')
         parser.add_argument('--polling-interval',
                             type=float,
@@ -207,10 +207,10 @@ class EngineManagerArgs:
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
                             default=EngineManagerArgs.last_stage_max_blocks,
-                            help='if the remain blocks num < last_stage_max_blocks, do last stage migration')
+                            help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
         parser.add_argument('--max-stages',
                             type=int,
                             default=EngineManagerArgs.max_stages,
-                            help='drop migration if stage num > max_stages')
+                            help='drop migration if the number of stages > max_stages')
 
         return parser

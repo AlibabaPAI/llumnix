@@ -28,7 +28,7 @@ class MockLlumlet:
     def __init__(self, instance_id):
         self.instance_id = instance_id
         self.actor_name = f"instance_{instance_id}"
-        self.num_request = 0
+        self.num_requests = 0
         self.request_id_set = set()
         self.instance_info = None
         self.num_migrate_out = 0
@@ -48,13 +48,13 @@ class MockLlumlet:
     def get_all_request_ids(self):
         return list(self.request_id_set)
 
-    def get_num_request(self):
-        return self.num_request
+    def get_num_requests(self):
+        return self.num_requests
 
     def generate(self, request_id, server_info, *args, **kwargs):
         self.request_id_set.add(request_id)
-        self.num_request = len(self.request_id_set)
-        return self.num_request
+        self.num_requests = len(self.request_id_set)
+        return self.num_requests
 
     def abort(self, request_id):
         if isinstance(request_id, str):
@@ -63,8 +63,8 @@ class MockLlumlet:
         for request_id in request_ids:
             if request_id in self.request_id_set:
                 self.request_id_set.remove(request_id)
-                self.num_request = len(self.request_id_set)
-        return self.num_request
+                self.num_requests = len(self.request_id_set)
+        return self.num_requests
 
     def migrate_out(self, dst_instance_name):
         self.num_migrate_out += 1
@@ -127,17 +127,17 @@ def test_init_llumlet(llumlet):
 def test_scale_up_and_down(engine_manager):
     initial_instances = 4
     instance_ids, llumlets = init_llumlets(initial_instances)
-    num_instance = ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
-    assert num_instance == initial_instances
+    num_instances = ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
+    assert num_instances == initial_instances
     instance_ids_1, llumlets_1 = init_llumlets(initial_instances)
-    num_instance = ray.get(engine_manager.scale_down.remote(instance_ids_1))
-    assert num_instance == initial_instances
-    num_instance = ray.get(engine_manager.scale_up.remote(instance_ids_1, llumlets_1))
-    assert num_instance == initial_instances * 2
-    num_instance = ray.get(engine_manager.scale_down.remote(instance_ids))
-    assert num_instance == initial_instances
-    num_instance = ray.get(engine_manager.scale_down.remote(instance_ids_1))
-    assert num_instance == 0
+    num_instances = ray.get(engine_manager.scale_down.remote(instance_ids_1))
+    assert num_instances == initial_instances
+    num_instances = ray.get(engine_manager.scale_up.remote(instance_ids_1, llumlets_1))
+    assert num_instances == initial_instances * 2
+    num_instances = ray.get(engine_manager.scale_down.remote(instance_ids))
+    assert num_instances == initial_instances
+    num_instances = ray.get(engine_manager.scale_down.remote(instance_ids_1))
+    assert num_instances == 0
 
 def test_connect_to_instances():
     initial_instances = 4
@@ -145,10 +145,10 @@ def test_connect_to_instances():
     ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
     engine_manager = init_manager()
     instance_ids_1, llumlets_1 = init_llumlets(initial_instances)
-    num_instance = ray.get(engine_manager.scale_up.remote(instance_ids_1, llumlets_1))
-    assert num_instance == initial_instances * 2
-    num_instance = ray.get(engine_manager.scale_down.remote(instance_ids))
-    assert num_instance == initial_instances
+    num_instances = ray.get(engine_manager.scale_up.remote(instance_ids_1, llumlets_1))
+    assert num_instances == initial_instances * 2
+    num_instances = ray.get(engine_manager.scale_down.remote(instance_ids))
+    assert num_instances == initial_instances
     ray.kill(engine_manager)
     ray.shutdown()
 
@@ -156,20 +156,20 @@ def test_generate_and_abort(engine_manager, llumlet):
     instance_id = ray.get(llumlet.get_instance_id.remote())
     ray.get(engine_manager.scale_up.remote(instance_id, llumlet))
     request_id = random_uuid()
-    num_request = ray.get(llumlet.get_num_request.remote())
-    assert num_request == 0
+    num_requests = ray.get(llumlet.get_num_requests.remote())
+    assert num_requests == 0
     ray.get(engine_manager.generate.remote(request_id, None, None, None))
-    num_request = ray.get(llumlet.get_num_request.remote())
-    assert num_request == 1
+    num_requests = ray.get(llumlet.get_num_requests.remote())
+    assert num_requests == 1
     ray.get(engine_manager.abort.remote(request_id))
-    num_request = ray.get(llumlet.get_num_request.remote())
-    assert num_request == 0
+    num_requests = ray.get(llumlet.get_num_requests.remote())
+    assert num_requests == 0
     request_id_1 = random_uuid()
     request_id_2 = random_uuid()
     request_ids = [request_id_1, request_id_2]
     ray.get(engine_manager.abort.remote(request_ids))
-    num_request = ray.get(llumlet.get_num_request.remote())
-    assert num_request == 0
+    num_requests = ray.get(llumlet.get_num_requests.remote())
+    assert num_requests == 0
 
 def test_get_request_instance():
     instance_ids, llumlets = init_llumlets(2)
@@ -179,34 +179,34 @@ def test_get_request_instance():
     request_id_1 = random_uuid()
     ray.get(llumlet.generate.remote(request_id, None, None, None))
     ray.get(llumlet_1.generate.remote(request_id_1, None, None, None))
-    num_request = ray.get(llumlet.get_num_request.remote())
-    num_request_1 = ray.get(llumlet_1.get_num_request.remote())
-    assert num_request == 1
-    assert num_request_1 == 1
+    num_requests = ray.get(llumlet.get_num_requests.remote())
+    num_requests_1 = ray.get(llumlet_1.get_num_requests.remote())
+    assert num_requests == 1
+    assert num_requests_1 == 1
     engine_manager = init_manager()
     ray.get(engine_manager.abort.remote(request_id))
     ray.get(engine_manager.abort.remote(request_id_1))
-    num_request = ray.get(llumlet.get_num_request.remote())
-    num_request_1 = ray.get(llumlet_1.get_num_request.remote())
-    assert num_request == 0
-    assert num_request_1 == 0
+    num_requests = ray.get(llumlet.get_num_requests.remote())
+    num_requests_1 = ray.get(llumlet_1.get_num_requests.remote())
+    assert num_requests == 0
+    assert num_requests_1 == 0
     ray.kill(engine_manager)
     ray.shutdown()
 
 def get_instance_info_migrate_in(instance_id):
     instance_info = InstanceInfo()
     instance_info.instance_id = instance_id
-    instance_info.num_available_gpu_block = np.inf
-    instance_info.num_running_request = 1
-    instance_info.num_block_first_waiting_request = 0
+    instance_info.num_available_gpu_blocks = np.inf
+    instance_info.num_running_requests = 1
+    instance_info.num_blocks_first_waiting_request = 0
     return instance_info
 
 def get_instance_info_migrate_out(instance_id):
     instance_info = InstanceInfo()
     instance_info.instance_id = instance_id
-    instance_info.num_available_gpu_block = 0
-    instance_info.num_running_request = 1
-    instance_info.num_block_first_waiting_request = np.inf
+    instance_info.num_available_gpu_blocks = 0
+    instance_info.num_running_requests = 1
+    instance_info.num_blocks_first_waiting_request = np.inf
     return instance_info
 
 def test_update_instance_info_loop_and_migrate(engine_manager):

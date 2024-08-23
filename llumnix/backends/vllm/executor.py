@@ -27,6 +27,7 @@ from vllm import envs
 from vllm.sequence import Logprob, SequenceOutput, SequenceGroupOutput, SamplerOutput, ExecuteModelRequest
 from vllm.config import _GB
 
+from llumnix.config import MigrationConfig
 from llumnix.logger import init_logger
 from llumnix.backends.vllm.utils import get_cache_block_size
 from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_prefill, model_decode, _pad_to_alignment
@@ -35,6 +36,7 @@ logger = init_logger(__name__)
 
 class LlumnixRayGPUExecutor(RayGPUExecutor):
     node_id: str = None
+    migration_config: MigrationConfig = None
 
     def _init_workers_ray(self, placement_group: "PlacementGroup",
                           **ray_remote_kwargs):
@@ -149,6 +151,11 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
         self._run_workers("load_model",
                           max_concurrent_workers=self.parallel_config.
                           max_parallel_loading_workers)
+        self._run_workers("reserve_memory_for_migration",
+                          migration_config=self.migration_config,
+                          model_config=self.model_config,
+                          cache_config=self.cache_config,
+                          parallel_config=self.parallel_config)
 
     def execute_model(self, *args, **kwargs):
         t0 = time.time()

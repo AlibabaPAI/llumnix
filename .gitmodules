@@ -1,0 +1,4 @@
+[submodule "third_party/pygloo"]
+	path = third_party/pygloo
+	url = https://github.com/ZeldaHuang/pygloo
+	branch = llumnix

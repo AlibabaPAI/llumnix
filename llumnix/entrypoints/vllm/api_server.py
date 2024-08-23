@@ -26,11 +26,12 @@ from vllm.sampling_params import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncStream
 
-from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo
-from llumnix.entrypoints.llumnix_utils import launch_ray_cluster, is_gpu_available, init_llumnix_components
+from llumnix.entrypoints.llumnix_utils import (launch_ray_cluster, connect_to_ray_cluster,
+                                                is_gpu_available, init_llumnix_components)
 from llumnix.logger import init_logger
+from llumnix.utils import random_uuid
 
 
 logger = init_logger(__name__)
@@ -214,7 +215,6 @@ async def is_ready():
     ready_status = await engine_manager.is_ready.remote()
     return ready_status
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
@@ -241,12 +241,17 @@ if __name__ == "__main__":
         # Launch the ray cluster for multi-node serving.
         launch_ray_cluster(args.ray_cluster_port)
 
+    # Connect to a ray cluster.
+    connect_to_ray_cluster(port=args.ray_cluster_port)
+
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():
         # Launch the Llumnix componets on current node.
         server_id = random_uuid()
         node_id = ray.get_runtime_context().get_node_id()
-        engine_manager, instance_ids, llumlets, request_output_queue = init_llumnix_components(engine_manager_args, engine_args, node_id)
+        engine_manager, instance_ids, llumlets, request_output_queue = \
+            init_llumnix_components(engine_manager_args, engine_args, node_id)
+
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]
             instance_num_requests[ins_id] = 0

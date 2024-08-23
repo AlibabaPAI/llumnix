@@ -36,14 +36,14 @@ from llumnix.logger import init_logger
 logger = init_logger(__name__)
 engine_manager = None
 instances = {}
-instance_num_request: Dict[str, int] = {}
+instance_num_requests: Dict[str, int] = {}
 # request_output_queue could be None if initialzed in lifespan.
 request_output_queue = None
 server_id = None
 TIMEOUT_KEEP_ALIVE = 5  # seconds.
 request_streams: Dict[str, AsyncStream] = {}
 log_requests = None
-num_finished_request = 0
+num_finished_requests = 0
 WAIT_MANAGER_INTERVAL = 5
 
 
@@ -82,9 +82,9 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
         await engine_manager.generate.remote(request_id, server_info, prompt, sampling_params)
     except ray.exceptions.RayActorError:
         try:
-            if instance_num_request:
-                instance_id = min(instance_num_request, key=instance_num_request.get)
-                instance_num_request[instance_id] += 1
+            if instance_num_requests:
+                instance_id = min(instance_num_requests, key=instance_num_requests.get)
+                instance_num_requests[instance_id] += 1
                 await instances[instance_id].generate.remote(request_id, server_info, prompt, sampling_params)
                 print("Manager is unavailable, directly pass request {} to instance {}".format(request_id, instance_id))
             else:
@@ -96,7 +96,7 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
             if instance_id in instances:
                 print("[manager_generate] instance {} is dead".format(instance_id))
                 del instances[instance_id]
-                del instance_num_request[instance_id]
+                del instance_num_requests[instance_id]
             return await asyncio.create_task(manager_generate(prompt, sampling_params, request_id))
     return results_generator
 
@@ -185,12 +185,12 @@ async def generate_benchmark(request: Request) -> Response:
         start = now_time
         final_output = request_output
 
-    global num_finished_request
+    global num_finished_requests
     if log_requests:
         # TODO(s5u13b): Use logger.
         print(f"Finished request {request_id}.")
-        num_finished_request += 1
-        print(f"num_finished_request {num_finished_request}.")
+        num_finished_requests += 1
+        print(f"num_finished_requests {num_finished_requests}.")
 
     generation = final_output.outputs[0].text
     num_output_tokens = len(final_output.outputs[0].token_ids)
@@ -218,7 +218,7 @@ async def is_ready():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
-    parser.add_argument("--port", type=int, default=8003)
+    parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--ssl-keyfile", type=str, default=None)
     parser.add_argument("--ssl-certfile", type=str, default=None)
     parser.add_argument('--disable-log-requests-server',
@@ -249,7 +249,7 @@ if __name__ == "__main__":
         engine_manager, instance_ids, llumlets, request_output_queue = init_llumnix_components(engine_manager_args, engine_args, node_id)
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]
-            instance_num_request[ins_id] = 0
+            instance_num_requests[ins_id] = 0
         log_requests = not args.disable_log_requests_server
         # Start the api server after all the components of llumnix are ready.
         print(f"Start Api Server on '{args.host}:{args.port}'")

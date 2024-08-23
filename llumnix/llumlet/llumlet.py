@@ -130,12 +130,6 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         return self.backend_engine.engine.instance_info
 
-    def get_actor_name(self) -> str:
-        return self.actor_name
-
-    def get_instance_id(self) -> str:
-        return self.instance_id
-
     def is_ready(self) -> bool:
         return True
 

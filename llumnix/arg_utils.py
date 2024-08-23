@@ -26,7 +26,7 @@ class EngineManagerArgs:
     initial_instances: int = 1
     fixed_node_init_instance: bool = False
 
-    load_metric: str = 'consumed_speed'
+    load_metric: str = 'remaining_steps'
     polling_interval: float = 0.05
 
     dispatch_policy: str = 'load'
@@ -34,7 +34,7 @@ class EngineManagerArgs:
     enable_migration: bool = True
     enable_defrag: bool = True
     pair_migration_frequency: int = 1
-    pair_migration_policy: str = 'prefill_constrained'
+    pair_migration_policy: str = 'defrag_constrained'
     migrate_out_threshold: float = 3.0
     request_migration_policy: str = 'SJF'
 
@@ -87,8 +87,8 @@ class EngineManagerArgs:
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
-        engine_args = cls(**{attr: getattr(args, attr) for attr in attrs})
-        return engine_args
+        engine_manager_args = cls(**{attr: getattr(args, attr) for attr in attrs})
+        return engine_manager_args
 
     @staticmethod
     def add_cli_args(
@@ -107,7 +107,7 @@ class EngineManagerArgs:
         parser.add_argument('--load-metric',
                             type=str,
                             default=EngineManagerArgs.load_metric,
-                            choices=['consumed_speed', 'used_ratio'],
+                            choices=['remaining_steps', 'usage_ratio'],
                             help='instance load metric')
         parser.add_argument('--polling-interval',
                             type=float,
@@ -130,7 +130,7 @@ class EngineManagerArgs:
         parser.add_argument('--pair-migration-policy',
                             type=str,
                             default=EngineManagerArgs.pair_migration_policy,
-                            choices=['balanced', 'prefill_constrained', 'prefill_relaxed'],
+                            choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
                             help='pair migration policy')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
@@ -207,10 +207,10 @@ class EngineManagerArgs:
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
                             default=EngineManagerArgs.last_stage_max_blocks,
-                            help='if the remain blocks num < last_stage_max_blocks, do last stage migration')
+                            help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
         parser.add_argument('--max-stages',
                             type=int,
                             default=EngineManagerArgs.max_stages,
-                            help='drop migration if stage num > max_stages')
+                            help='drop migration if the number of stages > max_stages')
 
         return parser

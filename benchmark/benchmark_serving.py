@@ -31,8 +31,8 @@ from transformers import AutoTokenizer
 from typing import List
 
 
-num_finished_request = 0
-server_num_request = {}
+num_finished_requests = 0
+server_num_requests = {}
 
 
 def get_wait_time(mean_time_between_requests: float, distribution: str, coefficient_variation: float = 0.0) -> float:
@@ -76,11 +76,11 @@ async def query_model_vllm(prompt, verbose, ip_ports):
     prompt, prompt_len, expected_response_len = prompt
 
     # Round-Robin dispatch request to the given api servers.
-    global server_num_request
-    server_id = min(server_num_request, key=server_num_request.get)
-    server_num_request[server_id] += 1
+    global server_num_requests
+    server_id = min(server_num_requests, key=server_num_requests.get)
+    server_num_requests[server_id] += 1
     timeout = aiohttp.ClientTimeout(total=4*60*60)
-    global num_finished_request
+    global num_finished_requests
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         # TODO(yiwang): Remove hard codes of params.
@@ -111,8 +111,8 @@ async def query_model_vllm(prompt, verbose, ip_ports):
                 output['response_len'] = expected_response_len
                 if verbose and 'generated_text' in output:
                     print(json.dumps(output['generated_text']))
-                num_finished_request += 1
-                print("num_finised_request: {}".format(num_finished_request))
+                num_finished_requests += 1
+                print("num_finised_requests: {}".format(num_finished_requests))
                 return (prompt, output)
         except aiohttp.ClientError as e:
             print(f"Connect to {ip_ports[server_id]} failed with: {str(e)}")
@@ -334,18 +334,18 @@ def plot_instance(log_filename_0):
     log_files.sort(key=os.path.getmtime, reverse=True)
     df_0 = pd.read_csv(log_files[0]).sort_values(by=["timestamp"])
     timestamp_list_0 = df_0["timestamp"].to_numpy()
-    instance_num_list_0 = df_0["num_instance"].to_numpy()
+    num_instances_list_0 = df_0["num_instances"].to_numpy()
     time_0 = 0
     sum_0 = 0
     for idx, t in enumerate(timestamp_list_0):
         if t > time_0:
             time_0 += 1
-            sum_0 += instance_num_list_0[idx]
+            sum_0 += num_instances_list_0[idx]
     print(f"{sum_0/time_0} gpu/s")
     avg_instance_num = np.round(sum_0/time_0, 2)
 
     fig, ax = plt.subplots()
-    ax.plot(timestamp_list_0, instance_num_list_0, color="red", label=f"instance_num(avg {avg_instance_num} /s)")
+    ax.plot(timestamp_list_0, num_instances_list_0, color="red", label=f"instance_num(avg {avg_instance_num} /s)")
     ax.legend(loc='upper left')
     fig_filename = os.path.splitext(log_filename_0)[0] + "_instance.png"
     index1 = fig_filename.rfind('/')
@@ -437,10 +437,10 @@ async def benchmark(
     else:
         raise ValueError(f'unknown backend {backend}')
 
-    global server_num_request
-    num_server = len(ip_ports)
-    for server_id in range(num_server):
-        server_num_request[server_id] = 0
+    global server_num_requests
+    num_servers = len(ip_ports)
+    for server_id in range(num_servers):
+        server_num_requests[server_id] = 0
 
     m = MeasureLatency()
 

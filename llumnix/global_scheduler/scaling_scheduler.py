@@ -33,7 +33,7 @@ class ScalingScheduler:
                                                           instance_load_calculator=instance_load_calculator)
         self.instance_load_calculator = instance_load_calculator
 
-        self.num_instance = 0
+        self.num_instances = 0
         self.instance_id_set: Set[str] = set()
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
@@ -43,7 +43,7 @@ class ScalingScheduler:
         scale_up_num = 0
         scale_down_num = 0
         # if not all instances have returned instance_info, not scale
-        if len(self.instance_info.keys()) < self.num_instance:
+        if len(self.instance_info.keys()) < self.num_instances:
             return scale_up_num, scale_down_num
         now_instances = [self.instance_info[instance_id] for instance_id in self.instance_id_set]
         load_metric_up = self.scaling_policy.compute_load_metric_up(now_instances)
@@ -62,21 +62,21 @@ class ScalingScheduler:
 
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
-        self.num_instance = len(self.instance_id_set)
+        self.num_instances = len(self.instance_id_set)
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
-        self.num_instance = len(self.instance_id_set)
+        self.num_instances = len(self.instance_id_set)
 
     def get_empty_instance_info(self) -> InstanceInfo:
         dummy_intance_info = InstanceInfo()
         dummy_intance_info.instance_id = -1
         dummy_intance_info.step_id = -1
         # TODO(s5u13b): Should be changed for proactive auto-scaling.
-        dummy_intance_info.num_total_gpu_block = np.inf
-        dummy_intance_info.num_available_gpu_block = np.inf
-        dummy_intance_info.num_free_gpu_block = np.inf
-        dummy_intance_info.num_available_gpu_block_waiting = np.inf
+        dummy_intance_info.num_total_gpu_blocks = np.inf
+        dummy_intance_info.num_available_gpu_blocks = np.inf
+        dummy_intance_info.num_free_gpu_blocks = np.inf
+        dummy_intance_info.num_available_gpu_blocks_waiting = np.inf
         return dummy_intance_info
 
 class ScalePolicy(ABC):
@@ -96,13 +96,13 @@ class ScalePolicy(ABC):
         tot_instance_info = InstanceInfo()
         tot_instance_info.instance_id = -1
         tot_instance_info.step_id = -1
-        tot_instance_info.num_running_request = sum([i.num_running_request for i in instance_infos])
-        tot_instance_info.num_waiting_request = sum([i.num_waiting_request for i in instance_infos])
-        tot_instance_info.num_free_gpu_block = sum([i.num_free_gpu_block for i in instance_infos])
-        tot_instance_info.num_total_gpu_block = sum([i.num_total_gpu_block for i in instance_infos])
-        tot_instance_info.num_watermark_block = sum([i.num_watermark_block for i in instance_infos])
-        tot_instance_info.num_block_all_waiting_request = sum([i.num_block_all_waiting_request for i in instance_infos])
-        tot_instance_info.num_available_gpu_block = tot_instance_info.num_free_gpu_block - tot_instance_info.num_watermark_block
+        tot_instance_info.num_running_requests = sum([i.num_running_requests for i in instance_infos])
+        tot_instance_info.num_waiting_requests = sum([i.num_waiting_requests for i in instance_infos])
+        tot_instance_info.num_free_gpu_blocks = sum([i.num_free_gpu_blocks for i in instance_infos])
+        tot_instance_info.num_total_gpu_blocks = sum([i.num_total_gpu_blocks for i in instance_infos])
+        tot_instance_info.num_watermark_blocks = sum([i.num_watermark_blocks for i in instance_infos])
+        tot_instance_info.num_blocks_all_waiting_requests = sum([i.num_blocks_all_waiting_requests for i in instance_infos])
+        tot_instance_info.num_available_gpu_blocks = tot_instance_info.num_free_gpu_blocks - tot_instance_info.num_watermark_blocks
         return self.instance_load_calculator.compute_instance_load(tot_instance_info, action="scale")
 
 class MaxLoad(ScalePolicy):
@@ -123,23 +123,23 @@ class AvgLoad(ScalePolicy):
         return self.compute_load_metric_avg(instance_infos)
 
     def compute_load_metric_down(self, instance_infos: List[InstanceInfo]) -> float:
-        num_instance = len(instance_infos)
+        num_instances = len(instance_infos)
         tot_instance_info = InstanceInfo()
         tot_instance_info.instance_id = -1
         tot_instance_info.step_id = -1
         # the average load after scale down the last instance
-        tot_instance_info.num_running_request = sum([i.num_running_request for i in instance_infos])
-        tot_instance_info.num_waiting_request = sum([i.num_waiting_request for i in instance_infos])
-        tot_instance_info.num_free_gpu_block = sum([i.num_free_gpu_block-i.num_total_gpu_block
-                                                    if i.instance_id + 1 == num_instance else i.num_free_gpu_block
+        tot_instance_info.num_running_requests = sum([i.num_running_requests for i in instance_infos])
+        tot_instance_info.num_waiting_requests = sum([i.num_waiting_requests for i in instance_infos])
+        tot_instance_info.num_free_gpu_blocks = sum([i.num_free_gpu_blocks - i.num_total_gpu_blocks
+                                                    if i.instance_id + 1 == num_instances else i.num_free_gpu_blocks
                                                     for i in instance_infos])
-        tot_instance_info.num_free_gpu_block = max(0, tot_instance_info.num_free_gpu_block)
-        tot_instance_info.num_total_gpu_block = sum([0 if i.instance_id + 1 == num_instance else i.num_total_gpu_block
+        tot_instance_info.num_free_gpu_blocks = max(0, tot_instance_info.num_free_gpu_blocks)
+        tot_instance_info.num_total_gpu_blocks = sum([0 if i.instance_id + 1 == num_instances else i.num_total_gpu_blocks
                                                     for i in instance_infos])
-        tot_instance_info.num_watermark_block = sum([0 if i.instance_id + 1 == num_instance else i.num_watermark_block
+        tot_instance_info.num_watermark_blocks = sum([0 if i.instance_id + 1 == num_instances else i.num_watermark_blocks
                                                     for i in instance_infos])
-        tot_instance_info.num_block_all_waiting_request = sum([i.num_block_all_waiting_request for i in instance_infos])
-        tot_instance_info.num_available_gpu_block = tot_instance_info.num_free_gpu_block - tot_instance_info.num_watermark_block
+        tot_instance_info.num_blocks_all_waiting_requests = sum([i.num_blocks_all_waiting_requests for i in instance_infos])
+        tot_instance_info.num_available_gpu_blocks = tot_instance_info.num_free_gpu_blocks - tot_instance_info.num_watermark_blocks
         return self.instance_load_calculator.compute_instance_load(tot_instance_info, action='scale')
 
 class ScalePolicyFactory:

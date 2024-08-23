@@ -121,9 +121,9 @@ class LLMEngineLlumnix(LLMEngine):
         instance_info: InstanceInfo = self.scheduler.get_instance_info()
 
         if self.scaling_down:
-            instance_info.num_running_request = 1
-            instance_info.num_available_gpu_block = -self.cache_config.num_gpu_blocks
-            instance_info.num_available_gpu_block_waiting = -self.cache_config.num_gpu_blocks
+            instance_info.num_running_requests = 1
+            instance_info.num_available_gpu_blocks = -self.cache_config.num_gpu_blocks
+            instance_info.num_available_gpu_blocks_waiting = -self.cache_config.num_gpu_blocks
 
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
@@ -136,7 +136,7 @@ class LLMEngineLlumnix(LLMEngine):
                 blocks = self.scheduler.block_manager.get_block_table(seq)
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
-            instance_info.num_block_last_running_request = len(tot_blocks)
+            instance_info.num_blocks_last_running_request = len(tot_blocks)
 
         self.free_request_states(instance_info.finished_request_ids)
 

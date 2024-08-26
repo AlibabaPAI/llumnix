@@ -38,7 +38,6 @@ MANAGER_ACTOR_NAME = 'manager'
 CLEARING_INTERVAL = 3600
 RETRIES_INTERVALS = 5.0
 
-# TODO(s5u13b): add unit test for CI
 # TODO(s5u13b): Fix the logger when manager failover.
 
 
@@ -252,7 +251,6 @@ class LLMEngineManager:
                 call_migrate_instance_pairs.append(migrate_instance_pair)
                 task = self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name)
                 migration_tasks.append(task)
-            # TODO(s5u13b): It's not necessary for manager to await for each migration.
             # TODO(s5u13b): Migration failover could be implemented in Llumlet rather than manager.
             rets = await asyncio.gather(*migration_tasks, return_exceptions=True)
             await self._post_migrate(rets, call_migrate_instance_pairs)
@@ -426,7 +424,7 @@ class LLMEngineManager:
         logger.info("engine_manager_args: {}".format(engine_manager_args))
         return engine_manager
 
-    # TODO(s5u13b): significant duplication with llumlet_utils.init_llumlets. consider reducing duplicate codes.
+    # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
     def init_llumlets(self,
                       engine_args,
                       node_id: str) -> Tuple[List[str], List[Llumlet]]:

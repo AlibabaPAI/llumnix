@@ -79,7 +79,6 @@ class LLMEngineLlumnix(LLMEngine):
             executor_class.migration_config = migration_config
         else:
             raise ValueError('unimplemented executor backend')
-        # TODO(s5u13b): Do not hack here.
         # Hack to pass node_id to _init_workers_ray function.
         executor_class.node_id = node_id
         # Create the LLM engine.

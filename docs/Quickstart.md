@@ -15,7 +15,7 @@ cd llumnix
 make install
 ```
 
-If you want to use gloo as migration backend, please install [Bazel](https://github.com/bazelbuild/bazel) >= 5.1.0. Then, run `make pygloo` to install [pygloo](https://github.com/ZeldaHuang/pygloo). 
+If you want to use gloo as migration backend, please refer to [this link](https://github.com/ZeldaHuang/pygloo/blob/main/.github/workflows/ubuntu_basic.yml#L24C1-L26C1) to install [Bazel](https://github.com/bazelbuild/bazel) >= 5.1.0. Then, run `make pygloo` to install [pygloo](https://github.com/ZeldaHuang/pygloo).
 
 Note: Using conda is not recommended, as it cannot properly handle pygloo's dependency on gcc libstdc++.so.6: version GLIBCXX_3.4.30.
 
@@ -45,7 +45,7 @@ python -m llumnix.entrypoints.vllm.api_server \
 Upon starting the server, Llumnix's components are automatically configured.
 In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.4.2/models/engine_args.html).
 
-2. Launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster. 
+2. Launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster.
 ```
 # Configure on all nodes.
 export HEAD_NODE_IP=$HEAD_NODE_IP_ADDRESS
@@ -66,7 +66,7 @@ When you include the --launch-ray-cluster option in Llumnix's serving deployment
 
 
 # Benchmarking
-We provide a benchmarking example to help you get through the usage of Llumnix. 
+We provide a benchmarking example to help you get through the usage of Llumnix.
 First, you should start the server to launch Llumnix and backend LLM engine instances:
 ```
 HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \

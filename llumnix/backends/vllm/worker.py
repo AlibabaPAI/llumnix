@@ -42,25 +42,24 @@ class MigrationWorker(Worker):
         torch.cuda.set_device(self.device)
         return super().load_model()
 
-    # TODO(KuilongCui): global rank can be get from manager. There is no need to get for gloo and nccl
-    # for every migratie_cache
     def get_global_rank(self):
         return self.global_rank
 
     def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
-                                      cache_config: CacheConfig, parallel_config: ParallelConfig):
+                                      cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
         # TODO(s5u13b): move this to arguments checker
         if parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl':
             logger.warning("nccl backend is not supported for PP or TP enabled model, use gloo instead.")
             migration_config.migration_backend = 'gloo'
 
-        # for nccl migration backend, reserve gpu memory for dummy cache in migration backend
-        if migration_config.migration_backend == "nccl" and parallel_config.world_size == 1:
-            migrate_cache_blocks_size = migration_config.migration_cache_blocks
-            migrate_num_layers = migration_config.migration_num_layers
-            dummy_cache_size = migrate_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
-                cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
+        migrate_cache_blocks_size = migration_config.migration_cache_blocks
+        migrate_num_layers = migration_config.migration_num_layers
+        dummy_cache_size = migrate_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
+            cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
 
+        # For nccl migration backend, reserve gpu memory for dummy cache in migration backend. For other backends,
+        # CPU memory is used for the dummy cache, which is almost unlimited, so no special action is needed.
+        if migration_config.migration_backend == "nccl" and parallel_config.world_size == 1:
             device = torch.device(f"cuda:{self.local_rank}")
             _, total_memory = torch.cuda.mem_get_info(device)
             migrate_ratio = math.ceil(dummy_cache_size / total_memory * 10000) / 10000
@@ -73,6 +72,8 @@ class MigrationWorker(Worker):
 
             logger.info("nccl migration backend take {:.4f} gpu memory, left gpu_memory_utilization {:.4f} for kv cache."
                         .format(migrate_ratio, cache_config.gpu_memory_utilization))
+
+        return dummy_cache_size
 
     def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list,
                        placement_group=None, node_id=None) -> None:

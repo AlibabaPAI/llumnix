@@ -13,6 +13,7 @@
 
 from typing import List
 import torch
+import cupy
 from func_timeout import func_set_timeout, FunctionTimedOut
 
 import ray
@@ -176,7 +177,7 @@ class RayColMigrationBackend(MigrationBackendBase):
             pin_memory=pin_memory
         )
 
-        self.migration_stream = torch.cuda.Stream()
+        self.migration_stream = cupy.cuda.Stream()
 
     def init_backend(self, group_name, world_size, rank) -> bool:
         @func_set_timeout(self.migration_config.migration_backend_init_timeout)
@@ -249,26 +250,28 @@ class RayColMigrationBackend(MigrationBackendBase):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
-        with torch.cuda.stream(self.migration_stream):
+
+        with self.migration_stream:
             for layer_idx in range(self.cache_engine.num_layers):
                 cache_idx = layer_idx % self.migration_num_layers
                 self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], send_cache[cache_idx], src_to_dst)
                 if cache_idx + 1 == self.migration_num_layers or layer_idx + 1 == self.cache_engine.num_layers:
                     # TODO(KuilongCui): check the error code if peer is dead
                     col.send(send_cache, dst_handle, self.group_name)
-        torch.cuda.Stream.synchronize(self.migration_stream)
+        self.migration_stream.synchronize()
 
     def do_recv(self, src_handle, blocks: List[int]):
         num_blocks = len(blocks)
         src_to_dst = dict(enumerate(blocks))
         recv_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
-        with torch.cuda.stream(self.migration_stream):
+
+        with self.migration_stream:
             for layer_idx in range(self.cache_engine.num_layers):
                 cache_idx = layer_idx % self.migration_num_layers
                 if cache_idx == 0:
                     col.recv(recv_cache, src_handle, self.group_name)
                 self.cache_engine.attn_backend.swap_blocks(recv_cache[cache_idx], self.gpu_cache[layer_idx], src_to_dst)
-        torch.cuda.Stream.synchronize(self.migration_stream)
+        self.migration_stream.synchronize()
 
 def get_migration_backend(migration_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy,
                         is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:

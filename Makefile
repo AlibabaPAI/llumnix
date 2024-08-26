@@ -16,16 +16,20 @@ init:
 	@git submodule update --init --recursive
 
 .PHONY: install
-install:
-	pip install -e .
+install: cupy
+	@pip install -e .
 
 .PHONY: lint
 lint: check_pylint_installed
-	pylint --rcfile=.pylintrc ./llumnix
+	@pylint --rcfile=.pylintrc -s n ./llumnix
+
+	@pylint -s n --disable=all \
+			--enable=trailing-whitespace,unused-variable,wrong-import-order,missing-final-newline,line-too-long,\
+			unused-import,singleton-comparison,unnecessary-comprehension ./tests
 
 .PHONY: test
 test:
-	pytest -vs --ignore=third_party/ --disable-warnings
+	@pytest -q -x --ignore=third_party/ --disable-warnings
 
 #################### pygloo install for gloo migration backend begin ####################
 
@@ -34,9 +38,17 @@ PYGLOO_DIR = third_party/pygloo
 
 .PHONY: pygloo
 pygloo: init
-	./tools/pygloo_install.sh
+	@./tools/pygloo_install.sh
 
 ##################### pygloo install for gloo migration backend end #####################
+
+###################################### cupy begin #######################################
+
+.PHONY: cupy
+cupy:
+	@./tools/cupy_install.sh
+
+####################################### cupy end ########################################
 
 ##################################### pylint begin ######################################
 

@@ -123,7 +123,7 @@ def test_init_manager(engine_manager):
 def test_init_llumlet(llumlet):
     assert llumlet is not None
     ray.get(llumlet.is_ready.remote())
-    
+
 # TODO(s5u13b): Add init_llumlets test.
 
 def test_scale_up_and_down(engine_manager):
@@ -156,7 +156,7 @@ def test_connect_to_instances():
 
 def test_generate_and_abort(engine_manager, llumlet):
     instance_id = ray.get(llumlet.get_instance_id.remote())
-    ray.get(engine_manager.scale_up.remote(instance_id, llumlet))
+    ray.get(engine_manager.scale_up.remote(instance_id, [llumlet]))
     request_id = random_uuid()
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0

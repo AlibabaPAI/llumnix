@@ -22,7 +22,7 @@ from llumnix.llumlet.llumlet import MigrationStatus
 @ray.remote
 def ray_remote_call(ret):
     return ret
-# 测试用例
+
 def test_migrate_out_onestage():
     # Initialize Ray
     ray.init(ignore_reinit_error=True)

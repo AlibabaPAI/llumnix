@@ -61,6 +61,9 @@ class SchedulerLlumnix(Scheduler):
         self.prefilling_seq_groups = []
         self.scheduler_lock = threading.Lock()
         self.migrating_out_request_last_stage = []
+    
+    def add_update_instance_info_callback(self, update_instance_info_callback):
+        self.update_instance_info_callback = update_instance_info_callback
 
     def _preempt(
         self,
@@ -186,7 +189,7 @@ class SchedulerLlumnix(Scheduler):
         self.free_seq(seq)
 
     @scheduler_lock
-    def get_instance_info(self) -> InstanceInfo:
+    def _get_instance_info(self) -> InstanceInfo:
         num_total_gpu_blocks = self.cache_config.num_gpu_blocks
         num_free_gpu_blocks = self.block_manager.get_num_free_gpu_blocks()
         num_used_gpu_blocks = num_total_gpu_blocks - num_free_gpu_blocks
@@ -210,8 +213,8 @@ class SchedulerLlumnix(Scheduler):
         instance_info = InstanceInfo(
             num_total_gpu_blocks=num_total_gpu_blocks,
             num_watermark_blocks=self.block_manager.watermark_blocks,
-            num_free_gpu_blocks=num_free_gpu_blocks,
             num_used_gpu_blocks=num_used_gpu_blocks,
+            num_free_gpu_blocks=num_free_gpu_blocks,
             gpu_cache_usage=gpu_cache_usage,
             num_running_requests=len(self.running),
             num_waiting_requests=len(self.waiting),
@@ -238,6 +241,7 @@ class SchedulerLlumnix(Scheduler):
         for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups:
             if scheduled_seq_group.seq_group.is_prefill():
                 self.prefilling_seq_groups.append(scheduled_seq_group.seq_group)
+        self.update_instance_info_callback(self._get_instance_info())
         return seq_group_metadata_list, scheduler_outputs
 
     @scheduler_lock

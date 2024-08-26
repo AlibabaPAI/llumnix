@@ -90,6 +90,7 @@ class LLMEngineLlumnix(LLMEngine):
             log_stats=not engine_args.disable_log_stats,
             usage_context=usage_context,
         )
+        engine.scheduler.add_update_instance_info_callback(engine.update_instance_info)
         return engine
 
     def _process_model_outputs(
@@ -119,7 +120,7 @@ class LLMEngineLlumnix(LLMEngine):
     def step(self) -> None:
         output_list = super().step()
 
-        instance_info: InstanceInfo = self.scheduler.get_instance_info()
+        instance_info: InstanceInfo = self.instance_info
 
         if self.scaling_down:
             instance_info.num_running_requests = 1
@@ -147,8 +148,13 @@ class LLMEngineLlumnix(LLMEngine):
                 server_info_list.append(self.request_server_info[output.request_id])
             self._put_request_output_to_server(output_list, server_info_list)
         self.instance_info = instance_info
+    
+    def update_instance_info(self, instance_info: InstanceInfo) -> None:
+        self.instance_info = instance_info
 
-    def _put_request_output_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
+    def _put_request_output_to_server(self, 
+                                      request_outputs: List[RequestOutput], 
+                                      server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_queue: Dict[str, RayQueue] = {}
         # Reorganize data in orther to put request output to queue in batch at one time.

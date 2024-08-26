@@ -54,7 +54,7 @@ class EngineManagerArgs:
     gpu_type: str = "a10"
     migration_backend_init_timeout: float = 10.0
     migration_backend: str = "rpc"
-    migration_cache_blocks: int = 32
+    migration_cache_blocks: int = 512
     migration_num_layers: int = 1
     last_stage_max_blocks: int = 16
     max_stages: int = 3
@@ -99,11 +99,11 @@ class EngineManagerArgs:
                             help='disable fixing the placement of instance to current node')
         parser.add_argument('--disable-init-instance-by-manager',
                             action='store_true',
-                            help='disable the initialization of the instance by the manager')
+                            help='disable initializing instance by manager')
         parser.add_argument('--initial-instances',
                             type=int,
                             default=EngineManagerArgs.initial_instances,
-                            help='number of model instances created at initialzation')
+                            help='number of instances created at initialzation')
 
         parser.add_argument('--load-metric',
                             type=str,
@@ -200,7 +200,7 @@ class EngineManagerArgs:
                             type=str,
                             default=EngineManagerArgs.migration_backend,
                             choices=['gloo','nccl','rpc'],
-                            help='communication backend during migration')
+                            help='communication backend of migration')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
                             default=EngineManagerArgs.migration_backend_init_timeout,
@@ -208,7 +208,7 @@ class EngineManagerArgs:
         parser.add_argument('--migration-cache-blocks',
                             type=int,
                             default=EngineManagerArgs.migration_cache_blocks,
-                            help='cache blocks num during migration')
+                            help='number of cache blocks in migration')
         parser.add_argument('--migration-num-layers',
                             type=int,
                             default=EngineManagerArgs.migration_num_layers,

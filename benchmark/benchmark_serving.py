@@ -83,7 +83,7 @@ async def query_model_vllm(prompt, verbose, ip_ports):
     global num_finished_requests
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        # TODO(yiwang): Remove hard codes of params.
+        # TODO(s5u13b): Remove hard codes of params.
         best_of = 1
         use_beam_search = False
         output_len = expected_response_len

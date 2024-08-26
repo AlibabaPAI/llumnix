@@ -85,7 +85,6 @@ def test_migration_correctness():
             break
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
             llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
-    print("init done")
     # empty instance migrate out
     res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res

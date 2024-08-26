@@ -111,10 +111,10 @@ def test_scheduler_num_killed_request():
     # remain 0 blocks
     seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
-    assert scheduler._get_num_killed_request() == 0
+    assert scheduler._get_num_killed_requests() == 0
     # preempt 2 requests
     seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
-    assert scheduler._get_num_killed_request() == 2
+    assert scheduler._get_num_killed_requests() == 2
 
 def test_scheduler_running_request():
     scheduler = initialize_scheduler()
@@ -165,12 +165,12 @@ def test_scheduler_should_abort_migration():
     seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
 
-    assert scheduler._get_num_killed_request() == 0
+    assert scheduler._get_num_killed_requests() == 0
     # assert scheduler.block_manager.get_num_free_gpu_blocks() == 0
     # all in running queue
     seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
-    assert scheduler._get_num_killed_request() == 0
+    assert scheduler._get_num_killed_requests() == 0
     migrating_request = scheduler.get_last_running_request()
     last_stage_time = time.time()
     assert migrating_request.request_id == "1"
@@ -179,13 +179,13 @@ def test_scheduler_should_abort_migration():
     append_new_token(out, 1)
     assert scheduler.should_abort_migration(seq_group_1, last_stage_time) == True
     assert scheduler.should_abort_migration(seq_group_0, last_stage_time) == False
-    assert scheduler._get_num_killed_request() == 1
+    assert scheduler._get_num_killed_requests() == 1
     scheduler.remove_running_request(seq_group_0)
     scheduler.free_src_request(seq_group_0)
     # free request 0, requset 1 prefill
     seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
-    assert scheduler._get_num_killed_request() == 0
+    assert scheduler._get_num_killed_requests() == 0
     assert scheduler.should_abort_migration(seq_group_1, last_stage_time) == True
 
 def test_free_dst_pre_alloc_cache():

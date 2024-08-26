@@ -51,7 +51,7 @@ def test_migration_correctness():
     ray.init(namespace="llumnix", ignore_reinit_error=True)
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", "gloo",16,1,4,4,5,False)
+    migration_config = MigrationConfig("LCFS", "gloo",16,1,4,5,20)
     que = RayQueue(actor_options={
         "scheduling_strategy": NodeAffinitySchedulingStrategy(
             node_id=ray.get_runtime_context().get_node_id(),
@@ -59,26 +59,32 @@ def test_migration_correctness():
     })
     server_info = ServerInfo("0",que)
 
-    llumlet_0:Llumlet = Llumlet.from_args(True,
-                      "0",
-                      BackendType.VLLM,
-                      1,
-                      migration_config,
-                      engine_args,
-                     )
-    llumlet_1:Llumlet = Llumlet.from_args(True,
-                      "1",
-                      BackendType.VLLM,
-                      1,
-                      migration_config,
-                      engine_args,
+    llumlet_0:Llumlet = Llumlet.from_args(
+                            False,
+                            True,
+                            ray.get_runtime_context().get_node_id(),
+                            "0",
+                            BackendType.VLLM,
+                            1,
+                            migration_config,
+                            engine_args,)
+
+    llumlet_1:Llumlet = Llumlet.from_args(
+                            False,
+                            True,
+                            ray.get_runtime_context().get_node_id(),
+                            "1",
+                            BackendType.VLLM,
+                            1,
+                            migration_config,
+                            engine_args,
                      )
     while True:
         res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])
         if all(res):
             break
-    ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migrate_backend", id_rank_map, "llumnix"),
-            llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migrate_backend", id_rank_map, "llumnix")])
+    ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
+            llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
     print("init done")
     # empty instance migrate out
     res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
@@ -102,7 +108,9 @@ def test_migration_correctness():
         request_id1 = random_uuid()
         llumlet_0.generate.remote(request_id1, server_info, prompt, sampling_params)
         # wait prefill done
-        time.sleep(0.1)
+        while True:
+            if ray.get(llumlet_0.execute_engine_method.remote("get_last_running_request")):
+                break
         # migrate request
         res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
         assert len(res) == 1

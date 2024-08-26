@@ -36,6 +36,7 @@ logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
 CLEARING_INTERVAL = 3600
+RETRIES_INTERVALS = 5.0
 
 # TODO(yiwang): add unit test for CI
 # TODO(yiwang): Fix the logger when manager failover.
@@ -55,7 +56,7 @@ class LLMEngineManager:
 
         self.log_requests = log_requests
 
-        self.num_instance = 0
+        self.num_instances = 0
         self.enable_migration = engine_manager_args.enable_migration
         self.enable_scaling = engine_manager_args.enable_scaling
         self.max_instances = engine_manager_args.max_instances
@@ -63,13 +64,14 @@ class LLMEngineManager:
 
         logger.info("LLMEngineManager starts")
         logger.info("enable_migration: {}".format(self.enable_migration))
-        logger.info("num_instance: {}".format(self.num_instance))
+        logger.info("num_instances: {}".format(self.num_instances))
         logger.info("max_instances: {}, min_instances: {}".format(self.max_instances, self.min_instances))
 
         # TODO(yiwang): refactor auto-scaling
 
         self.instances: Dict[str, Llumlet] = {}
         self.instance_migrating: Dict[str, bool] = {}
+        self.pending_rebuild_migration_instances = 0
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
         # When manager starts, it automatically connects to all existing instances.
         self._connect_to_instances()
@@ -87,7 +89,7 @@ class LLMEngineManager:
         asyncio.create_task(self._clear_request_instance_loop(self.clearing_interval))
 
         # migrate states
-        self.num_instance_info_update = 0
+        self.num_instance_info_updates = 0
         self.migrating = False
 
         # auto-scaling states
@@ -107,6 +109,10 @@ class LLMEngineManager:
             server_info: ServerInfo,
             *args,
             **kwargs,) -> None:
+        while self.num_instances == 0:
+            logger.info("No instance available temporarily, sleep {}s, "
+                        "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
+            await asyncio.sleep(RETRIES_INTERVALS)
         instance_id = self.global_scheduler.dispatch()
         try:
             await self.instances[instance_id].generate.remote(request_id, server_info, *args, **kwargs)
@@ -117,7 +123,7 @@ class LLMEngineManager:
         except (ray.exceptions.RayActorError, KeyError):
             logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
             self.scale_down(instance_id)
-            if self.num_instance != 0:
+            if self.num_instances != 0:
                 asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
@@ -142,7 +148,7 @@ class LLMEngineManager:
                 logger.info("[abort] instance {} is dead".format(instance_id))
                 self.scale_down(instance_id)
 
-    async def _get_request_instance(self):
+    async def _get_request_instance(self) -> None:
         logger.info("_get_request_instance:")
         tasks = [instance_actor_handle.get_all_request_ids.remote() for instance_actor_handle in self.instances.values()]
         instance_ids = list(self.instances.keys())
@@ -170,20 +176,25 @@ class LLMEngineManager:
                 tasks = [instance.get_instance_info.remote() for instance in self.instances.values()]
                 instance_ids = list(self.instances.keys())
                 rets = await asyncio.gather(*tasks, return_exceptions=True)
+
                 instance_info_list = []
+                dead_instances = []
                 for idx, ret in enumerate(rets):
                     if not isinstance(ret, ray.exceptions.RayActorError):
                         if ret is not None:
                             instance_info_list.append(ret)
                     else:
                         instance_id = instance_ids[idx]
-                        logger.info("[_update_instance_info_loop] instance {} is dead".format(instance_id))
-                        self.scale_down(instance_id)
+                        dead_instances.append(instance_id)
+                if len(dead_instances) > 0:
+                    logger.info("[_update_instance_info_loop] dead instances: {}.".format(dead_instances))
+                    self.scale_down(dead_instances)
+
                 self.global_scheduler.update_instance_infos(instance_info_list)
-                self.num_instance_info_update += 1
+                self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
-                if self.enable_migration and self.num_instance_info_update != 0 \
-                    and self.num_instance_info_update % self.pair_migration_frequency == 0:
+                if self.enable_migration and self.num_instance_info_updates != 0 \
+                    and self.num_instance_info_updates % self.pair_migration_frequency == 0:
                     asyncio.create_task(self._migrate())
                 if self.log_instance_info:
                     self._log_instance_infos_to_csv(instance_info_list)
@@ -250,27 +261,117 @@ class LLMEngineManager:
             logger.error("unexpected exception occurs: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
+    async def rebuild_migrate_backend(self) -> None:
+        # Wait for all instances to finish migration
+        while any(self.instance_migrating.values()):
+            await asyncio.sleep(0.1)
+
+        # During rebuilding migration backend, disable migrate
+        origin_config = self.enable_migration
+        self.enable_migration = False
+
+        async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):
+            tasks = []
+            for instance_name in alive_instances:
+                llumlet_handle = self.instances[instance_name]
+                tasks.append(llumlet_handle.execute_engine_method.remote("_run_workers", task_name, *args, **kwargs))
+
+            rets = await asyncio.gather(*tasks, return_exceptions=True)
+
+            dead_instances = set()
+            for instance_name, ret in zip(alive_instances, rets):
+                if isinstance(ret, ray.exceptions.RayActorError):
+                    dead_instances.add(instance_name)
+
+            if len(dead_instances) > 0:
+                self.scale_down(dead_instances, rebuild_migrate_backend=False)
+
+                if self.engine_manager_args.migration_backend == 'gloo':
+                    # clear gloo migrate backend intermediate state
+                    ray.kill(ray.get_actor("gloo_queue", "llumnix"))
+
+            return dead_instances
+
+        alive_instances = sorted(self.instances.keys())
+        pending_task = self.pending_rebuild_migration_instances
+        group_name = None
+
+        while len(alive_instances) > 0 and self.pending_rebuild_migration_instances > 0:
+            dead_instances = set()
+            group_name = random_uuid()
+            instance_rank = {instance_id: index for index, instance_id in enumerate(alive_instances)}
+            dead_instances.update(await run_task(alive_instances, "rebuild_migration_backend",
+                                                                  instance_rank, group_name))
+
+            if len(dead_instances) == 0 and self.pending_rebuild_migration_instances == pending_task:
+                dead_instances.update(await run_task(alive_instances, "warmup"))
+
+            if len(dead_instances) == 0:
+                self.pending_rebuild_migration_instances -= pending_task
+
+            alive_instances = sorted(set(self.instances.keys()) - dead_instances)
+            pending_task = self.pending_rebuild_migration_instances
+
+        if len(alive_instances) == 0:
+            self.pending_rebuild_migration_instances = 0
+            group_name = None
+
+        logger.info("rebuild {} migrate backend done, group_name: {}, alive instance ({}): {}"
+            .format(self.engine_manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
+
+        # Restore migrate config
+        self.enable_migration = origin_config
+
     def scale_up(self, instance_id: Union[str, Iterable[str]], llumlet_actor_handles: List["ray.actor.ActorHandle"]) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
+
+        indeed_update = False
+        no_pending_instance = (self.pending_rebuild_migration_instances == 0)
+
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
+                indeed_update = True
                 self.instances[ins_id] = llumlet_actor_handles[idx]
                 self.instance_migrating[ins_id] = False
+                self.pending_rebuild_migration_instances += 1
         self.global_scheduler.scale_up(instance_ids)
-        self.num_instance = len(self.instances)
+        self.num_instances = len(self.instances)
 
-    def scale_down(self, instance_id: Union[str, Iterable[str]]) -> None:
+        # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
+        # a coroutine is already handling the changes in the number of instances in the cluster and it will account for the changes
+        # caused by this scale-up (see rebuild_migrate_backend for details). Therefore, we simply return in this case. Specifically,
+        # for RPC, the Ray actor handle is used for the migration cache, so there is no need to rebuild the group.
+        if self.engine_manager_args.migration_backend != 'rpc' and indeed_update and no_pending_instance:
+            asyncio.create_task(self.rebuild_migrate_backend())
+
+        return self.num_instances
+
+    def scale_down(self, instance_id: Union[str, Iterable[str]], rebuild_migrate_backend: bool = True) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
+
+        indeed_update = False
+        no_pending_instance = self.pending_rebuild_migration_instances == 0
+
         for ins_id in instance_ids:
             if ins_id in self.instances:
+                indeed_update = True
                 del self.instances[ins_id]
                 del self.instance_migrating[ins_id]
+                self.pending_rebuild_migration_instances += 1
         self.global_scheduler.scale_down(instance_ids)
-        self.num_instance = len(self.instances)
+        self.num_instances = len(self.instances)
+
+        if self.engine_manager_args.migration_backend != 'rpc':
+            if len(self.instances) == 0:
+                self.pending_rebuild_migration_instances = 0
+            elif indeed_update and no_pending_instance and rebuild_migrate_backend:
+                asyncio.create_task(self.rebuild_migrate_backend())
+
+        return self.num_instances
 
     def _connect_to_instances(self):
         actor_names_dict = ray.util.list_named_actors(True)
@@ -281,7 +382,13 @@ class LLMEngineManager:
         for instance_actor_name, instance_actor_handle in zip(instance_actor_names, instance_actor_handles):
             instance_id = instance_actor_name[len('instance_'):]
             if instance_id not in self.instances:
-                logger.info("connect to instance {}".format(instance_id))
+                try:
+                    ray.get(instance_actor_handle.is_ready.remote())
+                # pylint: disable=W0703
+                except Exception as e:
+                    logger.info("connect to instance {} abort, which may be not ready or alive, err: {}".format(instance_id, e))
+                    continue
+                logger.info("connect to instance {}.".format(instance_id))
                 scale_up_instance_ids.append(instance_id)
                 scale_up_instance_actor_handles.append(instance_actor_handle)
         # The only function that can add instance actor handles to manager.
@@ -309,7 +416,8 @@ class LLMEngineManager:
                                    max_restarts=-1,
                                    name=MANAGER_ACTOR_NAME,
                                    namespace='llumnix',
-                                   lifetime="detached")(cls)
+                                   lifetime="detached"
+                                   )(cls)
         engine_manager = manager_class.remote(engine_manager_args,
                                               global_scheduler_config,
                                               os.getcwd(),
@@ -318,6 +426,7 @@ class LLMEngineManager:
         logger.info("engine_manager_args: {}".format(engine_manager_args))
         return engine_manager
 
+    # TODO(s5u13b): significant duplication with llumlet_utils.init_llumlets. consider reducing duplicate codes.
     def init_llumlets(self,
                       engine_args,
                       node_id: str) -> Tuple[List[str], List[Llumlet]]:
@@ -330,31 +439,31 @@ class LLMEngineManager:
             instance_id = random_uuid()
             if not engine_manager_args.profiling_result_file_path:
                 llumlet = Llumlet.from_args(
-                    engine_manager_args.fixed_node_init_instance,
+                    engine_manager_args.disable_fixed_node_init_instance,
                     True,
                     node_id,
                     instance_id,
                     BackendType.VLLM,
                     parallel_config.world_size,
-                    engine_manager_args.create_migration_configs(),
+                    engine_manager_args.create_migration_config(),
                     engine_args,
                 )
             else:
                 llumlet = Llumlet.from_args(
-                    engine_manager_args.fixed_node_init_instance,
+                    engine_manager_args.disable_fixed_node_init_instance,
                     True,
                     node_id,
                     instance_id,
                     BackendType.SIM_VLLM,
                     parallel_config.world_size,
-                    engine_manager_args.create_migration_configs(),
+                    engine_manager_args.create_migration_config(),
                     engine_manager_args.profiling_result_file_path,
                     engine_manager_args.gpu_type,
                     engine_args,
                 )
             instance_ids.append(instance_id)
             llumlets.append(llumlet)
-        self.scale_up(instance_ids, llumlets)
+
         return instance_ids, llumlets
 
     def get_actor_name(self) -> str:
@@ -375,20 +484,20 @@ class LLMEngineManager:
             'instance_id',
             'step_id',
             'gpu_cache_usage',
-            'num_available_gpu_block',
+            'num_available_gpu_blocks',
             'instance_load',
             'max_tot_tokens',
-            'num_running_request',
-            'num_waiting_request',
-            'num_killed_request',
+            'num_running_requests',
+            'num_waiting_requests',
+            'num_killed_requests',
             'inference_type',
             'bs',
             'latency',
             'seq_lens',
-            'num_instance',
-            'num_seq',
-            'num_block_first_waiting_request',
-            'num_block_all_waiting_request',
+            'num_instances',
+            'num_seqs',
+            'num_blocks_first_waiting_request',
+            'num_blocks_all_waiting_requests',
             'waiting_time_first_waiting_request'])
 
     def _log_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
@@ -398,19 +507,19 @@ class LLMEngineManager:
                 instance_info.instance_id,
                 instance_info.step_id,
                 instance_info.gpu_cache_usage,
-                instance_info.num_available_gpu_block,
+                instance_info.num_available_gpu_blocks,
                 instance_info.instance_load_migrate,
                 instance_info.max_tot_tokens,
-                instance_info.num_running_request,
-                instance_info.num_waiting_request,
-                instance_info.num_killed_request,
+                instance_info.num_running_requests,
+                instance_info.num_waiting_requests,
+                instance_info.num_killed_requests,
                 instance_info.inference_type,
                 instance_info.num_batched_tokens,
                 instance_info.latency,
                 instance_info.running_seq_lens,
-                self.num_instance,
-                instance_info.num_seq,
-                instance_info.num_block_first_waiting_request,
-                instance_info.num_block_all_waiting_request,
+                self.num_instances,
+                instance_info.num_seqs,
+                instance_info.num_blocks_first_waiting_request,
+                instance_info.num_blocks_all_waiting_requests,
                 instance_info.waiting_time_first_waiting_request])
         self.instance_info_file.flush()

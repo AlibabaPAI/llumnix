@@ -20,7 +20,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType
-from llumnix.backends.utils import init_backend_engine, initialize_cluster
+from llumnix.backends.utils import init_backend_engine, initialize_placement_group
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
@@ -52,7 +52,7 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
-                  fixed_node_init_instance: bool,
+                  disable_fixed_node_init_instance: bool,
                   detached: bool,
                   node_id: str,
                   instance_id: str,
@@ -64,10 +64,11 @@ class Llumlet:
         lifetime = "detached" if detached else None
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         if backend_type == backend_type.VLLM:
-            if not fixed_node_init_instance:
+            if disable_fixed_node_init_instance:
                 # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
-                assert migration_config.migration_backend != 'gloo', 'When the migration backend is gloo, fixed_node_init_instance must be set.'
-                placement_group = initialize_cluster(world_size, detached=detached)
+                assert migration_config.migration_backend != 'gloo', 'When the migration backend is gloo, \
+                    do not set --disable-fixed-node-init-instance.'
+                placement_group = initialize_placement_group(world_size, detached=detached)
                 kwargs["placement_group"] = placement_group
                 engine_class = ray.remote(num_cpus=1,
                                           name=f"instance_{instance_id}",
@@ -129,12 +130,6 @@ class Llumlet:
 
     def get_instance_info(self) -> InstanceInfo:
         return self.backend_engine.engine.instance_info
-
-    def get_actor_name(self) -> str:
-        return self.actor_name
-
-    def get_instance_id(self) -> str:
-        return self.instance_id
 
     def is_ready(self) -> bool:
         return True

@@ -22,34 +22,34 @@ logger = init_logger(__name__)
 
 class InstanceInfo:
     def __init__(self,
-                 num_total_gpu_block: int = 0,
-                 num_watermark_block: int= 0,
-                 num_used_gpu_block: int = 0,
-                 num_free_gpu_block: int = 0,
+                 num_total_gpu_blocks: int = 0,
+                 num_watermark_blocks: int= 0,
+                 num_used_gpu_blocks: int = 0,
+                 num_free_gpu_blocks: int = 0,
                  gpu_cache_usage: float = 0.0,
-                 num_running_request: int = 0,
-                 num_waiting_request: int = 0,
-                 num_killed_request: int = 0,
-                 num_block_first_waiting_request: int = 0,
+                 num_running_requests: int = 0,
+                 num_waiting_requests: int = 0,
+                 num_killed_requests: int = 0,
+                 num_blocks_first_waiting_request: int = 0,
                  waiting_time_first_waiting_request: int = 0,
-                 num_block_all_waiting_request: int = 0,
+                 num_blocks_all_waiting_requests: int = 0,
                  inference_type: str = "",
                  num_batched_tokens: int = 0) -> None:
-        self.num_total_gpu_block = num_total_gpu_block
-        self.num_watermark_block = num_watermark_block
-        self.num_used_gpu_block = num_used_gpu_block
-        self.num_free_gpu_block = num_free_gpu_block
-        self.num_available_gpu_block = self.num_free_gpu_block - self.num_watermark_block
+        self.num_total_gpu_blocks = num_total_gpu_blocks
+        self.num_watermark_blocks = num_watermark_blocks
+        self.num_used_gpu_blocks = num_used_gpu_blocks
+        self.num_free_gpu_blocks = num_free_gpu_blocks
+        self.num_available_gpu_blocks = self.num_free_gpu_blocks - self.num_watermark_blocks
         self.gpu_cache_usage = gpu_cache_usage
-        self.num_running_request = num_running_request
-        self.num_waiting_request = num_waiting_request
-        self.num_killed_request = num_killed_request
-        self.num_block_first_waiting_request = num_block_first_waiting_request
+        self.num_running_requests = num_running_requests
+        self.num_waiting_requests = num_waiting_requests
+        self.num_killed_requests = num_killed_requests
+        self.num_blocks_first_waiting_request = num_blocks_first_waiting_request
         self.waiting_time_first_waiting_request = waiting_time_first_waiting_request
-        self.num_block_all_waiting_request = num_block_all_waiting_request
-        self.num_available_gpu_block_waiting = self.num_available_gpu_block - self.num_block_all_waiting_request
+        self.num_blocks_all_waiting_requests = num_blocks_all_waiting_requests
+        self.num_available_gpu_blocks_waiting = self.num_available_gpu_blocks - self.num_blocks_all_waiting_requests
         # For instance load computation before migration.
-        self.num_block_last_running_request = 0
+        self.num_blocks_last_running_request = 0
 
         # For global scheduling.
         self.instance_load_migrate = -np.inf
@@ -59,31 +59,31 @@ class InstanceInfo:
         self.inference_type = inference_type
         self.num_batched_tokens = num_batched_tokens
         self.running_seq_lens = []
-        self.num_seq = 0
+        self.num_seqs = 0
         self.max_tot_tokens = 0
         self.finished_request_ids = None
 
         # For record statistics, assigned in backend engine.
-        self.instance_id: None
-        self.step_id: None
-        self.timestamp: None
+        self.instance_id = None
+        self.step_id = None
+        self.timestamp = None
         self.latency = 0.0
 
 class InstanceLoadInfo:
     def __init__(self, instance_info: InstanceInfo) -> None:
-        self.num_total_gpu_block = instance_info.num_total_gpu_block
-        self.num_watermark_block = instance_info.num_watermark_block
-        self.num_used_gpu_block = instance_info.num_used_gpu_block
-        self.num_free_gpu_block = instance_info.num_free_gpu_block
-        self.num_available_gpu_block = instance_info.num_available_gpu_block
+        self.num_total_gpu_blocks = instance_info.num_total_gpu_blocks
+        self.num_watermark_blocks = instance_info.num_watermark_blocks
+        self.num_used_gpu_blocks = instance_info.num_used_gpu_blocks
+        self.num_free_gpu_blocks = instance_info.num_free_gpu_blocks
+        self.num_available_gpu_blocks = instance_info.num_available_gpu_blocks
 
-        self.num_waiting_request = instance_info.num_waiting_request
-        self.num_running_request = instance_info.num_running_request
-        self.num_killed_request = instance_info.num_killed_request
+        self.num_waiting_requests = instance_info.num_waiting_requests
+        self.num_running_requests = instance_info.num_running_requests
+        self.num_killed_requests = instance_info.num_killed_requests
 
-        self.num_block_first_waiting_request = instance_info.num_block_first_waiting_request
+        self.num_blocks_first_waiting_request = instance_info.num_blocks_first_waiting_request
         self.waiting_time_first_waiting_request = instance_info.waiting_time_first_waiting_request
-        self.num_block_all_waiting_request = instance_info.num_block_all_waiting_request
+        self.num_blocks_all_waiting_requests = instance_info.num_blocks_all_waiting_requests
 
         self.instance_id = instance_info.instance_id
         self.step_id = instance_info.step_id
@@ -92,7 +92,7 @@ class InstanceLoadCalculator:
     def __init__(self,
                  load_metric: str,
                  enable_defrag: bool) -> None:
-        assert load_metric in ['consumed_speed', 'used_ratio']
+        assert load_metric in ['remaining_steps', 'usage_ratio']
         self.load_metric = load_metric
         self.enable_defrag = enable_defrag
         self.load_computation_strategies: Dict[str, LoadComputationStrategy] = {
@@ -122,36 +122,36 @@ class LoadComputationStrategy(ABC):
 
 class MigrationLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
-        assert self.load_metric in ['used_ratio', 'consumed_speed']
+        assert self.load_metric in ['usage_ratio', 'remaining_steps']
         instance_load = -np.inf
-        if self.load_metric == 'used_ratio':
-            instance_load = i.num_used_gpu_block / i.num_total_gpu_block
-        elif self.load_metric == 'consumed_speed':
+        if self.load_metric == 'usage_ratio':
+            instance_load = (i.num_used_gpu_blocks + i.num_blocks_first_waiting_request) / i.num_total_gpu_blocks
+        elif self.load_metric == 'remaining_steps':
             if not self.enable_defrag:
-                num_request = i.num_running_request
-                num_available_gpu_block = i.num_available_gpu_block
+                num_requests = i.num_running_requests
+                num_available_gpu_blocks = i.num_available_gpu_blocks
             else:
-                num_request = i.num_running_request
-                if i.num_waiting_request != 0:
-                    num_request += 1
-                    # num_request = i.num_running_request + i.num_waiting_request
-                num_available_gpu_block = i.num_available_gpu_block - i.num_block_first_waiting_request
-                # num_available_gpu_block = i.num_available_gpu_block - i.num_block_all_waiting_request
-            if num_request == 0:
+                num_requests = i.num_running_requests
+                if i.num_waiting_requests != 0:
+                    num_requests += 1
+                    # num_requests = i.num_running_requests + i.num_waiting_requests
+                num_available_gpu_blocks = i.num_available_gpu_blocks - i.num_blocks_first_waiting_request
+                # num_available_gpu_blocks = i.num_available_gpu_blocks - i.num_blocks_all_waiting_requests
+            if num_requests == 0:
                 return -np.inf
-            instance_load = (num_available_gpu_block / num_request)*(-1)
+            instance_load = (num_available_gpu_blocks / num_requests)*(-1)
         return instance_load
 
 class DispatchAndScalingLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
-        assert self.load_metric in ['used_ratio', 'consumed_speed']
+        assert self.load_metric in ['usage_ratio', 'remaining_steps']
         instance_load = -np.inf
-        if self.load_metric == 'used_ratio':
-            instance_load = (i.num_used_gpu_block + i.num_block_all_waiting_request) / i.num_total_gpu_block
-        elif self.load_metric == 'consumed_speed':
-            num_request = i.num_running_request + i.num_waiting_request
-            num_available_gpu_block = i.num_available_gpu_block - i.num_block_all_waiting_request
-            if num_request == 0:
+        if self.load_metric == 'usage_ratio':
+            instance_load = (i.num_used_gpu_blocks + i.num_blocks_all_waiting_requests) / i.num_total_gpu_blocks
+        elif self.load_metric == 'remaining_steps':
+            num_requests = i.num_running_requests + i.num_waiting_requests
+            num_available_gpu_blocks = i.num_available_gpu_blocks - i.num_blocks_all_waiting_requests
+            if num_requests == 0:
                 return -np.inf
-            instance_load = (num_available_gpu_block / num_request)*(-1)
+            instance_load = (num_available_gpu_blocks / num_requests)*(-1)
         return instance_load

@@ -22,11 +22,11 @@ from llumnix.config import GlobalSchedulerConfig, MigrationConfig
 @dataclass
 class EngineManagerArgs:
     launch_ray_cluster: bool = True
-    init_instance_by_manager: bool = True
+    disable_init_instance_by_manager: bool = False
     initial_instances: int = 1
-    fixed_node_init_instance: bool = False
+    disable_fixed_node_init_instance: bool = False
 
-    load_metric: str = 'consumed_speed'
+    load_metric: str = 'remaining_steps'
     polling_interval: float = 0.05
 
     dispatch_policy: str = 'load'
@@ -34,7 +34,7 @@ class EngineManagerArgs:
     enable_migration: bool = True
     enable_defrag: bool = True
     pair_migration_frequency: int = 1
-    pair_migration_policy: str = 'prefill_constrained'
+    pair_migration_policy: str = 'defrag_constrained'
     migrate_out_threshold: float = 3.0
     request_migration_policy: str = 'SJF'
 
@@ -52,10 +52,11 @@ class EngineManagerArgs:
     profiling_result_file_path: str = ""
 
     gpu_type: str = "a10"
-
+    migration_backend_init_timeout: float = 10.0
     migration_backend: str = "rpc"
-    migration_cache_blocks: int = 512
-    last_stage_max_blocks: int = 4
+    migration_cache_blocks: int = 32
+    migration_num_layers: int = 1
+    last_stage_max_blocks: int = 16
     max_stages: int = 3
 
     def create_engine_manager_configs(
@@ -72,14 +73,14 @@ class EngineManagerArgs:
                                                         self.scale_down_threshold)
         return global_scheduler_config
 
-    def create_migration_configs(
-        self,
-    ) -> MigrationConfig:
+    def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
                                            self.migration_cache_blocks,
+                                           self.migration_num_layers,
                                            self.last_stage_max_blocks,
-                                           self.max_stages)
+                                           self.max_stages,
+                                           self.migration_backend_init_timeout)
         return migration_config
 
     @classmethod
@@ -87,18 +88,18 @@ class EngineManagerArgs:
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
-        engine_args = cls(**{attr: getattr(args, attr) for attr in attrs})
-        return engine_args
+        engine_manager_args = cls(**{attr: getattr(args, attr) for attr in attrs})
+        return engine_manager_args
 
     @staticmethod
     def add_cli_args(
             parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        parser.add_argument('--fixed-node-init-instance',
+        parser.add_argument('--disable-fixed-node-init-instance',
                             action='store_true',
-                            help='fix the placement of instance to current node')
-        parser.add_argument('--init-instance-by-manager',
+                            help='disable fixing the placement of instance to current node')
+        parser.add_argument('--disable-init-instance-by-manager',
                             action='store_true',
-                            help='initialize instance by manager')
+                            help='disable the initialization of the instance by the manager')
         parser.add_argument('--initial-instances',
                             type=int,
                             default=EngineManagerArgs.initial_instances,
@@ -107,7 +108,7 @@ class EngineManagerArgs:
         parser.add_argument('--load-metric',
                             type=str,
                             default=EngineManagerArgs.load_metric,
-                            choices=['consumed_speed', 'used_ratio'],
+                            choices=['remaining_steps', 'usage_ratio'],
                             help='instance load metric')
         parser.add_argument('--polling-interval',
                             type=float,
@@ -117,7 +118,7 @@ class EngineManagerArgs:
         parser.add_argument('--dispatch-policy',
                             type=str,
                             default=EngineManagerArgs.dispatch_policy,
-                            choices=['balanced', 'load', 'queue'],
+                            choices=['balanced', 'load', 'queue', 'flood'],
                             help='request dispatch policy')
 
         parser.add_argument('--enable-migration',
@@ -130,7 +131,7 @@ class EngineManagerArgs:
         parser.add_argument('--pair-migration-policy',
                             type=str,
                             default=EngineManagerArgs.pair_migration_policy,
-                            choices=['balanced', 'prefill_constrained', 'prefill_relaxed'],
+                            choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
                             help='pair migration policy')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
@@ -198,19 +199,27 @@ class EngineManagerArgs:
         parser.add_argument('--migration-backend',
                             type=str,
                             default=EngineManagerArgs.migration_backend,
-                            choices=['gloo','rpc'],
-                            help='communication backend of migration')
-        parser.add_argument('--migration-cache_blocks',
+                            choices=['gloo','nccl','rpc'],
+                            help='communication backend during migration')
+        parser.add_argument('--migration-backend-init-timeout',
+                            type=float,
+                            default=EngineManagerArgs.migration_backend_init_timeout,
+                            help='timeout(s) for initializing migration backend')
+        parser.add_argument('--migration-cache-blocks',
                             type=int,
                             default=EngineManagerArgs.migration_cache_blocks,
-                            help='number of cache blocks in migration')
+                            help='cache blocks num during migration')
+        parser.add_argument('--migration-num-layers',
+                            type=int,
+                            default=EngineManagerArgs.migration_num_layers,
+                            help='number of kv-cache layers to transfer in each round during migration')
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
                             default=EngineManagerArgs.last_stage_max_blocks,
-                            help='if the remain blocks num < last_stage_max_blocks, do last stage migration')
+                            help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
         parser.add_argument('--max-stages',
                             type=int,
                             default=EngineManagerArgs.max_stages,
-                            help='drop migration if stage num > max_stages')
+                            help='drop migration if the number of stages > max_stages')
 
         return parser

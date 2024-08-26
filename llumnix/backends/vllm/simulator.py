@@ -54,7 +54,8 @@ class BackendSimVLLM(BackendVLLM):
         assert sim_parallel_config in profiling_result.para_dict.keys(), "sim parallel config not in database"
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
 
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(latency_mem=latency_mem, engine_args=engine_args)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(migration_config=migration_config,
+                                                                          latency_mem=latency_mem, engine_args=engine_args)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.output_processor.scheduler = self.engine.scheduler
         # multi-instance args

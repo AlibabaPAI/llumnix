@@ -146,7 +146,7 @@ class LLMEngineLlumnix(LLMEngine):
                 server_info_list.append(self.request_server_info[output.request_id])
             self._put_request_output_to_server(output_list, server_info_list)
         self.instance_info = instance_info
-    
+
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
         if self.instance_info is not None:
@@ -157,8 +157,8 @@ class LLMEngineLlumnix(LLMEngine):
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 
-    def _put_request_output_to_server(self, 
-                                      request_outputs: List[RequestOutput], 
+    def _put_request_output_to_server(self,
+                                      request_outputs: List[RequestOutput],
                                       server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_queue: Dict[str, RayQueue] = {}

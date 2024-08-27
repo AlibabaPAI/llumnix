@@ -62,7 +62,7 @@ class SchedulerLlumnix(Scheduler):
         self.prefilling_seq_groups = []
         self.scheduler_lock = threading.Lock()
         self.migrating_out_request_last_stage = []
-    
+
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
         self.update_instance_info_callback(self._get_instance_info())

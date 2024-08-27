@@ -37,16 +37,17 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
+
 ```
 
 `--disable-fixed-node-init-instance`
-- Disable fixing the instance's placement to the current node.
+- Disable fixing the placement of instance to current node.
 
 `--disable-init-instance-by-manager`
-- Disable the initialization of instance by the manager.
+- Disable initializing instance by manager.
 
 `--initial-instances`
-- Number of model instances created at initialization.
+- Number of instances created at initialization.
 - Default: 1
 
 `--load-metric`
@@ -56,7 +57,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--polling-interval`
 - Time interval(s) to update instance info and pair migration.
-- Default: 0.1
+- Default: 0.05
 
 `--dispatch-policy`
 - Request dispatch policy.
@@ -72,6 +73,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--pair-migration-policy`
 - Pair migration policy.
+- Possible choices: balanced, defrag_constrained, defrag_relaxed
+- Default: "defrag_constrained"
 
 `--migrate-out-threshold`
 - Migrate out instance load threshold.
@@ -83,7 +86,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: "SJF"
 
 `--enable-defrag`
-- Enable defragmentation.
+- Enable defragmentation through migration based on virtual usage.
 - Default: False
 
 `--enable-scaling`
@@ -104,15 +107,15 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--scaling-policy`
 - Scaling policy.
 - Possible choices: max_load, avg_load
-- default: "max_load"
+- default: "avg_load"
 
 `--scale-up-threshold`
 - Scale up threshold.
-- Default: 4
+- Default: 10
 
 `--scale-down-threshold`
 - Scale down threshold.
-- Default: 100
+- Default: 60
 
 `--disable-log-requests-manager`
 - Disable logging requests in manager.

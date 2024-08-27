@@ -38,8 +38,7 @@ MANAGER_ACTOR_NAME = 'manager'
 CLEARING_INTERVAL = 3600
 RETRIES_INTERVALS = 5.0
 
-# TODO(yiwang): add unit test for CI
-# TODO(yiwang): Fix the logger when manager failover.
+# TODO(s5u13b): Fix the logger when manager failover.
 
 
 class LLMEngineManager:
@@ -67,7 +66,7 @@ class LLMEngineManager:
         logger.info("num_instances: {}".format(self.num_instances))
         logger.info("max_instances: {}, min_instances: {}".format(self.max_instances, self.min_instances))
 
-        # TODO(yiwang): refactor auto-scaling
+        # TODO(s5u13b): refactor auto-scaling
 
         self.instances: Dict[str, Llumlet] = {}
         self.instance_migrating: Dict[str, bool] = {}
@@ -252,8 +251,7 @@ class LLMEngineManager:
                 call_migrate_instance_pairs.append(migrate_instance_pair)
                 task = self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name)
                 migration_tasks.append(task)
-            # TODO(yiwang): It's not necessary for manager to await for each migration.
-            # TODO(yiwang): Migration failover could be implemented in Llumlet rather than manager.
+            # TODO(s5u13b): Migration failover could be implemented in Llumlet rather than manager.
             rets = await asyncio.gather(*migration_tasks, return_exceptions=True)
             await self._post_migrate(rets, call_migrate_instance_pairs)
         # pylint: disable=W0703
@@ -426,7 +424,8 @@ class LLMEngineManager:
         logger.info("engine_manager_args: {}".format(engine_manager_args))
         return engine_manager
 
-    # TODO(s5u13b): significant duplication with llumlet_utils.init_llumlets. consider reducing duplicate codes.
+    # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
+    # TODO(s5u13b): Fix the logger when enabling init instance by manager.
     def init_llumlets(self,
                       engine_args,
                       node_id: str) -> Tuple[List[str], List[Llumlet]]:

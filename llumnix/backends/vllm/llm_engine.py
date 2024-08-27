@@ -79,7 +79,6 @@ class LLMEngineLlumnix(LLMEngine):
             executor_class.migration_config = migration_config
         else:
             raise ValueError('unimplemented executor backend')
-        # TODO(s5u13b): Do not hack here.
         # Hack to pass node_id to _init_workers_ray function.
         executor_class.node_id = node_id
         # Create the LLM engine.
@@ -119,7 +118,7 @@ class LLMEngineLlumnix(LLMEngine):
     def step(self) -> None:
         output_list = super().step()
 
-        instance_info: InstanceInfo = self.scheduler.get_instance_info()
+        instance_info: InstanceInfo = self.instance_info
 
         if self.scaling_down:
             instance_info.num_running_requests = 1
@@ -148,7 +147,19 @@ class LLMEngineLlumnix(LLMEngine):
             self._put_request_output_to_server(output_list, server_info_list)
         self.instance_info = instance_info
 
-    def _put_request_output_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
+    def update_instance_info(self, instance_info: InstanceInfo) -> None:
+        # These fields are updated after step.
+        if self.instance_info is not None:
+            instance_info.instance_id = self.instance_info.instance_id
+            instance_info.step_id = self.instance_info.step_id
+            instance_info.timestamp = self.instance_info.timestamp
+            instance_info.latency = self.instance_info.latency
+            instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
+        self.instance_info = instance_info
+
+    def _put_request_output_to_server(self,
+                                      request_outputs: List[RequestOutput],
+                                      server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_queue: Dict[str, RayQueue] = {}
         # Reorganize data in orther to put request output to queue in batch at one time.
@@ -192,6 +203,7 @@ class BackendVLLM(BackendInterface):
                                                                           node_id=node_id)
         # multi-instance args
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
+        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()

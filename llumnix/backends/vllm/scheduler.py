@@ -29,6 +29,7 @@ from llumnix.backends.vllm.utils import scheduler_lock
 
 logger = init_logger(__name__)
 
+
 # TODO(ZeldaHuang): adapt prefix cache and sliding window, now use v1 manager
 class BlockManagerLlumnix(BlockSpaceManagerV1):
     def get_free_blocks(self, num_required_blocks: int) -> BlockTable:
@@ -61,6 +62,10 @@ class SchedulerLlumnix(Scheduler):
         self.prefilling_seq_groups = []
         self.scheduler_lock = threading.Lock()
         self.migrating_out_request_last_stage = []
+
+    def add_update_instance_info_callback(self, update_instance_info_callback):
+        self.update_instance_info_callback = update_instance_info_callback
+        self.update_instance_info_callback(self._get_instance_info())
 
     def _preempt(
         self,
@@ -185,8 +190,7 @@ class SchedulerLlumnix(Scheduler):
         logger.info("free seq {}".format(seq.seq_id))
         self.free_seq(seq)
 
-    @scheduler_lock
-    def get_instance_info(self) -> InstanceInfo:
+    def _get_instance_info(self) -> InstanceInfo:
         num_total_gpu_blocks = self.cache_config.num_gpu_blocks
         num_free_gpu_blocks = self.block_manager.get_num_free_gpu_blocks()
         num_used_gpu_blocks = num_total_gpu_blocks - num_free_gpu_blocks
@@ -210,8 +214,8 @@ class SchedulerLlumnix(Scheduler):
         instance_info = InstanceInfo(
             num_total_gpu_blocks=num_total_gpu_blocks,
             num_watermark_blocks=self.block_manager.watermark_blocks,
-            num_free_gpu_blocks=num_free_gpu_blocks,
             num_used_gpu_blocks=num_used_gpu_blocks,
+            num_free_gpu_blocks=num_free_gpu_blocks,
             gpu_cache_usage=gpu_cache_usage,
             num_running_requests=len(self.running),
             num_waiting_requests=len(self.waiting),
@@ -225,6 +229,7 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.running:
             instance_info.running_seq_lens.extend([seq.get_len() for seq in seq_group.get_seqs()])
             instance_info.num_seqs = len(instance_info.running_seq_lens)
+        # TODO(s5u13b): Only correct when using prefill preemption batching policy.
         instance_info.num_batched_tokens = sum([seq_group.get_seqs()[0].get_len() for seq_group in self.prefilling_seq_groups])\
                                          if self.prefilling_seq_groups else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]
@@ -238,6 +243,7 @@ class SchedulerLlumnix(Scheduler):
         for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups:
             if scheduled_seq_group.seq_group.is_prefill():
                 self.prefilling_seq_groups.append(scheduled_seq_group.seq_group)
+        self.update_instance_info_callback(self._get_instance_info())
         return seq_group_metadata_list, scheduler_outputs
 
     @scheduler_lock

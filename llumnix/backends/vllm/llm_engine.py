@@ -89,7 +89,6 @@ class LLMEngineLlumnix(LLMEngine):
             log_stats=not engine_args.disable_log_stats,
             usage_context=usage_context,
         )
-        engine.scheduler.add_update_instance_info_callback(engine.update_instance_info)
         return engine
 
     def _process_model_outputs(
@@ -149,6 +148,13 @@ class LLMEngineLlumnix(LLMEngine):
         self.instance_info = instance_info
     
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
+        # These fields are updated after step.
+        if self.instance_info is not None:
+            instance_info.instance_id = self.instance_info.instance_id
+            instance_info.step_id = self.instance_info.step_id
+            instance_info.timestamp = self.instance_info.timestamp
+            instance_info.latency = self.instance_info.latency
+            instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 
     def _put_request_output_to_server(self, 
@@ -197,6 +203,7 @@ class BackendVLLM(BackendInterface):
                                                                           node_id=node_id)
         # multi-instance args
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
+        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()

@@ -145,7 +145,7 @@ class EngineManagerArgs:
         parser.add_argument('--enable-defrag',
                             type=bool,
                             default=EngineManagerArgs.enable_defrag,
-                            help='enable defragmentation')
+                            help='enable defragmentation through migration based on virtual usage')
 
         parser.add_argument('--enable-scaling',
                             action='store_true',

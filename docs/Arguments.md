@@ -86,7 +86,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: "SJF"
 
 `--enable-defrag`
-- Enable defragmentation.
+- Enable defragmentation through migration based on virtual usage.
 - Default: False
 
 `--enable-scaling`

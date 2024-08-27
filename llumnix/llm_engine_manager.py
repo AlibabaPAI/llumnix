@@ -122,8 +122,6 @@ class LLMEngineManager:
         except (ray.exceptions.RayActorError, KeyError):
             logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
             self.scale_down(instance_id)
-            if self.num_instances != 0:
-                asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):

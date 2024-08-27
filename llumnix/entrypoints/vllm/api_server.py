@@ -46,6 +46,7 @@ request_streams: Dict[str, AsyncStream] = {}
 log_requests = None
 num_finished_requests = 0
 WAIT_MANAGER_INTERVAL = 5
+manager_first_dead = True
 
 
 async def _background_process_outputs():
@@ -78,10 +79,17 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
     # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
     server_info = ServerInfo(server_id, request_output_queue)
     # If manager is unavailable, request will be directly added to the llumlet held by api server.
+    global manager_first_dead
     try:
         # await to catch exception
         await engine_manager.generate.remote(request_id, server_info, prompt, sampling_params)
+        if not manager_first_dead:
+            manager_first_dead = True
     except ray.exceptions.RayActorError:
+        # Do not re-generate the request to avoid duplicate requests.
+        if manager_first_dead:
+            manager_first_dead = False
+            return results_generator
         try:
             if instance_num_requests:
                 instance_id = min(instance_num_requests, key=instance_num_requests.get)

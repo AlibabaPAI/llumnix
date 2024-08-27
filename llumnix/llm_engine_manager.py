@@ -425,6 +425,7 @@ class LLMEngineManager:
         return engine_manager
 
     # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
+    # TODO(s5u13b): Fix the logger when enabling init instance by manager.
     def init_llumlets(self,
                       engine_args,
                       node_id: str) -> Tuple[List[str], List[Llumlet]]:

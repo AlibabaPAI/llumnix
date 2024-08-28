@@ -6,7 +6,14 @@ Llumnix requires python `3.8.1~3.10.0` and is currently built on top of vLLM (ve
 
 [vLLM Installation](https://docs.vllm.ai/en/v0.4.2/getting_started/installation.html)
 
-## Build from Source
+### Install from Pypi
+
+You can install Llumnix from pypi:
+```
+pip install llumnix
+```
+
+### Build from Source
 
 You can build and install Llumnix from source:
 ```
@@ -15,11 +22,11 @@ cd llumnix
 make install
 ```
 
-If you want to use gloo as migration backend, please refer to [this link](https://github.com/ZeldaHuang/pygloo/blob/main/.github/workflows/ubuntu_basic.yml#L24C1-L26C1) to install [Bazel](https://github.com/bazelbuild/bazel) >= 5.1.0. Then, run `make pygloo` to install [pygloo](https://github.com/ZeldaHuang/pygloo).
+The default migration backend is RPC. If you want to use NCCL as the migration backend, run `make cupy-cuda` to install [cupy-cuda](https://pypi.org/search/?q=cupy-cuda) manually, as it is related to the CUDA version.
+
+If you want to use Gloo as migration backend, **in addition to installing cupy-cuda**, please refer to [this link](https://github.com/ZeldaHuang/pygloo/blob/main/.github/workflows/ubuntu_basic.yml#L24C1-L26C1) to install [Bazel](https://github.com/bazelbuild/bazel) >= 5.1.0. Then, run `make pygloo` to install [pygloo](https://github.com/ZeldaHuang/pygloo).
 
 Note: Using conda is not recommended, as it cannot properly handle pygloo's dependency on gcc libstdc++.so.6: version GLIBCXX_3.4.30.
-
-We will provide official releases through pypi soon.
 
 After installation, you can follow this guide to use Llumnix for multi-instance LLM serving quickly.
 

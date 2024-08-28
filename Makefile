@@ -16,7 +16,7 @@ init:
 	@git submodule update --init --recursive
 
 .PHONY: install
-install: cupy
+install:
 	@pip install -e .
 
 .PHONY: lint
@@ -24,7 +24,7 @@ lint: check_pylint_installed
 	@pylint --rcfile=.pylintrc -s n ./llumnix ./tests --exit-zero
 
 .PHONY: test
-test:
+test: check_pytest_installed
 	@pytest -q -x --ignore=third_party/ --disable-warnings
 
 #################### pygloo install for gloo migration backend begin ####################
@@ -40,9 +40,9 @@ pygloo: init
 
 ###################################### cupy begin #######################################
 
-.PHONY: cupy
-cupy:
-	@./tools/cupy_install.sh
+.PHONY: cupy-cuda
+cupy-cuda:
+	@./tools/cupy_cuda_install.sh
 
 ####################################### cupy end ########################################
 
@@ -52,12 +52,26 @@ PYLINT_VERSION = 2.12.2
 
 .PHONY: check_pylint_installed
 check_pylint_installed:
-	@command -v pylint >/dev/null 2>&1 || { \
+	@python3 -m pip show pylint > /dev/null 2>&1 || { \
 		echo "pylint is not installed. Installing pylint $(PYLINT_VERSION)..."; \
 		python3 -m pip install pylint==$(PYLINT_VERSION); }
 
-	@python3 -c "import pylint_pytest" >/dev/null 2>&1 || { \
+###################################### pylint end #######################################
+
+##################################### pytest begin ######################################
+
+.PHONY: check_pytest_installed
+check_pytest_installed:
+	@python3 -m pip show pytest > /dev/null 2>&1 || { \
+		echo "pytest is not installed. Installing pytest ..."; \
+		python3 -m pip install pytest; }
+
+	@python3 -m pip show pytest-asyncio > /dev/null 2>&1 || { \
+		echo "pytest-asyncio is not installed. Installing pytest-asyncio ..."; \
+		python3 -m pip install pytest-asyncio; }
+
+	@python3 -m pip show pylint-pytest > /dev/null 2>&1 || { \
 		echo "pylint-pytest is not installed. Installing pylint-pytest ..."; \
 		python3 -m pip install pylint-pytest; }
 
-###################################### pylint end #######################################
+###################################### pytest end #######################################

@@ -38,7 +38,7 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
     elif engine_args.use_v2_block_manager or engine_args.speculative_model:
         unsupported_feature = "speculative decoding"
     if unsupported_feature:
-        raise ValueError(f'Unsupported feature: Llumnix does not support"{unsupported_feature}" currently.')
+        raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
 
 def check_engine_args(engine_args: AsyncEngineArgs) -> None:
     assert engine_args.engine_use_ray and engine_args.worker_use_ray, \

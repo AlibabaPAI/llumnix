@@ -95,7 +95,7 @@ class EngineManagerArgs:
     @classmethod
     def _check_args(cls, args):
         assert args.migration_backend == 'gloo' \
-            and (args.disable_init_instance_by_manager or args.disable_fixed_node_init_instance), \
+            and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance, \
             ("When using gloo as migration backend, "
              "do not set --disable-init-instance-by-manager and --disable-fixed-node-init-instance.")
 

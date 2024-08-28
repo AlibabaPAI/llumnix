@@ -73,7 +73,7 @@ app = FastAPI(lifespan=lifespan)
 
 async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
     if sampling_params.n > 1 or sampling_params.use_beam_search:
-        raise ValueError("unsupport multiple sequence decoding")
+        raise ValueError("Unsupported feature: multiple sequence decoding")
     results_generator = AsyncStream(request_id)
     request_streams[request_id] = results_generator
     # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.

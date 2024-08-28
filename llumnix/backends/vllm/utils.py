@@ -37,7 +37,7 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
     elif engine_args.use_v2_block_manager or engine_args.speculative_model:
         unsupported_feature = "speculative decoding"
     if unsupported_feature:
-        raise ValueError(f'vllm feature "{unsupported_feature}" is currently unsupported by llumnix.')
+        raise ValueError(f'Unsupported feature: Llumnix does not support"{unsupported_feature}" currently.')
 
 def _get_dtype_size(dtype: torch.dtype) -> int:
     return torch.tensor([], dtype=dtype).element_size()

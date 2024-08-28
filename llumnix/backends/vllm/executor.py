@@ -65,7 +65,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
             if placement_group:
                 bundle = placement_group.bundle_specs[rank+1]
                 if not bundle.get("GPU", 0):
-                    raise Exception("gpu resource cannot be 0")
+                    raise Exception("GPU resource cannot be 0.")
                 scheduling_strategy = PlacementGroupSchedulingStrategy(
                     placement_group=placement_group,
                     placement_group_capture_child_tasks=True,

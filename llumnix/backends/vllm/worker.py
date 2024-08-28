@@ -67,7 +67,7 @@ class MigrationWorker(Worker):
             cache_config.gpu_memory_utilization -= migrate_ratio
 
             if cache_config.gpu_memory_utilization <= 0:
-                raise ValueError("nccl migration backend take {:.4f} gpu memory, which is greater than gpu_memory_utilization {:.4f}. "
+                raise ValueError("Nccl migration backend take {:.4f} gpu memory, which is greater than gpu_memory_utilization {:.4f}. "
                                  "try to increase gpu-memory-utilization or reduce migration-cache-blocks."
                                  .format(migrate_ratio, cache_config.gpu_memory_utilization))
 

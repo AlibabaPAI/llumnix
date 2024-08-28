@@ -78,7 +78,7 @@ class LLMEngineLlumnix(LLMEngine):
             executor_class = LlumnixRayGPUExecutor
             executor_class.migration_config = migration_config
         else:
-            raise ValueError('unimplemented executor backend')
+            raise ValueError('Unsupported executor backend')
         # Hack to pass node_id to _init_workers_ray function.
         executor_class.node_id = node_id
         # Create the LLM engine.

@@ -32,7 +32,7 @@ from llumnix.entrypoints.llumnix_utils import (launch_ray_cluster, connect_to_ra
                                                 is_gpu_available, init_llumnix_components)
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
-
+from llumnix.backends.vllm.utils import check_engine_args
 
 logger = init_logger(__name__)
 engine_manager = None
@@ -242,6 +242,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     engine_manager_args = EngineManagerArgs.from_cli_args(args)
     engine_args = AsyncEngineArgs.from_cli_args(args)
+
+    check_engine_args(engine_args)
 
     print("engine_args: {}".format(engine_args))
 

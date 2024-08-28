@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 
 from vllm.config import ModelConfig, ParallelConfig
-from vllm.engine.arg_utils import EngineArgs
+from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.sampling_params import SamplingType
 from vllm.model_executor.layers.sampler import SampleResultType, _multinomial, _greedy_sample, _random_sample,\
@@ -25,6 +25,7 @@ from vllm.model_executor.layers.sampler import SampleResultType, _multinomial, _
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
+
 
 def detect_unsupported_feature(engine_args: EngineArgs) -> None:
     unsupported_feature = None
@@ -38,6 +39,11 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
         unsupported_feature = "speculative decoding"
     if unsupported_feature:
         raise ValueError(f'Unsupported feature: Llumnix does not support"{unsupported_feature}" currently.')
+
+def check_engine_args(engine_args: AsyncEngineArgs) -> None:
+    assert engine_args.engine_use_ray and engine_args.worker_use_ray, \
+            ("In Llumnix, engine and worker must be ray actor.")
+    detect_unsupported_feature(engine_args)
 
 def _get_dtype_size(dtype: torch.dtype) -> int:
     return torch.tensor([], dtype=dtype).element_size()

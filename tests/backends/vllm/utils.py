@@ -12,14 +12,16 @@
 # limitations under the License.
 
 import time
+from unittest.mock import MagicMock
 from typing import Iterable, Optional, Tuple
 
 from vllm import SamplingParams
 from vllm.lora.request import LoRARequest
-from vllm.sequence import Logprob, Sequence, SequenceGroup
+from vllm.sequence import Logprob, Sequence
 from vllm.config import SchedulerConfig, CacheConfig
 
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 
 def initialize_scheduler(*,
                          max_num_seqs=1000,
@@ -33,9 +35,7 @@ def initialize_scheduler(*,
     cache_config.num_cpu_blocks = 8
     cache_config.num_gpu_blocks = 8
     scheduler = SchedulerLlumnix(scheduler_config, cache_config, lora_config)
-    def update_instance_info(instance_info):
-        pass
-    scheduler.add_update_instance_info_callback(update_instance_info)
+    scheduler.update_instance_info_callback = MagicMock()
     return scheduler
 
 def create_dummy_prompt(
@@ -45,7 +45,7 @@ def create_dummy_prompt(
     lora_request: Optional[LoRARequest] = None,
     use_beam_search: bool = False,
     best_of: int = 1,
-) -> Tuple[Sequence, SequenceGroup]:
+) -> Tuple[Sequence, SequenceGroupLlumnix]:
     if not block_size:
         block_size = prompt_length
 
@@ -54,8 +54,8 @@ def create_dummy_prompt(
     prompt_tokens = list(range(prompt_length))
     prompt_str = " ".join([str(t) for t in prompt_tokens])
     prompt = Sequence(int(request_id), prompt_str, prompt_tokens, block_size)
-    seq_group = SequenceGroup(
-        request_id, [prompt],
+    seq_group = SequenceGroupLlumnix(
+        request_id, None, [prompt],
         SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
         time.time(), lora_request)
 
@@ -67,7 +67,7 @@ def create_seq_group(
         seq_output_lens: Iterable[int] = (128, ),
         request_id: str = '0',
         seq_id_start: int = 0,
-        sampling_params: Optional[SamplingParams] = None) -> SequenceGroup:
+        sampling_params: Optional[SamplingParams] = None) -> SequenceGroupLlumnix:
 
     assert len(seq_output_lens) > 0
 
@@ -92,8 +92,9 @@ def create_seq_group(
             )
         seqs.append(seq)
 
-    seq_group = SequenceGroup(
+    seq_group = SequenceGroupLlumnix(
         request_id=request_id,
+        server_info=None,
         seqs=seqs,
         sampling_params=sampling_params,
         arrival_time=time.time(),

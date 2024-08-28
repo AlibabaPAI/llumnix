@@ -34,8 +34,9 @@ class MockEngine(LLMEngineLlumnix):
         detokenizer = MagicMock(spec=Detokenizer)
         stop_checker = MagicMock(spec=StopChecker)
         seq_counter = Counter()
+        self.instance_info = None
         self.executor_class = executor_class
-
+        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         self.output_processor = SingleStepOutputProcessor(self.scheduler.scheduler_config,detokenizer, self.scheduler, seq_counter, stop_checker)
     
     def update_instance_info(self, instance_info):
@@ -73,13 +74,13 @@ def test_llm_engine_process_model_outputs():
 
     scheduled_seq_groups = out.scheduled_seq_groups
     # normal case, all requests be processed
-    ret = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
+    ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
     assert len(ret) == 2
     metas, out = llm_engine.scheduler.schedule()
     scheduled_seq_groups = out.scheduled_seq_groups
     seqs[0].status=SequenceStatus.WAITING
     # migration case , requests stopping during last stage migration, stop process
-    ret = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
+    ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
     assert len(ret) == 1
 
 def test_llm_engine_from_engine_args():

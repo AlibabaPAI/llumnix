@@ -110,11 +110,11 @@ class Llumlet:
                 return migrated_request_list
             status = self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
             if status == MigrationStatus.FINISHED_DONE:
-                self.backend_engine.free_src_request(migrate_out_request.backend_request)
+                ray.get(migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request))
+                self.backend_engine.free_src_request(migrate_out_request)
                 migrated_request_list.append(migrate_out_request.request_id)
                 migrate_out_request.stage_timestamps.append(time.time())
-                self.backend_engine.free_request_states(migrate_out_request.request_id)
-                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request.backend_request)
+                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             else:
                 ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
             t1 = time.time()

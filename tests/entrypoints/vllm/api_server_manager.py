@@ -45,7 +45,7 @@ class MockLLMEngineManager:
 
     async def abort(self, request_id):
         self._num_aborts += 1
-        
+
     def testing_stats(self):
         return {"num_aborted_requests": self._num_aborts}
 

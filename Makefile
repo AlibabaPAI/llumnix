@@ -21,11 +21,7 @@ install: cupy
 
 .PHONY: lint
 lint: check_pylint_installed
-	@pylint --rcfile=.pylintrc -s n ./llumnix
-
-	@pylint -s n --disable=all \
-			--enable=trailing-whitespace,unused-variable,wrong-import-order,missing-final-newline,line-too-long,\
-			unused-import,singleton-comparison,unnecessary-comprehension ./tests
+	@pylint --rcfile=.pylintrc -s n ./llumnix ./tests
 
 .PHONY: test
 test:
@@ -59,5 +55,9 @@ check_pylint_installed:
 	@command -v pylint >/dev/null 2>&1 || { \
 		echo "pylint is not installed. Installing pylint $(PYLINT_VERSION)..."; \
 		python3 -m pip install pylint==$(PYLINT_VERSION); }
+
+	@python3 -c "import pylint_pytest" >/dev/null 2>&1 || { \
+		echo "pylint-pytest is not installed. Installing pylint-pytest ..."; \
+		python3 -m pip install pylint-pytest; }
 
 ###################################### pylint end #######################################

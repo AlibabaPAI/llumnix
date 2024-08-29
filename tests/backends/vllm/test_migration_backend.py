@@ -17,7 +17,6 @@ import torch
 import ray
 
 from vllm.engine.arg_utils import EngineArgs
-from vllm.utils import get_distributed_init_method, get_ip, get_open_port
 
 from llumnix.backends.vllm.worker import MigrationWorker
 from llumnix.arg_utils import EngineManagerArgs
@@ -94,7 +93,7 @@ def test_migrate_cache(backend):
 
     dst_blocks = list(range(num_gpu_blocks))
     random.shuffle(dst_blocks)
-    src_to_dst = {idx: block_num for idx, block_num in enumerate(dst_blocks)}
+    src_to_dst = dict(enumerate(dst_blocks))
     ray.get(worker1.execute_method.remote(
         'migrate_cache',
         src_worker_handle_list=[worker0],

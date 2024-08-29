@@ -23,9 +23,7 @@ install: cupy
 lint: check_pylint_installed
 	@pylint --rcfile=.pylintrc -s n ./llumnix
 
-	@pylint -s n --disable=all \
-			--enable=trailing-whitespace,unused-variable,wrong-import-order,missing-final-newline,line-too-long,\
-			unused-import,singleton-comparison,unnecessary-comprehension ./tests
+	@pylint -s n --disable=unused-argument,redefined-outer-name,super-init-not-called,protected-access,protected-access ./tests
 
 .PHONY: test
 test:

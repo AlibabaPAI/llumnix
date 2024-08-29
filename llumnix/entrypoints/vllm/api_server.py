@@ -83,8 +83,7 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
     try:
         # await to catch exception
         await engine_manager.generate.remote(request_id, server_info, prompt, sampling_params)
-        if not manager_available:
-            manager_available = True
+        manager_available = True
     except ray.exceptions.RayActorError:
         # Do not re-generate the request to avoid duplicate requests.
         if manager_available:

@@ -17,6 +17,7 @@ import numpy as np
 import time
 
 from vllm.utils import random_uuid
+from vllm import EngineArgs
 
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
@@ -123,7 +124,13 @@ def test_init_llumlet(setup_ray_env, llumlet):
     assert llumlet is not None
     ray.get(llumlet.is_ready.remote())
 
-# TODO(s5u13b): Add init_llumlets test.
+def test_init_llumlets(setup_ray_env, engine_manager):
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    node_id = ray.get_runtime_context().get_node_id()
+    instance_ids, llumlets = ray.get(engine_manager.init_llumlets.remote(engine_args, node_id))
+    num_instances = ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
+    engine_manager_args = EngineManagerArgs()
+    assert num_instances == engine_manager_args.initial_instances
 
 def test_scale_up_and_down(setup_ray_env, engine_manager):
     initial_instances = 4

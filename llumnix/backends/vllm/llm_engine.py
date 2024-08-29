@@ -251,9 +251,6 @@ class BackendVLLM(BackendInterface):
                     server_info: ServerInfo,
                     *args,
                     **kwargs) -> None:
-        # When manager is unavailable, api server might dispatch the request that has already been dispatched.
-        if request_id in self.engine.request_server_info:
-            return
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
         self.engine.request_server_info[request_id] = server_info
         self.engine.add_request(request_id, *args, **kwargs)

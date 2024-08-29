@@ -46,12 +46,7 @@ class MigrationWorker(Worker):
         return self.global_rank
 
     def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
-                                      cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
-        # TODO(s5u13b): move this to arguments checker
-        if parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl':
-            logger.warning("nccl backend is not supported for PP or TP enabled model, use gloo instead.")
-            migration_config.migration_backend = 'gloo'
-
+                                     cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
         migrate_cache_blocks_size = migration_config.migration_cache_blocks
         migrate_num_layers = migration_config.migration_num_layers
         dummy_cache_size = migrate_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(

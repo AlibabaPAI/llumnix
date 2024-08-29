@@ -92,7 +92,6 @@ class InstanceLoadCalculator:
     def __init__(self,
                  load_metric: str,
                  enable_defrag: bool) -> None:
-        assert load_metric in ['remaining_steps', 'usage_ratio']
         self.load_metric = load_metric
         self.enable_defrag = enable_defrag
         self.load_computation_strategies: Dict[str, LoadComputationStrategy] = {
@@ -122,7 +121,6 @@ class LoadComputationStrategy(ABC):
 
 class MigrationLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
-        assert self.load_metric in ['usage_ratio', 'remaining_steps']
         instance_load = -np.inf
         if self.load_metric == 'usage_ratio':
             instance_load = (i.num_used_gpu_blocks + i.num_blocks_first_waiting_request) / i.num_total_gpu_blocks
@@ -144,7 +142,6 @@ class MigrationLoadComputation(LoadComputationStrategy):
 
 class DispatchAndScalingLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, i: InstanceLoadInfo) -> float:
-        assert self.load_metric in ['usage_ratio', 'remaining_steps']
         instance_load = -np.inf
         if self.load_metric == 'usage_ratio':
             instance_load = (i.num_used_gpu_blocks + i.num_blocks_all_waiting_requests) / i.num_total_gpu_blocks

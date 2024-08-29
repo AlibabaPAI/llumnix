@@ -183,14 +183,8 @@ def init_request_output_queue() -> RayQueue:
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,
                             engine_args,
                             node_id: str) -> Tuple[LLMEngineManager, List[Llumlet], RayQueue]:
-    assert engine_args.engine_use_ray and engine_args.worker_use_ray, \
-            ("In Llumnix, engine and worker must be ray actor in orther to run step and migrate concurrently.")
     engine_manager = init_manager(engine_manager_args)
-    # TODO(s5u13b): Add arguments checker for Llumnix.
     if engine_manager_args.disable_init_instance_by_manager:
-        assert engine_manager_args.migration_backend != 'gloo', \
-            ("Llumlet should be initialized by manager when using gloo as migration backend for auto-scaling, "
-             "please do not set --disable-init-instance-by-manager argument.")
         instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id)
     else:
         instance_ids, llumlets = retry_manager_method_sync(engine_manager.init_llumlets.remote, 'init_llumlets', engine_args, node_id)

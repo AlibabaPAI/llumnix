@@ -46,12 +46,7 @@ class MigrationWorker(Worker):
         return self.global_rank
 
     def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
-                                      cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
-        # TODO(s5u13b): move this to arguments checker
-        if parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl':
-            logger.warning("nccl backend is not supported for PP or TP enabled model, use gloo instead.")
-            migration_config.migration_backend = 'gloo'
-
+                                     cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
         migrate_cache_blocks_size = migration_config.migration_cache_blocks
         migrate_num_layers = migration_config.migration_num_layers
         dummy_cache_size = migrate_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
@@ -66,7 +61,7 @@ class MigrationWorker(Worker):
             cache_config.gpu_memory_utilization -= migrate_ratio
 
             if cache_config.gpu_memory_utilization <= 0:
-                raise ValueError("nccl migration backend take {:.4f} gpu memory, which is greater than gpu_memory_utilization {:.4f}. "
+                raise ValueError("Nccl migration backend take {:.4f} gpu memory, which is greater than gpu_memory_utilization {:.4f}. "
                                  "try to increase gpu-memory-utilization or reduce migration-cache-blocks."
                                  .format(migrate_ratio, cache_config.gpu_memory_utilization))
 

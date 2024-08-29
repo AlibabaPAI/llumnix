@@ -29,7 +29,7 @@ def init_backend_engine(instance_id: str, backend_type: BackendType, *args, **kw
         from llumnix.backends.vllm.simulator import BackendSimVLLM
         backend_engine = BackendSimVLLM(instance_id, *args, **kwargs)
     else:
-        raise ValueError(f'unimplemented backend {backend_type}')
+        raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine
 
 def initialize_placement_group(

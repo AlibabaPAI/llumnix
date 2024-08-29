@@ -410,7 +410,7 @@ class LLMEngineManager:
     def from_args(cls,
                   engine_manager_args: EngineManagerArgs,
                   profiling_database: ProfilingDatabase=None) -> "LLMEngineManager":
-        global_scheduler_config = engine_manager_args.create_engine_manager_configs()
+        global_scheduler_config = engine_manager_args.create_global_scheduler_configs()
         # Init manager actor in 'llumnix' namespace to ensure that only one manager can be created.
         manager_class = ray.remote(num_cpus=0,
                                    max_restarts=-1,

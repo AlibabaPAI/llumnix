@@ -59,7 +59,7 @@ class EngineManagerArgs:
     last_stage_max_blocks: int = 16
     max_stages: int = 3
 
-    def create_engine_manager_configs(
+    def create_global_scheduler_configs(
         self,
     ) -> Tuple[GlobalSchedulerConfig]:
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
@@ -89,7 +89,15 @@ class EngineManagerArgs:
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
         engine_manager_args = cls(**{attr: getattr(args, attr) for attr in attrs})
+        cls._check_args(engine_manager_args)
         return engine_manager_args
+
+    @classmethod
+    def _check_args(cls, args):
+        assert args.migration_backend != 'gloo' or (args.migration_backend == 'gloo' \
+            and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \
+            ("When using gloo as migration backend, "
+             "do not set --disable-init-instance-by-manager and --disable-fixed-node-init-instance.")
 
     @staticmethod
     def add_cli_args(

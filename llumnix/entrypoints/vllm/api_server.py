@@ -32,7 +32,7 @@ from llumnix.entrypoints.llumnix_utils import (launch_ray_cluster, connect_to_ra
                                                 is_gpu_available, init_llumnix_components)
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
-
+from llumnix.backends.vllm.utils import check_engine_args
 
 logger = init_logger(__name__)
 engine_manager = None
@@ -73,7 +73,7 @@ app = FastAPI(lifespan=lifespan)
 
 async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
     if sampling_params.n > 1 or sampling_params.use_beam_search:
-        raise ValueError("unsupport multiple sequence decoding")
+        raise ValueError("Unsupported feature: multiple sequence decoding")
     results_generator = AsyncStream(request_id)
     request_streams[request_id] = results_generator
     # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
@@ -89,7 +89,6 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
         if manager_available:
             manager_available = False
             return results_generator
-
         try:
             if instance_num_requests:
                 instance_id = min(instance_num_requests, key=instance_num_requests.get)
@@ -242,6 +241,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     engine_manager_args = EngineManagerArgs.from_cli_args(args)
     engine_args = AsyncEngineArgs.from_cli_args(args)
+
+    check_engine_args(engine_args, engine_manager_args)
 
     print("engine_args: {}".format(engine_args))
 

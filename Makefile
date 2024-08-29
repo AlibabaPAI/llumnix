@@ -21,9 +21,7 @@ install: cupy
 
 .PHONY: lint
 lint: check_pylint_installed
-	@pylint --rcfile=.pylintrc -s n ./llumnix
-
-	@pylint -s n --disable=unused-argument,redefined-outer-name,super-init-not-called,protected-access,protected-access ./tests
+	@pylint --rcfile=.pylintrc -s n ./llumnix ./tests
 
 .PHONY: test
 test:
@@ -57,5 +55,9 @@ check_pylint_installed:
 	@command -v pylint >/dev/null 2>&1 || { \
 		echo "pylint is not installed. Installing pylint $(PYLINT_VERSION)..."; \
 		python3 -m pip install pylint==$(PYLINT_VERSION); }
+
+	@python3 -c "import pylint_pytest" >/dev/null 2>&1 || { \
+		echo "pylint-pytest is not installed. Installing pylint-pytest ..."; \
+		python3 -m pip install pylint-pytest; }
 
 ###################################### pylint end #######################################

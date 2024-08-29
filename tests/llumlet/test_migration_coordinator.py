@@ -11,8 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import ray
 from unittest.mock import MagicMock, patch
+
+import ray
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.llumlet.migrating_request import MigratingRequest

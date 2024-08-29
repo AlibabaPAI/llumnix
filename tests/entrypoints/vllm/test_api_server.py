@@ -72,7 +72,7 @@ def test_api_server(api_server, interface: str):
         _query_server = _query_server_generate
     elif interface == 'generate_benchmark':
         _query_server = _query_server_generate_benchmark
-    
+
     with Pool(32) as pool:
         # Wait until the server is ready
         prompts = ["warm up"] * 1

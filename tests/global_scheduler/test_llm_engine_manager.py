@@ -11,10 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+
 import ray
 import pytest
 import numpy as np
-import time
 
 from vllm.utils import random_uuid
 from vllm import EngineArgs
@@ -177,9 +178,8 @@ def test_generate_and_abort(setup_ray_env, engine_manager, llumlet):
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
 
-def test_get_request_instance(setup_ray_env):
-    instance_ids, llumlets = init_llumlets(2)
-    instance_id, instance_id_1 = instance_ids[0], instance_ids[1]
+def test_get_request_instance():
+    _, llumlets = init_llumlets(2)
     llumlet, llumlet_1 = llumlets[0], llumlets[1]
     request_id = random_uuid()
     request_id_1 = random_uuid()

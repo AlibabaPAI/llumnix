@@ -283,8 +283,12 @@ class LLMEngineManager:
                 self.scale_down(dead_instances, rebuild_migrate_backend=False)
 
                 if self.engine_manager_args.migration_backend == 'gloo':
-                    # clear gloo migrate backend intermediate state
-                    ray.kill(ray.get_actor("gloo_queue", "llumnix"))
+                    try:
+                        # clear gloo migrate backend intermediate state
+                        ray.kill(ray.get_actor("gloo_queue", "llumnix"))
+                    except ValueError:
+                        # gloo_queue may not have been created yet; just ignore this error.
+                        pass
 
             return dead_instances
 

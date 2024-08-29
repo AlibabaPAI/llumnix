@@ -21,9 +21,13 @@ def setup_ray_env():
     yield
     named_actors = ray.util.list_named_actors(True)
     for actor in named_actors:
-        actor_handle = ray.get_actor(actor['name'], namespace='llumnix')
+        try:
+            actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+        except:
+            continue
         try:
             ray.kill(actor_handle)
         except:
-            pass
+            continue
+    # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
     ray.shutdown()

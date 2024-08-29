@@ -178,7 +178,7 @@ def test_generate_and_abort(setup_ray_env, engine_manager, llumlet):
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
 
-def test_get_request_instance():
+def test_get_request_instance(setup_ray_env):
     _, llumlets = init_llumlets(2)
     llumlet, llumlet_1 = llumlets[0], llumlets[1]
     request_id = random_uuid()
@@ -228,6 +228,6 @@ def test_update_instance_info_loop_and_migrate(setup_ray_env, engine_manager):
     num_migrate_out = ray.get(llumlet.get_num_migrate_out.remote())
     assert num_migrate_out == 0
     ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
-    time.sleep(0.2)
+    time.sleep(0.5)
     num_migrate_out = ray.get(llumlet.get_num_migrate_out.remote())
     assert num_migrate_out != 0

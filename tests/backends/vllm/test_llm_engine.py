@@ -31,7 +31,6 @@ from .utils import create_dummy_prompt, initialize_scheduler
 class MockEngine(LLMEngineLlumnix):
     def __init__(self, executor_class=None, *args, **kwargs):
         self.scheduler = initialize_scheduler()
-        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         detokenizer = MagicMock(spec=Detokenizer)
         stop_checker = MagicMock(spec=StopChecker)
         seq_counter = Counter()

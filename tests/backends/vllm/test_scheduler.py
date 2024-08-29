@@ -77,19 +77,19 @@ def test_scheduler_policy():
 
     # all seq_group in waiting queue
     migrating_request = scheduler.get_last_running_request()
-    assert migrating_request == None
+    assert migrating_request is None
     migrating_request = scheduler.get_shortest_running_request()
-    assert migrating_request == None
+    assert migrating_request is None
     migrating_request = scheduler.get_longest_running_request()
-    assert migrating_request == None
+    assert migrating_request is None
     # all seq_group in prefilling stage
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    _, out = schedule_and_update_computed_tokens(scheduler)
     migrating_request = scheduler.get_last_running_request()
-    assert migrating_request == None
+    assert migrating_request is None
     migrating_request = scheduler.get_shortest_running_request()
-    assert migrating_request == None
+    assert migrating_request is None
     migrating_request = scheduler.get_longest_running_request()
-    assert migrating_request == None
+    assert migrating_request is None
     append_new_token(out, 1)
     schedule_and_update_computed_tokens(scheduler)
     # all in running queue
@@ -109,11 +109,11 @@ def test_scheduler_num_killed_request():
         _, seq_group = create_dummy_prompt(str(idx), prompt_length=8, block_size=block_size)
         scheduler.add_seq_group(seq_group)
     # remain 0 blocks
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    _, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
     assert scheduler._get_num_killed_requests() == 0
     # preempt 2 requests
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    _, out = schedule_and_update_computed_tokens(scheduler)
     assert scheduler._get_num_killed_requests() == 2
 
 def test_scheduler_running_request():
@@ -123,7 +123,7 @@ def test_scheduler_running_request():
     for idx in range(1, num_seq_group + 1):
         _, seq_group = create_dummy_prompt(str(idx), prompt_length=idx, block_size=block_size)
         scheduler.add_seq_group(seq_group)
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    schedule_and_update_computed_tokens(scheduler)
     assert scheduler.get_num_unfinished_seq_groups() == 4
     scheduler.remove_running_request("1")
     assert scheduler.get_num_unfinished_seq_groups() == 3
@@ -162,39 +162,39 @@ def test_scheduler_should_abort_migration():
     _, seq_group_1 = create_dummy_prompt("1", prompt_length=17, block_size=block_size)
     scheduler.add_seq_group(seq_group_1)
     # remain 0 blocks
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    _, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
 
     assert scheduler._get_num_killed_requests() == 0
     # assert scheduler.block_manager.get_num_free_gpu_blocks() == 0
     # all in running queue
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    _, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
     assert scheduler._get_num_killed_requests() == 0
     migrating_request = scheduler.get_last_running_request()
     last_stage_time = time.time()
     assert migrating_request.request_id == "1"
     # preempt request 1
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    _, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
-    assert scheduler.should_abort_migration(seq_group_1, last_stage_time) == True
-    assert scheduler.should_abort_migration(seq_group_0, last_stage_time) == False
+    assert scheduler.should_abort_migration(seq_group_1, last_stage_time)
+    assert not scheduler.should_abort_migration(seq_group_0, last_stage_time)
     assert scheduler._get_num_killed_requests() == 1
     scheduler.remove_running_request(seq_group_0)
     scheduler.free_src_request(seq_group_0)
     # free request 0, requset 1 prefill
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    _, out = schedule_and_update_computed_tokens(scheduler)
     append_new_token(out, 1)
     assert scheduler._get_num_killed_requests() == 0
-    assert scheduler.should_abort_migration(seq_group_1, last_stage_time) == True
+    assert scheduler.should_abort_migration(seq_group_1, last_stage_time)
 
 def test_free_dst_pre_alloc_cache():
     scheduler = initialize_scheduler()
-    blocks = scheduler.pre_alloc("1", 2)
-    blocks = scheduler.pre_alloc("1", 4)
+    scheduler.pre_alloc("1", 2)
+    scheduler.pre_alloc("1", 4)
     assert len(scheduler.pre_alloc_cache_dict["1"]) == 6
     scheduler.free_dst_pre_alloc_cache("1")
-    assert scheduler.pre_alloc_cache_dict.get("1",None) == None
+    assert scheduler.pre_alloc_cache_dict.get("1", None) is None
     assert scheduler.block_manager.get_num_free_gpu_blocks() == 8
 
 def test_get_request_incremental_blocks():
@@ -202,6 +202,6 @@ def test_get_request_incremental_blocks():
     block_size = 4
     _, seq_group = create_dummy_prompt("0", prompt_length=16, block_size=block_size)
     scheduler.add_seq_group(seq_group)
-    seq_group_meta, out = schedule_and_update_computed_tokens(scheduler)
+    schedule_and_update_computed_tokens(scheduler)
     incremental_blocks = scheduler.get_request_incremental_blocks(seq_group, 2)
     assert len(incremental_blocks) == 2

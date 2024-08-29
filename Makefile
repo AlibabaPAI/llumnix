@@ -16,16 +16,16 @@ init:
 	@git submodule update --init --recursive
 
 .PHONY: install
-install:
-	pip install -e .
+install: cupy
+	@pip install -e .
 
 .PHONY: lint
 lint: check_pylint_installed
-	pylint --rcfile=.pylintrc ./llumnix
+	@pylint --rcfile=.pylintrc -s n ./llumnix ./tests
 
 .PHONY: test
 test:
-	pytest -vs --ignore=third_party/ --disable-warnings
+	@pytest -q -x --ignore=third_party/ --disable-warnings
 
 #################### pygloo install for gloo migration backend begin ####################
 
@@ -34,9 +34,17 @@ PYGLOO_DIR = third_party/pygloo
 
 .PHONY: pygloo
 pygloo: init
-	./tools/pygloo_install.sh
+	@./tools/pygloo_install.sh
 
 ##################### pygloo install for gloo migration backend end #####################
+
+###################################### cupy begin #######################################
+
+.PHONY: cupy
+cupy:
+	@./tools/cupy_install.sh
+
+####################################### cupy end ########################################
 
 ##################################### pylint begin ######################################
 
@@ -47,5 +55,9 @@ check_pylint_installed:
 	@command -v pylint >/dev/null 2>&1 || { \
 		echo "pylint is not installed. Installing pylint $(PYLINT_VERSION)..."; \
 		python3 -m pip install pylint==$(PYLINT_VERSION); }
+
+	@python3 -c "import pylint_pytest" >/dev/null 2>&1 || { \
+		echo "pylint-pytest is not installed. Installing pylint-pytest ..."; \
+		python3 -m pip install pylint-pytest; }
 
 ###################################### pylint end #######################################

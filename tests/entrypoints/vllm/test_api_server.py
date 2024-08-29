@@ -54,7 +54,7 @@ def api_server():
     uvicorn_process = subprocess.Popen(commands)
     yield
     uvicorn_process.terminate()
-    ray.shutdown()
+    # Waiting for api server subprocess to terminate.
     time.sleep(1.0)
 
 @pytest.mark.parametrize("interface", ['generate', 'generate_benchmark'])

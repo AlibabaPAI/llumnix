@@ -19,14 +19,14 @@ from llumnix.llumlet.migrating_request import MigratingRequest
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.llumlet.llumlet import MigrationStatus
 
+from tests.utils import setup_ray_env
+
+
 @ray.remote
 def ray_remote_call(ret):
     return ret
 
-def test_migrate_out_onestage():
-    # Initialize Ray
-    ray.init(ignore_reinit_error=True)
-
+def test_migrate_out_onestage(setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
@@ -73,13 +73,10 @@ def test_migrate_out_onestage():
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_ABORTED
-    ray.shutdown()
 
+# setup_ray_env should be passed after migrate_out_onestage
 @patch.object(MigrationCoordinator, 'migrate_out_onestage')
-def test_migrate_out_multistage(migrate_out_onestage):
-    # Initialize Ray
-    ray.init(ignore_reinit_error=True)
-
+def test_migrate_out_multistage(migrate_out_onestage, setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
@@ -106,5 +103,3 @@ def test_migrate_out_multistage(migrate_out_onestage):
     status = coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
     assert coordinator.migrate_out_onestage.call_count == max_stages + 1
     assert status == MigrationStatus.FINISHED_ABORTED
-
-    ray.shutdown()

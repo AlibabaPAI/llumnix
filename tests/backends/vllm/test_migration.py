@@ -29,6 +29,8 @@ from llumnix.server_info import ServerInfo
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt
+from tests.utils import setup_ray_env
+
 
 TEST_PROMPTS = ["hello world, ",
                 "Briefly describe the major milestones in the development of artificial intelligence from 1950 to 2020.\n",
@@ -47,8 +49,7 @@ class MockLlumlet(Llumlet):
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2,
                     reason="Need at least 2 GPUs to run the test.")
-def test_migration_correctness():
-    ray.init(namespace="llumnix", ignore_reinit_error=True)
+def test_migration_correctness(setup_ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
     migration_config = MigrationConfig("LCFS", "gloo",16,1,4,5,20)
@@ -128,7 +129,6 @@ def test_migration_correctness():
         assert output.cumulative_logprob == origin_output.cumulative_logprob
     for prompt in TEST_PROMPTS:
         test_correctness(prompt)
-    ray.shutdown()
 
 def test_clear_migration_states():
     llumlet = MockLlumlet()

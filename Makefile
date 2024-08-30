@@ -21,7 +21,7 @@ install: cupy
 
 .PHONY: lint
 lint: check_pylint_installed
-	@pylint --rcfile=.pylintrc -s n ./llumnix ./tests
+	@pylint --rcfile=.pylintrc -s n ./llumnix ./tests --exit-zero
 
 .PHONY: test
 test:

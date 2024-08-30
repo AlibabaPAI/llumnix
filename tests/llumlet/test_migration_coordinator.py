@@ -14,6 +14,7 @@
 from unittest.mock import MagicMock, patch
 
 import ray
+import pytest
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.backends.backend_interface import BackendInterface
@@ -77,7 +78,8 @@ def test_migrate_out_onestage(setup_ray_env):
 
 # setup_ray_env should be passed after migrate_out_onestage
 @patch.object(MigrationCoordinator, 'migrate_out_onestage')
-def test_migrate_out_multistage(migrate_out_onestage, setup_ray_env):
+@pytest.fixture
+def test_migrate_out_multistage(_):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()

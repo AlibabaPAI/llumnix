@@ -143,4 +143,3 @@ def test_scheduler_pre_alloc():
     assert len(scheduler.pre_alloc_cache_dict["1"]) == 6
     blocks = scheduler.pre_alloc("2,", 4)
     assert len(blocks) == 0
-

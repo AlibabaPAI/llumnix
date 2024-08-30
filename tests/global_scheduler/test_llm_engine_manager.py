@@ -18,10 +18,13 @@ import pytest
 import numpy as np
 
 from vllm.utils import random_uuid
+from vllm import EngineArgs
 
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.instance_info import InstanceInfo
+
+from tests.utils import setup_ray_env
 
 
 @ray.remote(num_cpus=1, max_concurrency=4)
@@ -75,7 +78,6 @@ class MockLlumlet:
 
 
 def init_manager():
-    ray.init(ignore_reinit_error=True, namespace='llumnix')
     try:
         engine_manager_args = EngineManagerArgs()
         engine_manager_args.log_instance_info = False
@@ -103,8 +105,6 @@ def engine_manager():
     engine_manager = init_manager()
     ray.get(engine_manager.is_ready.remote())
     yield engine_manager
-    ray.kill(engine_manager)
-    ray.shutdown()
 
 @pytest.fixture
 def llumlet():
@@ -115,19 +115,25 @@ def llumlet():
     ray.get(llumlet.is_ready.remote())
     return llumlet
 
-def test_init_manager(engine_manager):
+def test_init_manager(setup_ray_env, engine_manager):
     assert engine_manager is not None
     engine_manager_actor_handle = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
     assert engine_manager_actor_handle is not None
     assert engine_manager == engine_manager_actor_handle
 
-def test_init_llumlet(llumlet):
+def test_init_llumlet(setup_ray_env, llumlet):
     assert llumlet is not None
     ray.get(llumlet.is_ready.remote())
 
-# TODO(s5u13b): Add init_llumlets test.
+def test_init_llumlets(setup_ray_env, engine_manager):
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    node_id = ray.get_runtime_context().get_node_id()
+    instance_ids, llumlets = ray.get(engine_manager.init_llumlets.remote(engine_args, node_id))
+    num_instances = ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
+    engine_manager_args = EngineManagerArgs()
+    assert num_instances == engine_manager_args.initial_instances
 
-def test_scale_up_and_down(engine_manager):
+def test_scale_up_and_down(setup_ray_env, engine_manager):
     initial_instances = 4
     instance_ids, llumlets = init_llumlets(initial_instances)
     num_instances = ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
@@ -142,7 +148,7 @@ def test_scale_up_and_down(engine_manager):
     num_instances = ray.get(engine_manager.scale_down.remote(instance_ids_1))
     assert num_instances == 0
 
-def test_connect_to_instances():
+def test_connect_to_instances(setup_ray_env):
     initial_instances = 4
     instance_ids, llumlets = init_llumlets(initial_instances)
     ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
@@ -152,10 +158,8 @@ def test_connect_to_instances():
     assert num_instances == initial_instances * 2
     num_instances = ray.get(engine_manager.scale_down.remote(instance_ids))
     assert num_instances == initial_instances
-    ray.kill(engine_manager)
-    ray.shutdown()
 
-def test_generate_and_abort(engine_manager, llumlet):
+def test_generate_and_abort(setup_ray_env, engine_manager, llumlet):
     instance_id = ray.get(llumlet.get_instance_id.remote())
     ray.get(engine_manager.scale_up.remote(instance_id, [llumlet]))
     request_id = random_uuid()
@@ -174,7 +178,7 @@ def test_generate_and_abort(engine_manager, llumlet):
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
 
-def test_get_request_instance():
+def test_get_request_instance(setup_ray_env):
     _, llumlets = init_llumlets(2)
     llumlet, llumlet_1 = llumlets[0], llumlets[1]
     request_id = random_uuid()
@@ -192,8 +196,6 @@ def test_get_request_instance():
     num_requests_1 = ray.get(llumlet_1.get_num_requests.remote())
     assert num_requests == 0
     assert num_requests_1 == 0
-    ray.kill(engine_manager)
-    ray.shutdown()
 
 def get_instance_info_migrate_in(instance_id):
     instance_info = InstanceInfo()
@@ -211,7 +213,7 @@ def get_instance_info_migrate_out(instance_id):
     instance_info.num_blocks_first_waiting_request = np.inf
     return instance_info
 
-def test_update_instance_info_loop_and_migrate(engine_manager):
+def test_update_instance_info_loop_and_migrate(setup_ray_env, engine_manager):
     instance_ids, llumlets = init_llumlets(2)
     instance_id, instance_id_1 = instance_ids[0], instance_ids[1]
     llumlet, llumlet_1 = llumlets[0], llumlets[1]
@@ -226,6 +228,6 @@ def test_update_instance_info_loop_and_migrate(engine_manager):
     num_migrate_out = ray.get(llumlet.get_num_migrate_out.remote())
     assert num_migrate_out == 0
     ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
-    time.sleep(0.2)
+    time.sleep(0.5)
     num_migrate_out = ray.get(llumlet.get_num_migrate_out.remote())
     assert num_migrate_out != 0

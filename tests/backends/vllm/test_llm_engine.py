@@ -37,6 +37,9 @@ class MockEngine(LLMEngineLlumnix):
         self.executor_class = executor_class
 
         self.output_processor = SingleStepOutputProcessor(self.scheduler.scheduler_config,detokenizer, self.scheduler, seq_counter, stop_checker)
+    
+    def update_instance_info(self, instance_info):
+        pass
 
 
 def test_llm_engine_process_model_outputs():

@@ -33,6 +33,9 @@ def initialize_scheduler(*,
     cache_config.num_cpu_blocks = 8
     cache_config.num_gpu_blocks = 8
     scheduler = SchedulerLlumnix(scheduler_config, cache_config, lora_config)
+    def update_instance_info(instance_info):
+        pass
+    scheduler.add_update_instance_info_callback(update_instance_info)
     return scheduler
 
 def create_dummy_prompt(

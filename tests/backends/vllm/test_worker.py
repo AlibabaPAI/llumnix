@@ -25,6 +25,7 @@ from vllm.executor.ray_gpu_executor import RayWorkerWrapper
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.utils import random_uuid
 
+from tests.utils import setup_ray_env
 
 def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
                   worker_module_name="llumnix.backends.vllm.worker",
@@ -62,9 +63,7 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
     return worker
 
 @pytest.mark.parametrize("backend", ['rpc', 'gloo', 'nccl'])
-def test_reserve_memory_for_migration(backend):
-    ray.init(namespace="llumnix", ignore_reinit_error=True)
-
+def test_reserve_memory_for_migration(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = EngineManagerArgs(migration_cache_blocks=1).create_migration_config()
     migraiton_config.migration_backend = backend
@@ -83,13 +82,9 @@ def test_reserve_memory_for_migration(backend):
                                                                 parallel_config=engine_config.parallel_config))
     assert migration_cache_size == occupy_memory
 
-    ray.shutdown()
-
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rpc', 'gloo', 'nccl'])
-def test_rebuild_migration_backend(backend):
-    ray.init(namespace="llumnix", ignore_reinit_error=True)
-
+def test_rebuild_migration_backend(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = EngineManagerArgs(migration_cache_blocks=1).create_migration_config()
     migraiton_config.migration_backend = backend
@@ -135,5 +130,3 @@ def test_rebuild_migration_backend(backend):
     assert ray.get(worker0.execute_method.remote('rebuild_migration_backend', instance_rank=instance_rank,
                                                 group_name=random_uuid()))
     assert ray.get(worker0.execute_method.remote('warmup'))
-
-    ray.shutdown()

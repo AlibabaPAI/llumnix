@@ -16,7 +16,6 @@ from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
 import threading
 import ray
-# pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
 from ray.util.queue import Queue as RayQueue
 

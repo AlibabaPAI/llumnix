@@ -78,8 +78,7 @@ def test_migrate_out_onestage(setup_ray_env):
 
 # setup_ray_env should be passed after migrate_out_onestage
 @patch.object(MigrationCoordinator, 'migrate_out_onestage')
-@pytest.fixture
-def test_migrate_out_multistage(_):
+def test_migrate_out_multistage(_, setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()

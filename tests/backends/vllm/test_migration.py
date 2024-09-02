@@ -49,9 +49,9 @@ class MockLlumlet(Llumlet):
 
 # @pytest.mark.skipif(torch.cuda.device_count() < 2,
 #                     reason="Need at least 2 GPUs to run the test.")
+# FIXME(ZeldaHuang) this test is currently unstable
 @pytest.mark.skip(reason="Regression Test")
-@pytest.fixture
-def test_migration_correctness():
+def test_migration_correctness(setup_ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
     migration_config = MigrationConfig("LCFS", "gloo",16,1,4,5,20)

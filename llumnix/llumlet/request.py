@@ -23,13 +23,14 @@ class LlumnixRequest:
     def __init__(self, request_id: int, server_info: ServerInfo) -> None:
         self.request_id = request_id
         self.server_info = server_info
-        self.last_preemption_time = None
 
         # migration args
+        self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
 
     def reset_migration_args(self):
+        self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
 

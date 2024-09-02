@@ -23,7 +23,6 @@ class LocalMigrationScheduler:
         self.backend_engine = backend_engine
 
     def get_migrate_out_request(self, min_request_len=0, max_request_len=np.inf) -> Optional[LlumnixRequest]:
-        # TODO(s5u13b): remove the if-else codes
         migrate_out_request: LlumnixRequest = None
         if self.request_migration_policy == 'LCFS':
             migrate_out_request = self.get_last_running_request(min_request_len, max_request_len)
@@ -40,6 +39,7 @@ class LocalMigrationScheduler:
                 and min_request_len <= request.request_len <= max_request_len:
                 return request
         return None
+
     def get_longest_running_request(self, min_request_len, max_request_len):
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \

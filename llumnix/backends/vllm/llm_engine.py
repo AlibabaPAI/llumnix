@@ -113,6 +113,7 @@ class LLMEngineLlumnix(LLMEngine):
                 output[0].outputs = new_output
                 seq_group_metadata_list = new_seq_group_metadata_list
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+            # TODO(ZeldaHuang) Use LlumnixRequestOutput to store llumnix output args.
             return request_outputs, server_info_list
 
     def step(self) -> None:

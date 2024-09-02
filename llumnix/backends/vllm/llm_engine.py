@@ -12,12 +12,10 @@
 # limitations under the License.
 
 import time
-from typing import List, Optional, Dict, Union, Iterable, Any
+from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
 import threading
 import ray
-# pylint: disable=unused-import
-from ray.util.placement_group import PlacementGroup
 from ray.util.queue import Queue as RayQueue
 
 from vllm.engine.llm_engine import LLMEngine
@@ -29,10 +27,10 @@ from vllm.utils import Counter
 from vllm.usage.usage_lib import UsageContext
 
 from llumnix.logger import init_logger
-from llumnix.llumlet.migrating_request import MigratingRequest
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 from llumnix.backends.vllm.utils import detect_unsupported_feature
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
@@ -47,8 +45,6 @@ class LLMEngineLlumnix(LLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        self.scaling_down = False
-        self.request_server_info: Dict[str, ServerInfo] = {}
 
     # pylint: disable=W0221
     @classmethod
@@ -97,9 +93,10 @@ class LLMEngineLlumnix(LLMEngine):
         scheduled_seq_groups: List[ScheduledSequenceGroup],
         ignored_seq_groups: List[SequenceGroup],
         seq_group_metadata_list: List[SequenceGroupMetadata],
-    ) -> List[RequestOutput]:
+    ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         # ensure scheduled_seq_groups matching output
         with self.scheduler.scheduler_lock:
+            server_info_list = []
             if output:
                 new_output = []
                 new_scheduled_seq_groups = []
@@ -110,21 +107,18 @@ class LLMEngineLlumnix(LLMEngine):
                         new_scheduled_seq_groups.append(scheduled_seq_group)
                         new_seq_group_metadata_list.append(seq_group_meta)
                         new_output.append(seq_group_output)
+                        server_info_list.append(seq_group.server_info)
                 scheduled_seq_groups = new_scheduled_seq_groups
                 output[0].outputs = new_output
                 seq_group_metadata_list = new_seq_group_metadata_list
-            return super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+            request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+            # TODO(ZeldaHuang) Use LlumnixRequestOutput to store llumnix output args.
+            return request_outputs, server_info_list
 
     def step(self) -> None:
-        output_list = super().step()
+        output_list, server_info_list = super().step()
 
         instance_info: InstanceInfo = self.instance_info
-
-        if self.scaling_down:
-            instance_info.num_running_requests = 1
-            instance_info.num_available_gpu_blocks = -self.cache_config.num_gpu_blocks
-            instance_info.num_available_gpu_blocks_waiting = -self.cache_config.num_gpu_blocks
-
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
@@ -138,13 +132,7 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        self.free_request_states(instance_info.finished_request_ids)
-
-        if len(output_list) > 0:
-            server_info_list = []
-            for output in output_list:
-                server_info_list.append(self.request_server_info[output.request_id])
-            self._put_request_output_to_server(output_list, server_info_list)
+        self._put_request_output_to_server(output_list, server_info_list)
         self.instance_info = instance_info
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -157,9 +145,13 @@ class LLMEngineLlumnix(LLMEngine):
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 
-    def _put_request_output_to_server(self,
-                                      request_outputs: List[RequestOutput],
-                                      server_infos: List[ServerInfo]) -> None:
+    def add_request(self, request_id: str, server_info: ServerInfo, *args, **kwargs):
+        super().add_request(request_id, *args, **kwargs)
+        seq_group = self.scheduler.waiting[-1]
+        self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, [seq_group.get_seqs()[0]], seq_group.sampling_params,
+                                  seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
+
+    def _put_request_output_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_queue: Dict[str, RayQueue] = {}
         # Reorganize data in orther to put request output to queue in batch at one time.
@@ -175,17 +167,7 @@ class LLMEngineLlumnix(LLMEngine):
             except ray.exceptions.RayActorError:
                 logger.info("Server {} is dead".format(server_id))
                 request_ids = [req_output.request_id for req_output in req_outputs]
-                self.abort(request_ids)
-
-    def free_request_states(self, request_id: Union[str, Iterable[str]]) -> None:
-        if isinstance(request_id, str):
-            request_id = (request_id,)
-        request_ids = set(request_id)
-        for req_id in request_ids:
-            if req_id in self.request_server_info:
-                del self.request_server_info[req_id]
-            if req_id in self.scheduler.last_preemption_time_dict:
-                del self.scheduler.last_preemption_time_dict[req_id]
+                self.abort_request(request_ids)
 
 class BackendVLLM(BackendInterface):
     def __init__(
@@ -224,28 +206,6 @@ class BackendVLLM(BackendInterface):
     def execute_worker_method(self, method, *args, **kwargs):
         return self.engine.model_executor.driver_worker.execute_method(method, *args, **kwargs)
 
-    def stop_shutdown(self) -> None:
-        self.engine.scaling_down = False
-
-    def shutdown_workers(self):
-        migrated_requests = []
-
-        self.engine.scaling_down = True
-        while self.has_unfinished_requests() and self.engine.scaling_down:
-            time.sleep(1)
-        time.sleep(0.1)
-        if self.engine.scaling_down:
-            self._run_workers(
-                "shutdown",
-                )
-        return migrated_requests
-
-    def restart_workers(self) -> None:
-        self._run_workers(
-            "restart",
-            )
-        self.engine.scaling_down = False
-
     def add_request(self,
                     request_id: str,
                     server_info: ServerInfo,
@@ -255,14 +215,14 @@ class BackendVLLM(BackendInterface):
         self.engine.request_server_info[request_id] = server_info
         self.engine.add_request(request_id, *args, **kwargs)
 
-    def commit_dst_request(self, backend_request: SequenceGroup, server_info: ServerInfo) -> None:
+    def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
         logger.info("add seq {} to block table".format(seq.seq_id))
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         self.add_running_request(backend_request)
-        self.engine.request_server_info[backend_request.request_id] = server_info
+        backend_request.reset_migration_args()
 
     def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",
@@ -282,11 +242,10 @@ class BackendVLLM(BackendInterface):
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids = set(request_id)
-        self.free_request_states(request_ids)
         return self.engine.abort_request(request_ids)
 
-    def free_request_states(self, request_id: Union[str, Iterable[str]]) -> None:
-        return self.engine.free_request_states(request_id)
+    def get_running_queue(self ) -> List[SequenceGroupLlumnix]:
+        return self.engine.scheduler.get_running_queue()
 
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.get_request_incremental_blocks(*args, **kwargs)
@@ -320,18 +279,6 @@ class BackendVLLM(BackendInterface):
 
     def free_src_request(self, backend_request: SequenceGroup) -> None:
         return self.engine.scheduler.free_src_request(backend_request)
-
-    def get_last_running_request(self) -> Optional[MigratingRequest]:
-        return self.engine.scheduler.get_last_running_request()
-
-    def get_longest_running_request(self) -> Optional[MigratingRequest]:
-        return self.engine.scheduler.get_longest_running_request()
-
-    def get_shortest_running_request(self) -> Optional[MigratingRequest]:
-        return self.engine.scheduler.get_shortest_running_request()
-
-    def get_request_server_info(self, request_id: str) -> ServerInfo:
-        return self.engine.request_server_info[request_id]
 
     def get_all_request_ids(self) -> List[str]:
         return self.engine.scheduler.get_all_request_ids()

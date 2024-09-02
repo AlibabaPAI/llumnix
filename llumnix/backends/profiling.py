@@ -23,7 +23,8 @@ import cloudpickle
 import pandas as pd
 import numpy as np
 
-from llumnix.backends.backend_interface import BackendType, BackendInferenceType
+from llumnix.backends.backend_interface import BackendType
+from llumnix.llumlet.request import RequestInferenceType
 
 # 2D parallel configuration
 # (gpu, tensor parallel, pipeline parallel)
@@ -53,8 +54,8 @@ class LatencyMemData:
     decode_model_params: Any = None
     prefill_model_params: Any = None
 
-    def add_latency_result(self, inference_type: BackendInferenceType, batch_size: int, tot_seq_len: int, latency: List[float]):
-        if inference_type == BackendInferenceType.PREFILL:
+    def add_latency_result(self, inference_type: RequestInferenceType, batch_size: int, tot_seq_len: int, latency: List[float]):
+        if inference_type == RequestInferenceType.PREFILL:
             self.prefill_latency[batch_size] = latency
         else:
             self.decode_latency[(batch_size, tot_seq_len)] = latency
@@ -79,13 +80,13 @@ class ProfilingResult:
     # The latency of postprocess on CPU.
     postprocess_cpu: float = 0.0
 
-    def add_latency_result(self, parallel_config: SimParallelConfig, inference_type: BackendInferenceType, batch_size: int,
+    def add_latency_result(self, parallel_config: SimParallelConfig, inference_type: RequestInferenceType, batch_size: int,
                            tot_seq_len: int, stage_latency: List[float], metadata: Any = None):
         """Add or overwrite the profiling results of a model."""
         if parallel_config not in self.para_dict:
             self.para_dict[parallel_config] = LatencyMemData(
                 metadata=metadata, prefill_latency={}, decode_latency={}, cache_dict={})
-            if inference_type == BackendInferenceType.PREFILL:
+            if inference_type == RequestInferenceType.PREFILL:
                 self.para_dict[parallel_config].prefill_latency = {tot_seq_len: stage_latency}
             else:
                 self.para_dict[parallel_config].decode_latency = {(batch_size, tot_seq_len): stage_latency}
@@ -145,7 +146,7 @@ class ProfilingDatabase:
 
     def _extract_data(self, row):
         """Extract the profiling results from a row of the profiling CSV file."""
-        inference_type = BackendInferenceType.PREFILL if row["inference_type"] == "prefill" else BackendInferenceType.DECODE
+        inference_type = RequestInferenceType.PREFILL if row["inference_type"] == "prefill" else RequestInferenceType.DECODE
         # assert pp==1
         stage_latencies = [float(row["latency"])]
         batch_size = _pad_to_alignment(int(row["bs"]), 8)

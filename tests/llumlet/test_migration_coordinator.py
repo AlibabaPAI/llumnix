@@ -14,11 +14,12 @@
 from unittest.mock import MagicMock, patch
 
 import ray
+import pytest
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
-from llumnix.llumlet.migrating_request import MigratingRequest
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.llumlet.llumlet import MigrationStatus
+from .test_local_migration_scheduler import MockRequest
 
 from tests.utils import setup_ray_env
 
@@ -31,7 +32,7 @@ def test_migrate_out_onestage(setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
-    migrate_out_request = MigratingRequest(1, "test_request")
+    migrate_out_request = MagicMock()
 
     # Create an instance of MigrationCoordinator
     coordinator = MigrationCoordinator(backend_engine, 1, 3)
@@ -40,7 +41,7 @@ def test_migrate_out_onestage(setup_ray_env):
     src_blocks = [1, 2, 3]
     dst_blocks = [1, 2]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
-    backend_engine.should_abort_migration.return_value = False
+    migrate_out_request.should_abort_migration.return_value = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
 
     # Test normal migration scenario
@@ -51,37 +52,37 @@ def test_migrate_out_onestage(setup_ray_env):
     src_blocks = [3]
     dst_blocks = [3]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
-    backend_engine.should_abort_migration.return_value = False
+    migrate_out_request.should_abort_migration.return_value = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_DONE
 
-    migrate_out_request = MigratingRequest(2, "test_request")
+    migrate_out_request = MagicMock()
     # Test migration aborted scenario
     src_blocks = [1, 2, 3]
     dst_blocks = []
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
-    backend_engine.should_abort_migration.return_value = False
+    migrate_out_request.should_abort_migration.return_value = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_ABORTED
 
-    migrate_out_request = MigratingRequest(3, "test_request")
+    migrate_out_request = MagicMock()
     src_blocks = [1, 2, 3]
     dst_blocks = [1, 2]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
-    backend_engine.should_abort_migration.return_value = True
+    migrate_out_request.should_abort_migration.return_value = True
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_ABORTED
 
 # setup_ray_env should be passed after migrate_out_onestage
 @patch.object(MigrationCoordinator, 'migrate_out_onestage')
-def test_migrate_out_multistage(migrate_out_onestage, setup_ray_env):
+def test_migrate_out_multistage(_, setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
-    migrate_out_request = MigratingRequest(1, "test_request")
+    migrate_out_request = MockRequest("1", 1)
 
     # Create an instance of MigrationCoordinator
     max_stages = 3

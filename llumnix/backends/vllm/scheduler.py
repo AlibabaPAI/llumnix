@@ -16,19 +16,15 @@ import time
 import threading
 from typing import Dict, List, Optional, Tuple
 
-from vllm.sequence import SequenceGroup
 from vllm.core.block_manager_v1 import BlockSpaceManagerV1, BlockTable
-from vllm.core.scheduler import (Scheduler, SequenceGroupMetadata, SchedulerOutputs,
-                                 PreemptionMode, SequenceStatus)
+from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, SequenceGroupMetadata, SchedulerOutputs)
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
-from llumnix.llumlet.local_migration_scheduler import MigratingRequest
-from llumnix.backends.backend_interface import BackendInferenceType
+from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 from llumnix.backends.vllm.utils import scheduler_lock
 
 logger = init_logger(__name__)
-
 
 # TODO(ZeldaHuang): adapt prefix cache and sliding window, now use v1 manager
 class BlockManagerLlumnix(BlockSpaceManagerV1):
@@ -58,10 +54,8 @@ class SchedulerLlumnix(Scheduler):
             sliding_window=self.cache_config.sliding_window,
             enable_caching=self.cache_config.enable_prefix_caching)
         self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
-        self.last_preemption_time_dict: Dict[str, float] = {}
-        self.prefilling_seq_groups = []
         self.scheduler_lock = threading.Lock()
-        self.migrating_out_request_last_stage = []
+        self.migrating_out_request_last_stage: List[LlumnixRequest] = []
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
@@ -69,43 +63,23 @@ class SchedulerLlumnix(Scheduler):
 
     def _preempt(
         self,
-        seq_group: SequenceGroup,
+        seq_group: LlumnixRequest,
         blocks_to_swap_out: Dict[int, int],
         preemption_mode: Optional[PreemptionMode] = None,
     ) -> PreemptionMode:
-        self.last_preemption_time_dict[seq_group.request_id] = time.time()
+        seq_group.last_preemption_time = time.time()
         return super()._preempt(seq_group, blocks_to_swap_out, preemption_mode)
 
     def _get_num_killed_requests(self) -> int:
         cnt = len(self.swapped)
         for seq_group in self.waiting:
-            if seq_group.request_id in self.last_preemption_time_dict:
+            if seq_group.last_preemption_time:
                 cnt += 1
         return cnt
 
     @scheduler_lock
-    def get_last_running_request(self) -> Optional[MigratingRequest]:
-        for seq_group in reversed(self.running):
-            if seq_group not in self.prefilling_seq_groups:
-                return MigratingRequest(seq_group.request_id, seq_group)
-        return None
-
-    @scheduler_lock
-    def get_longest_running_request(self) -> Optional[MigratingRequest]:
-        # TODO(ZeldaHuang): use for loop find request
-        sorted_running = sorted(self.running, key=lambda seq_group: seq_group.get_seqs()[0].get_len())
-        for seq_group in reversed(sorted_running):
-            if seq_group not in self.prefilling_seq_groups:
-                return MigratingRequest(seq_group.request_id, seq_group)
-        return None
-
-    @scheduler_lock
-    def get_shortest_running_request(self) -> Optional[MigratingRequest]:
-        sorted_running = sorted(self.running, key=lambda seq_group: seq_group.get_seqs()[0].get_len())
-        for seq_group in sorted_running:
-            if seq_group not in self.prefilling_seq_groups:
-                return MigratingRequest(seq_group.request_id, seq_group)
-        return None
+    def get_running_queue(self):
+        return self.running
 
     @scheduler_lock
     def get_all_request_ids(self) -> List[str]:
@@ -116,7 +90,7 @@ class SchedulerLlumnix(Scheduler):
         return request_ids
 
     @scheduler_lock
-    def get_request_incremental_blocks(self, backend_request: SequenceGroup, pre_stage_num_blocks: int) -> List[int]:
+    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
         seq = backend_request.get_seqs()[0]
         blocks = self.block_manager.get_block_table(seq)
         return blocks[pre_stage_num_blocks:]
@@ -130,13 +104,13 @@ class SchedulerLlumnix(Scheduler):
                 seq.status = SequenceStatus.WAITING
                 break
 
-    def add_migrating_out_request_last_stage(self, backend_request: SequenceGroup) -> None:
+    def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         self.migrating_out_request_last_stage.append(backend_request)
 
-    def remove_migrating_out_request_last_stage(self, backend_request: SequenceGroup) -> None:
+    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         self.migrating_out_request_last_stage.remove(backend_request)
 
-    def pop_migrating_out_requests_last_stage(self) -> List[SequenceGroup]:
+    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
         migrating_out_request_last_stage = self.migrating_out_request_last_stage.copy()
         self.migrating_out_request_last_stage.clear()
         return migrating_out_request_last_stage
@@ -151,23 +125,13 @@ class SchedulerLlumnix(Scheduler):
         return blocks
 
     @scheduler_lock
-    def should_abort_migration(self, backend_request: SequenceGroup, last_stage_time: int) -> bool:
-        if backend_request not in self.running or not backend_request.get_seqs()[0].get_output_len():
-            # not in running queue or in prefill stage
-            return True
-        last_preemption_time = self.last_preemption_time_dict.get(backend_request.request_id, 0)
-        if last_preemption_time > last_stage_time:
-            return True
-        return False
-
-    @scheduler_lock
-    def add_running_request(self, backend_request: SequenceGroup) -> None:
+    def add_running_request(self, backend_request: LlumnixRequest) -> None:
         seq = backend_request.get_seqs()[0]
         seq.status = SequenceStatus.RUNNING
         self.running.append(backend_request)
 
     @scheduler_lock
-    def is_request_running(self, backend_request: SequenceGroup) -> bool:
+    def is_request_running(self, backend_request: LlumnixRequest) -> bool:
         return backend_request in self.running
 
     @scheduler_lock
@@ -185,7 +149,7 @@ class SchedulerLlumnix(Scheduler):
                 self.block_manager._free_block_table(blocks)
 
     @scheduler_lock
-    def free_src_request(self, backend_request: SequenceGroup) -> None:
+    def free_src_request(self, backend_request: LlumnixRequest) -> None:
         seq = backend_request.get_seqs()[0]
         logger.info("free seq {}".format(seq.seq_id))
         self.free_seq(seq)
@@ -223,26 +187,21 @@ class SchedulerLlumnix(Scheduler):
             num_blocks_first_waiting_request=num_blocks_first_waiting_request,
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
-            inference_type=BackendInferenceType.PREFILL if self.prefilling_seq_groups \
-                           else BackendInferenceType.DECODE,
         )
         for seq_group in self.running:
             instance_info.running_seq_lens.extend([seq.get_len() for seq in seq_group.get_seqs()])
-            instance_info.num_seqs = len(instance_info.running_seq_lens)
-        # TODO(s5u13b): Only correct when using prefill preemption batching policy.
-        instance_info.num_batched_tokens = sum([seq_group.get_seqs()[0].get_len() for seq_group in self.prefilling_seq_groups])\
-                                         if self.prefilling_seq_groups else len(instance_info.running_seq_lens)
+            instance_info.num_seq = len(instance_info.running_seq_lens)
+        if self.running:
+            instance_info.inference_type = self.running[-1].inference_type
+        # TODO(ZeldaHuang) adapt chunked-prefill
+        instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in self.running])\
+                                         if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]
         return instance_info
 
     @scheduler_lock
     def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
-        # record prefilling requests
         seq_group_metadata_list, scheduler_outputs = super().schedule()
-        self.prefilling_seq_groups = []
-        for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups:
-            if scheduled_seq_group.seq_group.is_prefill():
-                self.prefilling_seq_groups.append(scheduled_seq_group.seq_group)
         self.update_instance_info_callback(self._get_instance_info())
         return seq_group_metadata_list, scheduler_outputs
 

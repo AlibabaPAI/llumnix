@@ -16,6 +16,7 @@ import time
 from vllm.sequence import Sequence
 from vllm.sequence import Logprob
 from llumnix.backends.vllm.scheduler import BlockManagerLlumnix
+from llumnix.llumlet.request import RequestInferenceType
 from .utils import create_dummy_prompt, initialize_scheduler
 
 
@@ -67,7 +68,7 @@ def test_manager_add_block_table():
     after_free = block_manager.get_num_free_gpu_blocks()
     assert after_free == num_gpu_blocks
 
-def test_scheduler_policy():
+def test_sequence_group_inference_type():
     scheduler = initialize_scheduler()
     num_seq_group = 4
     block_size = 4
@@ -76,29 +77,19 @@ def test_scheduler_policy():
         scheduler.add_seq_group(seq_group)
 
     # all seq_group in waiting queue
-    migrating_request = scheduler.get_last_running_request()
-    assert migrating_request is None
-    migrating_request = scheduler.get_shortest_running_request()
-    assert migrating_request is None
-    migrating_request = scheduler.get_longest_running_request()
-    assert migrating_request is None
+    for req in scheduler.waiting:
+        assert req.inference_type == RequestInferenceType.PREFILL
     # all seq_group in prefilling stage
-    _, out = schedule_and_update_computed_tokens(scheduler)
-    migrating_request = scheduler.get_last_running_request()
-    assert migrating_request is None
-    migrating_request = scheduler.get_shortest_running_request()
-    assert migrating_request is None
-    migrating_request = scheduler.get_longest_running_request()
-    assert migrating_request is None
+    metas, out = scheduler.schedule()
+    for req in scheduler.running:
+        assert req.inference_type == RequestInferenceType.PREFILL
+    for s, meta in zip(out.scheduled_seq_groups, metas):
+        s.seq_group.update_num_computed_tokens(meta.token_chunk_size)
     append_new_token(out, 1)
     schedule_and_update_computed_tokens(scheduler)
     # all in running queue
-    migrating_request = scheduler.get_last_running_request()
-    assert migrating_request.request_id == str(num_seq_group)
-    migrating_request = scheduler.get_shortest_running_request()
-    assert migrating_request.request_id == "1"
-    migrating_request = scheduler.get_longest_running_request()
-    assert migrating_request.request_id == str(num_seq_group)
+    for req in scheduler.running:
+        assert req.inference_type == RequestInferenceType.DECODE
 
 def test_scheduler_num_killed_request():
     scheduler = initialize_scheduler()
@@ -152,56 +143,3 @@ def test_scheduler_pre_alloc():
     assert len(scheduler.pre_alloc_cache_dict["1"]) == 6
     blocks = scheduler.pre_alloc("2,", 4)
     assert len(blocks) == 0
-
-def test_scheduler_should_abort_migration():
-    scheduler = initialize_scheduler()
-    # tot 8 blocks
-    block_size = 4
-    _, seq_group_0 = create_dummy_prompt("0", prompt_length=7, block_size=block_size)
-    scheduler.add_seq_group(seq_group_0)
-    _, seq_group_1 = create_dummy_prompt("1", prompt_length=17, block_size=block_size)
-    scheduler.add_seq_group(seq_group_1)
-    # remain 0 blocks
-    _, out = schedule_and_update_computed_tokens(scheduler)
-    append_new_token(out, 1)
-
-    assert scheduler._get_num_killed_requests() == 0
-    # assert scheduler.block_manager.get_num_free_gpu_blocks() == 0
-    # all in running queue
-    _, out = schedule_and_update_computed_tokens(scheduler)
-    append_new_token(out, 1)
-    assert scheduler._get_num_killed_requests() == 0
-    migrating_request = scheduler.get_last_running_request()
-    last_stage_time = time.time()
-    assert migrating_request.request_id == "1"
-    # preempt request 1
-    _, out = schedule_and_update_computed_tokens(scheduler)
-    append_new_token(out, 1)
-    assert scheduler.should_abort_migration(seq_group_1, last_stage_time)
-    assert not scheduler.should_abort_migration(seq_group_0, last_stage_time)
-    assert scheduler._get_num_killed_requests() == 1
-    scheduler.remove_running_request(seq_group_0)
-    scheduler.free_src_request(seq_group_0)
-    # free request 0, requset 1 prefill
-    _, out = schedule_and_update_computed_tokens(scheduler)
-    append_new_token(out, 1)
-    assert scheduler._get_num_killed_requests() == 0
-    assert scheduler.should_abort_migration(seq_group_1, last_stage_time)
-
-def test_free_dst_pre_alloc_cache():
-    scheduler = initialize_scheduler()
-    scheduler.pre_alloc("1", 2)
-    scheduler.pre_alloc("1", 4)
-    assert len(scheduler.pre_alloc_cache_dict["1"]) == 6
-    scheduler.free_dst_pre_alloc_cache("1")
-    assert scheduler.pre_alloc_cache_dict.get("1", None) is None
-    assert scheduler.block_manager.get_num_free_gpu_blocks() == 8
-
-def test_get_request_incremental_blocks():
-    scheduler = initialize_scheduler()
-    block_size = 4
-    _, seq_group = create_dummy_prompt("0", prompt_length=16, block_size=block_size)
-    scheduler.add_seq_group(seq_group)
-    schedule_and_update_computed_tokens(scheduler)
-    incremental_blocks = scheduler.get_request_incremental_blocks(seq_group, 2)
-    assert len(incremental_blocks) == 2

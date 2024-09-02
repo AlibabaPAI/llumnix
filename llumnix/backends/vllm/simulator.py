@@ -62,8 +62,6 @@ class BackendSimVLLM(BackendVLLM):
         self.migration_config = migration_config
         self.instance_id = instance_id
         self.step_counter = Counter()
-        self.scaling_down = False
-        self.request_server_info = {}
 
     def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         self.engine.model_executor.send_blocks(len(src_blocks))

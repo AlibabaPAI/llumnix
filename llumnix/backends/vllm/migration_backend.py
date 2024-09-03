@@ -18,7 +18,7 @@ from func_timeout import func_set_timeout, FunctionTimedOut
 import ray
 import ray.util.collective as col
 from vllm.worker.cache_engine import CacheEngine
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logger import init_logger
 

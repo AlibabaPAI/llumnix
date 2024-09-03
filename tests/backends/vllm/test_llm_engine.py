@@ -30,7 +30,7 @@ from .utils import create_dummy_prompt, initialize_scheduler
 
 
 class MockEngine(LLMEngineLlumnix):
-    def __init__(self, executor_class=None, *args, **kwargs):
+    def __init__(self, *args, executor_class=None, **kwargs):
         self.scheduler = initialize_scheduler()
         detokenizer = MagicMock(spec=Detokenizer)
         stop_checker = MagicMock(spec=StopChecker)
@@ -45,7 +45,6 @@ class MockEngine(LLMEngineLlumnix):
 
 
 def test_llm_engine_process_model_outputs():
-
     llm_engine = MockEngine()
     _, seq_group_0 = create_dummy_prompt(
         "0", prompt_length=7, block_size=4

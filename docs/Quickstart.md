@@ -42,15 +42,14 @@ You only need two simple steps to migrate from a deployed vLLM service to Llumni
 1. Replace the original vLLM server entrypoint with the Llumnix one.
 ```
 python -m llumnix.entrypoints.vllm.api_server \
-    --host $HOST \
-    --port $PORT \
-    # Llumnix arguments ...
+    --config-file $CONFIG_PATH \
     # vLLM arguments ...
+    # Llumnix arguments ...
     ...
 ```
 
 Upon starting the server, Llumnix's components are automatically configured.
-In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.4.2/models/engine_args.html).
+In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](../llumnix/config/default.py) and [vLLM arguments](https://docs.vllm.ai/en/v0.4.2/models/engine_args.html).
 
 2. Launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster.
 ```
@@ -69,7 +68,7 @@ During the execution of serving deployment, Llumnix will:
 Following these steps, Llumnix acts as the request scheduling layer situated behind the multiple frontend API servers and above the multiple backend vLLM engine instances. This positioning allows Llumnix to significantly enhance serving performance through its dynamic, fine-grained, and KV-cache-aware request scheduling and rescheduling across instances.
 
 ## Ray Cluster Notice
-When you include the --launch-ray-cluster option in Llumnix's serving deployment command, Llumnix automatically builds a Ray cluster during the execution of serving deployment. This action will overwrite any existing Ray cluster. If this behavior is not desired, simply omit the --launch-ray-cluster option, and Llumnix will initiate its actor components within the current Ray cluster.
+When you set RAY.LAUNCH_CLUSTER to True, Llumnix automatically builds a Ray cluster during the execution of serving deployment. This action will overwrite any existing Ray cluster. If this behavior is not desired, simply omit the RAY.LAUNCH_CLUSTER option, and Llumnix will initiate its actor components within the current Ray cluster.
 
 
 # Benchmarking
@@ -77,16 +76,15 @@ We provide a benchmarking example to help you get through the usage of Llumnix.
 First, you should start the server to launch Llumnix and backend LLM engine instances:
 ```
 HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
-                --host $HOST \
-                --port $PORT \
-                --initial-instances $INITIAL_INSTANCES \
-                --launch-ray-cluster \
+                --config-file $CONFIG_PATH \
                 --model $MODEL_PATH \
                 --engine-use-ray \
                 --worker-use-ray \
-                --max-model-len 4096
+                --max-model-len 4096 \
+                MANAGER.INITIAL_INSTANCES 1 \
+                RAY.LAUNCH_CLUSTER True
 ```
-`INITIAL_INSTANCES` determines the number of instances to be launched on the current node, while `MODEL_PATH` defines the location of your model.
+`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node, 
 
 Second, you can run the benchmark to evaluate the serving performance:
 

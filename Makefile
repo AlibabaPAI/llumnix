@@ -21,7 +21,11 @@ install:
 
 .PHONY: lint
 lint: check_pylint_installed
-	@pylint --rcfile=.pylintrc -s n ./llumnix ./tests --exit-zero
+	@pylint --rcfile=.pylintrc -s n ./llumnix --exit-zero
+	
+	@pylint --rcfile=.pylintrc \
+			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
+			-s n ./tests --exit-zero
 
 .PHONY: test
 test: check_pytest_installed

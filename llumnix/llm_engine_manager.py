@@ -24,7 +24,7 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo
-from llumnix.config import GlobalSchedulerConfig
+from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo

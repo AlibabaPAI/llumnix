@@ -146,7 +146,7 @@ function-rgx=^(?:(?P<camel_case>_?[A-Z][a-zA-Z0-9]*)|(?P<snake_case>_?[a-z][a-z0
 method-rgx=^(?:(?P<exempt>__[a-z0-9_]+__|next)|(?P<camel_case>_{0,2}[A-Z][a-zA-Z0-9]*)|(?P<snake_case>_{0,2}[a-z][a-z0-9_]*))$
 
 # Regular expression which should only match correct instance attribute names
-attr-rgx=^_{0,2}[a-z][a-z0-9_]*$
+attr-rgx=^_{0,2}([a-z][a-z0-9_]*|[A-Z][A-Z_]+)$
 
 # Regular expression which should only match correct argument names
 argument-rgx=^[a-z][a-z0-9_]*$

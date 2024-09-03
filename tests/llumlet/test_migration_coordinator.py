@@ -14,15 +14,14 @@
 from unittest.mock import MagicMock, patch
 
 import ray
-import pytest
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.llumlet.llumlet import MigrationStatus
-from .test_local_migration_scheduler import MockRequest
 
 from tests.utils import setup_ray_env
 
+from .test_local_migration_scheduler import MockRequest
 
 @ray.remote
 def ray_remote_call(ret):

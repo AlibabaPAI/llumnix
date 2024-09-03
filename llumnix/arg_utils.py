@@ -16,12 +16,11 @@ from dataclasses import dataclass
 import argparse
 from typing import Tuple
 
-from llumnix.config import GlobalSchedulerConfig, MigrationConfig
-
+from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
+from llumnix.config import LlumnixConfig
 
 @dataclass
 class EngineManagerArgs:
-    launch_ray_cluster: bool = True
     disable_init_instance_by_manager: bool = False
     initial_instances: int = 1
     disable_fixed_node_init_instance: bool = False
@@ -84,16 +83,34 @@ class EngineManagerArgs:
         return migration_config
 
     @classmethod
-    def from_cli_args(cls, args: argparse.Namespace) -> 'EngineManagerArgs':
+    def from_llumnix_config(cls, cfg: LlumnixConfig) -> 'EngineManagerArgs':
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
-        engine_manager_args = cls(**{attr: getattr(args, attr) for attr in attrs})
+        engine_manager_args = cls(**{attr: getattr(cfg.MANAGER, attr.upper()) for attr in attrs})
         cls._check_args(engine_manager_args)
         return engine_manager_args
 
     @classmethod
-    def _check_args(cls, args):
+    def _check_args(cls, args: 'EngineManagerArgs'):
+        assert args.load_metric in ['remaining_steps', 'usage_ratio'], \
+            ("Invalid load metric: {}".format(args.load_metric))
+
+        assert args.dispatch_policy in ['balanced', 'load', 'queue', 'flood'], \
+            ("Invalid dispatch policy: {}".format(args.dispatch_policy))
+
+        assert args.pair_migration_policy in ['balanced', 'defrag_constrained', 'defrag_relaxed'], \
+            ("Invalid pair migration policy: {}".format(args.pair_migration_policy))
+
+        assert args.request_migration_policy in ['LCFS', 'SJF', 'LJF'], \
+            ("Invalid request migration policy: {}".format(args.request_migration_policy))
+
+        assert args.migration_backend in ['rpc', 'gloo', 'nccl'], \
+            ("Invalid migration backend: {}".format(args.migration_backend))
+
+        assert args.scaling_policy in ['max_load', 'avg_load'], \
+            ("Invalid scaling policy: {}".format(args.scaling_policy))
+
         assert args.migration_backend != 'gloo' or (args.migration_backend == 'gloo' \
             and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \
             ("When using gloo as migration backend, "

@@ -18,8 +18,6 @@ from multiprocessing import Pool
 from pathlib import Path
 import pytest
 import requests
-import ray
-
 
 def _query_server(prompt: str, max_tokens: int = 5, interface: str = 'generate') -> dict:
     response = requests.post("http://localhost:8000/{}".format(interface),
@@ -51,6 +49,7 @@ def api_server():
         str(script_path),
         "--host", "127.0.0.1",
     ]
+    # pylint: disable=consider-using-with
     uvicorn_process = subprocess.Popen(commands)
     yield
     uvicorn_process.terminate()

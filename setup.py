@@ -26,13 +26,30 @@ def get_requirements() -> List[str]:
         requirements = f.read().strip().split("\n")
     return requirements
 
+def readme():
+    with open('README.md', encoding='utf-8') as f:
+        content = f.read()
+    return content
+
 setup(
     name='llumnix',
-    version='0.0.1',
+    version='0.0.2',
+    python_requires='>=3.8.1, <3.11',
+    description='Efficient and easy multi-instance LLM serving',
+    long_description=readme(),
+    long_description_content_type="text/markdown",
+    author='Llumnix Team',
+    url='https://github.com/AlibabaPAI/llumnix',
+    license="Apache 2.0",
     packages=find_packages(),
     install_requires=get_requirements(),
-    author='Llumnix Team',
-    description='Efficient and easy multi-instance LLM serving',
-    license="Apache 2.0",
-    url='https://github.com/AlibabaPAI/llumnix',
+    platforms=["all"],
+    classifiers=[
+          'Programming Language :: Python',
+          'Programming Language :: Python :: 3.8',
+          'Programming Language :: Python :: 3.9',
+          'Programming Language :: Python :: 3.10',
+          "License :: OSI Approved :: Apache Software License",
+          "Topic :: Scientific/Engineering :: Artificial Intelligence",
+      ],
 )

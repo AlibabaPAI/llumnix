@@ -64,6 +64,7 @@ async def _background_process_outputs():
             if request_output.finished:
                 request_streams[request_id].finish()
                 del request_streams[request_id]
+        await asyncio.sleep(0.1)
 
 # pylint: disable=unused-argument
 @asynccontextmanager

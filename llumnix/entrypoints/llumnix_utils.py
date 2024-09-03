@@ -180,6 +180,8 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
                             engine_args,
                             node_id: str,
                             server_info: ServerInfo) -> Tuple[LLMEngineManager, List[Llumlet], QueueServer]:
+    request_output_queue = init_request_output_queue(server_info)
+
     engine_manager = init_manager(engine_manager_args)
     if engine_manager_args.disable_init_instance_by_manager:
         instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id)
@@ -208,7 +210,5 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
                                   available_instance_ids, available_llumlets)
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
                     .format(len(available_instance_ids), available_instance_ids))
-
-    request_output_queue = init_request_output_queue(server_info)
 
     return engine_manager, available_instance_ids, available_llumlets, request_output_queue

@@ -19,7 +19,7 @@ import zmq
 import zmq.asyncio
 import cloudpickle
 
-from llumnix.rpc.utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR,
+from llumnix.rpc.utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR, RPC_SOCKET_LIMIT_CUTOFF,
                                RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
 
 class Empty(Exception):
@@ -32,10 +32,27 @@ class Full(Exception):
 class QueueServer:
     def __init__(self, rpc_path: str, maxsize=0):
         self.context = zmq.asyncio.Context()
+
+        # Maximum number of sockets that can be opened (typically 65536).
+        # ZMQ_SOCKET_LIMIT (http://api.zeromq.org/4-2:zmq-ctx-get)
+        socket_limit = self.context.get(zmq.constants.SOCKET_LIMIT)
+        if socket_limit < RPC_SOCKET_LIMIT_CUTOFF:
+            raise ValueError(
+                f"Found zmq.constants.SOCKET_LIMIT={socket_limit}, which caps "
+                "the number of concurrent requests vLLM can process. Launch "
+                "vLLM with --disable-frontend-multiprocessing and open a "
+                "GitHub issue so we can investigate.")
+
+        # We only have 1 ipc connection that uses unix sockets, so
+        # safe to set MAX_SOCKETS to the zmq SOCKET_LIMIT (i.e. will
+        # not run into ulimit issues)
+        self.context.set(zmq.constants.MAX_SOCKETS, socket_limit)
+
         self.socket = self.context.socket(zmq.constants.ROUTER)
         self.socket.set_hwm(RPC_ZMQ_HWM)
         self.socket.bind(rpc_path)
         print("QueueServer's socket bind to:", rpc_path)
+
         self.maxsize = maxsize
         self.queue = asyncio.Queue(maxsize)
 

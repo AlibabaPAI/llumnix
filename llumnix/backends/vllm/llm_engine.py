@@ -17,7 +17,6 @@ from collections import defaultdict
 import threading
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.queue import Queue as RayQueue
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup

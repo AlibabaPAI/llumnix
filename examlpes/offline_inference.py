@@ -31,12 +31,12 @@ ray_cluster_port=37000
 launch_ray_cluster(ray_cluster_port=ray_cluster_port)
 connect_to_ray_cluster(port=ray_cluster_port)
 
-# Set manager args and engine args
+# Set manager args and engine args.
 manager_args = EngineManagerArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370)
 
-# Create llumlets
+# Create llumlets.
 llumlet_ids: List[str] = None
 llumlets: List[Llumlet] = None
 llumlet_ids, llumlets = init_llumlets(manager_args, engine_args,
@@ -86,7 +86,7 @@ async def main():
 
 asyncio.run(main())
 
-# kill all actor, as detach actor will not be killed by ray.shutdown
+# Kill all actor, as detach actor will not be killed by ray.shutdown.
 named_actors = ray.util.list_named_actors(True)
 for actor in named_actors:
     try:
@@ -98,5 +98,5 @@ for actor in named_actors:
     except:
         continue
 
-# shutdown ray cluster
+# Shutdown ray cluster.
 ray.shutdown()

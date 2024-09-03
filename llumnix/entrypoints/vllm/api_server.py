@@ -28,19 +28,21 @@ from vllm.engine.async_llm_engine import AsyncStream
 
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo
-from llumnix.entrypoints.llumnix_utils import (launch_ray_cluster, connect_to_ray_cluster,
-                                                is_gpu_available, init_llumnix_components)
+from llumnix.entrypoints.llumnix_utils import (get_ip_address,
+                                               launch_ray_cluster, connect_to_ray_cluster,
+                                               is_gpu_available, init_llumnix_components)
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.backends.vllm.utils import check_engine_args
+from llumnix.rpc.queue_server import QueueServer
 
 logger = init_logger(__name__)
 engine_manager = None
 instances = {}
 instance_num_requests: Dict[str, int] = {}
 # request_output_queue could be None if initialzed in lifespan.
-request_output_queue = None
-server_id = None
+request_output_queue: QueueServer = None
+server_info = None
 TIMEOUT_KEEP_ALIVE = 5  # seconds.
 request_streams: Dict[str, AsyncStream] = {}
 log_requests = None
@@ -51,8 +53,11 @@ manager_available = True
 
 async def _background_process_outputs():
     while True:
-        qsize = await request_output_queue.actor.qsize.remote()
-        request_outputs = await request_output_queue.actor.get_nowait_batch.remote(qsize)
+        print("Before get request_outputs")
+        request_outputs = await request_output_queue.get()
+        # qsize = request_output_queue.qsize()
+        # request_outputs = request_output_queue.get_nowait_batch(qsize)
+        print("After get request_outputs")
         for request_output in request_outputs:
             request_id = request_output.request_id
             # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
@@ -77,7 +82,6 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
     results_generator = AsyncStream(request_id)
     request_streams[request_id] = results_generator
     # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
-    server_info = ServerInfo(server_id, request_output_queue)
     # If manager is unavailable, request will be directly added to the llumlet held by api server.
     global manager_available
     try:
@@ -235,6 +239,7 @@ if __name__ == "__main__":
     parser.add_argument('--launch-ray-cluster',
                         action='store_true',
                         help='if launch ray cluster in api server')
+    parser.add_argument("--request-output-queue-port", type=int, default=1234)
 
     parser = EngineManagerArgs.add_cli_args(parser)
     parser = AsyncEngineArgs.add_cli_args(parser)
@@ -257,9 +262,12 @@ if __name__ == "__main__":
     if is_gpu_available():
         # Launch the Llumnix componets on current node.
         server_id = random_uuid()
+        ip = get_ip_address()
+        server_info = ServerInfo(server_id, ip, args.request_output_queue_port)
         node_id = ray.get_runtime_context().get_node_id()
         engine_manager, instance_ids, llumlets, request_output_queue = \
-            init_llumnix_components(engine_manager_args, engine_args, node_id)
+            init_llumnix_components(engine_manager_args, engine_args, node_id, server_info)
+        print("request_output_queue: {}".format(request_output_queue))
 
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]

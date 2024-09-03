@@ -26,6 +26,7 @@ from llumnix.arg_utils import EngineManagerArgs
 
 app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
+# @@@
 request_output_queue = RayQueue()
 llumnix.entrypoints.vllm.api_server.request_output_queue = request_output_queue
 MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME

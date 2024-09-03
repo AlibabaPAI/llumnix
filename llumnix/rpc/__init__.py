@@ -10,12 +10,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-class ServerInfo:
-    def __init__(self,
-                 server_id: str,
-                 request_output_queue_ip: str,
-                 request_output_queue_port: int) -> None:
-        self.server_id = server_id
-        self.request_output_queue_ip = request_output_queue_ip
-        self.request_output_queue_port = request_output_queue_port

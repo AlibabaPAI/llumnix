@@ -94,6 +94,7 @@ def test_migration_correctness(setup_ray_env):
 
     # running without migration
     def test_correctness(prompt):
+        # @@@
         sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
         request_id0 = random_uuid()
         llumlet_0.generate.remote(request_id0, server_info, prompt, sampling_params)

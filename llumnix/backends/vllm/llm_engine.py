@@ -32,13 +32,36 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
-from llumnix.backends.vllm.utils import detect_unsupported_feature
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.config import MigrationConfig
+from llumnix.rpc.queue_client import QueueClient
 
 
 logger = init_logger(__name__)
+
+@ray.remote(num_cpus=0)
+class AsyncActor:
+    def __init__(self, instance_id):
+        logger.info("Before create QueueClient")
+        self.request_output_queue_client = QueueClient()
+        logger.info("After create QueueClient")
+        self.instance_id = instance_id
+        self.engine_actor_handle = None
+
+    async def put_nowait_batch_to_server(self, 
+                                         server_request_outputs: Dict[str, List[RequestOutput]], 
+                                         server_info_dict: Dict[str, ServerInfo]) -> None:
+        if self.engine_actor_handle is None:
+            self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
+        for server_id, req_outputs in server_request_outputs.items():
+            try:
+                server_info = server_info_dict[server_id]
+                await self.request_output_queue_client.put_nowait_batch(req_outputs, server_info)
+            except TimeoutError:
+                logger.info("Server {} is dead".format(server_id))
+                request_ids = [req_output.request_id for req_output in req_outputs]
+                self.engine_actor_handle.abort_request.remote(request_ids)
 
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self, instance_id: str, *arg, **kwargs) -> None:
@@ -46,6 +69,8 @@ class LLMEngineLlumnix(LLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
+        self.async_actor = AsyncActor.remote(instance_id)
+        self.request_server_info: Dict[str, ServerInfo] = {}
 
     # pylint: disable=W0221
     @classmethod
@@ -61,7 +86,6 @@ class LLMEngineLlumnix(LLMEngine):
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
-        detect_unsupported_feature(engine_args)
         engine_config = engine_args.create_engine_config()
         engine_config.parallel_config.placement_group = placement_group
         # Initialize the cluster and specify the executor class.
@@ -133,7 +157,8 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        self._put_request_output_to_server(output_list, server_info_list)
+        if output_list:
+            self._put_request_outputs_to_server(output_list, server_info_list)
         self.instance_info = instance_info
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -152,23 +177,16 @@ class LLMEngineLlumnix(LLMEngine):
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, [seq_group.get_seqs()[0]], seq_group.sampling_params,
                                   seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
 
-    def _put_request_output_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
+    def _put_request_outputs_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
-        server_queue: Dict[str, RayQueue] = {}
+        server_info_dict = {}
         # Reorganize data in orther to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            request_output_queue = server_info.request_output_queue
             server_request_outputs[server_id].append(request_output)
-            if server_id not in server_queue:
-                server_queue[server_id] = request_output_queue
-        for server_id, req_outputs in server_request_outputs.items():
-            try:
-                server_queue[server_id].actor.put_nowait_batch.remote(req_outputs)
-            except ray.exceptions.RayActorError:
-                logger.info("Server {} is dead".format(server_id))
-                request_ids = [req_output.request_id for req_output in req_outputs]
-                self.abort_request(request_ids)
+            if server_id not in server_info_dict:
+                server_info_dict[server_id] = server_info
+        self.async_actor.put_nowait_batch_to_server.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
     def __init__(

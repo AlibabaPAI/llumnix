@@ -19,15 +19,15 @@ from typing import List, Tuple
 import asyncio
 import ray
 
-from ray.util.queue import Queue as RayQueue
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
-
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.backend_interface import BackendType
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
+from llumnix.rpc.utils import get_open_zmq_ipc_path
+from llumnix.server_info import ServerInfo
+from llumnix.rpc.queue_server import QueueServer
 
 
 logger = init_logger(__name__)
@@ -171,18 +171,17 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
         llumlets.append(llumlet)
     return instance_ids, llumlets
 
-def init_request_output_queue() -> RayQueue:
-    # request_output_queue should be placed in the same node as the api server.
-    request_output_queue = RayQueue(actor_options={
-        "scheduling_strategy": NodeAffinitySchedulingStrategy(
-            node_id=ray.get_runtime_context().get_node_id(),
-            soft=False,)
-    })
+def init_request_output_queue(server_info: ServerInfo) -> QueueServer:
+    rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
+    print("rpc_path: ", rpc_path)
+    request_output_queue = QueueServer(rpc_path)
+    print("init_request_output_queue done.")
     return request_output_queue
 
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,
                             engine_args,
-                            node_id: str) -> Tuple[LLMEngineManager, List[Llumlet], RayQueue]:
+                            node_id: str,
+                            server_info: ServerInfo) -> Tuple[LLMEngineManager, List[Llumlet], QueueServer]:
     engine_manager = init_manager(engine_manager_args)
     if engine_manager_args.disable_init_instance_by_manager:
         instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id)
@@ -212,6 +211,6 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
                     .format(len(available_instance_ids), available_instance_ids))
 
-    request_output_queue = init_request_output_queue()
+    request_output_queue = init_request_output_queue(server_info)
 
     return engine_manager, available_instance_ids, available_llumlets, request_output_queue

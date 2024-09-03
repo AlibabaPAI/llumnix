@@ -173,9 +173,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
 
 def init_request_output_queue(server_info: ServerInfo) -> QueueServer:
     rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
-    print("rpc_path: ", rpc_path)
     request_output_queue = QueueServer(rpc_path)
-    print("init_request_output_queue done.")
     return request_output_queue
 
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,

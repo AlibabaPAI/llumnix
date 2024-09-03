@@ -42,9 +42,7 @@ logger = init_logger(__name__)
 @ray.remote(num_cpus=0)
 class AsyncActor:
     def __init__(self, instance_id):
-        logger.info("Before create QueueClient")
         self.request_output_queue_client = QueueClient()
-        logger.info("After create QueueClient")
         self.instance_id = instance_id
         self.engine_actor_handle = None
 
@@ -120,7 +118,7 @@ class LLMEngineLlumnix(LLMEngine):
     ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         # ensure scheduled_seq_groups matching output
         with self.scheduler.scheduler_lock:
-            server_info_list = []
+            server_infos = []
             if output:
                 new_output = []
                 new_scheduled_seq_groups = []
@@ -131,16 +129,16 @@ class LLMEngineLlumnix(LLMEngine):
                         new_scheduled_seq_groups.append(scheduled_seq_group)
                         new_seq_group_metadata_list.append(seq_group_meta)
                         new_output.append(seq_group_output)
-                        server_info_list.append(seq_group.server_info)
+                        server_infos.append(seq_group.server_info)
                 scheduled_seq_groups = new_scheduled_seq_groups
                 output[0].outputs = new_output
                 seq_group_metadata_list = new_seq_group_metadata_list
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
-            # TODO(ZeldaHuang) Use LlumnixRequestOutput to store llumnix output args.
-            return request_outputs, server_info_list
+            # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
+            return request_outputs, server_infos
 
     def step(self) -> None:
-        output_list, server_info_list = super().step()
+        request_outputs, server_infos = super().step()
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -156,8 +154,8 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        if output_list:
-            self._put_request_outputs_to_server(output_list, server_info_list)
+        if request_outputs:
+            self._put_request_outputs_to_server(request_outputs, server_infos)
         self.instance_info = instance_info
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -230,8 +228,7 @@ class BackendVLLM(BackendInterface):
                     *args,
                     **kwargs) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        self.engine.request_server_info[request_id] = server_info
-        self.engine.add_request(request_id, *args, **kwargs)
+        self.engine.add_request(request_id, server_info, *args, **kwargs)
 
     def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]

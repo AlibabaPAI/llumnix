@@ -53,11 +53,8 @@ manager_available = True
 
 async def _background_process_outputs():
     while True:
-        print("Before get request_outputs")
-        request_outputs = await request_output_queue.get()
-        # qsize = request_output_queue.qsize()
-        # request_outputs = request_output_queue.get_nowait_batch(qsize)
-        print("After get request_outputs")
+        qsize = request_output_queue.qsize()
+        request_outputs = request_output_queue.get_nowait_batch(qsize)
         for request_output in request_outputs:
             request_id = request_output.request_id
             # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
@@ -71,8 +68,10 @@ async def _background_process_outputs():
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
+    asyncio.create_task(request_output_queue.run_server_loop())
     asyncio.create_task(_background_process_outputs())
     yield
+    request_output_queue.cleanup()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -267,7 +266,6 @@ if __name__ == "__main__":
         node_id = ray.get_runtime_context().get_node_id()
         engine_manager, instance_ids, llumlets, request_output_queue = \
             init_llumnix_components(engine_manager_args, engine_args, node_id, server_info)
-        print("request_output_queue: {}".format(request_output_queue))
 
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]

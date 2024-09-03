@@ -13,7 +13,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Union
+from typing import Union, List, Any
 
 
 RPC_GET_DATA_TIMEOUT_MS: int = 5000
@@ -23,7 +23,7 @@ RPC_SUCCESS_STR = "SUCCESS"
 
 @dataclass
 class RPCPutNoWaitBatchQueueRequest:
-    items = None
+    items: List[Any] = None
 
 class RPCUtilityRequest(Enum):
     IS_SERVER_READY = 1

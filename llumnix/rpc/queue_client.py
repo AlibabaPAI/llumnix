@@ -48,6 +48,7 @@ class QueueClient:
         # not run into ulimit issues)
         self.context.set(zmq.constants.MAX_SOCKETS, socket_limit)
 
+    # This function is not called explicitly.
     def close(self):
         self.context.destroy()
 
@@ -109,6 +110,6 @@ class QueueClient:
                                server_info: ServerInfo):
         rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
         await self._send_one_way_rpc_request(
-                        request=RPCPutNoWaitBatchQueueRequest(items),
+                        request=RPCPutNoWaitBatchQueueRequest(items=items),
                         rpc_path=rpc_path,
                         error_message="Unable to put items into queue.")

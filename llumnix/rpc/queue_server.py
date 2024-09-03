@@ -35,6 +35,7 @@ class QueueServer:
         self.socket = self.context.socket(zmq.constants.ROUTER)
         self.socket.set_hwm(RPC_ZMQ_HWM)
         self.socket.bind(rpc_path)
+        print("QueueServer's socket bind to:", rpc_path)
         self.maxsize = maxsize
         self.queue = asyncio.Queue(maxsize)
 

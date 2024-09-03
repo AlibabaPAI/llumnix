@@ -212,8 +212,7 @@ class BackendVLLM(BackendInterface):
                     *args,
                     **kwargs) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        self.engine.request_server_info[request_id] = server_info
-        self.engine.add_request(request_id, *args, **kwargs)
+        self.engine.add_request(request_id, server_info, *args, **kwargs)
 
     def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]

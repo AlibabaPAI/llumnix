@@ -25,7 +25,7 @@ lint: check_pylint_installed
 
 .PHONY: test
 test: check_pytest_installed
-	@pytest -q -x --ignore=third_party/ --disable-warnings
+	@pytest -x --ignore=third_party/ --disable-warnings
 
 #################### pygloo install for gloo migration backend begin ####################
 

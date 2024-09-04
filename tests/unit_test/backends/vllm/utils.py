@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import time
 from unittest.mock import MagicMock
 from typing import Iterable, Optional, Tuple
@@ -19,6 +20,7 @@ from vllm import SamplingParams
 from vllm.lora.request import LoRARequest
 from vllm.sequence import Logprob, Sequence
 from vllm.config import SchedulerConfig, CacheConfig
+from vllm.core.scheduler import SchedulingBudget
 
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
@@ -53,6 +55,7 @@ def create_dummy_prompt(
     lora_request: Optional[LoRARequest] = None,
     use_beam_search: bool = False,
     best_of: int = 1,
+    request_expected_steps: int = math.inf,
 ) -> Tuple[Sequence, SequenceGroupLlumnix]:
     if not block_size:
         block_size = prompt_length
@@ -63,7 +66,7 @@ def create_dummy_prompt(
     prompt_str = " ".join([str(t) for t in prompt_tokens])
     prompt = Sequence(int(request_id), prompt_str, prompt_tokens, block_size)
     seq_group = SequenceGroupLlumnix(
-        request_id, None, [prompt],
+        request_id, None, request_expected_steps, [prompt],
         SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
         time.time(), lora_request)
 
@@ -103,6 +106,7 @@ def create_seq_group(
     seq_group = SequenceGroupLlumnix(
         request_id=request_id,
         server_info=None,
+        request_expected_steps=math.inf,
         seqs=seqs,
         sampling_params=sampling_params,
         arrival_time=time.time(),
@@ -110,6 +114,12 @@ def create_seq_group(
 
     return seq_group
 
+def create_token_budget(token_budget: int = 10000,
+                        max_num_seqs: int = 10000) -> SchedulingBudget:
+    return SchedulingBudget(
+        token_budget=token_budget,
+        max_num_seqs=max_num_seqs,
+    )
 
 def round_up_to_next_block(seq_len: int, block_size: int) -> int:
     return (seq_len + block_size - 1) // block_size

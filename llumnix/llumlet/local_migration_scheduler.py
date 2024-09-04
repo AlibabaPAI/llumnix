@@ -23,14 +23,28 @@ class LocalMigrationScheduler:
         self.backend_engine = backend_engine
 
     def get_migrate_out_request(self, min_request_len=0, max_request_len=np.inf) -> Optional[LlumnixRequest]:
-        migrate_out_request: LlumnixRequest = None
-        if self.request_migration_policy == 'LCFS':
-            migrate_out_request = self.get_last_running_request(min_request_len, max_request_len)
-        elif self.request_migration_policy == 'LJF':
-            migrate_out_request = self.get_longest_running_request(min_request_len, max_request_len)
-        elif self.request_migration_policy == 'SJF':
-            migrate_out_request = self.get_shortest_running_request(min_request_len, max_request_len)
+         # Requests meet the strict pre-migration always have higher prioirity than other migration policy.
+        migrate_out_request = self.get_ready_migration_request(min_request_len, max_request_len)
+        if migrate_out_request is None:
+            if self.request_migration_policy == 'LCFS':
+                migrate_out_request = self.get_last_running_request(min_request_len, max_request_len)
+            elif self.request_migration_policy == 'LJF':
+                migrate_out_request = self.get_longest_running_request(min_request_len, max_request_len)
+            elif self.request_migration_policy == 'SJF':
+                migrate_out_request = self.get_shortest_running_request(min_request_len, max_request_len)
         return migrate_out_request
+
+    # The function is used to retrieve requests on the backend that have already met the expected_steps.
+    # TODO(xinyi): Currently, the function is only used for Prefill-decoding disaggregation,
+    # and only selects request that migrates from the prefill instance to the decoding instance.
+    def get_ready_migration_request(self, min_request_len, max_request_len):
+        running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
+        for request in reversed(running):
+            if request.output_len >= request.expected_steps \
+                and request.inference_type == RequestInferenceType.DECODE \
+                and min_request_len <= request.request_len <= max_request_len:
+                return request
+        return None
 
     def get_last_running_request(self, min_request_len, max_request_len):
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()

@@ -40,7 +40,9 @@ class GlobalSchedulerConfig:
             enable_defrag: bool,
             scaling_policy: str,
             scale_up_threshold: float,
-            scale_down_threshold: float) -> None:
+            scale_down_threshold: float,
+            enable_pd_disagg: bool,
+            num_available_dispatch_instances: int) -> None:
         self.initial_instances = initial_instances
         self.load_metric = load_metric
 
@@ -53,3 +55,6 @@ class GlobalSchedulerConfig:
         self.scaling_policy = scaling_policy
         self.scale_up_threshold = scale_up_threshold*(-1)
         self.scale_down_threshold = scale_down_threshold*(-1)
+
+        self.enable_pd_disagg = enable_pd_disagg
+        self.num_available_dispatch_instances = num_available_dispatch_instances

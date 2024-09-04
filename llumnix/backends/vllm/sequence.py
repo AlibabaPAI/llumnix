@@ -17,9 +17,9 @@ from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 
 class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
-    def __init__(self, request_id, server_info, *args, **kwargs) -> None:
+    def __init__(self, request_id, server_info, request_expected_steps: int, *args, **kwargs) -> None:
         SequenceGroup.__init__(self, request_id, *args, **kwargs)
-        LlumnixRequest.__init__(self, request_id, server_info)
+        LlumnixRequest.__init__(self, request_id, server_info, request_expected_steps)
 
     @property
     def prompt_len(self) -> int:

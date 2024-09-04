@@ -195,7 +195,7 @@ class SchedulerLlumnix(Scheduler):
             instance_info.inference_type = self.running[-1].inference_type
         # TODO(ZeldaHuang) adapt chunked-prefill
         instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in self.running])\
-                                         if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
+                                            if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]
         return instance_info
 
@@ -205,8 +205,10 @@ class SchedulerLlumnix(Scheduler):
         self.update_instance_info_callback(self._get_instance_info())
         return seq_group_metadata_list, scheduler_outputs
 
-    @scheduler_lock
     def add_seq_group(self, *args, **kwargs):
+        # The scheduler lock is mannually released in the end of LLMEngineLlumnix.add_request function.
+        # pylint: disable=R1732
+        self.scheduler_lock.acquire()
         return super().add_seq_group(*args, **kwargs)
 
     @scheduler_lock

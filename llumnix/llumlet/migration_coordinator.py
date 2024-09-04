@@ -53,7 +53,7 @@ class MigrationCoordinator:
         # live migration, transfer all blocks except last one(currently updating)
         migration_status = MigrationStatus.RUNNING
         is_last_stage = (len(incremental_blocks) <= self.last_stage_max_blocks)
-        if not is_last_stage:
+        if not is_last_stage and migrate_out_request.blocking_migration:
             src_blocks = incremental_blocks[:-1]
             stage_block_num = len(incremental_blocks) - 1
             dst_blocks = ray.get(migrate_in_ray_actor.execute_migration_method \
@@ -70,7 +70,7 @@ class MigrationCoordinator:
 
         if len(dst_blocks) != len(src_blocks):
             # migrate-in instance failed to prev alloc
-            if is_last_stage:
+            if is_last_stage or not migrate_out_request.blocking_migration:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             migration_status = MigrationStatus.FINISHED_ABORTED
@@ -80,7 +80,7 @@ class MigrationCoordinator:
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)
         # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
         self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
-        if not is_last_stage and migrate_out_request.should_abort_migration():
+        if not is_last_stage and migrate_out_request.blocking_migration and migrate_out_request.should_abort_migration():
             # migrate-out request abort by scheduler during send/recv
             migration_status = MigrationStatus.FINISHED_ABORTED
 

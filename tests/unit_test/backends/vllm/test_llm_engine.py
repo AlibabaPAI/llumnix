@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from unittest.mock import MagicMock
 import ray
 
@@ -109,7 +110,8 @@ def test_llm_engine_add_requset():
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     llm_engine.scheduler.scheduler_lock = MagicMock()
     server_info = ServerInfo(None, None, None, None, None)
-    llm_engine.add_request("0", server_info, "prompt", sampling_params)
+    llm_engine.add_request("0", server_info, math.inf, "prompt", sampling_params)
     assert len(llm_engine.scheduler.waiting) == 1
     assert llm_engine.scheduler.waiting[-1].request_id == "0"
+    assert llm_engine.scheduler.waiting[-1].expected_steps == math.inf
     assert isinstance(llm_engine.scheduler.waiting[-1], LlumnixRequest)

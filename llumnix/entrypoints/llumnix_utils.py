@@ -137,7 +137,6 @@ def init_llumlets(engine_manager_args: EngineManagerArgs, engine_args, node_id: 
 
     instance_ids = [random_uuid() for _ in range(engine_manager_args.initial_instances)]
     migration_configs = engine_manager_args.create_migration_config()
-
     for idx in range(engine_manager_args.initial_instances):
         instance_id = instance_ids[idx]
         if not engine_manager_args.profiling_result_file_path:

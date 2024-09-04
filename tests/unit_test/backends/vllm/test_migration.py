@@ -17,7 +17,7 @@ import pytest
 import ray
 
 from vllm import EngineArgs, SamplingParams
-from vllm.utils import random_uuid
+from llumnix.utils import random_uuid
 
 from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet

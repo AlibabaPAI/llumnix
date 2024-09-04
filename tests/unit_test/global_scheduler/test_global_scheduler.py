@@ -11,19 +11,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import pytest
-
-from vllm.utils import random_uuid
 
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo
+from llumnix.utils import random_uuid
 
 from .test_llm_engine_manager import get_instance_info_migrate_in, get_instance_info_migrate_out
 
 
 def init_global_scheduler():
-    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', 'defrag_constrained', 3.0, True, 'avg_load', 10, 60)
+    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', 'defrag_constrained', 3.0, True, 'avg_load', 10, 60, False, -1)
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler
 
@@ -70,8 +70,9 @@ def test_dispatch(global_scheduler):
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
     global_scheduler.scale_up(instance_ids)
     global_scheduler.update_instance_infos(instance_infos)
-    instance_id = global_scheduler.dispatch()
+    instance_id, request_expected_steps = global_scheduler.dispatch()
     assert instance_id in instance_ids
+    assert request_expected_steps == math.inf
 
 def test_pair_migration(global_scheduler):
     instance_id = random_uuid()
@@ -82,6 +83,6 @@ def test_pair_migration(global_scheduler):
     instance_infos = [instance_info_migrate_in, instance_info_migrate_out]
     global_scheduler.scale_up(instance_ids)
     global_scheduler.update_instance_infos(instance_infos)
-    migrate_instace_pairs = global_scheduler.pair_migration()
+    migrate_instace_pairs = global_scheduler.pair_migration("NO_CONSTRAINTS")
     assert migrate_instace_pairs[0][0] == instance_id_1
     assert migrate_instace_pairs[0][1] == instance_id

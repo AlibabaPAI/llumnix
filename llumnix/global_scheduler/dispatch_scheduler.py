@@ -24,11 +24,14 @@ logger = init_logger(__name__)
 class DispatchScheduler:
     def __init__(self,
                  dispatch_policy: str,
-                 instance_load_calculator: InstanceLoadCalculator) -> None:
+                 instance_load_calculator: InstanceLoadCalculator,
+                 num_available_dispatch_instances: int) -> None:
         self.dispatch_policy = DispatchPolicyFactory.get_policy(dispatch_policy)
         self.instance_load_calculator = instance_load_calculator
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
+        self.available_dispatch_instance_set: Set[str] = set()
+        self.num_available_dispatch_instances = num_available_dispatch_instances
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = {}
         self.sorted_instance_infos: List[InstanceInfo] = None
@@ -56,22 +59,27 @@ class DispatchScheduler:
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
-        self.instance_num_requests[instance_id] = 0
+        if self.num_available_dispatch_instances == -1 or (self.num_available_dispatch_instances > 0 and
+            len(self.available_dispatch_instance_set) < self.num_available_dispatch_instances):
+            self.available_dispatch_instance_set.add(instance_id)
+            self.instance_num_requests[instance_id] = 0
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
         self.num_instances = len(self.instance_id_set)
-        del self.instance_num_requests[instance_id]
+        if instance_id in self.instance_num_requests:
+            del self.instance_num_requests[instance_id]
 
     def _sort_instance_infos(self,
                             descending: bool = True) -> None:
         instance_infos: List[InstanceInfo] = list(self.instance_info.values())
+        available_instance_infos = [info for info in instance_infos if info.instance_id in self.available_dispatch_instance_set]
         if isinstance(self.dispatch_policy, Queue):
             key_attr = 'num_waiting_requests'
         else:
             key_attr = 'instance_load_dispatch_scale'
         self.sorted_instance_infos = sorted(
-            instance_infos,
+            available_instance_infos,
             key=lambda instance_info: getattr(instance_info, key_attr),
             reverse=descending
         )

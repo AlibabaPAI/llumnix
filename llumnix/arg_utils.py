@@ -21,6 +21,10 @@ from typing import Tuple
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
+from llumnix.common.config import get_cfg
+from llumnix.logger import init_logger
+
+logger = init_logger(__name__)
 
 @dataclass
 class EngineManagerArgs:
@@ -65,9 +69,17 @@ class EngineManagerArgs:
             if getattr(self, attr.name) is None:
                 setattr(self, attr.name, getattr(_C.MANAGER, attr.name.upper()))
 
+    config_file: str = None
     def create_global_scheduler_configs(
         self,
     ) -> Tuple[GlobalSchedulerConfig]:
+
+        # Provide default configuration.
+        config_data = get_cfg()
+        if self.config_file:
+            config_data.merge_from_file(self.config_file)
+
+        # Create the GlobalScheduler Configuration.
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.load_metric,
                                                         self.dispatch_policy,
@@ -76,7 +88,9 @@ class EngineManagerArgs:
                                                         self.enable_defrag,
                                                         self.scaling_policy,
                                                         self.scale_up_threshold,
-                                                        self.scale_down_threshold)
+                                                        self.scale_down_threshold,
+                                                        config_data.PDD_CONFIG.ENABLE_PREFILL_DISAGGREATION,
+                                                        config_data.PDD_CONFIG.PREFILL_INSTANCE_NUM)
         return global_scheduler_config
 
     def create_migration_config(self) -> MigrationConfig:
@@ -211,5 +225,8 @@ class EngineManagerArgs:
         parser.add_argument('--max-stages',
                             type=int,
                             help='drop migration if the number of stages > max_stages')
-
+        parser.add_argument("--config-file",
+                            type=str,
+                            default=EngineManagerArgs.config_file,
+                            help="path to the configuration file")
         return parser

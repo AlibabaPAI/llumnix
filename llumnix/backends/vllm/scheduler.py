@@ -205,7 +205,6 @@ class SchedulerLlumnix(Scheduler):
         self.update_instance_info_callback(self._get_instance_info())
         return seq_group_metadata_list, scheduler_outputs
 
-    @scheduler_lock
     def add_seq_group(self, *args, **kwargs):
         # The scheduler lock is mannually released in the end of LLMEngineLlumnix.add_request function.
         # pylint: disable=R1732

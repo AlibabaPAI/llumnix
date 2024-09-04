@@ -16,7 +16,6 @@ from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
 import threading
 import ray
-from ray.util.placement_group import PlacementGroup
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
@@ -46,8 +45,8 @@ class AsyncActor:
         self.instance_id = instance_id
         self.engine_actor_handle = None
 
-    async def put_nowait_batch_to_server(self, 
-                                         server_request_outputs: Dict[str, List[RequestOutput]], 
+    async def put_nowait_batch_to_server(self,
+                                         server_request_outputs: Dict[str, List[RequestOutput]],
                                          server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
@@ -134,7 +133,7 @@ class LLMEngineLlumnix(LLMEngine):
                 output[0].outputs = new_output
                 seq_group_metadata_list = new_seq_group_metadata_list
             for ignored_seq_group in ignored_seq_groups:
-                server_info_list.append(ignored_seq_group.server_info)
+                server_infos.append(ignored_seq_group.server_info)
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
             # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
             return request_outputs, server_infos
@@ -156,8 +155,7 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        if request_outputs:
-            self._put_request_outputs_to_server(request_outputs, server_infos)
+        self._put_request_outputs_to_server(request_outputs, server_infos)
         self.instance_info = instance_info
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:

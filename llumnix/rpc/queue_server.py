@@ -21,6 +21,9 @@ import cloudpickle
 
 from llumnix.rpc.utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR, RPC_SOCKET_LIMIT_CUTOFF,
                                RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
+from llumnix.logger import init_logger
+
+logger = init_logger(__name__)
 
 class Empty(Exception):
     pass
@@ -51,7 +54,7 @@ class QueueServer:
         self.socket = self.context.socket(zmq.constants.ROUTER)
         self.socket.set_hwm(RPC_ZMQ_HWM)
         self.socket.bind(rpc_path)
-        print("QueueServer's socket bind to:", rpc_path)
+        logger.info("QueueServer's socket bind to:", rpc_path)
 
         self.maxsize = maxsize
         self.queue = asyncio.Queue(maxsize)

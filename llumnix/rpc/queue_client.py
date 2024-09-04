@@ -39,9 +39,7 @@ class QueueClient:
         if socket_limit < RPC_SOCKET_LIMIT_CUTOFF:
             raise ValueError(
                 f"Found zmq.constants.SOCKET_LIMIT={socket_limit}, which caps "
-                "the number of concurrent requests vLLM can process. Launch "
-                "vLLM with --disable-frontend-multiprocessing and open a "
-                "GitHub issue so we can investigate.")
+                "the number of concurrent requests Llumnix can process.")
 
         # We only have 1 ipc connection that uses unix sockets, so
         # safe to set MAX_SOCKETS to the zmq SOCKET_LIMIT (i.e. will

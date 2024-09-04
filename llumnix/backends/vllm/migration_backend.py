@@ -13,7 +13,6 @@
 
 from typing import List
 import torch
-import cupy
 from func_timeout import func_set_timeout, FunctionTimedOut
 
 import ray
@@ -144,6 +143,9 @@ class RayColMigrationBackend(MigrationBackendBase):
     def __init__(self, migration_config: MigrationConfig, cache_engine: CacheEngine, local_rank,
                  scheduling_strategy, is_driver_worker, gpu_cache) -> None:
         super().__init__()
+
+        # pylint: disable=C0415
+        import cupy
 
         self.migration_config = migration_config
         self.cache_engine = cache_engine

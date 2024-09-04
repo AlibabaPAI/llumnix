@@ -15,6 +15,7 @@ from vllm.sequence import SequenceGroup
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
+
 class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
     def __init__(self, request_id, server_info, *args, **kwargs) -> None:
         SequenceGroup.__init__(self, request_id, *args, **kwargs)

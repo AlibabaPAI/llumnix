@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 from vllm.sequence import (Logprob, SequenceGroupOutput, SequenceOutput,
                            SequenceStatus,SamplerOutput)
-from vllm import EngineArgs
+from vllm import EngineArgs, SamplingParams
 from vllm.engine.output_processor.single_step import SingleStepOutputProcessor
 from vllm.engine.output_processor.stop_checker import StopChecker
 from vllm.transformers_utils.detokenizer import Detokenizer
@@ -24,6 +24,7 @@ from vllm.utils import Counter
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix
 from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor, SimGPUExecutor
 from llumnix.backends.profiling import LatencyMemData
+from llumnix.backends.vllm.sequence import LlumnixRequest
 
 from .utils import create_dummy_prompt, initialize_scheduler
 
@@ -33,12 +34,12 @@ class MockEngine(LLMEngineLlumnix):
         self.scheduler = initialize_scheduler()
         detokenizer = MagicMock(spec=Detokenizer)
         stop_checker = MagicMock(spec=StopChecker)
-        seq_counter = Counter()
+        self.seq_counter = Counter()
         self.instance_info = None
         self.executor_class = executor_class
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
-        self.output_processor = SingleStepOutputProcessor(self.scheduler.scheduler_config,detokenizer, self.scheduler, seq_counter, stop_checker)
-    
+        self.output_processor = SingleStepOutputProcessor(self.scheduler.scheduler_config,detokenizer, self.scheduler, self.seq_counter, stop_checker)
+
     def update_instance_info(self, instance_info):
         pass
 
@@ -91,3 +92,13 @@ def test_llm_engine_from_engine_args():
     latency_data = LatencyMemData({},{},{})
     llm_engine = MockEngine.from_engine_args(engine_args, instance_id="0", migration_config=None, latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
+
+def test_llm_engine_add_requset():
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args, instance_id="0", migration_config=None, latency_mem=MagicMock(sepc=LatencyMemData))
+    sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
+    llm_engine.scheduler.scheduler_lock = MagicMock()
+    llm_engine.add_request("0", None, "prompt", sampling_params)
+    assert len(llm_engine.scheduler.waiting) == 1
+    assert llm_engine.scheduler.waiting[-1].request_id == "0"
+    assert isinstance(llm_engine.scheduler.waiting[-1], LlumnixRequest)

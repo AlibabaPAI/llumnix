@@ -133,6 +133,8 @@ class LLMEngineLlumnix(LLMEngine):
                 scheduled_seq_groups = new_scheduled_seq_groups
                 output[0].outputs = new_output
                 seq_group_metadata_list = new_seq_group_metadata_list
+            for ignored_seq_group in ignored_seq_groups:
+                server_info_list.append(ignored_seq_group.server_info)
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
             # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
             return request_outputs, server_infos
@@ -172,7 +174,8 @@ class LLMEngineLlumnix(LLMEngine):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler.waiting[-1]
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, [seq_group.get_seqs()[0]], seq_group.sampling_params,
-                                  seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
+                                        seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
+        self.scheduler.scheduler_lock.release()
 
     def _put_request_outputs_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)

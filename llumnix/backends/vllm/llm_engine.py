@@ -19,7 +19,7 @@ import ray
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
-from vllm.outputs import RequestOutput
+from vllm.outputs import RequestOutput, CompletionOutput
 from vllm.sequence import SequenceGroup, SequenceStatus, SamplerOutput, SequenceGroupMetadata
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
@@ -35,29 +35,42 @@ from llumnix.server_info import ServerInfo
 from llumnix.config import MigrationConfig
 from llumnix.rpc.queue_client import QueueClient
 
-
 logger = init_logger(__name__)
 
-@ray.remote(num_cpus=0)
+
+@ray.remote(num_cpus=1)
 class AsyncActor:
     def __init__(self, instance_id):
         self.request_output_queue_client = QueueClient()
         self.instance_id = instance_id
         self.engine_actor_handle = None
 
-    async def put_nowait_batch_to_server(self,
+    async def put_nowait_batch_to_servers(self,
                                          server_request_outputs: Dict[str, List[RequestOutput]],
                                          server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
+        t1 = time.time()
+        logger.info("cross AsyncActor time diff (s): {}".format(t1 - list(server_request_outputs.values())[0][0].timestamp))
         for server_id, req_outputs in server_request_outputs.items():
             try:
                 server_info = server_info_dict[server_id]
+                t1 = time.time()
                 await self.request_output_queue_client.put_nowait_batch(req_outputs, server_info)
+                t2 = time.time()
+                logger.info("put_nowait_batch time diff (s): {}".format(t2 - t1))
             except TimeoutError:
                 logger.info("Server {} is dead".format(server_id))
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)
+
+# @ray.remote(num_cpus=1)
+# class DummyAsyncActor:
+#     def __init__(self, instance_id):
+#         self.instance_id = instance_id
+
+#     async def put_nowait_batch_to_servers(self, timestamp) -> None:
+#         logger.info("cross DummyAsyncActor time diff (s): {}".format(time.time() - timestamp))
 
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self, instance_id: str, *arg, **kwargs) -> None:
@@ -66,7 +79,7 @@ class LLMEngineLlumnix(LLMEngine):
         self.step_counter = Counter()
         self.instance_info = None
         self.async_actor = AsyncActor.remote(instance_id)
-        self.request_server_info: Dict[str, ServerInfo] = {}
+        # self.dummy_async_actor = DummyAsyncActor.remote(instance_id)
 
     # pylint: disable=W0221
     @classmethod
@@ -155,7 +168,15 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        self._put_request_outputs_to_server(request_outputs, server_infos)
+        server_infos = [server_infos[idx] for idx, request_output in enumerate(request_outputs) if request_output.finished]
+        request_outputs = [request_output for request_output in request_outputs if request_output.finished]
+        # dummy_request_outputs = []
+        # for request_output in request_outputs:
+        #     completion_output = CompletionOutput(0, "", [], 0.0, None)
+        #     dummy_request_outputs.append(RequestOutput(request_output.request_id, "", [], None, [completion_output], request_output.finished))
+        # request_outputs = dummy_request_outputs
+        if request_outputs:
+            self._put_request_outputs_to_server(request_outputs, server_infos)
         self.instance_info = instance_info
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -184,7 +205,9 @@ class LLMEngineLlumnix(LLMEngine):
             server_request_outputs[server_id].append(request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        self.async_actor.put_nowait_batch_to_server.remote(server_request_outputs, server_info_dict)
+            request_output.timestamp = time.time()
+        self.async_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
+        # self.dummy_async_actor.put_nowait_batch_to_servers.remote(time.time())
 
 class BackendVLLM(BackendInterface):
     def __init__(

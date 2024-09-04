@@ -20,6 +20,8 @@ import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
+from uvicorn import Config, Server
+import uvloop
 import ray
 
 from vllm.sampling_params import SamplingParams
@@ -53,18 +55,21 @@ manager_available = True
 
 async def _background_process_outputs():
     while True:
-        qsize = request_output_queue.qsize()
-        request_outputs = request_output_queue.get_nowait_batch(qsize)
-        for request_output in request_outputs:
-            request_id = request_output.request_id
-            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-            if request_id not in request_streams:
-                continue
-            request_streams[request_id].put(request_output)
-            if request_output.finished:
-                request_streams[request_id].finish()
-                del request_streams[request_id]
-        await asyncio.sleep(0.05)
+        # qsize = request_output_queue.qsize()
+        # request_outputs = request_output_queue.get_nowait_batch(qsize)
+        request_output = await request_output_queue.get()
+        # for request_output in request_outputs:
+        request_id = request_output.request_id
+        time_diff = time.time() - request_output.timestamp
+        print("request output time diff (s):", time_diff)
+        # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+        if request_id not in request_streams:
+            continue
+        request_streams[request_id].put(request_output)
+        if request_output.finished:
+            request_streams[request_id].finish()
+            del request_streams[request_id]
+        # await asyncio.sleep(0.05)
 
 # pylint: disable=unused-argument
 @asynccontextmanager
@@ -281,3 +286,14 @@ if __name__ == "__main__":
                     timeout_keep_alive=TIMEOUT_KEEP_ALIVE,
                     ssl_keyfile=args.ssl_keyfile,
                     ssl_certfile=args.ssl_certfile)
+        # loop = uvloop.new_event_loop()
+        # config = Config(app=app, 
+        #                 loop=loop, 
+        #                 host=args.host,
+        #                 port=args.port,
+        #                 log_level="debug",
+        #                 timeout_keep_alive=TIMEOUT_KEEP_ALIVE,
+        #                 ssl_keyfile=args.ssl_keyfile,
+        #                 ssl_certfile=args.ssl_certfile)
+        # uvicorn_server = Server(config)
+        # loop.run_until_complete(uvicorn_server.serve())

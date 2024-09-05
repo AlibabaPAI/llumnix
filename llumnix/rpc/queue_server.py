@@ -73,12 +73,14 @@ class QueueServer:
     async def put(self, item, timeout=None):
         try:
             await asyncio.wait_for(self.queue.put(item), timeout)
+        # pylint: disable=W0707
         except asyncio.TimeoutError:
             raise Full
 
     async def get(self, timeout=None):
         try:
             return await asyncio.wait_for(self.queue.get(), timeout)
+        # pylint: disable=W0707
         except asyncio.TimeoutError:
             raise Empty
 
@@ -112,6 +114,8 @@ class QueueServer:
             return self._is_server_ready(identity)
         elif isinstance(request, RPCPutNoWaitBatchQueueRequest):
             return self._put_nowait_batch(identity, request)
+        else:
+            raise ValueError(f"Unknown RPCRequest type: {request}")
 
     async def _is_server_ready(self, identity):
         await self.socket.send_multipart(
@@ -122,6 +126,7 @@ class QueueServer:
             self.put_nowait_batch(put_nowait_batch_queue_request.items)
             await self.socket.send_multipart(
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
+        # pylint: disable=W0703
         except Exception as e:
             await self.socket.send_multipart([identity, cloudpickle.dumps(e)])
 

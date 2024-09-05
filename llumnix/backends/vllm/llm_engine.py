@@ -41,7 +41,7 @@ logger = init_logger(__name__)
 
 
 @ray.remote(num_cpus=1)
-class AsyncActor:
+class AsyncPutQueueActor:
     def __init__(self, instance_id):
         self.request_output_queue_client = QueueClient()
         self.instance_id = instance_id
@@ -71,7 +71,7 @@ class LLMEngineLlumnix(LLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        self.async_actor = AsyncActor.remote(instance_id)
+        self.async_put_queue_actor = AsyncPutQueueActor.remote(instance_id)
 
     # pylint: disable=W0221
     @classmethod
@@ -190,7 +190,7 @@ class LLMEngineLlumnix(LLMEngine):
             server_request_outputs[server_id].append(request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        self.async_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
+        self.async_put_queue_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
     def __init__(

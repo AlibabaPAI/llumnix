@@ -48,7 +48,7 @@ class EngineManagerArgs:
 
     log_filename: str = "server.log"
     disable_log_requests_manager: bool = False
-    log_instance_info: bool = True
+    log_instance_info: bool = False
     profiling_result_file_path: str = ""
 
     gpu_type: str = "a10"

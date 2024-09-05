@@ -52,6 +52,7 @@ def api_server():
         str(script_path),
         "--host", "127.0.0.1",
     ]
+    # pylint: disable=consider-using-with
     uvicorn_process = subprocess.Popen(commands)
     yield
     uvicorn_process.terminate()

@@ -17,6 +17,7 @@ from collections import defaultdict
 import threading
 import asyncio
 import ray
+from ray.util.placement_group import PlacementGroup
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
@@ -80,7 +81,7 @@ class LLMEngineLlumnix(LLMEngine):
         migration_config: MigrationConfig,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
-        placement_group: Optional["PlacementGroup"] = None,
+        placement_group: Optional[PlacementGroup] = None,
         node_id: str = None,
         latency_mem: Optional[LatencyMemData] = None
     ) -> "LLMEngineLlumnix":
@@ -197,7 +198,7 @@ class BackendVLLM(BackendInterface):
         instance_id: str,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
-        placement_group: "PlacementGroup" = None,
+        placement_group: PlacementGroup = None,
         node_id: str = None
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,

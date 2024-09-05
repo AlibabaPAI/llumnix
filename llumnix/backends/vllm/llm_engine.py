@@ -20,7 +20,7 @@ import ray
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
-from vllm.outputs import RequestOutput, CompletionOutput
+from vllm.outputs import RequestOutput
 from vllm.sequence import SequenceGroup, SequenceStatus, SamplerOutput, SequenceGroupMetadata
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
@@ -58,6 +58,7 @@ class AsyncActor:
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, ret in enumerate(rets):
             if isinstance(ret, TimeoutError):
+                server_id = list(server_request_outputs.keys())[idx]
                 logger.info("Server {} is dead".format(server_id))
                 req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]

@@ -24,7 +24,7 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.rpc.queue_client import QueueClient
 from llumnix.entrypoints.llumnix_utils import init_request_output_queue
 
-from tests.rpc.test_queue import init_server_info
+from tests.unit_test.rpc.test_queue import init_server_info
 
 
 app = llumnix.entrypoints.vllm.api_server.app

@@ -24,8 +24,10 @@ from llumnix.entrypoints.llumnix_utils import (get_ip_address,
                                                retry_manager_method_async)
 from llumnix.llm_engine_manager import MANAGER_ACTOR_NAME
 
-from tests.utils import setup_ray_env
-from tests.rpc.test_queue import init_server_info
+from tests.unit_test.rpc.test_queue import init_server_info
+
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
 
 
 def test_launch_ray_cluster():

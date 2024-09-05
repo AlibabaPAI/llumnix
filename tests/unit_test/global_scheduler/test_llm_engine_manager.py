@@ -24,7 +24,8 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.instance_info import InstanceInfo
 
-from tests.utils import setup_ray_env
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
 
 
 @ray.remote(num_cpus=1, max_concurrency=4)

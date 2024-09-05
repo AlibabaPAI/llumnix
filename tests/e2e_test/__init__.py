@@ -11,22 +11,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
-
-
-def random_uuid() -> str:
-    return str(uuid.uuid4().hex)
-
-def convert_bytes(bytes_size):
-    """Convert bytes to KB, MB, GB, etc."""
-    if bytes_size < 0:
-        raise ValueError("Size must be a non-negative integer.")
-
-    size_suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
-    index = 0
-
-    while bytes_size >= 1024 and index < len(size_suffixes) - 1:
-        bytes_size /= 1024.0
-        index += 1
-
-    return f"{bytes_size:.2f} {size_suffixes[index]}"
+# TODO(KuilongCui): add failover test

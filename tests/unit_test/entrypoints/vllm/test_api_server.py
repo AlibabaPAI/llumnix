@@ -19,7 +19,8 @@ from pathlib import Path
 import pytest
 import requests
 
-from tests.utils import setup_ray_env
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
 
 
 def _query_server(prompt: str, max_tokens: int = 5, interface: str = 'generate') -> dict:

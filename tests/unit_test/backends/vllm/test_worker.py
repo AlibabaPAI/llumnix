@@ -14,7 +14,6 @@
 import pytest
 import torch
 import ray
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import get_distributed_init_method, get_ip, get_open_port
@@ -25,20 +24,15 @@ from vllm.executor.ray_gpu_executor import RayWorkerWrapper
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.utils import random_uuid
 
-from tests.utils import setup_ray_env
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
 
 def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
                   worker_module_name="llumnix.backends.vllm.worker",
                   worker_class_name="MigrationWorker"):
-    scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
-                soft=False,
-            )
-
     worker = ray.remote(
         num_cpus=0,
-        num_gpus=1,
-        scheduling_strategy=scheduling_strategy
+        num_gpus=1
     )(RayWorkerWrapper).remote(
         worker_module_name=worker_module_name,
         worker_class_name=worker_class_name,

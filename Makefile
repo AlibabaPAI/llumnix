@@ -21,15 +21,15 @@ install:
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed
-	@pylint --rcfile=.pylintrc -s n ./llumnix
+	@pylint --rcfile=.pylintrc -s n  --jobs=32 ./llumnix
 	
 	@pylint --rcfile=.pylintrc \
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
-			-s n ./tests
+			-s n --jobs=32 ./tests
 
 .PHONY: test
 test: check_pytest_installed
-	@pytest -x -q --ignore=third_party/ --disable-warnings
+	@pytest -x -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
 
 #################### pygloo install for gloo migration backend begin ####################
 

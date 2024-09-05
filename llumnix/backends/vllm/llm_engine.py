@@ -169,6 +169,7 @@ class LLMEngineLlumnix(LLMEngine):
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
         instance_info.latency = self.model_executor.last_inference_latency
+
         seq_groups = self.scheduler.running
         if seq_groups:
             tot_blocks = []
@@ -260,8 +261,8 @@ class BackendVLLM(BackendInterface):
         logger.info("add seq {} to block table".format(seq.seq_id))
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
-        self.add_running_request(backend_request)
         backend_request.reset_migration_args()
+        self.add_running_request(backend_request)
 
     def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",

@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 from typing import Dict, List
 import math
 import ray
@@ -21,11 +22,13 @@ from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
 from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
 from vllm.worker.cache_engine import CacheEngine
+from vllm.config import _GB
 
 from llumnix.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migration_backend
 from llumnix.internal_config import MigrationConfig
+from llumnix.utils import convert_bytes
 
 logger = init_logger(__name__)
 
@@ -104,10 +107,19 @@ class MigrationWorker(Worker):
 
     def migrate_cache(self, src_worker_handle_list, src_blocks: List[int], dst_blocks: List[int]) -> None:
         src_worker_handle = src_worker_handle_list[self.rank]
+
+        start_time = time.time()
         try:
             self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks)
         except ray.exceptions.RayActorError:
             logger.info("[migrate_cache] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+        end_time = time.time()
+
+        total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
+            self.cache_config, self.model_config, self.parallel_config)
+        speed = total_kv_cache_size/_GB/(end_time - start_time)
+        logger.info("[migration_cache] blocks_num: {}, total_kv_cache_size: {}, time: {}s, speed: {}GB/s."
+                    .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
 
     def do_recv(self, *args, **kwargs):
         return self.migration_backend.do_recv(*args, **kwargs)

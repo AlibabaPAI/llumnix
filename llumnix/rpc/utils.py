@@ -28,14 +28,15 @@ class RPCPutNoWaitBatchQueueRequest:
 class RPCUtilityRequest(Enum):
     IS_SERVER_READY = 1
 
+# pylint: disable=C0103
 RPC_REQUEST_TYPE = Union[RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest]
 
 class RPCClientClosedError(Exception):
     """Exception class raised when the client is used post-close.
-    
+
     The client can be closed, which closes the ZMQ context. This normally
-    happens on server shutdown. In some cases, methods like abort and 
-    do_log_stats will still be called and then try to open a socket, which 
+    happens on server shutdown. In some cases, methods like abort and
+    do_log_stats will still be called and then try to open a socket, which
     causes a ZMQError and creates a huge stack trace.
     So, we throw this error such that we can suppress it.
     """

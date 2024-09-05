@@ -51,16 +51,11 @@ class AsyncActor:
                                           server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
-        t1 = time.time()
-        logger.info("cross AsyncActor time diff (s): {}".format(t1 - list(server_request_outputs.values())[0][0].timestamp))
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
             tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait_batch(req_outputs, server_info)))
-        t1 = time.time()
         rets = await asyncio.gather(*tasks, return_exceptions=True)
-        t2 = time.time()
-        logger.info("asyncio.gather put_nowait_batch time diff (s): {}".format(t2 - t1))
         for idx, ret in enumerate(rets):
             if isinstance(ret, TimeoutError):
                 logger.info("Server {} is dead".format(server_id))
@@ -163,13 +158,6 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        # server_infos = [server_infos[idx] for idx, request_output in enumerate(request_outputs) if request_output.finished]
-        # request_outputs = [request_output for request_output in request_outputs if request_output.finished]
-        # dummy_request_outputs = []
-        # for request_output in request_outputs:
-        #     completion_output = CompletionOutput(0, "", [], 0.0, None)
-        #     dummy_request_outputs.append(RequestOutput(request_output.request_id, "", [], None, [completion_output], request_output.finished))
-        # request_outputs = dummy_request_outputs
         if request_outputs:
             self._put_request_outputs_to_server(request_outputs, server_infos)
         self.instance_info = instance_info
@@ -200,7 +188,6 @@ class LLMEngineLlumnix(LLMEngine):
             server_request_outputs[server_id].append(request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-            request_output.timestamp = time.time()
         self.async_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
@@ -217,7 +204,6 @@ class BackendVLLM(BackendInterface):
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           node_id=node_id)
-        # multi-instance args
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler

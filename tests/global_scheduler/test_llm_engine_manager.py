@@ -64,9 +64,10 @@ class MockLlumlet:
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids = set(request_id)
-        for request_id in request_ids:
-            if request_id in self.request_id_set:
-                self.request_id_set.remove(request_id)
+
+        for req_id in request_ids:
+            if req_id in self.request_id_set:
+                self.request_id_set.remove(req_id)
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 

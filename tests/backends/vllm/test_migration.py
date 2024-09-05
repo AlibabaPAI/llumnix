@@ -27,16 +27,18 @@ from llumnix.config import MigrationConfig
 from llumnix.server_info import ServerInfo
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
-from .test_llm_engine import MockEngine
-from .utils import create_dummy_prompt
 from tests.utils import setup_ray_env
 
+from .test_llm_engine import MockEngine
+from .utils import create_dummy_prompt
 
-TEST_PROMPTS = ["hello world, ",
-                "Briefly describe the major milestones in the development of artificial intelligence from 1950 to 2020.\n",
-                "Write a short story about a robot that dreams for the first time.\n",
-                "Explain the cultural significance of the Mona Lisa painting, and how its perception might vary in Western versus Eastern societies.\n",
-                "Swahili: 'The early bird catches the worm.'\n"]
+TEST_PROMPTS = [
+    "hello world, ",
+    "Briefly describe the major milestones in the development of artificial intelligence from 1950 to 2020.\n",
+    "Write a short story about a robot that dreams for the first time.\n",
+    "Explain the cultural significance of the Mona Lisa painting, and how its perception might vary in Western versus Eastern societies.\n",
+    "Swahili: 'The early bird catches the worm.'\n"
+]
 
 class MockBackendVLLM(BackendVLLM):
     def __init__(self):

@@ -23,10 +23,13 @@ def setup_ray_env():
     for actor in named_actors:
         try:
             actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+        # pylint: disable=bare-except
         except:
             continue
+
         try:
             ray.kill(actor_handle)
+        # pylint: disable=bare-except
         except:
             continue
     # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.

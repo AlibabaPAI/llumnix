@@ -57,7 +57,10 @@ async def _background_process_outputs():
     while True:
         # qsize = request_output_queue.qsize()
         # request_outputs = request_output_queue.get_nowait_batch(qsize)
+        t1 = time.time()
         request_output = await request_output_queue.get()
+        t2 = time.time()
+        print("await request output time diff (s):", t2 - t1)
         # for request_output in request_outputs:
         request_id = request_output.request_id
         time_diff = time.time() - request_output.timestamp
@@ -69,7 +72,7 @@ async def _background_process_outputs():
         if request_output.finished:
             request_streams[request_id].finish()
             del request_streams[request_id]
-        # await asyncio.sleep(0.05)
+        # await asyncio.sleep(0.005)
 
 # pylint: disable=unused-argument
 @asynccontextmanager
@@ -115,6 +118,23 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
                 del instances[instance_id]
                 del instance_num_requests[instance_id]
             return await asyncio.create_task(manager_generate(prompt, sampling_params, request_id))
+    # try:
+    #     if instance_num_requests:
+    #         instance_id = min(instance_num_requests, key=instance_num_requests.get)
+    #         instance_num_requests[instance_id] += 1
+    #         await instances[instance_id].generate.remote(request_id, server_info, prompt, sampling_params)
+    #         print("Manager is unavailable, directly pass request {} to instance {}".format(request_id, instance_id))
+    #     else:
+    #         print("Manager is unavailable, but there is no instance behind this api server, "
+    #                 "sleep {}s, waiting for manager restarts".format(WAIT_MANAGER_INTERVAL))
+    #         await asyncio.sleep(WAIT_MANAGER_INTERVAL)
+    #         return await asyncio.create_task(manager_generate(prompt, sampling_params, request_id))
+    # except (ray.exceptions.RayActorError, KeyError):
+    #     if instance_id in instances:
+    #         print("[manager_generate] instance {} is dead".format(instance_id))
+    #         del instances[instance_id]
+    #         del instance_num_requests[instance_id]
+    #     return await asyncio.create_task(manager_generate(prompt, sampling_params, request_id))
     return results_generator
 
 async def manager_abort(request_id: str) -> None:
@@ -270,6 +290,7 @@ if __name__ == "__main__":
         ip = get_ip_address()
         server_info = ServerInfo(server_id, ip, args.request_output_queue_port)
         node_id = ray.get_runtime_context().get_node_id()
+        # node_id = "581aa6cc1ac06df1ccee4105763d1d712a07431f7b7f483a20602907"
         engine_manager, instance_ids, llumlets, request_output_queue = \
             init_llumnix_components(engine_manager_args, engine_args, node_id, server_info)
 

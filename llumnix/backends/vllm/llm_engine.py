@@ -15,6 +15,7 @@ import time
 from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
 import threading
+import asyncio
 import ray
 
 from vllm.engine.llm_engine import LLMEngine
@@ -46,31 +47,26 @@ class AsyncActor:
         self.engine_actor_handle = None
 
     async def put_nowait_batch_to_servers(self,
-                                         server_request_outputs: Dict[str, List[RequestOutput]],
-                                         server_info_dict: Dict[str, ServerInfo]) -> None:
+                                          server_request_outputs: Dict[str, List[RequestOutput]],
+                                          server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
         t1 = time.time()
         logger.info("cross AsyncActor time diff (s): {}".format(t1 - list(server_request_outputs.values())[0][0].timestamp))
+        tasks = []
         for server_id, req_outputs in server_request_outputs.items():
-            try:
-                server_info = server_info_dict[server_id]
-                t1 = time.time()
-                await self.request_output_queue_client.put_nowait_batch(req_outputs, server_info)
-                t2 = time.time()
-                logger.info("put_nowait_batch time diff (s): {}".format(t2 - t1))
-            except TimeoutError:
+            server_info = server_info_dict[server_id]
+            tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait_batch(req_outputs, server_info)))
+        t1 = time.time()
+        rets = await asyncio.gather(*tasks, return_exceptions=True)
+        t2 = time.time()
+        logger.info("asyncio.gather put_nowait_batch time diff (s): {}".format(t2 - t1))
+        for idx, ret in enumerate(rets):
+            if isinstance(ret, TimeoutError):
                 logger.info("Server {} is dead".format(server_id))
+                req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)
-
-# @ray.remote(num_cpus=1)
-# class DummyAsyncActor:
-#     def __init__(self, instance_id):
-#         self.instance_id = instance_id
-
-#     async def put_nowait_batch_to_servers(self, timestamp) -> None:
-#         logger.info("cross DummyAsyncActor time diff (s): {}".format(time.time() - timestamp))
 
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self, instance_id: str, *arg, **kwargs) -> None:
@@ -79,7 +75,6 @@ class LLMEngineLlumnix(LLMEngine):
         self.step_counter = Counter()
         self.instance_info = None
         self.async_actor = AsyncActor.remote(instance_id)
-        # self.dummy_async_actor = DummyAsyncActor.remote(instance_id)
 
     # pylint: disable=W0221
     @classmethod
@@ -168,8 +163,8 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        server_infos = [server_infos[idx] for idx, request_output in enumerate(request_outputs) if request_output.finished]
-        request_outputs = [request_output for request_output in request_outputs if request_output.finished]
+        # server_infos = [server_infos[idx] for idx, request_output in enumerate(request_outputs) if request_output.finished]
+        # request_outputs = [request_output for request_output in request_outputs if request_output.finished]
         # dummy_request_outputs = []
         # for request_output in request_outputs:
         #     completion_output = CompletionOutput(0, "", [], 0.0, None)
@@ -207,7 +202,6 @@ class LLMEngineLlumnix(LLMEngine):
                 server_info_dict[server_id] = server_info
             request_output.timestamp = time.time()
         self.async_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
-        # self.dummy_async_actor.put_nowait_batch_to_servers.remote(time.time())
 
 class BackendVLLM(BackendInterface):
     def __init__(

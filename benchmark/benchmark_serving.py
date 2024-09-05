@@ -763,6 +763,39 @@ def main():
 
     prompts = list(zip(prompts, prompt_lens, response_lens))
 
+
+    # prompts = list(zip(prompts, prompt_lens, response_lens))
+    # num_prompts = len(prompts)
+    # new_prompts = []
+    # index = 0
+    # for idx in range(num_prompts):
+    #     if prompt_lens[idx] >= 256 and response_lens[idx] >= 256:
+    #         index = idx
+    #         break
+    # for _ in range(num_prompts):
+    #     new_prompts.append(prompts[index])
+    # prompts = new_prompts
+
+    # new_prompt_lens = []
+    # new_response_lens = []
+    # for _, prompt_len, response_len in prompts:
+    #     new_prompt_lens.append(prompt_len)
+    #     new_response_lens.append(response_len)
+    # prompt_lens = new_prompt_lens
+    # response_lens = new_response_lens
+
+    # total_tokens = []
+    # for i, (prompt_len, gen_len) in enumerate(zip(prompt_lens, response_lens)):
+    #     total_tokens.append(prompt_len + gen_len)
+
+    # print('prompt lens', sorted(list(prompt_lens)))
+    # print('response lens', sorted(list(response_lens)))
+    # print('total tokens', sorted(list(total_tokens)))
+
+    # print(prompts)
+
+    # plot_len_cdf(prompt_lens, response_lens, total_tokens, args.log_filename)
+
     throughput, prefill_token_latencies, decode_token_latencies, inference_latencies, avg_instance_num, request_latencies, request_ids, decode_latencies, request_lens, all_decode_latencies = asyncio.run(benchmark(
         backend,
         tokenizer,

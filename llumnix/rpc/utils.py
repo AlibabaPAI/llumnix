@@ -14,6 +14,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import Union, List, Any
+import tempfile
 
 
 RPC_GET_DATA_TIMEOUT_MS: int = 5000
@@ -42,3 +43,5 @@ class RPCClientClosedError(Exception):
 
 def get_open_zmq_ipc_path(ip, port) -> str:
     return "tcp://{}:{}".format(ip, port)
+    # return "inproc://{}:{}".format("localhost", port)
+    # return "ipc://{}:{}".format(tempfile.gettempdir(), port)

@@ -12,14 +12,13 @@
 # limitations under the License.
 
 import os
-
 from typing import List
 
 from vllm.utils import Counter
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.logger import init_logger
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM
 from llumnix.backends.profiling import ProfilingDatabase, LatencyMemData, ProfilingResult, SimParallelConfig

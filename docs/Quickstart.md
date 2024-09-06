@@ -42,15 +42,14 @@ You only need two simple steps to migrate from a deployed vLLM service to Llumni
 1. Replace the original vLLM server entrypoint with the Llumnix one.
 ```
 python -m llumnix.entrypoints.vllm.api_server \
-    --host $HOST \
-    --port $PORT \
-    # Llumnix arguments ...
+    --config-file $CONFIG_PATH \
     # vLLM arguments ...
+    # Llumnix arguments ...
     ...
 ```
 
 Upon starting the server, Llumnix's components are automatically configured.
-In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.4.2/models/engine_args.html).
+In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.4.2/models/engine_args.html). Lluminx arguments from cli will override the corresponding configuration in config file.
 
 2. Launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster.
 ```
@@ -77,6 +76,7 @@ We provide a benchmarking example to help you get through the usage of Llumnix.
 First, you should start the server to launch Llumnix and backend LLM engine instances:
 ```
 HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
+                --config-file $CONFIG_PATH \
                 --host $HOST \
                 --port $PORT \
                 --initial-instances $INITIAL_INSTANCES \
@@ -86,7 +86,7 @@ HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
                 --worker-use-ray \
                 --max-model-len 4096
 ```
-`INITIAL_INSTANCES` determines the number of instances to be launched on the current node, while `MODEL_PATH` defines the location of your model.
+`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node, 
 
 Second, you can run the benchmark to evaluate the serving performance:
 

@@ -15,7 +15,7 @@ import pytest
 
 from vllm.utils import random_uuid
 
-from llumnix.config import GlobalSchedulerConfig
+from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo
 

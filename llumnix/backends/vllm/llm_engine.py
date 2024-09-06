@@ -35,7 +35,7 @@ from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 from llumnix.backends.vllm.utils import detect_unsupported_feature
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 
 
 logger = init_logger(__name__)

@@ -23,7 +23,7 @@ from vllm.utils import random_uuid
 from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 

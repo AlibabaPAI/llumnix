@@ -21,7 +21,6 @@ from typing import Tuple
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
-from llumnix.common.config import get_cfg
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
@@ -36,6 +35,7 @@ class EngineManagerArgs:
     polling_interval: float = None
 
     dispatch_policy: str = None
+    num_dispatch_instances: int = None
 
     enable_migration: bool = None
     enable_defrag: bool = None
@@ -64,33 +64,29 @@ class EngineManagerArgs:
     last_stage_max_blocks: int = None
     max_stages: int = None
 
+    enable_pd_disagg: bool = False
+
     def __post_init__(self):
         for attr in dataclasses.fields(self):
             if getattr(self, attr.name) is None:
                 setattr(self, attr.name, getattr(_C.MANAGER, attr.name.upper()))
 
-    config_file: str = None
     def create_global_scheduler_configs(
         self,
     ) -> Tuple[GlobalSchedulerConfig]:
-
-        # Provide default configuration.
-        config_data = get_cfg()
-        if self.config_file:
-            config_data.merge_from_file(self.config_file)
 
         # Create the GlobalScheduler Configuration.
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.load_metric,
                                                         self.dispatch_policy,
+                                                        self.num_dispatch_instances,
                                                         self.pair_migration_policy,
                                                         self.migrate_out_threshold,
                                                         self.enable_defrag,
                                                         self.scaling_policy,
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
-                                                        config_data.PDD_CONFIG.ENABLE_PREFILL_DISAGGREATION,
-                                                        config_data.PDD_CONFIG.PREFILL_INSTANCE_NUM)
+                                                        self.enable_pd_disagg)
         return global_scheduler_config
 
     def create_migration_config(self) -> MigrationConfig:
@@ -148,6 +144,10 @@ class EngineManagerArgs:
                             type=str,
                             choices=['balanced', 'load', 'queue', 'flood'],
                             help='request dispatch policy')
+        parser.add_argument('--num-available-dispatch-instances',
+                            type=int,
+                            default=None,
+                            help='number of available instances for dispatching')
 
         parser.add_argument('--enable-migration',
                             action='store_true',
@@ -225,8 +225,8 @@ class EngineManagerArgs:
         parser.add_argument('--max-stages',
                             type=int,
                             help='drop migration if the number of stages > max_stages')
-        parser.add_argument("--config-file",
-                            type=str,
-                            default=EngineManagerArgs.config_file,
-                            help="path to the configuration file")
+        parser.add_argument('--enable-pd-disagg',
+                            type=bool,
+                            default=None,
+                            help='enable prefill decoding disaggregation')
         return parser

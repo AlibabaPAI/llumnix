@@ -38,12 +38,12 @@ class GlobalScheduler:
         self.dispatch_policy = global_scheduler_config.dispatch_policy
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
                                                     self.instance_load_calculator,
-                                                    global_scheduler_config.num_available_dispatch_instances)
+                                                    global_scheduler_config.num_dispatch_instances)
         # migrate args
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
                                                       self.instance_load_calculator,
-                                                      global_scheduler_config.num_available_dispatch_instances)
+                                                      global_scheduler_config.num_dispatch_instances)
         # auto-scaling args
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,

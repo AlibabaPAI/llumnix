@@ -6,4 +6,6 @@ scipy
 pandas
 matplotlib
 func_timeout
+yaml
+yacs
 numpy < 1.24.0 # for gloo migration backend's compatibility with numpy.float

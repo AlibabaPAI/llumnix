@@ -6,6 +6,7 @@ Note: since Llumnix is still in alpha stage, the interface and arguments are *su
 
 ```
 usage: -m llumnix.entrypoints.vllm.api_server [-h]
+            [--config-file CONFIG_FILE]
             [--disable-fixed-node-init-instance]
             [--disable-init-instance-by-manager]
             [--initial-instances INITIAL_INSTANCES]
@@ -39,6 +40,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--max-stages MAX_STAGES]
 
 ```
+
+`--config-file`
+- Path to config file.
 
 `--disable-fixed-node-init-instance`
 - Disable fixing the placement of instance to current node.

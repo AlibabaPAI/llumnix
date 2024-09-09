@@ -14,7 +14,7 @@
 from typing import Dict, List, Tuple, Union, Iterable, Set
 
 from llumnix.logger import init_logger
-from llumnix.config import GlobalSchedulerConfig
+from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler

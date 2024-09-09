@@ -27,7 +27,7 @@ from vllm import envs
 from vllm.sequence import Logprob, SequenceOutput, SequenceGroupOutput, SamplerOutput, ExecuteModelRequest
 from vllm.config import _GB
 
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 from llumnix.logger import init_logger
 from llumnix.backends.vllm.utils import get_cache_block_size
 from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_prefill, model_decode, _pad_to_alignment

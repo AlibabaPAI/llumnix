@@ -24,7 +24,7 @@ from llumnix.backends.utils import init_backend_engine, initialize_placement_gro
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 
 logger = init_logger(__name__)
 

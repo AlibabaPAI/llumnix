@@ -114,12 +114,12 @@ def test_pair_migration(policy):
             instance_info_dict[instance_id] = instance_info
             migration_scheduler.instance_id_type_set[InstanceType.NO_CONSTRAINTS].add(instance_id)
         migration_scheduler.instance_info = instance_info_dict
-        migration_scheduler._sort_instance_infos(descending=False)
+        migration_scheduler._sort_instance_infos([InstanceType.NO_CONSTRAINTS], descending=False)
         sorted_src_instance_infos = [i for i in reversed(migration_scheduler.sorted_instance_infos[InstanceType.NO_CONSTRAINTS])
                                 if i.num_killed_requests > 0 or i.instance_load_migrate > migration_scheduler.migrate_out_load_threshold]
         sorted_dst_instance_infos = [i for i in migration_scheduler.sorted_instance_infos[InstanceType.NO_CONSTRAINTS]
                                          if i.num_killed_requests == 0 and i.instance_load_migrate < migration_scheduler.migrate_out_load_threshold]
-        migrate_instance_pairs = migration_scheduler.pair_migration_policy.pair_migration(sorted_src_instance_infos, sorted_dst_instance_infos, True)
+        migrate_instance_pairs = migration_scheduler.pair_migration_policy.pair_migration(sorted_src_instance_infos, sorted_dst_instance_infos)
         for migrate_out_instance, migrate_in_instance in migrate_instance_pairs:
             assert migrate_out_instance != migrate_in_instance
             if policy == 'balanced':

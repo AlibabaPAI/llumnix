@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .llumnix_config import LlumnixConfig
+from .config import LlumnixConfig
 from .utils import get_llumnix_config
 
 __all__ = [

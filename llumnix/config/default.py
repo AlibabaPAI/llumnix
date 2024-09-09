@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .llumnix_config import LlumnixConfig as LC
+from .config import LlumnixConfig as LC
 
 # -----------------------------------------------------------------------------
 # Config definition

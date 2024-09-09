@@ -14,7 +14,7 @@
 from typing import Dict, Union
 import argparse
 
-from .llumnix_config import LlumnixConfig
+from .config import LlumnixConfig
 from .default import _C
 
 def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Namespace] = None) -> LlumnixConfig:

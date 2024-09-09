@@ -34,11 +34,10 @@ from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 from llumnix.rpc.queue_client import QueueClient
 
 logger = init_logger(__name__)
-
 
 
 class AsyncPutQueueThread(threading.Thread):

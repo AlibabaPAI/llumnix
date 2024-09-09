@@ -21,7 +21,7 @@ from vllm.utils import random_uuid
 from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
-from llumnix.config import MigrationConfig
+from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 from tests.utils import setup_ray_env

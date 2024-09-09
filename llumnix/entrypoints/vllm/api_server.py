@@ -35,6 +35,7 @@ from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.backends.vllm.utils import check_engine_args
 from llumnix.rpc.queue_server import QueueServer
+from llumnix.config import get_llumnix_config, LlumnixConfig
 
 logger = init_logger("llumnix.api_server")
 
@@ -225,35 +226,40 @@ async def is_ready():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="localhost")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", type=str, default=None)
+    parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--ssl-keyfile", type=str, default=None)
     parser.add_argument("--ssl-certfile", type=str, default=None)
     parser.add_argument('--disable-log-requests-server',
                         action='store_true',
+                        default=None,
                         help='disable logging requests in server')
-    parser.add_argument("--ray-cluster-port", type=int, default=30050)
+    parser.add_argument("--ray-cluster-port", type=int, default=None)
     parser.add_argument('--launch-ray-cluster',
                         action='store_true',
+                        default=None,
                         help='if launch ray cluster in api server')
     parser.add_argument("--request-output-queue-port", type=int, default=1234)
+    parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
 
     parser = EngineManagerArgs.add_cli_args(parser)
     parser = AsyncEngineArgs.add_cli_args(parser)
     args = parser.parse_args()
-    engine_manager_args = EngineManagerArgs.from_cli_args(args)
-    engine_args = AsyncEngineArgs.from_cli_args(args)
 
+    cfg: LlumnixConfig = get_llumnix_config(args.config_file, args)
+    engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
+    EngineManagerArgs.check_args(engine_manager_args)
+    engine_args = AsyncEngineArgs.from_cli_args(args)
     check_engine_args(engine_args, engine_manager_args)
 
     logger.info("engine_args: {}".format(engine_args))
 
-    if args.launch_ray_cluster:
+    if cfg.RAY.LAUNCH_CLUSTER:
         # Launch the ray cluster for multi-node serving.
-        launch_ray_cluster(args.ray_cluster_port)
+        launch_ray_cluster(cfg.RAY.CLUSTER_PORT)
 
     # Connect to a ray cluster.
-    connect_to_ray_cluster(port=args.ray_cluster_port)
+    connect_to_ray_cluster(port=cfg.RAY.CLUSTER_PORT)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():
@@ -268,13 +274,13 @@ if __name__ == "__main__":
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]
             instance_num_requests[ins_id] = 0
-        log_requests = not args.disable_log_requests_server
+        log_requests = not cfg.SERVER.DISABLE_LOG_REQUESTS_SERVER
         # Start the api server after all the components of llumnix are ready.
         logger.info("Start Api Server on '{}:{}'".format(args.host, args.port))
         uvicorn.run(app,
-                    host=args.host,
-                    port=args.port,
+                    host=cfg.SERVER.HOST,
+                    port=cfg.SERVER.PORT,
                     log_level="debug",
                     timeout_keep_alive=TIMEOUT_KEEP_ALIVE,
-                    ssl_keyfile=args.ssl_keyfile,
-                    ssl_certfile=args.ssl_certfile)
+                    ssl_keyfile=cfg.SERVER.SSL_KEYFILE,
+                    ssl_certfile=cfg.SERVER.SSL_CERTFILE)

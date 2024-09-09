@@ -14,7 +14,6 @@
 from typing import List
 import pytest
 import ray
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -23,7 +22,6 @@ from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
 from llumnix.config import MigrationConfig
-from llumnix.server_info import ServerInfo
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 from tests.utils import setup_ray_env

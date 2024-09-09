@@ -11,9 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
 import asyncio
 import signal
+import pytest
 import ray
 
 from vllm.outputs import CompletionOutput, RequestOutput
@@ -26,6 +26,7 @@ from llumnix.entrypoints.llumnix_utils import get_ip_address
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.llumnix_utils import init_request_output_queue
 
+# pylint: disable=W0611
 from tests.utils import setup_ray_env
 
 
@@ -100,7 +101,7 @@ async def benchmark_queue(qps, ip=None, port=None):
     server_id = random_uuid()
     server_info = ServerInfo(server_id, ip, port)
     await rpc_client.wait_for_server_rpc(server_info)
-    
+
     num_request_outputs = 500
     request_outputs = gen_request_outputs(num_request_outputs)
     async_request_outputs = async_request_output_gen(iter(request_outputs), qps=qps)
@@ -115,6 +116,7 @@ async def benchmark_queue(qps, ip=None, port=None):
         # Wait for server actor to finish.
         ray.get(server._wait_until_done.remote())
         rpc_client.close()
+    # pylint: disable=W0706
     except TimeoutException:
         raise
     finally:

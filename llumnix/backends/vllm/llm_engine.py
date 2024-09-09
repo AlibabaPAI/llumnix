@@ -40,16 +40,23 @@ from llumnix.rpc.queue_client import QueueClient
 logger = init_logger(__name__)
 
 
-@ray.remote(num_cpus=1)
-class AsyncPutQueueActor:
-    def __init__(self, instance_id):
-        self.request_output_queue_client = QueueClient()
-        self.instance_id = instance_id
-        self.engine_actor_handle = None
 
-    async def put_nowait_batch_to_servers(self,
-                                          server_request_outputs: Dict[str, List[RequestOutput]],
-                                          server_info_dict: Dict[str, ServerInfo]) -> None:
+class AsyncPutQueueThread(threading.Thread):
+    def __init__(self, instance_id):
+        super().__init__()
+        self.instance_id = instance_id
+        self.request_output_queue_client = QueueClient()
+        self.engine_actor_handle = None
+        self.loop = asyncio.new_event_loop()
+        self.daemon = True
+
+    def run(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+
+    async def _put_nowait_batch_to_servers(self,
+                                           server_request_outputs: Dict[str, List[RequestOutput]],
+                                           server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
         tasks = []
@@ -65,13 +72,21 @@ class AsyncPutQueueActor:
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)
 
+    def put_nowait_batch_to_servers(self,
+                                    server_request_outputs: Dict[str, List[RequestOutput]],
+                                    server_info_dict: Dict[str, ServerInfo]) -> None:
+        asyncio.run_coroutine_threadsafe(self._put_nowait_batch_to_servers(server_request_outputs, server_info_dict),
+                                         self.loop)
+
+
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self, instance_id: str, *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        self.async_put_queue_actor = AsyncPutQueueActor.remote(instance_id)
+        self.async_put_queue_thread = AsyncPutQueueThread(instance_id)
+        self.async_put_queue_thread.start()
 
     # pylint: disable=W0221
     @classmethod
@@ -190,7 +205,7 @@ class LLMEngineLlumnix(LLMEngine):
             server_request_outputs[server_id].append(request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        self.async_put_queue_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
+        self.async_put_queue_thread.put_nowait_batch_to_servers(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
     def __init__(

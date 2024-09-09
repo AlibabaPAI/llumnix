@@ -63,7 +63,7 @@ class MigrationScheduler:
         self.constraint_prefill_instance_num = constraint_prefill_instance_num
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
-        self.sorted_instance_infos: Dict[str, List[InstanceInfo]] = {instance_type: list() for instance_type in InstanceType}
+        self.sorted_instance_infos: Dict[str, List[InstanceInfo]] = {instance_type: [] for instance_type in InstanceType}
 
     def pair_migration(self, pair_migration_type:str) -> List[Tuple[str, str]]:
         sorted_src_instance_infos, sorted_dst_instance_infos = self._get_migration_settings(pair_migration_type)

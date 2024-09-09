@@ -224,8 +224,9 @@ async def is_ready():
     return ready_status
 
 if __name__ == "__main__":
-    # Note: All the arguments' default values should be None in the parser.
-    # The default values refer toconfig/default.py.
+    # Note: All the arguments' default values should be None in the parser !!!
+    # The default values refer to config/default.py.
+    # TODO(KuilongCui): add a better way to handle the default values.
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default=None)
     parser.add_argument("--port", type=int, default=None)

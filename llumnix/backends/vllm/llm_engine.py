@@ -85,6 +85,7 @@ class LLMEngineLlumnix(LLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
+        # TODO(s5u13b): Reduce the overhead.
         self.async_put_queue_thread = AsyncPutQueueThread(instance_id)
         self.async_put_queue_thread.start()
 

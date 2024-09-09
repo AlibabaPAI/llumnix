@@ -224,6 +224,8 @@ async def is_ready():
     return ready_status
 
 if __name__ == "__main__":
+    # Note: All the arguments' default values should be None in the parser.
+    # The default values refer toconfig/default.py.
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default=None)
     parser.add_argument("--port", type=int, default=None)
@@ -245,7 +247,7 @@ if __name__ == "__main__":
 
     cfg: LlumnixConfig = get_llumnix_config(args.config_file, args)
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
-    EngineManagerArgs.check_args(engine_manager_args)
+    EngineManagerArgs.check_args(engine_manager_args, parser)
     engine_args = AsyncEngineArgs.from_cli_args(args)
     check_engine_args(engine_args, engine_manager_args)
 

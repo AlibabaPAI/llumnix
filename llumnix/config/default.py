@@ -78,7 +78,7 @@ _C.MANAGER.DISPATCH_POLICY = 'load'
 # MIGRATION CONFIGURATION
 # -----------------------------------------------------------------------------
 # Enable migrate requests between instances
-_C.MANAGER.ENABLE_MIGRATION = False
+_C.MANAGER.ENABLE_MIGRATION = True
 # Pair migration frequency
 _C.MANAGER.PAIR_MIGRATION_FREQUENCY = 1
 # Pair migration policy with choices: 'balanced', 'defrag_constrained', 'defrag_relaxed'

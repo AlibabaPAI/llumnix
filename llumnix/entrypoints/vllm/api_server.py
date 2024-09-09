@@ -251,12 +251,12 @@ if __name__ == "__main__":
 
     logger.info("engine_args: {}".format(engine_args))
 
-    if cfg.RAY.LAUNCH_CLUSTER:
+    if cfg.RAY.LAUNCH_RAY_CLUSTER:
         # Launch the ray cluster for multi-node serving.
-        launch_ray_cluster(cfg.RAY.CLUSTER_PORT)
+        launch_ray_cluster(cfg.RAY.RAY_CLUSTER_PORT)
 
     # Connect to a ray cluster.
-    connect_to_ray_cluster(port=cfg.RAY.CLUSTER_PORT)
+    connect_to_ray_cluster(port=cfg.RAY.RAY_CLUSTER_PORT)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():

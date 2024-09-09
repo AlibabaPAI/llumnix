@@ -21,9 +21,6 @@ from typing import Tuple
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
-from llumnix.logger import init_logger
-
-logger = init_logger(__name__)
 
 @dataclass
 class EngineManagerArgs:

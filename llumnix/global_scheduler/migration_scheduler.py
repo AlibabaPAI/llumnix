@@ -59,17 +59,17 @@ class MigrationScheduler:
 
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
-        self.instance_id_type_set: Dict[InstanceType, Set[str]] = {instance_type: set() for instance_type in InstanceType}
+        self.instance_type_id_set: Dict[InstanceType, Set[str]] = {instance_type: set() for instance_type in InstanceType}
         self.constraint_prefill_instance_num = constraint_prefill_instance_num
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
         self.sorted_instance_infos: Dict[str, List[InstanceInfo]] = {instance_type: [] for instance_type in InstanceType}
 
     def pair_migration(self, pair_migration_type:str) -> List[Tuple[str, str]]:
-        sorted_src_instance_infos, sorted_dst_instance_infos = self._get_migration_settings(pair_migration_type)
+        sorted_src_instance_infos, sorted_dst_instance_infos = self._get_migration_instance_infos(pair_migration_type)
         return self.pair_migration_policy.pair_migration(sorted_src_instance_infos, sorted_dst_instance_infos)
 
-    def _get_migration_settings(self, pair_migration_type:str) -> Dict[str, InstanceInfo]:
+    def _get_migration_instance_infos(self, pair_migration_type:str) -> Dict[str, InstanceInfo]:
         if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
             # migrate out instances
             self._sort_instance_infos([InstanceType.NO_CONSTRAINTS])
@@ -100,12 +100,12 @@ class MigrationScheduler:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
         if self.constraint_prefill_instance_num > 0:
-            if len(self.instance_id_type_set[InstanceType.PREFILL]) < self.constraint_prefill_instance_num:
-                self.instance_id_type_set[InstanceType.PREFILL].add(instance_id)
+            if len(self.instance_type_id_set[InstanceType.PREFILL]) < self.constraint_prefill_instance_num:
+                self.instance_type_id_set[InstanceType.PREFILL].add(instance_id)
             else:
-                self.instance_id_type_set[InstanceType.DECODE].add(instance_id)
+                self.instance_type_id_set[InstanceType.DECODE].add(instance_id)
         else:
-            self.instance_id_type_set[InstanceType.NO_CONSTRAINTS].add(instance_id)
+            self.instance_type_id_set[InstanceType.NO_CONSTRAINTS].add(instance_id)
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
@@ -117,7 +117,7 @@ class MigrationScheduler:
         filtered_instance_infos  = {inst_type: set() for inst_type in instance_types_list}
         key_attr = 'instance_load_migrate'
         for inst_type in instance_types_list:
-            filtered_instance_infos[inst_type] = [info for info in instance_infos if info.instance_id in self.instance_id_type_set[inst_type]]
+            filtered_instance_infos[inst_type] = [info for info in instance_infos if info.instance_id in self.instance_type_id_set[inst_type]]
             self.sorted_instance_infos[inst_type] = sorted(
                 filtered_instance_infos[inst_type],
                 key=lambda instance_info: getattr(instance_info, key_attr),

@@ -224,6 +224,9 @@ async def is_ready():
     return ready_status
 
 if __name__ == "__main__":
+    # Note: All the arguments' default values should be None in the parser !!!
+    # The default values refer to config/default.py.
+    # TODO(KuilongCui): add a better way to handle the default values.
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default=None)
     parser.add_argument("--port", type=int, default=None)
@@ -245,18 +248,18 @@ if __name__ == "__main__":
 
     cfg: LlumnixConfig = get_llumnix_config(args.config_file, args)
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
-    EngineManagerArgs.check_args(engine_manager_args)
+    EngineManagerArgs.check_args(engine_manager_args, parser)
     engine_args = AsyncEngineArgs.from_cli_args(args)
     check_engine_args(engine_args, engine_manager_args)
 
     logger.info("engine_args: {}".format(engine_args))
 
-    if cfg.RAY.LAUNCH_CLUSTER:
+    if cfg.RAY.LAUNCH_RAY_CLUSTER:
         # Launch the ray cluster for multi-node serving.
-        launch_ray_cluster(cfg.RAY.CLUSTER_PORT)
+        launch_ray_cluster(cfg.RAY.RAY_CLUSTER_PORT)
 
     # Connect to a ray cluster.
-    connect_to_ray_cluster(port=cfg.RAY.CLUSTER_PORT)
+    connect_to_ray_cluster(port=cfg.RAY.RAY_CLUSTER_PORT)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():

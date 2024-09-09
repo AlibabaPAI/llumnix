@@ -69,9 +69,9 @@ _C.MANAGER.POLLING_INTERVAL = 0.05
 # -----------------------------------------------------------------------------
 # DISPATCH CONFIGURATION
 # -----------------------------------------------------------------------------
-# Instance load metric with choices: 'remaining_steps', 'usage_ratio'
+# Instance load metric
 _C.MANAGER.LOAD_METRIC = 'remaining_steps'
-# Request dispatch policy with choices: 'balanced', 'load', 'queue', 'flood'
+# Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
 
 # -----------------------------------------------------------------------------
@@ -81,11 +81,11 @@ _C.MANAGER.DISPATCH_POLICY = 'load'
 _C.MANAGER.ENABLE_MIGRATION = True
 # Pair migration frequency
 _C.MANAGER.PAIR_MIGRATION_FREQUENCY = 1
-# Pair migration policy with choices: 'balanced', 'defrag_constrained', 'defrag_relaxed'
+# Pair migration policy
 _C.MANAGER.PAIR_MIGRATION_POLICY = 'defrag_constrained'
 # Migrate out instance load threshold
 _C.MANAGER.MIGRATE_OUT_THRESHOLD = 3.0
-# Request migration policy with choices: 'LCFS', 'SJF', 'LJF'
+# Request migration policy
 _C.MANAGER.REQUEST_MIGRATION_POLICY = 'SJF'
 # Enable defragmentation through migration based on virtual usage
 _C.MANAGER.ENABLE_DEFRAG = True
@@ -94,7 +94,7 @@ _C.MANAGER.MAX_STAGES = 3
 # If the number of remain blocks < last_stage_max_blocks, do last stage migration
 _C.MANAGER.LAST_STAGE_MAX_BLOCKS = 16
 
-# Communication backend of migration with choices: 'gloo', 'nccl', 'rpc'
+# Communication backend of migration
 _C.MANAGER.MIGRATION_BACKEND = "rpc"
 # Timeout(s) for initializing migration backend
 _C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
@@ -114,7 +114,7 @@ _C.MANAGER.MIN_INSTANCES = 1
 _C.MANAGER.MAX_INSTANCES = 1
 # Interval time to check scaling
 _C.MANAGER.SCALING_INTERVAL = 10
-# Scaling policy with choices: 'max_load', 'avg_load'
+# Scaling policy
 _C.MANAGER.SCALING_POLICY = 'avg_load'
 # Scale up threshold
 _C.MANAGER.SCALE_UP_THRESHOLD = 10

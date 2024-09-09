@@ -99,24 +99,11 @@ class EngineManagerArgs:
         return engine_manager_args
 
     @classmethod
-    def check_args(cls, args: 'EngineManagerArgs'):
-        assert args.load_metric in ['remaining_steps', 'usage_ratio'], \
-            ("Invalid load metric: {}".format(args.load_metric))
-
-        assert args.dispatch_policy in ['balanced', 'load', 'queue', 'flood'], \
-            ("Invalid dispatch policy: {}".format(args.dispatch_policy))
-
-        assert args.pair_migration_policy in ['balanced', 'defrag_constrained', 'defrag_relaxed'], \
-            ("Invalid pair migration policy: {}".format(args.pair_migration_policy))
-
-        assert args.request_migration_policy in ['LCFS', 'SJF', 'LJF'], \
-            ("Invalid request migration policy: {}".format(args.request_migration_policy))
-
-        assert args.migration_backend in ['rpc', 'gloo', 'nccl'], \
-            ("Invalid migration backend: {}".format(args.migration_backend))
-
-        assert args.scaling_policy in ['max_load', 'avg_load'], \
-            ("Invalid scaling policy: {}".format(args.scaling_policy))
+    def check_args(cls, args: 'EngineManagerArgs', parser: argparse.ArgumentParser):
+        # pylint: disable=protected-access
+        for action in parser._optionals._actions:
+            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
+                assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
         assert args.migration_backend != 'gloo' or (args.migration_backend == 'gloo' \
             and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \

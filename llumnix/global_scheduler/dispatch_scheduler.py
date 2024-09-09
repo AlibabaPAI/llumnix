@@ -25,13 +25,13 @@ class DispatchScheduler:
     def __init__(self,
                  dispatch_policy: str,
                  instance_load_calculator: InstanceLoadCalculator,
-                 num_available_dispatch_instances: int) -> None:
+                 num_dispatch_instances: int) -> None:
         self.dispatch_policy = DispatchPolicyFactory.get_policy(dispatch_policy)
         self.instance_load_calculator = instance_load_calculator
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
         self.available_dispatch_instance_set: Set[str] = set()
-        self.num_available_dispatch_instances = num_available_dispatch_instances
+        self.num_dispatch_instances = num_dispatch_instances
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = {}
         self.sorted_instance_infos: List[InstanceInfo] = None
@@ -59,8 +59,8 @@ class DispatchScheduler:
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
-        if self.num_available_dispatch_instances == -1 or (self.num_available_dispatch_instances > 0 and
-            len(self.available_dispatch_instance_set) < self.num_available_dispatch_instances):
+        if self.num_dispatch_instances == -1 or (self.num_dispatch_instances > 0 and
+            len(self.available_dispatch_instance_set) < self.num_dispatch_instances):
             self.available_dispatch_instance_set.add(instance_id)
             self.instance_num_requests[instance_id] = 0
 

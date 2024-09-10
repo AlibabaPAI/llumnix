@@ -25,6 +25,7 @@ from llumnix.entrypoints.llumnix_utils import (get_ip_address,
 from llumnix.llm_engine_manager import MANAGER_ACTOR_NAME
 
 from tests.utils import setup_ray_env
+from tests.rpc.test_queue import init_server_info
 
 
 def test_launch_ray_cluster():
@@ -43,7 +44,8 @@ def test_init_manager(setup_ray_env):
     assert engine_manager == engine_manager_actor_handle
 
 def test_init_request_output_queue(setup_ray_env):
-    request_output_queue = init_request_output_queue()
+    server_info = init_server_info()
+    request_output_queue = init_request_output_queue(server_info)
     assert request_output_queue is not None
 
 def test_retry_manager_method_sync(setup_ray_env):

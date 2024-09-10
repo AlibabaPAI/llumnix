@@ -14,8 +14,6 @@
 from typing import List
 import pytest
 import ray
-from ray.util.queue import Queue as RayQueue
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -24,10 +22,11 @@ from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
-from llumnix.server_info import ServerInfo
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 from tests.utils import setup_ray_env
+from tests.rpc.test_queue import request_output_queue_server
+
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt
@@ -53,16 +52,11 @@ class MockLlumlet(Llumlet):
 #                     reason="Need at least 2 GPUs to run the test.")
 # FIXME(ZeldaHuang) this test is currently unstable
 @pytest.mark.skip(reason="Regression Test")
-def test_migration_correctness(setup_ray_env):
+def test_migration_correctness(setup_ray_env, request_output_queue_server, server_info):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
     migration_config = MigrationConfig("LCFS", "gloo",16,1,4,5,20)
-    que = RayQueue(actor_options={
-        "scheduling_strategy": NodeAffinitySchedulingStrategy(
-            node_id=ray.get_runtime_context().get_node_id(),
-            soft=False,)
-    })
-    server_info = ServerInfo("0",que)
+    que = request_output_queue_server
 
     llumlet_0:Llumlet = Llumlet.from_args(
                             False,
@@ -103,8 +97,8 @@ def test_migration_correctness(setup_ray_env):
         origin_output = None
         finished = False
         while not finished:
-            qsize = ray.get(request_output_queue.actor.qsize.remote())
-            request_outputs = ray.get(request_output_queue.actor.get_nowait_batch.remote(qsize))
+            qsize = request_output_queue.qsize()
+            request_outputs = request_output_queue.get_nowait_batch(qsize)
             for request_output in request_outputs:
                 origin_output = request_output.outputs[0]
                 finished = request_output.finished
@@ -123,8 +117,8 @@ def test_migration_correctness(setup_ray_env):
         output = None
         finished = False
         while not finished:
-            qsize = ray.get(request_output_queue.actor.qsize.remote())
-            request_outputs = ray.get(request_output_queue.actor.get_nowait_batch.remote(qsize))
+            qsize = request_output_queue.qsize()
+            request_outputs = request_output_queue.get_nowait_batch(qsize)
             for request_output in request_outputs:
                 if request_output.request_id != request_id1:
                     continue

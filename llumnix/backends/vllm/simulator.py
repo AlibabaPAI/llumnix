@@ -57,7 +57,6 @@ class BackendSimVLLM(BackendVLLM):
                                                                           latency_mem=latency_mem, engine_args=engine_args)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.output_processor.scheduler = self.engine.scheduler
-        # multi-instance args
         self.migration_config = migration_config
         self.instance_id = instance_id
         self.step_counter = Counter()

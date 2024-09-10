@@ -15,8 +15,8 @@ import time
 from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
 import threading
+import asyncio
 import ray
-from ray.util.queue import Queue as RayQueue
 from ray.util.placement_group import PlacementGroup
 
 from vllm.engine.llm_engine import LLMEngine
@@ -32,13 +32,51 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
-from llumnix.backends.vllm.utils import detect_unsupported_feature
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
-
+from llumnix.rpc.queue_client import QueueClient
 
 logger = init_logger(__name__)
+
+
+class AsyncPutQueueThread(threading.Thread):
+    def __init__(self, instance_id):
+        super().__init__()
+        self.instance_id = instance_id
+        self.request_output_queue_client = QueueClient()
+        self.engine_actor_handle = None
+        self.loop = asyncio.new_event_loop()
+        self.daemon = True
+
+    def run(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+
+    async def _put_nowait_batch_to_servers(self,
+                                           server_request_outputs: Dict[str, List[RequestOutput]],
+                                           server_info_dict: Dict[str, ServerInfo]) -> None:
+        if self.engine_actor_handle is None:
+            self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
+        tasks = []
+        for server_id, req_outputs in server_request_outputs.items():
+            server_info = server_info_dict[server_id]
+            tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait_batch(req_outputs, server_info)))
+        rets = await asyncio.gather(*tasks, return_exceptions=True)
+        for idx, ret in enumerate(rets):
+            if isinstance(ret, TimeoutError):
+                server_id = list(server_request_outputs.keys())[idx]
+                logger.info("Server {} is dead".format(server_id))
+                req_outputs = list(server_request_outputs.values())[idx]
+                request_ids = [req_output.request_id for req_output in req_outputs]
+                self.engine_actor_handle.abort_request.remote(request_ids)
+
+    def put_nowait_batch_to_servers(self,
+                                    server_request_outputs: Dict[str, List[RequestOutput]],
+                                    server_info_dict: Dict[str, ServerInfo]) -> None:
+        asyncio.run_coroutine_threadsafe(self._put_nowait_batch_to_servers(server_request_outputs, server_info_dict),
+                                         self.loop)
+
 
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self, instance_id: str, *arg, **kwargs) -> None:
@@ -46,6 +84,9 @@ class LLMEngineLlumnix(LLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
+        # TODO(s5u13b): Reduce the overhead.
+        self.async_put_queue_thread = AsyncPutQueueThread(instance_id)
+        self.async_put_queue_thread.start()
 
     # pylint: disable=W0221
     @classmethod
@@ -61,7 +102,6 @@ class LLMEngineLlumnix(LLMEngine):
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
-        detect_unsupported_feature(engine_args)
         engine_config = engine_args.create_engine_config()
         engine_config.parallel_config.placement_group = placement_group
         # Initialize the cluster and specify the executor class.
@@ -97,7 +137,7 @@ class LLMEngineLlumnix(LLMEngine):
     ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         # ensure scheduled_seq_groups matching output
         with self.scheduler.scheduler_lock:
-            server_info_list = []
+            server_infos = []
             if output:
                 new_output = []
                 new_scheduled_seq_groups = []
@@ -108,18 +148,18 @@ class LLMEngineLlumnix(LLMEngine):
                         new_scheduled_seq_groups.append(scheduled_seq_group)
                         new_seq_group_metadata_list.append(seq_group_meta)
                         new_output.append(seq_group_output)
-                        server_info_list.append(seq_group.server_info)
+                        server_infos.append(seq_group.server_info)
                 scheduled_seq_groups = new_scheduled_seq_groups
                 output[0].outputs = new_output
                 seq_group_metadata_list = new_seq_group_metadata_list
             for ignored_seq_group in ignored_seq_groups:
-                server_info_list.append(ignored_seq_group.server_info)
+                server_infos.append(ignored_seq_group.server_info)
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
-            # TODO(ZeldaHuang) Use LlumnixRequestOutput to store llumnix output args.
-            return request_outputs, server_info_list
+            # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
+            return request_outputs, server_infos
 
     def step(self) -> None:
-        output_list, server_info_list = super().step()
+        request_outputs, server_infos = super().step()
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -135,7 +175,8 @@ class LLMEngineLlumnix(LLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
-        self._put_request_output_to_server(output_list, server_info_list)
+        if request_outputs:
+            self._put_request_outputs_to_server(request_outputs, server_infos)
         self.instance_info = instance_info
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -155,23 +196,16 @@ class LLMEngineLlumnix(LLMEngine):
                                         seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
         self.scheduler.scheduler_lock.release()
 
-    def _put_request_output_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
+    def _put_request_outputs_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
-        server_queue: Dict[str, RayQueue] = {}
+        server_info_dict = {}
         # Reorganize data in orther to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            request_output_queue = server_info.request_output_queue
             server_request_outputs[server_id].append(request_output)
-            if server_id not in server_queue:
-                server_queue[server_id] = request_output_queue
-        for server_id, req_outputs in server_request_outputs.items():
-            try:
-                server_queue[server_id].actor.put_nowait_batch.remote(req_outputs)
-            except ray.exceptions.RayActorError:
-                logger.info("Server {} is dead".format(server_id))
-                request_ids = [req_output.request_id for req_output in req_outputs]
-                self.abort_request(request_ids)
+            if server_id not in server_info_dict:
+                server_info_dict[server_id] = server_info
+        self.async_put_queue_thread.put_nowait_batch_to_servers(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
     def __init__(
@@ -187,7 +221,6 @@ class BackendVLLM(BackendInterface):
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           node_id=node_id)
-        # multi-instance args
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler

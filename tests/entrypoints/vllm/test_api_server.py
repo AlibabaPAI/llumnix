@@ -19,6 +19,9 @@ from pathlib import Path
 import pytest
 import requests
 
+from tests.utils import setup_ray_env
+
+
 def _query_server(prompt: str, max_tokens: int = 5, interface: str = 'generate') -> dict:
     response = requests.post("http://localhost:8000/{}".format(interface),
                              json={
@@ -57,7 +60,7 @@ def api_server():
     time.sleep(1.0)
 
 @pytest.mark.parametrize("interface", ['generate', 'generate_benchmark'])
-def test_api_server(api_server, interface: str):
+def test_api_server(setup_ray_env, api_server, interface: str):
     """
     Run the API server and test it.
 

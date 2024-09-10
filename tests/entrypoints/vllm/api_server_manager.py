@@ -15,19 +15,20 @@ import argparse
 import uvicorn
 import ray
 from fastapi.responses import JSONResponse, Response
-from ray.util.queue import Queue as RayQueue
 
 from vllm.outputs import CompletionOutput, RequestOutput
 
 import llumnix.entrypoints.vllm.api_server
 import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
+from llumnix.rpc.queue_client import QueueClient
+from llumnix.entrypoints.llumnix_utils import init_request_output_queue
+
+from tests.rpc.test_queue import init_server_info
 
 
 app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
-request_output_queue = RayQueue()
-llumnix.entrypoints.vllm.api_server.request_output_queue = request_output_queue
 MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 
 
@@ -36,12 +37,13 @@ class MockLLMEngineManager:
     def __init__(self):
         self._num_generates = 0
         self._num_aborts = 0
+        self.request_output_queue = QueueClient()
 
     async def generate(self, request_id, server_info, *args, **kwargs):
         self._num_generates += 1
         completion_output = CompletionOutput(0, "", [], 0.0, None)
         request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=True)
-        request_output_queue.put(request_output)
+        await self.request_output_queue.put_nowait_batch([request_output], server_info)
 
     async def abort(self, request_id):
         self._num_aborts += 1
@@ -70,6 +72,9 @@ if __name__ == "__main__":
 
     engine_manager = init_manager()
     llumnix.entrypoints.vllm.api_server.engine_manager = engine_manager
+    server_info = init_server_info()
+    llumnix.entrypoints.vllm.api_server.server_info = server_info
+    llumnix.entrypoints.vllm.api_server.request_output_queue = init_request_output_queue(server_info)
 
     uvicorn.run(
         app,

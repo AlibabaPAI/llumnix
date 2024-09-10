@@ -42,13 +42,13 @@ class GlobalScheduler:
         # migrate args
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
-                                                      self.instance_load_calculator,
-                                                      global_scheduler_config.num_dispatch_instances)
+                                                      self.instance_load_calculator)
         # auto-scaling args
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,
                                                   global_scheduler_config.scaling_policy,
-                                                  self.instance_load_calculator)
+                                                  self.instance_load_calculator,
+                                                  global_scheduler_config.num_dispatch_instances)
 
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
@@ -60,6 +60,7 @@ class GlobalScheduler:
                 # Llumnix have different instance load compuatation methods for dispatch/migrate/scale.
                 instance_info.instance_load_dispatch_scale = self.instance_load_calculator.compute_instance_load(instance_info, action='dispatch')
                 instance_info.instance_load_migrate = self.instance_load_calculator.compute_instance_load(instance_info, action='migrate')
+                instance_info.instance_type = self.scaling_scheduler.get_instance_type_info(instance_info.instance_id)
                 self.instance_info[instance_info.instance_id] = instance_info
 
     def dispatch(self) -> str:

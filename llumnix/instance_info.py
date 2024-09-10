@@ -35,6 +35,7 @@ class InstanceInfo:
                  waiting_time_first_waiting_request: int = 0,
                  num_blocks_all_waiting_requests: int = 0,
                  inference_type: RequestInferenceType = RequestInferenceType.PREFILL,
+                 instance_type: str = "",
                  num_batched_tokens: int = 0) -> None:
         self.num_total_gpu_blocks = num_total_gpu_blocks
         self.num_watermark_blocks = num_watermark_blocks
@@ -55,6 +56,7 @@ class InstanceInfo:
         # For global scheduling.
         self.instance_load_migrate = -np.inf
         self.instance_load_dispatch_scale = -np.inf
+        self.instance_type = instance_type
 
         # For record statistics, assigned in scheduler.
         self.inference_type = inference_type

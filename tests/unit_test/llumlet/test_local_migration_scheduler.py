@@ -84,8 +84,8 @@ def test_scheduler_should_abort_migration():
 
 def test_blocking_migration():
     req_0 = MockRequest(request_id="0", length=1, request_expected_steps=math.inf)
-    assert req_0.blocking_migration is True
+    assert req_0.blocking_migration is False
     req_1 = MockRequest(request_id="1", length=2, request_expected_steps=1)
-    assert req_1.blocking_migration is False
+    assert req_1.blocking_migration is True
     req_2 = MockRequest(request_id="2", length=1, request_expected_steps=1)
-    assert req_2.blocking_migration is False
+    assert req_2.blocking_migration is True

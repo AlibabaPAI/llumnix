@@ -25,6 +25,8 @@ from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.instance_info import InstanceInfo
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
+from llumnix.global_scheduler.scaling_scheduler import InstanceType
+
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -207,6 +209,7 @@ def get_instance_info_migrate_in(instance_id):
     instance_info.num_available_gpu_blocks = np.inf
     instance_info.num_running_requests = 1
     instance_info.num_blocks_first_waiting_request = 0
+    instance_info.instance_type = InstanceType.NO_CONSTRAINTS
     return instance_info
 
 def get_instance_info_migrate_out(instance_id):
@@ -215,6 +218,7 @@ def get_instance_info_migrate_out(instance_id):
     instance_info.num_available_gpu_blocks = 0
     instance_info.num_running_requests = 1
     instance_info.num_blocks_first_waiting_request = np.inf
+    instance_info.instance_type = InstanceType.NO_CONSTRAINTS
     return instance_info
 
 def test_update_instance_info_loop_and_migrate(setup_ray_env, engine_manager):

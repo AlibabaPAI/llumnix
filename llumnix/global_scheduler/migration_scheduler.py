@@ -19,6 +19,7 @@ import numpy as np
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.global_scheduler.scaling_scheduler import InstanceType
 
 logger = init_logger(__name__)
 
@@ -30,19 +31,11 @@ class PairMigrationConstraints(str, Enum):
     DECODING_2_DECODING = "DECODING_2_DECODING"
     PREFILL_2_DECODING = "PREFILL_2_DECODING"
 
-class InstanceType(str, Enum):
-    NO_CONSTRAINTS = "NO_CONSTRAINTS"
-
-    # Specific to Prefill-Decoding disaggregation.
-    PREFILL = "prefill"
-    DECODE = "decode"
-
 class MigrationScheduler:
     def __init__(self,
                  pair_migration_policy: str,
                  migrate_out_load_threshold: float,
-                 instance_load_calculator: InstanceLoadCalculator,
-                 constraint_prefill_instance_num: int) -> None:
+                 instance_load_calculator: InstanceLoadCalculator) -> None:
         self.migrate_out_load_threshold = migrate_out_load_threshold
         self.instance_load_calculator = instance_load_calculator
         self.enable_defrag = instance_load_calculator.enable_defrag
@@ -59,38 +52,19 @@ class MigrationScheduler:
 
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
-        self.instance_type_id_set: Dict[InstanceType, Set[str]] = {instance_type: set() for instance_type in InstanceType}
-        self.constraint_prefill_instance_num = constraint_prefill_instance_num
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
-        self.sorted_instance_infos: Dict[str, List[InstanceInfo]] = {instance_type: [] for instance_type in InstanceType}
+        self.sorted_instance_infos: List[InstanceInfo] = None
 
     def pair_migration(self, pair_migration_type:str) -> List[Tuple[str, str]]:
+        self._sort_instance_infos(descending=False)
         sorted_src_instance_infos, sorted_dst_instance_infos = self._get_migration_instance_infos(pair_migration_type)
         return self.pair_migration_policy.pair_migration(sorted_src_instance_infos, sorted_dst_instance_infos)
 
     def _get_migration_instance_infos(self, pair_migration_type:str) -> Dict[str, InstanceInfo]:
-        if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
-            # migrate out instances
-            self._sort_instance_infos([InstanceType.NO_CONSTRAINTS])
-            sorted_src_instance_infos = [i for i in reversed(self.sorted_instance_infos[InstanceType.NO_CONSTRAINTS])
-                                if i.num_killed_requests > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
-            # migrate in instances
-            sorted_dst_instance_infos = [i for i in self.sorted_instance_infos[InstanceType.NO_CONSTRAINTS]
-                               if i.num_killed_requests == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
-        elif pair_migration_type == PairMigrationConstraints.PREFILL_2_DECODING:
-            self._sort_instance_infos([InstanceType.PREFILL, InstanceType.DECODE])
-            sorted_src_instance_infos = list(reversed(self.sorted_instance_infos[InstanceType.PREFILL]))
-            sorted_dst_instance_infos = [i for i in self.sorted_instance_infos[InstanceType.DECODE]
-                                            if i.num_killed_requests == 0]
-            # TODO[xinyi]: Considering decoding instances load, try to decode on the prefill instance.
-        elif pair_migration_type == PairMigrationConstraints.DECODING_2_DECODING:
-            self._sort_instance_infos([InstanceType.DECODE])
-            sorted_src_instance_infos = [i for i in reversed(self.sorted_instance_infos[InstanceType.DECODE])
-                                if i.num_killed_requests > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
-            sorted_dst_instance_infos = [i for i in self.sorted_instance_infos[InstanceType.DECODE]
-                               if i.num_killed_requests == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
-        return sorted_src_instance_infos, sorted_dst_instance_infos
+        filter_instance_infos_policy = FilteringInstanceInfosPolicyFactory.get_policy(pair_migration_type,
+                                                        migrate_out_load_threshold=self.migrate_out_load_threshold)
+        return filter_instance_infos_policy.filter_instances(self.sorted_instance_infos,pair_migration_type)
 
     def update_instance_infos(self,
                               instance_info: Dict[str, InstanceInfo]) -> None:
@@ -99,30 +73,79 @@ class MigrationScheduler:
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
-        if self.constraint_prefill_instance_num > 0:
-            if len(self.instance_type_id_set[InstanceType.PREFILL]) < self.constraint_prefill_instance_num:
-                self.instance_type_id_set[InstanceType.PREFILL].add(instance_id)
-            else:
-                self.instance_type_id_set[InstanceType.DECODE].add(instance_id)
-        else:
-            self.instance_type_id_set[InstanceType.NO_CONSTRAINTS].add(instance_id)
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
         self.num_instances = len(self.instance_id_set)
 
-    def _sort_instance_infos(self, instance_types_list: str,
-                             descending: bool = False) -> None:
+    def _sort_instance_infos(self,
+                             descending: bool = True) -> None:
         instance_infos: List[InstanceInfo] = list(self.instance_info.values())
-        filtered_instance_infos  = {inst_type: set() for inst_type in instance_types_list}
         key_attr = 'instance_load_migrate'
-        for inst_type in instance_types_list:
-            filtered_instance_infos[inst_type] = [info for info in instance_infos if info.instance_id in self.instance_type_id_set[inst_type]]
-            self.sorted_instance_infos[inst_type] = sorted(
-                filtered_instance_infos[inst_type],
-                key=lambda instance_info: getattr(instance_info, key_attr),
-                reverse=descending
-            )
+        self.sorted_instance_infos = sorted(
+            instance_infos,
+            key=lambda instance_info: getattr(instance_info, key_attr),
+            reverse=descending
+        )
+
+class FilteringInstanceInfosPolicy(ABC):
+    def __init__(self,
+                 migrate_out_load_threshold: float) -> None:
+        self.migrate_out_load_threshold = migrate_out_load_threshold
+        self.filter_instances_rules = {
+            PairMigrationConstraints.NO_CONSTRAINTS: (InstanceType.NO_CONSTRAINTS, InstanceType.NO_CONSTRAINTS),
+            PairMigrationConstraints.DECODING_2_DECODING: (InstanceType.DECODE, InstanceType.DECODE),
+            PairMigrationConstraints.PREFILL_2_DECODING: (InstanceType.PREFILL, InstanceType.DECODE),
+        }
+
+    def filter_instances(self, sorted_instance_infos: List[InstanceInfo], pair_migration_type: str = None) -> Dict[str, InstanceInfo]:
+        src_type, dst_type = self.filter_instances_rules[pair_migration_type]
+        filtered_src_instance_infos = [info for info in sorted_instance_infos if info.instance_type == src_type]
+        filtered_dst_instance_infos = [info for info in sorted_instance_infos if info.instance_type == dst_type]
+        src_instance_infos = self.filter_src_instances(filtered_src_instance_infos)
+        dst_instance_infos = self.filter_dst_instances(filtered_dst_instance_infos)
+        return src_instance_infos, dst_instance_infos
+
+    @abstractmethod
+    def filter_src_instances(self, filtered_instance_infos) -> Dict[str, InstanceInfo]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def filter_dst_instances(self, filtered_instance_infos) -> Dict[str, InstanceInfo]:
+        raise NotImplementedError
+
+class FilterConstrained(FilteringInstanceInfosPolicy):
+    def filter_src_instances(self, filtered_instance_infos: List[InstanceInfo]) -> Dict[str, InstanceInfo]:
+        src_instance_infos = [i for i in reversed(filtered_instance_infos)
+                            if i.num_killed_requests > 0 or i.instance_load_migrate > self.migrate_out_load_threshold]
+        return src_instance_infos
+
+    def filter_dst_instances(self, filtered_instance_infos: List[InstanceInfo]) -> Dict[str, InstanceInfo]:
+        dst_instance_infos = [i for i in filtered_instance_infos
+                            if i.num_killed_requests == 0 and i.instance_load_migrate < self.migrate_out_load_threshold]
+        return dst_instance_infos
+
+class FilterRelaxed(FilteringInstanceInfosPolicy):
+    # The policy is currently used to select the decoding instances to migrate requests from the prefill instances.
+    def filter_src_instances(self, filtered_instance_infos: List[InstanceInfo]) -> Dict[str, InstanceInfo]:
+        src_instance_infos = list(reversed(filtered_instance_infos))
+        return src_instance_infos
+
+    def filter_dst_instances(self, filtered_instance_infos: List[InstanceInfo]) -> Dict[str, InstanceInfo]:
+        dst_instance_infos = [i for i in filtered_instance_infos
+                                        if i.num_killed_requests == 0]
+        return dst_instance_infos
+
+class FilteringInstanceInfosPolicyFactory:
+    _POLICY_REGISTRY = {
+        PairMigrationConstraints.NO_CONSTRAINTS: FilterConstrained,
+        PairMigrationConstraints.DECODING_2_DECODING: FilterConstrained,
+        PairMigrationConstraints.PREFILL_2_DECODING: FilterRelaxed,
+    }
+
+    @classmethod
+    def get_policy(cls, policy_name: PairMigrationConstraints, **kwargs) -> FilteringInstanceInfosPolicy:
+        return cls._POLICY_REGISTRY[policy_name](**kwargs)
 
 class PairMigrationPolicy(ABC):
     def __init__(self,

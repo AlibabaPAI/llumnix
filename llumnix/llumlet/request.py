@@ -56,11 +56,11 @@ class LlumnixRequest:
     def output_len(self) -> int:
         raise NotImplementedError
 
-    # Whether the migration of request is divided into multiple stages. For requests that have already reached
-    # the expected steps, the migration will completed within one stage.
+    # Whether the migration of request is completed within one stage. For requests that have already reached
+    # the expected steps, blocking_migration is True.
     @property
     def blocking_migration(self) -> bool:
-        return self.output_len < self.expected_steps
+        return self.output_len >= self.expected_steps
 
     def should_abort_migration(self) -> bool:
         return self.output_len == 0 \

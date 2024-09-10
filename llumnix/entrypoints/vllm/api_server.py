@@ -239,7 +239,7 @@ if __name__ == "__main__":
                         action='store_true',
                         default=None,
                         help='if launch ray cluster in api server')
-    parser.add_argument("--request-output-queue-port", type=int, default=1234)
+    parser.add_argument("--request-output-queue-port", type=int, default=None)
     parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
 
     parser = EngineManagerArgs.add_cli_args(parser)

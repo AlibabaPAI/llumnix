@@ -269,7 +269,7 @@ if __name__ == "__main__":
         # Launch the Llumnix componets on current node.
         server_id = random_uuid()
         ip = get_ip_address()
-        server_info = ServerInfo(server_id, ip, args.request_output_queue_port)
+        server_info = ServerInfo(server_id, ip, cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
         node_id = ray.get_runtime_context().get_node_id()
         engine_manager, instance_ids, llumlets, request_output_queue = \
             init_llumnix_components(engine_manager_args, engine_args, node_id, server_info)
@@ -279,7 +279,7 @@ if __name__ == "__main__":
             instance_num_requests[ins_id] = 0
         log_requests = not cfg.SERVER.DISABLE_LOG_REQUESTS_SERVER
         # Start the api server after all the components of llumnix are ready.
-        logger.info("Start Api Server on '{}:{}'".format(args.host, args.port))
+        logger.info("Start Api Server on '{}:{}'".format(cfg.SERVER.HOST, cfg.SERVER.PORT))
         uvicorn.run(app,
                     host=cfg.SERVER.HOST,
                     port=cfg.SERVER.PORT,

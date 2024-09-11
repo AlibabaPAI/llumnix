@@ -141,7 +141,7 @@ class Llumlet:
             dst_instance_id = dst_instance_name[len("instance_"):]
             migrated_request_list = []
             continue_migrate = True
-            while continue_migrate:
+            while continue_migrate and len(migrated_request_list) < num_requests:
                 t0 = time.time()
                 migrate_out_request = self.migration_scheduler.get_migrate_out_request()
                 if migrate_out_request is not None:
@@ -158,8 +158,6 @@ class Llumlet:
                     self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
                 else:
                     ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
-                    continue_migrate = False
-                if num_requests == 1:
                     continue_migrate = False
                 t1 = time.time()
                 logger.info("{}->{} migrate done, migrate request {}, status:{}, len:{} blocks, cost:{} ms" \

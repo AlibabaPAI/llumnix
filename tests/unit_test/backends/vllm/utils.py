@@ -56,7 +56,7 @@ def create_dummy_prompt(
     lora_request: Optional[LoRARequest] = None,
     use_beam_search: bool = False,
     best_of: int = 1,
-    request_expected_steps: int = math.inf,
+    expected_steps: int = math.inf,
 ) -> Tuple[Sequence, SequenceGroupLlumnix]:
     if not block_size:
         block_size = prompt_length
@@ -68,7 +68,7 @@ def create_dummy_prompt(
     prompt = Sequence(int(request_id), prompt_str, prompt_tokens, block_size)
     server_info = ServerInfo(None, None, None, None, None)
     seq_group = SequenceGroupLlumnix(
-        request_id, server_info, request_expected_steps, [prompt],
+        request_id, server_info, expected_steps, [prompt],
         SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
         time.time(), lora_request)
 
@@ -108,7 +108,7 @@ def create_seq_group(
     seq_group = SequenceGroupLlumnix(
         request_id=request_id,
         server_info=None,
-        request_expected_steps=math.inf,
+        expected_steps=math.inf,
         seqs=seqs,
         sampling_params=sampling_params,
         arrival_time=time.time(),

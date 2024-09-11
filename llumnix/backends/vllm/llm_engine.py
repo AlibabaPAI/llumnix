@@ -243,12 +243,12 @@ class LLMEngineLlumnix(LLMEngine):
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 
-    def add_request(self, request_id: str, server_info: ServerInfo, request_expected_steps: int, *args, **kwargs):
+    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler.waiting[-1]
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.engine_add_request_timestamp = time.time()
-        self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, request_expected_steps, [seq_group.get_seqs()[0]],
+        self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
                                                           seq_group.sampling_params, seq_group.metrics.arrival_time, seq_group.lora_request,
                                                           seq_group.multi_modal_data)
         self.scheduler.scheduler_lock.release()
@@ -347,11 +347,11 @@ class BackendVLLM(BackendInterface):
     def add_request(self,
                     request_id: str,
                     server_info: ServerInfo,
-                    request_expected_steps: int,
+                    expected_steps: int,
                     *args,
                     **kwargs) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        self.engine.add_request(request_id, server_info, request_expected_steps, *args, **kwargs)
+        self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]

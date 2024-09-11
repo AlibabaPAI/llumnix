@@ -21,12 +21,12 @@ class RequestInferenceType(str, Enum):
     DECODE = "decode"
 
 class LlumnixRequest:
-    def __init__(self, request_id: int, server_info: ServerInfo, request_expected_steps: int) -> None:
+    def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
         self.request_id = request_id
         self.server_info = server_info
 
         # strict pre-migration args
-        self.expected_steps = request_expected_steps
+        self.expected_steps = expected_steps
 
         # migration args
         self.last_preemption_time = None

@@ -16,8 +16,8 @@ from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 class MockRequest(LlumnixRequest):
-    def __init__(self, request_id, length, request_expected_steps) -> None:
-        super().__init__(request_id=request_id, server_info=None, request_expected_steps=request_expected_steps)
+    def __init__(self, request_id, length, expected_steps) -> None:
+        super().__init__(request_id=request_id, server_info=None, expected_steps=expected_steps)
         self.length = length
         self.status = RequestInferenceType.DECODE
 
@@ -41,8 +41,8 @@ class MockeEngine():
     def __init__(self) -> None:
         self.running = []
 
-    def add_request(self, request_id, length, request_expected_steps) -> None:
-        self.running.append(MockRequest(request_id, length, request_expected_steps))
+    def add_request(self, request_id, length, expected_steps) -> None:
+        self.running.append(MockRequest(request_id, length, expected_steps))
 
     def get_running_queue(self):
         return self.running
@@ -51,9 +51,9 @@ def test_scheduler_policy():
     engine = MockeEngine()
     scheduler = LocalMigrationScheduler("", engine)
 
-    engine.add_request(request_id="0", length=1, request_expected_steps=math.inf)
-    engine.add_request(request_id="1", length=3, request_expected_steps=math.inf)
-    engine.add_request(request_id="2", length=2, request_expected_steps=math.inf)
+    engine.add_request(request_id="0", length=1, expected_steps=math.inf)
+    engine.add_request(request_id="1", length=3, expected_steps=math.inf)
+    engine.add_request(request_id="2", length=2, expected_steps=math.inf)
 
     scheduler.request_migration_policy = "LCFS"
     assert scheduler.get_migrate_out_request().request_id == "2"
@@ -62,18 +62,18 @@ def test_scheduler_policy():
     scheduler.request_migration_policy = "SJF"
     assert scheduler.get_migrate_out_request().request_id == "0"
 
-    engine.add_request(request_id="3", length=2, request_expected_steps=1)
+    engine.add_request(request_id="3", length=2, expected_steps=1)
     request = scheduler.get_migrate_out_request()
     assert request.request_id == "3"
     assert request.output_len >= request.expected_steps and request.inference_type == RequestInferenceType.DECODE
-    engine.add_request(request_id="4", length=3, request_expected_steps=math.inf)
+    engine.add_request(request_id="4", length=3, expected_steps=math.inf)
     scheduler.request_migration_policy = "LCFS"
     request = scheduler.get_migrate_out_request()
     assert request.request_id == "3"
     assert request.output_len >= request.expected_steps and request.inference_type == RequestInferenceType.DECODE
 
 def test_scheduler_should_abort_migration():
-    req_0 = MockRequest(request_id="0", length=1, request_expected_steps=math.inf)
+    req_0 = MockRequest(request_id="0", length=1, expected_steps=math.inf)
     req_0.stage_timestamps = [1]
     assert req_0.should_abort_migration() is False
     req_0.status = RequestInferenceType.PREFILL
@@ -83,9 +83,9 @@ def test_scheduler_should_abort_migration():
     assert req_0.should_abort_migration() is True
 
 def test_blocking_migration():
-    req_0 = MockRequest(request_id="0", length=1, request_expected_steps=math.inf)
+    req_0 = MockRequest(request_id="0", length=1, expected_steps=math.inf)
     assert req_0.blocking_migration is False
-    req_1 = MockRequest(request_id="1", length=2, request_expected_steps=1)
+    req_1 = MockRequest(request_id="1", length=2, expected_steps=1)
     assert req_1.blocking_migration is True
-    req_2 = MockRequest(request_id="2", length=1, request_expected_steps=1)
+    req_2 = MockRequest(request_id="2", length=1, expected_steps=1)
     assert req_2.blocking_migration is True

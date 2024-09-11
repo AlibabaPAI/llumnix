@@ -157,7 +157,7 @@ def test_schedule_running():
     budget = create_token_budget()
     curr_loras = None
     
-    _, seq_group_0 = create_dummy_prompt("0", prompt_length=1, request_expected_steps=math.inf)
+    _, seq_group_0 = create_dummy_prompt("0", prompt_length=1, expected_steps=math.inf)
     scheduler._allocate_and_set_running(seq_group_0)
     append_new_token_seq_group(1, seq_group_0, 1)
     scheduler.running.append(seq_group_0)
@@ -167,7 +167,7 @@ def test_schedule_running():
     assert len(running_scheduled.prefill_seq_groups) == 0
     assert len(remainig_running) == 0
 
-    _, seq_group_1 = create_dummy_prompt("1", prompt_length=1, request_expected_steps=1)
+    _, seq_group_1 = create_dummy_prompt("1", prompt_length=1, expected_steps=1)
     scheduler._allocate_and_set_running(seq_group_1)
     append_new_token_seq_group(1, seq_group_1, 1)
     scheduler.running.append(seq_group_1)

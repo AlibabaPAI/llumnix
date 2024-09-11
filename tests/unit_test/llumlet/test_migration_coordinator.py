@@ -42,6 +42,7 @@ def test_migrate_out_onestage(setup_ray_env):
     dst_blocks = [1, 2]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
     migrate_out_request.should_abort_migration.return_value = False
+    migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
 
     # Test normal migration scenario
@@ -53,6 +54,7 @@ def test_migrate_out_onestage(setup_ray_env):
     dst_blocks = [3]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
     migrate_out_request.should_abort_migration.return_value = False
+    migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_DONE
@@ -63,6 +65,7 @@ def test_migrate_out_onestage(setup_ray_env):
     dst_blocks = []
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
     migrate_out_request.should_abort_migration.return_value = False
+    migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_ABORTED
@@ -72,6 +75,17 @@ def test_migrate_out_onestage(setup_ray_env):
     dst_blocks = [1, 2]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
     migrate_out_request.should_abort_migration.return_value = True
+    migrate_out_request.blocking_migration = False
+    migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
+    status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
+    assert status == MigrationStatus.FINISHED_ABORTED
+
+    migrate_out_request = MagicMock()
+    src_blocks = [1, 2, 3]
+    dst_blocks = [1, 2]
+    backend_engine.get_request_incremental_blocks.return_value = src_blocks
+    migrate_out_request.should_abort_migration.return_value = False
+    migrate_out_request.blocking_migration = True
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_ABORTED

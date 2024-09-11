@@ -25,8 +25,8 @@ class InstanceType(str, Enum):
     NO_CONSTRAINTS = "NO_CONSTRAINTS"
 
     # Specific to Prefill-Decoding disaggregation.
-    PREFILL = "prefill"
-    DECODE = "decode"
+    PREFILL = "PREFILL"
+    DECODE = "DECODE"
 
 
 class ScalingScheduler:
@@ -79,14 +79,12 @@ class ScalingScheduler:
         instance_type = None
         if self.maximum_prefill_instance_num > 0:
             if len(self.instance_type_id_set[InstanceType.PREFILL]) < self.maximum_prefill_instance_num:
-                self.instance_type_id_set[InstanceType.PREFILL].add(instance_id)
                 instance_type = InstanceType.PREFILL
             else:
-                self.instance_type_id_set[InstanceType.DECODE].add(instance_id)
                 instance_type = InstanceType.DECODE
         else:
-            self.instance_type_id_set[InstanceType.NO_CONSTRAINTS].add(instance_id)
             instance_type = InstanceType.NO_CONSTRAINTS
+        self.instance_type_id_set[instance_type].add(instance_id)
         return instance_type
 
     def remove_instance(self, instance_id: str) -> None:

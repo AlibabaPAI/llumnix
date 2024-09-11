@@ -59,7 +59,7 @@ class DispatchScheduler:
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
-        if self.num_dispatch_instances == -1 or (self.num_dispatch_instances > 0 and
+        if self.num_dispatch_instances <= 0 or (self.num_dispatch_instances > 0 and
             len(self.available_dispatch_instance_set) < self.num_dispatch_instances):
             self.available_dispatch_instance_set.add(instance_id)
             self.instance_num_requests[instance_id] = 0

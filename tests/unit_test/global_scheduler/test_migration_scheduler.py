@@ -58,7 +58,7 @@ def test_get_migration_instance_infos(pair_migration_type):
                 constraint_prefill_instance_num = random.randint(-1, INSTANCE_NUM)
             migration_scheduler = init_migration_scheduler()
             if constraint_prefill_instance_num > 0:
-                if len([info for info in migration_scheduler.instance_info.values() if info.instance_type == InstanceType.PREFILL]) < constraint_prefill_instance_num:
+                if len([info for info in instance_info_dict.values() if info.instance_type == InstanceType.PREFILL]) < constraint_prefill_instance_num:
                     instance_info.instance_type = InstanceType.PREFILL
                 else:
                     instance_info.instance_type = InstanceType.DECODE

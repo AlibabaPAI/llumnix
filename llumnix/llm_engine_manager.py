@@ -18,6 +18,7 @@ import os
 from typing import Dict, List, Tuple, Union, Iterable
 from collections import defaultdict
 import traceback
+from functools import partial
 import ray
 
 from llumnix.llumlet.llumlet import Llumlet
@@ -167,34 +168,37 @@ class LLMEngineManager:
                 self.request_instance[request_id] = instance_id
 
     async def _update_instance_info_loop(self, interval: float) -> None:
+        def update_instance_info_callback(instance_id, fut):
+            ret = fut.result()[0]
+            if not isinstance(ret, ray.exceptions.RayActorError):
+                if ret is not None:
+                    instance_infos.append(ret)
+                    self.global_scheduler.update_instance_infos([ret])
+            else:
+                dead_instance_ids.append(instance_id)
         while True:
             try:
                 await asyncio.sleep(interval)
-                tasks = [instance.get_instance_info.remote() for instance in self.instances.values()]
-                instance_ids = list(self.instances.keys())
-                rets = await asyncio.gather(*tasks, return_exceptions=True)
-
-                instance_info_list = []
-                dead_instances = []
-                for idx, ret in enumerate(rets):
-                    if not isinstance(ret, ray.exceptions.RayActorError):
-                        if ret is not None:
-                            instance_info_list.append(ret)
-                    else:
-                        instance_id = instance_ids[idx]
-                        dead_instances.append(instance_id)
-                if len(dead_instances) > 0:
-                    logger.info("[_update_instance_info_loop] dead instances: {}.".format(dead_instances))
-                    self.scale_down(dead_instances)
-
-                self.global_scheduler.update_instance_infos(instance_info_list)
+                tasks = []
+                instance_infos = []
+                dead_instance_ids = []
+                for instance_id, instance in self.instances.items():
+                    # Use asyncio.gather to wrap ray remote call to add done callback
+                    task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
+                    callback = partial(update_instance_info_callback, instance_id)
+                    task.add_done_callback(callback)
+                    tasks.append(task)
+                await asyncio.gather(*tasks, return_exceptions=True)
+                if len(dead_instance_ids) > 0:
+                    logger.info("[_update_instance_info_loop] dead instances: {}.".format(dead_instance_ids))
+                    self.scale_down(dead_instance_ids)
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \
                     and self.num_instance_info_updates % self.pair_migration_frequency == 0:
                     asyncio.create_task(self._migrate())
                 if self.log_instance_info:
-                    self._log_instance_infos_to_csv(instance_info_list)
+                    self._log_instance_infos_to_csv(instance_infos)
             # pylint: disable=W0703
             except Exception as e:
                 logger.error("unexpected exception occurs: {}".format(e))

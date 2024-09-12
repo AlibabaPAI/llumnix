@@ -60,9 +60,9 @@ def test_scheduler_policy():
 
     scheduler.request_migration_policy = "LCFS"
     assert scheduler.get_migrate_out_request().request_id == "2"
-    scheduler.request_migration_policy = "LJF"
+    scheduler.request_migration_policy = "LRF"
     assert scheduler.get_migrate_out_request().request_id == "1"
-    scheduler.request_migration_policy = "SJF"
+    scheduler.request_migration_policy = "SRF"
     assert scheduler.get_migrate_out_request().request_id == "0"
 
     engine.add_request(request_id="3", length=2, expected_steps=1)

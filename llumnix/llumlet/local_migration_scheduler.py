@@ -23,15 +23,17 @@ class LocalMigrationScheduler:
         self.backend_engine = backend_engine
 
     def get_migrate_out_request(self, min_request_len=0, max_request_len=np.inf) -> Optional[LlumnixRequest]:
-         # Requests meet the strict pre-migration always have higher prioirity than other migration policy.
-        migrate_out_request = self.get_ready_migration_request(min_request_len, max_request_len)
+        # Requests meet the strict pre-migration always have higher prioirity than other migration policy.
+        migrate_out_request: LlumnixRequest = self.get_ready_migration_request(min_request_len, max_request_len)
         if migrate_out_request is None:
             if self.request_migration_policy == 'LCFS':
-                migrate_out_request = self.get_last_running_request(min_request_len, max_request_len)
-            elif self.request_migration_policy == 'LJF':
-                migrate_out_request = self.get_longest_running_request(min_request_len, max_request_len)
-            elif self.request_migration_policy == 'SJF':
-                migrate_out_request = self.get_shortest_running_request(min_request_len, max_request_len)
+                migrate_out_request = self._get_last_running_request(min_request_len, max_request_len)
+            elif self.request_migration_policy == 'LRF':
+                migrate_out_request = self._get_longest_running_request(min_request_len, max_request_len)
+            elif self.request_migration_policy == 'SRF':
+                migrate_out_request = self._get_shortest_running_request(min_request_len, max_request_len)
+            elif self.request_migration_policy == 'FWSR':
+                migrate_out_request = self._get_first_waiting_or_shortest_running_request(min_request_len, max_request_len)
         return migrate_out_request
 
     # The function is used to retrieve requests on the backend that have already met the expected_steps.

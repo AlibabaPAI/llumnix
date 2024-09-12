@@ -116,6 +116,7 @@ class Llumlet:
                 migrate_out_request.stage_timestamps.append(time.time())
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             else:
+                migrate_out_request.reset_migration_args()
                 ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
             t1 = time.time()
             logger.info("{}->{} migrate done, migrate request {}, status:{}, len:{} blocks, cost:{} ms" \

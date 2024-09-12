@@ -244,7 +244,8 @@ class EngineManagerArgs:
                             help='migrate out instance load threshold')
         parser.add_argument('--request-migration-policy',
                             type=str,
-                            choices=['LCFS', 'SJF', 'LJF'],
+                            default=None,
+                            choices=['LCFS', 'SRF', 'LRF', 'FWSR'],
                             help='request migration policy')
         parser.add_argument('--enable-defrag',
                             type=bool,

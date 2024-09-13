@@ -78,4 +78,4 @@ class LocalMigrationScheduler:
     def _get_first_waiting_or_shortest_running_request(self, min_request_len, max_request_len):
         waiting: Deque[LlumnixRequest] = self.backend_engine.get_waiting_queue()
         waiting = [seq_group for seq_group in waiting if seq_group.try_schedule_times >= 1]
-        return waiting[0] if waiting else self._get_shortest_running_request(min_request_len, max_request_len)
+        return waiting[0] if waiting and waiting[0].request_len > 0 else self._get_shortest_running_request(min_request_len, max_request_len)

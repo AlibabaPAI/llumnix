@@ -353,7 +353,10 @@ class BackendVLLM(BackendInterface):
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_args()
-        self.add_running_request(backend_request)
+        if backend_request.status == RequestStatus.RUNNING:
+            self.add_running_request(backend_request)
+        else: # backend_request.status == RequestStatus.WAITING
+            self.add_waiting_request(backend_request)
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         await dst_ray_actor.execute_engine_method.remote("_run_workers",

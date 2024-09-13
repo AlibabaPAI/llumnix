@@ -37,6 +37,8 @@ class LlumnixRequest:
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
 
+        self.waiting_migrating = False
+
     def reset_migration_args(self):
         self.last_preemption_time = None
         self.stage_timestamps = []
@@ -72,7 +74,7 @@ class LlumnixRequest:
         raise NotImplementedError
 
     @property
-    def request_status(self) -> RequestStatus:
+    def status(self) -> RequestStatus:
         raise NotImplementedError
 
     @property

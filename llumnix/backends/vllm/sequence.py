@@ -12,11 +12,18 @@
 # limitations under the License.
 
 import math
+import enum
 
 from vllm.sequence import SequenceGroup, SequenceStatus
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
+
+class SequenceStatusLlumnix(enum.Enum):
+    # src running request migrating to dst
+    RUNNING_MIGRATING = enum.auto()
+    # src waiting request migrating to dst
+    WAITING_MIGRATING = enum.auto()
 
 class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
     def __init__(self, request_id, server_info, expected_steps: int, *args, **kwargs) -> None:
@@ -54,13 +61,21 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         return self.metrics.arrival_time
 
     @property
-    def request_status(self) -> RequestStatus:
-        if self.get_seqs()[0].status == SequenceStatus.RUNNING:
+    def status(self) -> RequestStatus:
+        status = self.get_seqs()[0].status
+        assert status in [SequenceStatus.RUNNING, SequenceStatus.WAITING, 
+                          SequenceStatusLlumnix.RUNNING_MIGRATING, SequenceStatusLlumnix.WAITING_MIGRATING], \
+            "Only RUNNING, WAITING, RUNNING_MIGRATING, WAITING_MIGRATING are expected status for LlumnixRequest"
+        if status == SequenceStatus.RUNNING:
             return RequestStatus.RUNNING
-        elif self.get_seqs()[0].status == SequenceStatus.WAITING:
+        elif status == SequenceStatus.WAITING:
+            return RequestStatus.WAITING
+        elif status == SequenceStatusLlumnix.RUNNING_MIGRATING:
+            return RequestStatus.RUNNING
+        elif status == SequenceStatusLlumnix.WAITING_MIGRATING:
             return RequestStatus.WAITING
 
     @property
     def prefill_num_blocks(self) -> int:
         # Get the prefill len of the waiting request.
-        return math.ceil(len(self.request_len) / len(self.get_seqs()[0].block_size))
+        return math.ceil(self.request_len / self.get_seqs()[0].block_size)

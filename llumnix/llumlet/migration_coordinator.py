@@ -63,7 +63,7 @@ class MigrationCoordinator:
         prefill_num_blocks = migrate_out_request.prefill_num_blocks
         dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                 .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
-                                                                migrate_out_request.request_status,
+                                                                migrate_out_request.status,
                                                                 migrate_out_request.arrival_time,
                                                                 prefill_num_blocks)
         if len(dst_blocks) != prefill_num_blocks:
@@ -104,7 +104,7 @@ class MigrationCoordinator:
             stage_block_num = len(incremental_blocks) - 1
             dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                     .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
-                                                                    migrate_out_request.request_status,
+                                                                    migrate_out_request.status,
                                                                     migrate_out_request.arrival_time,
                                                                     stage_block_num)
         else:
@@ -116,7 +116,7 @@ class MigrationCoordinator:
             src_blocks = incremental_blocks[:]
             dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                     .remote("migrate_in_pre_alloc", migrate_out_request.request_id, 
-                                                                    migrate_out_request.request_status,
+                                                                    migrate_out_request.status,
                                                                     migrate_out_request.arrival_time,
                                                                     stage_block_num)
 
@@ -148,6 +148,9 @@ class MigrationCoordinator:
                                                          request_status,
                                                          request_arrival_time,
                                                          block_num)
+        if len(pre_alloc_blocks) != block_num:
+            # failed to alloc, abort request
+            self.free_dst_pre_alloc_cache(request_id)
         return pre_alloc_blocks
 
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:

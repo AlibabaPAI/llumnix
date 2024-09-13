@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import time
+import traceback
 from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
 import threading
@@ -29,7 +30,7 @@ from vllm.usage.usage_lib import UsageContext
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 from llumnix.backends.profiling import LatencyMemData
@@ -244,14 +245,44 @@ class BackendVLLM(BackendInterface):
         self._run_workers("init_migration", instance_id=instance_id, migration_config=migration_config,\
                                                       src_worker_handle_list=self.worker_handle_list,
                                                       placement_group=placement_group, node_id=node_id)
+
+        self.state_lock = threading.Lock()
+        self.state = EngineState.INIT
+        logger.info("{} current state {}".format(self.instance_id, self.state))
+
+        self._stop_event = threading.Event()
         self._thread = threading.Thread(
             target=self._start_engine_loop, args=(), daemon=True, name="engine_loop"
         )
         self._thread.start()
 
     def _start_engine_loop(self) -> None:
-        while True:
-            self.engine.step()
+        self._stop_event.clear()
+
+        with self.state_lock:
+            previous_state = self.state
+            self.state = EngineState.RUNNING
+            logger.info("{} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+
+        while not self._stop_event.is_set():
+            try:
+                self.engine.step()
+            # pylint: disable=broad-except
+            except Exception as e:
+                logger.error("Error in engine loop: {}".format(e))
+                logger.error("exception traceback: {}".format(traceback.format_exc()))
+                self._run_workers("shutdown")
+
+                with self.state_lock:
+                    previous_state = self.state
+                    self.state = EngineState.CRASHED
+                    logger.info("{} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+                break
+
+        with self.state_lock:
+            if self.state == EngineState.RUNNING:
+                self.state = EngineState.STOPPED
+                logger.info("{} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def execute_worker_method(self, method, *args, **kwargs):
         return self.engine.model_executor.driver_worker.execute_method(method, *args, **kwargs)

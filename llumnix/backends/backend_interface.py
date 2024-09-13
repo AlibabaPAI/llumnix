@@ -18,6 +18,11 @@ from typing import Iterable, List, Union
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.server_info import ServerInfo
 
+class EngineState(str, Enum):
+    INIT = "INIT"
+    CRASHED = "CRASHED"
+    RUNNING = "RUNNING"
+    STOPPED = "STOPPED"
 
 class BackendType(str, Enum):
     VLLM = "VLLM"

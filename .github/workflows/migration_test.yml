@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
     - main
+  push:
+    branches:
+      - main
 
 jobs:
   cancel_previous_workflows:
@@ -27,6 +30,7 @@ jobs:
     - name: Build And Test
       run: ./tools/migration_test.sh
     - name: Create comment from file
+      if: ${{ github.event_name != 'push' }}
       uses: actions/github-script@v7
       with:
         script: |

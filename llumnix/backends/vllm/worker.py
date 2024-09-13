@@ -147,6 +147,7 @@ class MigrationWorker(Worker):
         del self.model_runner
         del self.cache_engine
         del self.gpu_cache
+        del self.migration_backend
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
 

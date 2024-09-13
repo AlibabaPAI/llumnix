@@ -19,7 +19,7 @@ from typing import List
 import ray
 
 from llumnix.logger import init_logger
-from llumnix.llumlet.request import LlumnixRequest
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface
 
 logger = init_logger(__name__)
@@ -27,17 +27,15 @@ logger = init_logger(__name__)
 class MigrationStatus(enum.Enum):
     """Status of Migration."""
     RUNNING = enum.auto()
-    # aborted by src instance
-    ABORTED_SRC = enum.auto()
-    # aborted by dst instance
-    ABORTED_DST = enum.auto()
+    FINISHED_DST_ABORTED = enum.auto()
+    FINISHED_SRC_ABORTED = enum.auto()
     FINISHED_DONE = enum.auto()
 
     @staticmethod
     def is_finished(status: "MigrationStatus") -> bool:
         return status in [
-            MigrationStatus.ABORTED_SRC,
-            MigrationStatus.ABORTED_DST,
+            MigrationStatus.FINISHED_DST_ABORTED,
+            MigrationStatus.FINISHED_SRC_ABORTED,
             MigrationStatus.FINISHED_DONE
         ]
 
@@ -49,20 +47,66 @@ class MigrationCoordinator:
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.backend_engine = backend_engine
+    
+    async def migrate_out_running_request(self,
+                                          migrate_in_ray_actor: "ray.actor.ActorHandle",
+                                          migrate_out_request: LlumnixRequest) -> "MigrationStatus":
+        return await self._migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
 
-    async def migrate_out_onestage(self, migrate_in_ray_actor: "ray.actor.ActorHandle",  migrate_out_request: LlumnixRequest, ) -> "MigrationStatus":
-        """one-stage live migration until last stage
+    async def migrate_out_waiting_request(self,
+                                          migrate_in_ray_actor: "ray.actor.ActorHandle",
+                                          migrate_out_request: LlumnixRequest) -> "MigrationStatus":
+        """one-stage migration for a waiting request
+        """
+        self.backend_engine.remove_waiting_request(migrate_out_request.request_id)
+        self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
+        prefill_num_blocks = migrate_out_request.prefill_num_blocks
+        dst_blocks = await migrate_in_ray_actor.execute_migration_method \
+                                .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
+                                                                migrate_out_request.request_status,
+                                                                migrate_out_request.arrival_time,
+                                                                prefill_num_blocks)
+        if len(dst_blocks) != prefill_num_blocks:
+            self.backend_engine.add_waiting_request(migrate_out_request)
+            self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+            return MigrationStatus.FINISHED_DST_ABORTED
+
+        return MigrationStatus.FINISHED_DONE
+
+    async def _migrate_out_multistage(self,
+                                      migrate_in_ray_actor: "ray.actor.ActorHandle",
+                                      migrate_out_request: LlumnixRequest) -> "MigrationStatus":
+        """Migrate out requests to a specified instance, return migrated request id.
+        Args:
+            dst_instance_name: instance actor name, used to get ray actor handle
+        """
+        stage_count = 0
+        while stage_count < self.max_stages:
+            stage_count += 1
+            status = await self._migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
+            if MigrationStatus.is_finished(status):
+                return status
+        # exceed max stages
+        return MigrationStatus.FINISHED_SRC_ABORTED
+
+    async def _migrate_out_onestage(self,
+                                    migrate_in_ray_actor: "ray.actor.ActorHandle",
+                                    migrate_out_request: LlumnixRequest) -> "MigrationStatus":
+        """one-stage live migration until last stage for a running request
         """
         pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
         incremental_blocks = self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
         # live migration, transfer all blocks except last one(currently updating)
-        migration_status = MigrationStatus.RUNNING
         is_last_stage = (len(incremental_blocks) <= self.last_stage_max_blocks) or migrate_out_request.blocking_migration
         if not is_last_stage:
+            migration_status = MigrationStatus.RUNNING
             src_blocks = incremental_blocks[:-1]
             stage_block_num = len(incremental_blocks) - 1
             dst_blocks = await migrate_in_ray_actor.execute_migration_method \
-                            .remote("migrate_in_pre_alloc", migrate_out_request.request_id, stage_block_num)
+                                    .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
+                                                                    migrate_out_request.request_status,
+                                                                    migrate_out_request.arrival_time,
+                                                                    stage_block_num)
         else:
             # last stage migration, stop inference, transfer all blocks
             migration_status = MigrationStatus.FINISHED_DONE
@@ -71,15 +115,17 @@ class MigrationCoordinator:
             stage_block_num = len(incremental_blocks)
             src_blocks = incremental_blocks[:]
             dst_blocks = await migrate_in_ray_actor.execute_migration_method \
-                            .remote("migrate_in_pre_alloc", migrate_out_request.request_id, stage_block_num)
+                                    .remote("migrate_in_pre_alloc", migrate_out_request.request_id, 
+                                                                    migrate_out_request.request_status,
+                                                                    migrate_out_request.arrival_time,
+                                                                    stage_block_num)
 
         if len(dst_blocks) != len(src_blocks):
-            # migrate-in instance failed to prev alloc
+            # migrate-in instance failed to pre alloc
             if is_last_stage:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-            migration_status = MigrationStatus.ABORTED_DST
-            return migration_status
+            return MigrationStatus.FINISHED_DST_ABORTED
         # do stage send/recv
         migrate_out_request.stage_timestamps.append(time.time())
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)
@@ -87,31 +133,21 @@ class MigrationCoordinator:
         await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
         if not is_last_stage and migrate_out_request.should_abort_migration():
             # migrate-out request abort by scheduler during send/recv
-            migration_status = MigrationStatus.ABORTED_SRC
+            return MigrationStatus.FINISHED_SRC_ABORTED
 
         return migration_status
 
-    async def migrate_out_multistage(self, migrate_in_ray_actor: "ray.actor.ActorHandle",  migrate_out_request: LlumnixRequest) -> "MigrationStatus":
-        """Migrate out requests to a specified instance, return migrated request id.
-        Args:
-        dst_instance_name:instance actor name, used to get ray actor handle
-        """
-        state_count = 0
-        while state_count < self.max_stages:
-            state_count += 1
-            status = await self.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
-            if MigrationStatus.is_finished(status):
-                return status
-        # exceed max stages
-        return MigrationStatus.ABORTED_SRC
-
-    def migrate_in_pre_alloc(self, request_id: str, block_num: int) -> List[int]:
+    def migrate_in_pre_alloc(self, 
+                             request_id: str,
+                             request_status: RequestStatus,
+                             request_arrival_time: float,
+                             block_num: int) -> List[int]:
         """prev alloc blocks to migrate in request
         """
-        pre_alloc_blocks = self.backend_engine.pre_alloc(request_id ,block_num)
-        if len(pre_alloc_blocks) != block_num:
-            # failed to alloc, abort request
-            self.free_dst_pre_alloc_cache(request_id)
+        pre_alloc_blocks = self.backend_engine.pre_alloc(request_id,
+                                                         request_status,
+                                                         request_arrival_time,
+                                                         block_num)
         return pre_alloc_blocks
 
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:

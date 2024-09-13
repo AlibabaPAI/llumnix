@@ -24,7 +24,7 @@ class RequestStatus(str, Enum):
     WAITING = "waiting"
 
 class LlumnixRequest:
-    def __init__(self, request_id: int, server_info: ServerInfo) -> None:
+    def __init__(self, request_id: str, server_info: ServerInfo) -> None:
         self.request_id = request_id
         self.server_info = server_info
 
@@ -32,6 +32,8 @@ class LlumnixRequest:
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
+
+        self.waiting_migrating = False
 
     def reset_migration_args(self):
         self.last_preemption_time = None
@@ -63,7 +65,7 @@ class LlumnixRequest:
         raise NotImplementedError
 
     @property
-    def request_status(self) -> RequestStatus:
+    def status(self) -> RequestStatus:
         raise NotImplementedError
 
     @property

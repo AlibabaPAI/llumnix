@@ -5,13 +5,13 @@ class MockRequest(LlumnixRequest):
     def __init__(self, request_id, length) -> None:
         super().__init__(request_id=request_id, server_info=None)
         self.length = length
-        self.status = RequestInferenceType.DECODE
+        self._inference_type = RequestInferenceType.DECODE
         self._finished = False
         self.last_preemption_time = -1
 
     @property
     def inference_type(self) -> RequestInferenceType:
-        return self.status
+        return self._inference_type
 
     @property
     def request_len(self) -> int:

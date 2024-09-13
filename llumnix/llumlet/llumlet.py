@@ -15,6 +15,7 @@ import asyncio
 import traceback
 from typing import List, Union, Iterable
 import time
+import traceback
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
@@ -163,6 +164,9 @@ class Llumlet:
         except ray.exceptions.RayActorError:
             logger.info("[migrate_out] instance {} is dead".format(dst_instance_name[len("instance_"):]))
             raise
+        except Exception as e:
+            logger.error("unexpected exception occurs: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
         return migrated_request_list
 
     def get_instance_info(self) -> InstanceInfo:
@@ -205,9 +209,9 @@ class Llumlet:
             migrating_out_requests_last_stage = self.backend_engine.pop_migrating_out_requests_last_stage()
             for backend_request in migrating_out_requests_last_stage:
                 logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
-                if backend_request.request_status == RequestStatus.RUNNING:
+                if backend_request.status == RequestStatus.RUNNING:
                     self.backend_engine.add_running_request(backend_request)
-                else: # backend_request.request_status == RequestStatus.WAITING
+                else: # backend_request.status == RequestStatus.WAITING
                     self.backend_engine.add_waiting_request(backend_request)
 
     def execute_migration_method(self, method, *args, **kwargs):

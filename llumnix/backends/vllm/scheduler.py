@@ -13,17 +13,19 @@
 
 from asyncio.log import logger
 import time
-from typing import Dict, List, Optional, Tuple, Deque
+from typing import Dict, List, Optional, Tuple, Deque, Union
 from collections import deque
 
 from vllm.core.block_manager_v1 import BlockSpaceManagerV1, BlockTable
 from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, SequenceGroupMetadata, SchedulerOutputs)
 from vllm.core.policy import PolicyFactory
+from vllm.sequence import SequenceGroup
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
-from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, SequenceStatusLlumnix
+
 
 logger = init_logger(__name__)
 
@@ -100,12 +102,15 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.running:
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
+                self._set_status(seq_group, status_to=SequenceStatusLlumnix.RUNNING_MIGRATING)
                 break
 
     def remove_waiting_request(self, request_id: str) -> None:
         for seq_group in self.waiting:
             if seq_group.request_id == request_id:
                 self.waiting.remove(seq_group)
+                self._set_status(seq_group, status_to=SequenceStatusLlumnix.WAITING_MIGRATING)
+                seq_group.waiting_migrating = True
                 break
 
     def add_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
@@ -139,16 +144,32 @@ class SchedulerLlumnix(Scheduler):
         return blocks
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
+        self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
         self.running.append(backend_request)
 
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
+        self._set_status(backend_request, status_to=SequenceStatus.WAITING)
         self.waiting.append(backend_request)
         fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
         self.waiting = fcfs_policy.sort_by_priority(time.time(), self.waiting)
 
-    def is_request_running(self, backend_request: LlumnixRequest) -> bool:
-        return backend_request in self.running
+    def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
+        # Change seq status to running, but request status is still waiting_migrating.
+        if seq_group.waiting_migrating:
+            # For the waiting request migrated in, blocks have already been allocated when pre alloc.
+            self._set_status(seq_group, status_to=SequenceStatus.RUNNING)
+            seq_group.waiting_migrating = False
+        else:
+            super()._allocate_and_set_running(seq_group)
 
+    def _set_status(self, 
+                    seq_group: SequenceGroup,
+                    status_to: Union[SequenceStatus, SequenceStatusLlumnix],
+                    status_from: Union[SequenceStatus, SequenceStatusLlumnix] = None):
+        for seq in seq_group.get_seqs(status=status_from):
+            seq.status = status_to
+
+    @scheduler_lock
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
         if request_id:
             blocks = self.pre_alloc_cache_dict.pop(request_id, [])

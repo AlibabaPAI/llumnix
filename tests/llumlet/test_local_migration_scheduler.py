@@ -6,6 +6,8 @@ class MockRequest(LlumnixRequest):
         super().__init__(request_id=request_id, server_info=None)
         self.length = length
         self.status = RequestInferenceType.DECODE
+        self._finished = False
+        self.last_preemption_time = -1
 
     @property
     def inference_type(self) -> RequestInferenceType:
@@ -22,6 +24,10 @@ class MockRequest(LlumnixRequest):
     @property
     def output_len(self) -> int:
         return self.length
+    
+    @property
+    def finished(self) -> bool:
+        return self._finished
 
 class MockeEngine():
     def __init__(self) -> None:
@@ -52,8 +58,9 @@ def test_scheduler_should_abort_migration():
     req_0 = MockRequest(request_id="0", length=1)
     req_0.stage_timestamps = [1]
     assert req_0.should_abort_migration() is False
-    req_0.status = RequestInferenceType.PREFILL
+    req_0._finished = True
     assert req_0.should_abort_migration() is True
-    req_0.status = RequestInferenceType.DECODE
+    req_0._finished = False
+    assert req_0.should_abort_migration() is False
     req_0.last_preemption_time = 2
     assert req_0.should_abort_migration() is True

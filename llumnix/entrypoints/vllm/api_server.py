@@ -224,35 +224,44 @@ async def is_ready():
     ready_status = await engine_manager.is_ready.remote()
     return ready_status
 
+class CustomArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        self.cur_namespace = "llumnix"
+        super().__init__(*args, **kwargs)
+
+    def set_namespace(self, namespace: str):
+        self.cur_namespace = namespace
+
+    def add_argument(self, *args, **kwargs):
+        if self.cur_namespace == 'llumnix' and "--help" not in args and args[0] != "--config-file":
+            assert 'default' not in kwargs or kwargs['default'] is None, \
+                f"Do not set the default value for '{args[0]}' in CLI, or set it to None. " \
+                f"The default value will be retrieved from config/default.py in get_llumnix_config."
+        super().add_argument(*args, **kwargs)
+
 if __name__ == "__main__":
-    # Note: All the arguments' default values should be None in the parser !!!
-    # The default values refer to config/default.py.
-    # TODO(KuilongCui): add a better way to handle the default values.
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default=None)
-    parser.add_argument("--port", type=int, default=None)
-    parser.add_argument("--ssl-keyfile", type=str, default=None)
-    parser.add_argument("--ssl-certfile", type=str, default=None)
-    parser.add_argument('--disable-log-requests-server',
-                        action='store_true',
-                        default=None,
-                        help='disable logging requests in server')
-    parser.add_argument("--ray-cluster-port", type=int, default=None)
-    parser.add_argument('--launch-ray-cluster',
-                        action='store_true',
-                        default=None,
-                        help='if launch ray cluster in api server')
-    parser.add_argument("--request-output-queue-port", type=int, default=None)
+    parser: CustomArgumentParser = CustomArgumentParser()
+
+    parser.set_namespace("llumnix")
+    parser.add_argument("--host", type=str)
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--ssl-keyfile", type=str)
+    parser.add_argument("--ssl-certfile", type=str)
+    parser.add_argument('--disable-log-requests-server', action='store_true', help='disable logging requests in server')
+    parser.add_argument("--ray-cluster-port", type=int)
+    parser.add_argument('--launch-ray-cluster', action='store_true', help='if launch ray cluster in api server')
+    parser.add_argument("--request-output-queue-port", type=int)
     parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
-
     parser = EngineManagerArgs.add_cli_args(parser)
-    parser = AsyncEngineArgs.add_cli_args(parser)
-    args = parser.parse_args()
 
-    cfg: LlumnixConfig = get_llumnix_config(args.config_file, args)
+    parser.set_namespace("vllm")
+    parser = AsyncEngineArgs.add_cli_args(parser)
+
+    cli_args = parser.parse_args()
+    cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
     EngineManagerArgs.check_args(engine_manager_args, parser)
-    engine_args = AsyncEngineArgs.from_cli_args(args)
+    engine_args = AsyncEngineArgs.from_cli_args(cli_args)
     check_engine_args(engine_args, engine_manager_args)
 
     logger.info("engine_args: {}".format(engine_args))

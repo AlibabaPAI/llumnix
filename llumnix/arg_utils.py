@@ -245,7 +245,7 @@ class EngineManagerArgs:
         parser.add_argument('--request-migration-policy',
                             type=str,
                             default=None,
-                            choices=['LCFS', 'SRF', 'LRF', 'FWSR'],
+                            choices=['LCFS', 'SRF', 'LRF', 'FWJ'],
                             help='request migration policy')
         parser.add_argument('--enable-defrag',
                             type=bool,

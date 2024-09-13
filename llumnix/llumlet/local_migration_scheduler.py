@@ -33,7 +33,7 @@ class LocalMigrationScheduler:
                 migrate_out_request = self._get_longest_running_request(min_request_len, max_request_len)
             elif self.request_migration_policy == 'SRF':
                 migrate_out_request = self._get_shortest_running_request(min_request_len, max_request_len)
-            elif self.request_migration_policy == 'FWSR':
+            elif self.request_migration_policy == 'FWJ':
                 migrate_out_request = self._get_first_waiting_or_shortest_running_request(min_request_len, max_request_len)
         return migrate_out_request
 
@@ -57,7 +57,7 @@ class LocalMigrationScheduler:
                 return request
         return None
 
-    def _get_longest_running_request(self, min_request_len, max_request_len):
+    def _get_longest_running_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
                                         and min_request_len <= request.request_len <= max_request_len
@@ -66,7 +66,7 @@ class LocalMigrationScheduler:
                                  key=lambda request: request.request_len, default=None)
         return longest_seq_group
 
-    def _get_shortest_running_request(self, min_request_len, max_request_len):
+    def _get_shortest_running_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
                                          and min_request_len <= request.request_len <= max_request_len
@@ -75,7 +75,7 @@ class LocalMigrationScheduler:
                                   key=lambda request: request.request_len, default=None)
         return shortest_seq_group
     
-    def _get_first_waiting_or_shortest_running_request(self, min_request_len, max_request_len):
+    def _get_first_waiting_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
         waiting: Deque[LlumnixRequest] = self.backend_engine.get_waiting_queue()
         waiting = [seq_group for seq_group in waiting if seq_group.try_schedule_times >= 1]
-        return waiting[0] if waiting and waiting[0].request_len > 0 else self._get_shortest_running_request(min_request_len, max_request_len)
+        return waiting[0] if waiting and waiting[0].request_len > 0 else None

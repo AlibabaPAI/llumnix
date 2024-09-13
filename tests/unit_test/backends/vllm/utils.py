@@ -18,7 +18,7 @@ from typing import Iterable, Optional, Tuple
 
 from vllm import SamplingParams
 from vllm.lora.request import LoRARequest
-from vllm.sequence import Logprob, Sequence
+from vllm.sequence import Logprob, Sequence, SequenceStatus
 from vllm.config import SchedulerConfig, CacheConfig
 from vllm.core.scheduler import SchedulingBudget
 
@@ -45,6 +45,7 @@ def create_dummy_prompt(
     request_id: str,
     prompt_length: int,
     block_size: Optional[int] = None,
+    status: SequenceStatus = SequenceStatus.WAITING,
     lora_request: Optional[LoRARequest] = None,
     use_beam_search: bool = False,
     best_of: int = 1,
@@ -63,6 +64,7 @@ def create_dummy_prompt(
         request_id, server_info, expected_steps, [prompt],
         SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
         time.time(), lora_request)
+    seq_group.get_seqs()[0].status = status
 
     return prompt, seq_group
 

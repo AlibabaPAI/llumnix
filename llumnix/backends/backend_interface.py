@@ -13,9 +13,9 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Iterable, List, Union
+from typing import Iterable, List, Union, Deque
 
-from llumnix.llumlet.request import LlumnixRequest
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 
 class EngineState(str, Enum):
@@ -99,9 +99,16 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_running_queue(self) -> List[LlumnixRequest]:
+    def get_running_queue(self) -> Deque[LlumnixRequest]:
         """
         Return backend's running queue.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_waiting_queue(self) -> Deque[LlumnixRequest]:
+        """
+        Return backend's waiting queue.
         """
         raise NotImplementedError
 
@@ -116,6 +123,20 @@ class BackendInterface(ABC):
 
         Args:
             request_id: A string identifier for the request that is to be removed from the running
+                        queue. This ID uniquely identifies the request within the backend system.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def remove_waiting_request(self, request_id: str) -> None:
+        """
+        Removes a request from the backend's waiting queue.
+
+        This method is responsible for safely halting and removing an active request from the waiting
+        queue of the backend engine. This action is performed in waiting request migration.
+
+        Args:
+            request_id: A string identifier for the request that is to be removed from the waiting
                         queue. This ID uniquely identifies the request within the backend system.
         """
         raise NotImplementedError
@@ -164,17 +185,25 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def pre_alloc(self, request_id: str, block_num: int) -> List[int]:
+    def pre_alloc(self,
+                  request_id: str,
+                  request_status: RequestStatus,
+                  request_arrival_time: float,
+                  block_num: int) -> List[int]:
         """Pre-allocates cache blocks for a migrating request.
 
         This method selects a specified number of free cache blocks to be reserved for an incoming
         migration request identified by the given request ID. It updates the pre-allocation cache
         dictionary with the allocated blocks, which ensures that these blocks are not used by
-        another process until the migration is finished.
+        another process until the migration is finished. For the waiting request, it only reserves
+        free cache blocks when the request is the earliest arrival one among the requests of dst instance's 
+        waiting queue.
 
         Args:
             request_id: The unique identifier of the migration request for which cache blocks
                         are to be pre-allocated.
+            request_status: The status (waiting/running) of the request.
+            request_arrival_time: The arrival time of the request.
             block_num: The number of cache blocks that need to be pre-allocated for the request.
 
         Returns:
@@ -187,9 +216,8 @@ class BackendInterface(ABC):
         """
         Adds a backend request to the running queue for processing.
 
-        This method enqueues a backend request into engine running queue, marking it for
-        active processing. It is used when a suspend migrating request should be added back
-        to running queue.
+        This method enqueues a backend request into engine running queue. 
+        It is used when a suspend migrating request should be added back to running queue.
 
         Args:
             backend_request: An object representing the backend request. The type of this
@@ -199,19 +227,17 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def is_request_running(self, backend_request: LlumnixRequest) -> bool:
-        """Checks if a given backend request is currently in the running queue.
+    def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
+        """
+        Adds a backend request to the waiting queue for processing.
 
-        This method determines whether a backend request is present and actively being processed
-        in the running queue.
+        This method enqueues a backend request into engine waiting queue. 
+        It is used when a suspend migrating request should be added back to waiting queue.
 
         Args:
             backend_request: An object representing the backend request. The type of this
                              object is dependent on the backend implementation and the details
                              of the request.
-
-        Returns:
-            True if the backend request is currently in the running queue; False otherwise.
         """
         raise NotImplementedError
 

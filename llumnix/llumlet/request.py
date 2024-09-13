@@ -20,6 +20,10 @@ class RequestInferenceType(str, Enum):
     PREFILL = "prefill"
     DECODE = "decode"
 
+class RequestStatus(str, Enum):
+    RUNNING = "running"
+    WAITING = "waiting"
+
 class LlumnixRequest:
     def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
         self.request_id = request_id
@@ -58,6 +62,22 @@ class LlumnixRequest:
     @property
     def output_len(self) -> int:
         raise NotImplementedError
+    
+    @property
+    def finished(self) -> bool:
+        raise NotImplementedError
+
+    @property
+    def arrival_time(self) -> float:
+        raise NotImplementedError
+
+    @property
+    def request_status(self) -> RequestStatus:
+        raise NotImplementedError
+
+    @property
+    def prefill_num_blocks(self) -> int:
+        raise NotImplementedError
 
     # Whether the migration of request is completed within one stage. For requests that have already reached
     # the expected steps, blocking_migration is True.
@@ -66,7 +86,5 @@ class LlumnixRequest:
         return self.output_len >= self.expected_steps
 
     def should_abort_migration(self) -> bool:
-        return self.output_len == 0 \
-            or (self.last_preemption_time and self.last_preemption_time > self.stage_timestamps[-1]) \
-            or self.inference_type == RequestInferenceType.PREFILL \
-            or self.is_finished()
+        return self.finished \
+            or (self.last_preemption_time is not None and self.last_preemption_time > self.stage_timestamps[-1])

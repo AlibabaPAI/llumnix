@@ -27,6 +27,7 @@ from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.llumlet.request import RequestStatus
 
 logger = init_logger(__name__)
 
@@ -55,7 +56,7 @@ class Llumlet:
                                                             self.backend_engine)
             self.log_requests = True
 
-            self.check_state_thread = asyncio.create_task(self.check_state())
+            asyncio.create_task(self._check_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))
@@ -118,7 +119,7 @@ class Llumlet:
         llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 
-    async def check_state(self):
+    async def _check_state_loop(self):
         while True:
             await asyncio.sleep(1)
             if self.backend_engine.state == EngineState.CRASHED:
@@ -137,19 +138,21 @@ class Llumlet:
             while continue_migrate and len(migrated_request_list) < num_requests:
                 t0 = time.time()
                 migrate_out_request = self.migration_scheduler.get_migrate_out_request()
-                if migrate_out_request is not None:
-                    logger.info("migrate_out {}".format(migrate_out_request.request_id))
                 if migrate_out_request is None:
                     return migrated_request_list
+                assert migrate_out_request.request_status in [RequestStatus.WAITING, RequestStatus.RUNNING], "Only migrate out waiting or running request"
                 logger.info("{}->{} begin migrate out {}".format(self.instance_id, dst_instance_id, migrate_out_request.request_id))
-                status = await self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
+                if migrate_out_request.request_status == RequestStatus.RUNNING:
+                    status = await self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
+                else:
+                    status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
                 if status == MigrationStatus.FINISHED_DONE:
                     await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
-                    self.backend_engine.free_src_request(migrate_out_request)
+                    if migrate_out_request.request_status == RequestStatus.RUNNING:
+                        self.backend_engine.free_src_request(migrate_out_request)
                     migrated_request_list.append(migrate_out_request.request_id)
-                    migrate_out_request.stage_timestamps.append(time.time())
                     self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-                else:
+                elif status == MigrationStatus.FINISHED_SRC_ABORTED:                    
                     migrate_out_request.reset_migration_args()
                     await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
                     continue_migrate = False
@@ -202,7 +205,10 @@ class Llumlet:
             migrating_out_requests_last_stage = self.backend_engine.pop_migrating_out_requests_last_stage()
             for backend_request in migrating_out_requests_last_stage:
                 logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
-                self.backend_engine.add_running_request(backend_request)
+                if backend_request.request_status == RequestStatus.RUNNING:
+                    self.backend_engine.add_running_request(backend_request)
+                else: # backend_request.request_status == RequestStatus.WAITING
+                    self.backend_engine.add_waiting_request(backend_request)
 
     def execute_migration_method(self, method, *args, **kwargs):
         executor = getattr(self.migration_coordinator, method)

@@ -11,15 +11,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from vllm.sequence import SequenceGroup
+import math
 
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from vllm.sequence import SequenceGroup, SequenceStatus
+
+from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
 
 class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
     def __init__(self, request_id, server_info, expected_steps: int, *args, **kwargs) -> None:
         SequenceGroup.__init__(self, request_id, *args, **kwargs)
         LlumnixRequest.__init__(self, request_id, server_info, expected_steps)
+        self.try_schedule_times = 0
 
     @property
     def prompt_len(self) -> int:
@@ -41,3 +44,23 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         if self.is_prefill():
             return RequestInferenceType.PREFILL
         return RequestInferenceType.DECODE
+
+    @property
+    def finished(self) -> bool:
+        return self.get_seqs()[0].is_finished()
+
+    @property
+    def arrival_time(self) -> float:
+        return self.metrics.arrival_time
+
+    @property
+    def request_status(self) -> RequestStatus:
+        if self.get_seqs()[0].status == SequenceStatus.RUNNING:
+            return RequestStatus.RUNNING
+        elif self.get_seqs()[0].status == SequenceStatus.WAITING:
+            return RequestStatus.WAITING
+
+    @property
+    def prefill_num_blocks(self) -> int:
+        # Get the prefill len of the waiting request.
+        return math.ceil(len(self.request_len) / len(self.get_seqs()[0].block_size))

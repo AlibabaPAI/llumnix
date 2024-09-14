@@ -108,7 +108,6 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.waiting:
             if seq_group.request_id == request_id:
                 self.waiting.remove(seq_group)
-                seq_group.waiting_migrating = True
                 break
 
     def add_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:

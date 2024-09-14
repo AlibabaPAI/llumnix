@@ -31,7 +31,9 @@ class LocalMigrationScheduler:
         elif self.request_migration_policy == 'SRF':
             migrate_out_requests = self._get_shortest_running_request(min_request_len, max_request_len)
         elif self.request_migration_policy == 'EWF':
-            migrate_out_requests = self._get_first_waiting_request(min_request_len, max_request_len)
+            migrate_out_requests = self._get_earliest_waiting_request(min_request_len, max_request_len)
+        elif self.request_migration_policy == 'EWSR':
+            migrate_out_requests = self._get_earliest_waiting_and_shortest_running_requests(min_request_len, max_request_len)
         return migrate_out_requests
 
     def _get_last_running_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
@@ -58,7 +60,12 @@ class LocalMigrationScheduler:
                                   key=lambda request: request.request_len, default=None)
         return [shortest_seq_group] if shortest_seq_group != None else []
 
-    def _get_first_waiting_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
+    def _get_earliest_waiting_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         waiting: Deque[LlumnixRequest] = self.backend_engine.get_waiting_queue()
         waiting = [seq_group for seq_group in waiting if seq_group.try_schedule_times >= 1]
         return [waiting[0]] if waiting and min_request_len < waiting[0].request_len < max_request_len else []
+
+    def _get_earliest_waiting_and_shortest_running_requests(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
+        waiting_requests = self._get_earliest_waiting_request(min_request_len, max_request_len)
+        running_requests = self._get_shortest_running_request(min_request_len, max_request_len)
+        return waiting_requests + running_requests

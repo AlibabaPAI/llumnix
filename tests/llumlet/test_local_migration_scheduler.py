@@ -40,7 +40,7 @@ class MockRequest(LlumnixRequest):
 
     @property
     def arrival_time(self) -> float:
-        pass
+        self._arrival_time
 
     @property
     def status(self) -> RequestStatus:
@@ -84,14 +84,15 @@ def test_scheduler_policy():
     scheduler.request_migration_policy = "SRF"
     assert scheduler.get_migrate_out_requests()[0].request_id == "0"
 
-    t1 = time.time()
-    t2 = time.time()
-    t3 = time.time()
-    engine.add_request_waiting(request_id="3", length=1, arrival_time=t2)
-    engine.add_request_waiting(request_id="4", length=3, arrival_time=t3)
-    engine.add_request_waiting(request_id="5", length=2, arrival_time=t1)
+    engine.add_request_waiting(request_id="3", length=1, arrival_time=2.0)
+    engine.add_request_waiting(request_id="4", length=3, arrival_time=3.0)
+    engine.add_request_waiting(request_id="5", length=2, arrival_time=1.0)
     scheduler.request_migration_policy = "EWF"
     assert scheduler.get_migrate_out_requests()[0].request_id == "5"
+    
+    scheduler.request_migration_policy = "EWSR"
+    assert scheduler.get_migrate_out_requests()[0].request_id == "5"
+    assert scheduler.get_migrate_out_requests()[1].request_id == "0"
 
 def test_scheduler_should_abort_migration():
     req_0 = MockRequest(request_id="0", length=1)

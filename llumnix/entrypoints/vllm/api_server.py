@@ -224,7 +224,7 @@ async def is_ready():
     ready_status = await engine_manager.is_ready.remote()
     return ready_status
 
-class CustomArgumentParser(argparse.ArgumentParser):
+class LlumnixArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -233,14 +233,14 @@ class CustomArgumentParser(argparse.ArgumentParser):
         self.cur_namespace = namespace
 
     def add_argument(self, *args, **kwargs):
-        if self.cur_namespace == 'llumnix' and "--help" not in args and args[0] != "--config-file":
+        if self.cur_namespace == 'llumnix' and "--help" not in args:
             assert 'default' not in kwargs or kwargs['default'] is None, \
                 f"Do not set the default value for '{args[0]}' in CLI, or set it to None. " \
                 f"The default value will be retrieved from config/default.py in get_llumnix_config."
         super().add_argument(*args, **kwargs)
 
 if __name__ == "__main__":
-    parser: CustomArgumentParser = CustomArgumentParser()
+    parser: LlumnixArgumentParser = LlumnixArgumentParser()
 
     parser.set_namespace("llumnix")
     parser.add_argument("--host", type=str)
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     parser.add_argument("--ray-cluster-port", type=int)
     parser.add_argument('--launch-ray-cluster', action='store_true', help='if launch ray cluster in api server')
     parser.add_argument("--request-output-queue-port", type=int)
-    parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
+    parser.add_argument("--config-file", help="path to config file")
     parser = EngineManagerArgs.add_cli_args(parser)
 
     parser.set_namespace("vllm")

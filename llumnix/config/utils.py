@@ -23,7 +23,7 @@ def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Name
 
     cfg: LlumnixConfig = _C.clone()
 
-    if len(cfg_filename) > 0:
+    if cfg_filename is not None and len(cfg_filename) > 0:
         cfg.merge_from_file(cfg_filename)
 
     def update_config(config, args):

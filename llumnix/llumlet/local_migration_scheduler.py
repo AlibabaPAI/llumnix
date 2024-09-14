@@ -66,7 +66,7 @@ class LocalMigrationScheduler:
                                         and min_request_len < request.request_len < max_request_len
         longest_seq_group = max((request for request in running if condition(request)), \
                                  key=lambda request: request.request_len, default=None)
-        return [longest_seq_group] if longest_seq_group != None else []
+        return [longest_seq_group] if longest_seq_group is not None else []
 
     def _get_shortest_running_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
@@ -74,7 +74,7 @@ class LocalMigrationScheduler:
                                          and min_request_len < request.request_len < max_request_len
         shortest_seq_group = min((request for request in running if condition(request)), \
                                   key=lambda request: request.request_len, default=None)
-        return [shortest_seq_group] if shortest_seq_group != None else []
+        return [shortest_seq_group] if shortest_seq_group is not None else []
 
     def _get_first_waiting_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         waiting: Deque[LlumnixRequest] = self.backend_engine.get_waiting_queue()

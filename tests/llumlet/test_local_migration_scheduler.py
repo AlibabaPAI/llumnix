@@ -78,11 +78,11 @@ def test_scheduler_policy():
     engine.add_request_running(request_id="2", length=2)
 
     scheduler.request_migration_policy = "LCFS"
-    assert scheduler.get_migrate_out_request().request_id == "2"
+    assert scheduler.get_migrate_out_requests()[0].request_id == "2"
     scheduler.request_migration_policy = "LRF"
-    assert scheduler.get_migrate_out_request().request_id == "1"
+    assert scheduler.get_migrate_out_requests()[0].request_id == "1"
     scheduler.request_migration_policy = "SRF"
-    assert scheduler.get_migrate_out_request().request_id == "0"
+    assert scheduler.get_migrate_out_requests()[0].request_id == "0"
 
     t1 = time.time()
     t2 = time.time()
@@ -91,7 +91,7 @@ def test_scheduler_policy():
     engine.add_request_waiting(request_id="4", length=3, arrival_time=t3)
     engine.add_request_waiting(request_id="5", length=2, arrival_time=t1)
     scheduler.request_migration_policy = "EWF"
-    assert scheduler.get_migrate_out_request().request_id == "5"
+    assert scheduler.get_migrate_out_requests()[0].request_id == "5"
 
 def test_scheduler_should_abort_migration():
     req_0 = MockRequest(request_id="0", length=1)

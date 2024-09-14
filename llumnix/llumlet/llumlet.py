@@ -101,15 +101,21 @@ class Llumlet:
         return llumlet
 
     def migrate_out(self, dst_instance_name: str) -> List[str]:
+        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+        if len(migrate_out_requests) == 0:
+            return []
+        migrated_request_list = []
+        for migrate_out_request in migrate_out_requests:
+            migrated_request_list.extend(self._migrate_out_one_request(migrate_out_request, dst_instance_name))
+        return migrated_request_list
+
+    def _migrate_out_one_request(self, migrate_out_request, dst_instance_name: str):
         try:
             t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
             dst_instance_id = dst_instance_name[len("instance_"):]
             logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
-            migrate_out_request = self.migration_scheduler.get_migrate_out_request()
             migrated_request_list = []
-            if migrate_out_request is None:
-                return migrated_request_list
             assert migrate_out_request.status in [RequestStatus.WAITING, RequestStatus.RUNNING], "Only migrate out waiting/running request"
             if migrate_out_request.status == RequestStatus.RUNNING:
                 status = self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
@@ -126,8 +132,8 @@ class Llumlet:
                 ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
             t1 = time.time()
             logger.info("{}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
-                  .format(self.instance_id, dst_instance_id, migrated_request_list, status, \
-                   sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
+                        .format(self.instance_id, dst_instance_id, migrated_request_list, status, \
+                                sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:
             logger.info("[migrate_out] instance {} is dead".format(dst_instance_name[len("instance_"):]))
             raise

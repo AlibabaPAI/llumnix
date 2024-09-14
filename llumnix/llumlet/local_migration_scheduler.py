@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Deque, Optional
+from typing import Deque, List
 import numpy as np
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
@@ -23,45 +23,42 @@ class LocalMigrationScheduler:
         self.request_migration_policy = request_migration_policy
         self.backend_engine = backend_engine
 
-    def get_migrate_out_request(self, min_request_len=0, max_request_len=np.inf) -> Optional[LlumnixRequest]:
-        migrate_out_request: LlumnixRequest = None
+    def get_migrate_out_requests(self, min_request_len=0, max_request_len=np.inf) -> List[LlumnixRequest]:
         if self.request_migration_policy == 'LCFS':
-            migrate_out_request = self._get_last_running_request(min_request_len, max_request_len)
+            migrate_out_requests = self._get_last_running_request(min_request_len, max_request_len)
         elif self.request_migration_policy == 'LRF':
-            migrate_out_request = self._get_longest_running_request(min_request_len, max_request_len)
+            migrate_out_requests = self._get_longest_running_request(min_request_len, max_request_len)
         elif self.request_migration_policy == 'SRF':
-            migrate_out_request = self._get_shortest_running_request(min_request_len, max_request_len)
+            migrate_out_requests = self._get_shortest_running_request(min_request_len, max_request_len)
         elif self.request_migration_policy == 'EWF':
-            migrate_out_request = self._get_first_waiting_request(min_request_len, max_request_len)
-        return migrate_out_request
+            migrate_out_requests = self._get_first_waiting_request(min_request_len, max_request_len)
+        return migrate_out_requests
 
-    def _get_last_running_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
+    def _get_last_running_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         for request in reversed(running):
             if request.inference_type == RequestInferenceType.DECODE \
                 and min_request_len < request.request_len < max_request_len:
-                return request
-        return None
+                return [request]
+        return []
 
-    def _get_longest_running_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
+    def _get_longest_running_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
                                         and min_request_len < request.request_len < max_request_len
-
         longest_seq_group = max((request for request in running if condition(request)), \
                                  key=lambda request: request.request_len, default=None)
-        return longest_seq_group
+        return [longest_seq_group] if longest_seq_group != None else []
 
-    def _get_shortest_running_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
+    def _get_shortest_running_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
                                          and min_request_len < request.request_len < max_request_len
-
         shortest_seq_group = min((request for request in running if condition(request)), \
                                   key=lambda request: request.request_len, default=None)
-        return shortest_seq_group
+        return [shortest_seq_group] if shortest_seq_group != None else []
 
-    def _get_first_waiting_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
+    def _get_first_waiting_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         waiting: Deque[LlumnixRequest] = self.backend_engine.get_waiting_queue()
         waiting = [seq_group for seq_group in waiting if seq_group.try_schedule_times >= 1]
-        return waiting[0] if waiting and min_request_len < waiting[0] < max_request_len else None
+        return [waiting[0]] if waiting and min_request_len < waiting[0].request_len < max_request_len else []

@@ -46,7 +46,7 @@ class MigrationCoordinator:
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.backend_engine = backend_engine
-    
+
     def migrate_out_running_request(self,
                                     migrate_in_ray_actor: "ray.actor.ActorHandle",
                                     migrate_out_request: LlumnixRequest) -> "MigrationStatus":
@@ -114,7 +114,7 @@ class MigrationCoordinator:
             stage_block_num = len(incremental_blocks)
             src_blocks = incremental_blocks[:]
             dst_blocks = ray.get(migrate_in_ray_actor.execute_migration_method \
-                                    .remote("migrate_in_pre_alloc", migrate_out_request.request_id, 
+                                    .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
                                                                     migrate_out_request.status,
                                                                     migrate_out_request.arrival_time,
                                                                     stage_block_num))
@@ -136,7 +136,7 @@ class MigrationCoordinator:
 
         return migration_status
 
-    def migrate_in_pre_alloc(self, 
+    def migrate_in_pre_alloc(self,
                              request_id: str,
                              request_status: RequestStatus,
                              request_arrival_time: float,

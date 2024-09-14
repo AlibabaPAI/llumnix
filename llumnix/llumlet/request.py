@@ -55,7 +55,7 @@ class LlumnixRequest:
     @property
     def output_len(self) -> int:
         raise NotImplementedError
-    
+
     @property
     def finished(self) -> bool:
         raise NotImplementedError

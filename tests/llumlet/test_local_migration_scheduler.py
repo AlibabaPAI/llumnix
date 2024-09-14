@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from vllm.core.policy import PolicyFactory
 
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
 class MockRequest(LlumnixRequest):
     def __init__(self, request_id, length, arrival_time=None) -> None:
@@ -15,6 +15,7 @@ class MockRequest(LlumnixRequest):
         self.last_preemption_time = -1
         self.try_schedule_times = 1
         self.metrics = MagicMock()
+        self._arrival_time = arrival_time
         self.metrics.arrival_time = arrival_time
 
     @property
@@ -32,10 +33,22 @@ class MockRequest(LlumnixRequest):
     @property
     def output_len(self) -> int:
         return self.length
-    
+
     @property
     def finished(self) -> bool:
         return self._finished
+
+    @property
+    def arrival_time(self) -> float:
+        pass
+
+    @property
+    def status(self) -> RequestStatus:
+        pass
+
+    @property
+    def prefill_num_blocks(self) -> int:
+        pass
 
 class MockeEngine():
     def __init__(self) -> None:
@@ -52,7 +65,7 @@ class MockeEngine():
 
     def get_running_queue(self):
         return self.running
-    
+
     def get_waiting_queue(self):
         return self.waiting
 

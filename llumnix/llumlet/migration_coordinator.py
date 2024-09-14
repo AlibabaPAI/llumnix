@@ -137,7 +137,7 @@ class MigrationCoordinator:
 
         return migration_status
 
-    def migrate_in_pre_alloc(self, 
+    def migrate_in_pre_alloc(self,
                              request_id: str,
                              request_status: RequestStatus,
                              request_arrival_time: float,

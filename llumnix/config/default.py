@@ -95,7 +95,7 @@ _C.MANAGER.PAIR_MIGRATION_POLICY = 'defrag_constrained'
 # Migrate out instance load threshold
 _C.MANAGER.MIGRATE_OUT_THRESHOLD = 3.0
 # Request migration policy
-_C.MANAGER.REQUEST_MIGRATION_POLICY = 'SRF'
+_C.MANAGER.REQUEST_MIGRATION_POLICY = 'SR'
 # Enable defragmentation through migration based on virtual usage
 _C.MANAGER.ENABLE_DEFRAG = False
 # Drop migration if the number of stages > max_stages

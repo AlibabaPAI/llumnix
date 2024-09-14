@@ -77,20 +77,20 @@ def test_scheduler_policy():
     engine.add_request_running(request_id="1", length=3)
     engine.add_request_running(request_id="2", length=2)
 
-    scheduler.request_migration_policy = "LCFS"
+    scheduler.request_migration_policy = "LCR"
     assert scheduler.get_migrate_out_requests()[0].request_id == "2"
-    scheduler.request_migration_policy = "LRF"
+    scheduler.request_migration_policy = "LR"
     assert scheduler.get_migrate_out_requests()[0].request_id == "1"
-    scheduler.request_migration_policy = "SRF"
+    scheduler.request_migration_policy = "SR"
     assert scheduler.get_migrate_out_requests()[0].request_id == "0"
 
     engine.add_request_waiting(request_id="3", length=1, arrival_time=2.0)
     engine.add_request_waiting(request_id="4", length=3, arrival_time=3.0)
     engine.add_request_waiting(request_id="5", length=2, arrival_time=1.0)
-    scheduler.request_migration_policy = "EWF"
+    scheduler.request_migration_policy = "FCW"
     assert scheduler.get_migrate_out_requests()[0].request_id == "5"
     
-    scheduler.request_migration_policy = "EWSR"
+    scheduler.request_migration_policy = "FCWSR"
     assert scheduler.get_migrate_out_requests()[0].request_id == "5"
     assert scheduler.get_migrate_out_requests()[1].request_id == "0"
 

@@ -57,7 +57,7 @@ class MockLlumlet(Llumlet):
 def test_migration_correctness(setup_ray_env, request_output_queue_server, server_info):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", "gloo",16,1,4,5,20)
+    migration_config = MigrationConfig("LCR", "gloo",16,1,4,5,20)
     que = request_output_queue_server
 
     llumlet_0:Llumlet = Llumlet.from_args(

@@ -130,7 +130,7 @@ class Llumlet:
                 self_actor = ray.get_actor(self.actor_name)
                 ray.kill(self_actor)
 
-    async def migrate_out(self, dst_instance_name: str, num_requests: int) -> List[str]:
+    async def migrate_out(self, dst_instance_name: str) -> List[str]:
         migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
         if len(migrate_out_requests) == 0:
             return []
@@ -141,24 +141,25 @@ class Llumlet:
 
     async def _migrate_out_one_request(self, migrate_out_request, dst_instance_name: str):
         try:
+            t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
             dst_instance_id = dst_instance_name[len("instance_"):]
-            logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
             migrated_request_list = []
-            assert migrate_out_request.status in [RequestStatus.WAITING, RequestStatus.RUNNING], "Only migrate out waiting/running request"
+            assert migrate_out_request.status in [RequestStatus.WAITING, RequestStatus.RUNNING], "Only migrate out waiting or running request"
+            logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
             if migrate_out_request.status == RequestStatus.RUNNING:
-                status = self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
+                status = await self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
             else:
-                status = self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
+                status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
             if status == MigrationStatus.FINISHED_DONE:
-                ray.get(migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request))
+                await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
                 if migrate_out_request.status == RequestStatus.RUNNING:
                     self.backend_engine.free_src_request(migrate_out_request)
                 migrated_request_list.append(migrate_out_request.request_id)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             elif status == MigrationStatus.FINISHED_SRC_ABORTED:
                 migrate_out_request.reset_migration_args()
-                ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
+                await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
             t1 = time.time()
             logger.info("{}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
                         .format(self.instance_id, dst_instance_id, migrated_request_list, status, \

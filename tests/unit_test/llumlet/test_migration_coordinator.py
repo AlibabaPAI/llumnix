@@ -120,10 +120,10 @@ def test_migrate_out_waiting_request():
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
     migrate_out_request = MagicMock()
-    
+
     # Create an instance of MigrationCoordinator
     coordinator = MigrationCoordinator(backend_engine, last_stage_max_blocks=1, max_stages=3)
-    
+
     # Test FINISHED_DONE
     migrate_out_request.prefill_num_blocks = 3
     dst_blocks = [1, 2, 3]
@@ -133,7 +133,7 @@ def test_migrate_out_waiting_request():
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_DONE
-    
+
     # Test FINISHED_ABORTED
     migrate_out_request.prefill_num_blocks = 2
     status = coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)

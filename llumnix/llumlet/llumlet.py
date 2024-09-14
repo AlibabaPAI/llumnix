@@ -164,9 +164,11 @@ class Llumlet:
         except ray.exceptions.RayActorError:
             logger.info("[migrate_out] instance {} is dead".format(dst_instance_name[len("instance_"):]))
             raise
+        # pylint: disable=W0703
         except Exception as e:
             logger.error("unexpected exception occurs: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
+            raise
         return migrated_request_list
 
     def get_instance_info(self) -> InstanceInfo:

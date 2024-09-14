@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import math
-import enum
 
 from vllm.sequence import SequenceGroup, SequenceStatus
 
@@ -60,9 +59,10 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         assert status in [SequenceStatus.RUNNING, SequenceStatus.WAITING], \
             "Only RUNNING, WAITING are expected status for LlumnixRequest"
         if status == SequenceStatus.RUNNING:
-            return RequestStatus.RUNNING
-        elif status == SequenceStatus.WAITING:
-            return RequestStatus.WAITING
+            request_status = RequestStatus.RUNNING
+        else: # status == SequenceStatus.WAITING
+            request_status = RequestStatus.WAITING
+        return request_status
 
     @property
     def prefill_num_blocks(self) -> int:

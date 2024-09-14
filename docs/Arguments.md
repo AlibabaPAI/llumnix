@@ -17,7 +17,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag_constrained,defrag_relaxed}]
             [--migrate-out-threshold MIGRATE_OUT_THRESHOLD]
-            [--request-migration-policy {LCFS,SRF,LRF,FWJ}]
+            [--request-migration-policy {LCFS,SRF,LRF,EWF}]
             [--enable-defrag ENABLE_DEFRAG]
             [--enable-scaling]
             [--min-instances MIN_INSTANCES]
@@ -89,7 +89,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--request-migration-policy`
 - Request migration policy.
-- Possible choices: LCFS, SRF, LRF, FWJ
+- Possible choices: LCFS, SRF, LRF, EWF
 - Default: "SRF"
 
 `--enable-defrag`

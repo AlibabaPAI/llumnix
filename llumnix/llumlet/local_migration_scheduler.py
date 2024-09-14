@@ -33,8 +33,8 @@ class LocalMigrationScheduler:
                 migrate_out_request = self._get_longest_running_request(min_request_len, max_request_len)
             elif self.request_migration_policy == 'SRF':
                 migrate_out_request = self._get_shortest_running_request(min_request_len, max_request_len)
-            elif self.request_migration_policy == 'FWJ':
-                migrate_out_request = self._get_first_waiting_or_shortest_running_request(min_request_len, max_request_len)
+            elif self.request_migration_policy == 'EWF':
+                migrate_out_request = self._get_first_waiting_request(min_request_len, max_request_len)
         return migrate_out_request
 
     # The function is used to retrieve requests on the backend that have already met the expected_steps.

@@ -124,9 +124,9 @@ class SchedulerLlumnix(Scheduler):
     def pre_alloc(self, 
                   request_id: str,
                   request_status: RequestStatus,
-                  request_arrival_time: float, 
+                  request_arrival_time: float,
                   block_num: int) -> List[int]:
-        # Only migrate waiting request when the waiting request is the earliest arrival one 
+        # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING:
             if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
@@ -146,6 +146,7 @@ class SchedulerLlumnix(Scheduler):
 
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
         self._set_status(backend_request, status_to=SequenceStatus.WAITING)
+        # pylint: disable=E0203
         self.waiting.append(backend_request)
         fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
         self.waiting = fcfs_policy.sort_by_priority(time.time(), self.waiting)
@@ -159,7 +160,7 @@ class SchedulerLlumnix(Scheduler):
         else:
             super()._allocate_and_set_running(seq_group)
 
-    def _set_status(self, 
+    def _set_status(self,
                     seq_group: SequenceGroup,
                     status_to: SequenceStatus,
                     status_from: SequenceStatus = None):

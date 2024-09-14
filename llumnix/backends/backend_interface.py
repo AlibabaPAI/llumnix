@@ -196,7 +196,7 @@ class BackendInterface(ABC):
         migration request identified by the given request ID. It updates the pre-allocation cache
         dictionary with the allocated blocks, which ensures that these blocks are not used by
         another process until the migration is finished. For the waiting request, it only reserves
-        free cache blocks when the request is the earliest arrival one among the requests of dst instance's 
+        free cache blocks when the request is the earliest arrival one among the requests of dst instance's
         waiting queue.
 
         Args:
@@ -216,7 +216,7 @@ class BackendInterface(ABC):
         """
         Adds a backend request to the running queue for processing.
 
-        This method enqueues a backend request into engine running queue. 
+        This method enqueues a backend request into engine running queue.
         It is used when a suspend migrating request should be added back to running queue.
 
         Args:
@@ -231,7 +231,7 @@ class BackendInterface(ABC):
         """
         Adds a backend request to the waiting queue for processing.
 
-        This method enqueues a backend request into engine waiting queue. 
+        This method enqueues a backend request into engine waiting queue.
         It is used when a suspend migrating request should be added back to waiting queue.
 
         Args:

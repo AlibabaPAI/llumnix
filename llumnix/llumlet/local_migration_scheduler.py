@@ -53,14 +53,14 @@ class LocalMigrationScheduler:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         for request in reversed(running):
             if request.inference_type == RequestInferenceType.DECODE \
-                and min_request_len <= request.request_len <= max_request_len:
+                and min_request_len < request.request_len < max_request_len:
                 return request
         return None
 
     def _get_longest_running_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
-                                        and min_request_len <= request.request_len <= max_request_len
+                                        and min_request_len < request.request_len < max_request_len
 
         longest_seq_group = max((request for request in running if condition(request)), \
                                  key=lambda request: request.request_len, default=None)
@@ -69,13 +69,13 @@ class LocalMigrationScheduler:
     def _get_shortest_running_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
-                                         and min_request_len <= request.request_len <= max_request_len
+                                         and min_request_len < request.request_len < max_request_len
 
         shortest_seq_group = min((request for request in running if condition(request)), \
                                   key=lambda request: request.request_len, default=None)
         return shortest_seq_group
-    
+
     def _get_first_waiting_request(self, min_request_len, max_request_len) -> Optional[LlumnixRequest]:
         waiting: Deque[LlumnixRequest] = self.backend_engine.get_waiting_queue()
         waiting = [seq_group for seq_group in waiting if seq_group.try_schedule_times >= 1]
-        return waiting[0] if waiting and waiting[0].request_len > 0 else None
+        return waiting[0] if waiting and min_request_len < waiting[0] < max_request_len else None

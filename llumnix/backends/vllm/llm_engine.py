@@ -356,6 +356,7 @@ class BackendVLLM(BackendInterface):
         if backend_request.status == RequestStatus.RUNNING:
             self.add_running_request(backend_request)
         else: # backend_request.status == RequestStatus.WAITING
+            backend_request.waiting_migrating = True
             self.add_waiting_request(backend_request)
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:

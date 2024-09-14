@@ -25,7 +25,7 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm.utils import scheduler_lock
-from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, SequenceStatusLlumnix
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 
 
 logger = init_logger(__name__)
@@ -108,7 +108,6 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.running:
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
-                self._set_status(seq_group, status_to=SequenceStatusLlumnix.RUNNING_MIGRATING)
                 break
 
     @scheduler_lock
@@ -116,7 +115,6 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.waiting:
             if seq_group.request_id == request_id:
                 self.waiting.remove(seq_group)
-                self._set_status(seq_group, status_to=SequenceStatusLlumnix.WAITING_MIGRATING)
                 seq_group.waiting_migrating = True
                 break
 
@@ -174,8 +172,8 @@ class SchedulerLlumnix(Scheduler):
 
     def _set_status(self, 
                     seq_group: SequenceGroup,
-                    status_to: Union[SequenceStatus, SequenceStatusLlumnix],
-                    status_from: Union[SequenceStatus, SequenceStatusLlumnix] = None):
+                    status_to: SequenceStatus,
+                    status_from: SequenceStatus = None):
         for seq in seq_group.get_seqs(status=status_from):
             seq.status = status_to
 
@@ -197,7 +195,8 @@ class SchedulerLlumnix(Scheduler):
     @scheduler_lock
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         seq = backend_request.get_seqs()[0]
-        logger.info("free seq {}".format(seq.seq_id))
+        logger.info("free request: {}".format(backend_request.request_id))
+        logger.info("free seq: {}".format(seq.seq_id))
         self.free_seq(seq)
 
     def _get_instance_info(self) -> InstanceInfo:

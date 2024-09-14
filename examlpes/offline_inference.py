@@ -10,6 +10,12 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager, init_llumlets
 from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
                      EngineArgs, RequestOutput)
+from llumnix.utils import random_uuid
+from llumnix.rpc.queue_server import QueueServer
+from llumnix.rpc.queue_client import QueueClient
+from llumnix.rpc.utils import get_open_zmq_ipc_path
+from llumnix.entrypoints.llumnix_utils import get_ip_address
+
 
 # Sample prompts.
 prompts = [
@@ -48,35 +54,32 @@ llumlet_ids, llumlets = init_llumlets(manager_args, engine_args,
 manager: LLMEngineManager = init_manager(manager_args)
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
-server_id = str(uuid.uuid4().hex)
-request_output_queue = RayQueue(actor_options={
-    "scheduling_strategy": NodeAffinitySchedulingStrategy(
-        node_id=ray.get_runtime_context().get_node_id(),
-        soft=False)
-})
-server_info = ServerInfo(server_id, request_output_queue)
+server_id = random_uuid()
+ip = get_ip_address()
+port = 1234
+server_info = ServerInfo(server_id, ip, port)
+rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
+request_output_queue = QueueServer(rpc_path)
 
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.
 async def background_process_outputs(num_tasks):
     finish_task = 0
     while finish_task != num_tasks:
-        await asyncio.sleep(0.1)
-        qsize = await request_output_queue.actor.qsize.remote()
-        if qsize > 0:
-            request_outputs: List[RequestOutput] = await request_output_queue.actor.get_nowait_batch.remote(qsize)
-            for request_output in request_outputs:
-                if request_output.finished:
-                    finish_task += 1
-                    prompt = request_output.prompt
-                    generated_text = request_output.outputs[0].text
-                    print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
-   
+        request_output = await request_output_queue.get()
+        if request_output.finished:
+            finish_task += 1
+            prompt = request_output.prompt
+            generated_text = request_output.outputs[0].text
+            print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
+    request_output_queue.cleanup()
+
 async def main():
     output_task = asyncio.create_task(background_process_outputs(len(prompts)))
+    asyncio.create_task(request_output_queue.run_server_loop())
 
     for request in prompts:
-        request_id = str(uuid.uuid4().hex)
+        request_id = random_uuid()
         await manager.generate.remote(request_id=request_id,
                                       server_info=server_info, 
                                       prompt=request,

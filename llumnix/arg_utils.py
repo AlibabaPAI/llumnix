@@ -140,7 +140,11 @@ class EngineManagerArgs:
                             type=str,
                             default=None,
                             choices=['balanced', 'load', 'queue', 'flood'],
-                            help='request dispatch policy')
+                            help='The request dispatch policy.\n\n'
+                            '* "balanced" dispatch request to the instance with minimum requests dispatched.\n'
+                            '* "load" dispatch request to the instance with lowest instance load.\n'
+                            '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
+                            '* "flood" dispatch request to the instance with maximum requests dispatched.\n')
 
         parser.add_argument('--enable-migration',
                             action='store_true',
@@ -154,7 +158,12 @@ class EngineManagerArgs:
                             type=str,
                             default=None,
                             choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
-                            help='pair migration policy')
+                            help='The pair migration policy.\n\n'
+                            '* "balanced" pair migration to make the instance load of instance more balanced.\n'
+                            '* "defrag_constrained" pair migration without balanced constraint to '
+                            'achieve defragmentation thoroughly (with instance constraints).\n'
+                            '* "defrag_relaxed" pair migration to without balanced constraint '
+                            'to achieve defragmentation thoroughly (without instance constraints).\n')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
                             default=None,
@@ -162,8 +171,13 @@ class EngineManagerArgs:
         parser.add_argument('--request-migration-policy',
                             type=str,
                             default=None,
-                            choices=['LCFS', 'SJF', 'LJF'],
-                            help='request migration policy')
+                            choices=['LCR', 'SR', 'LR', 'FCW', 'FCWSR'],
+                            help='The request migration policy.\n\n'
+                            '* "LCR" migrate the running request last come.\n'
+                            '* "SR" migrate the running request shortest.\n'
+                            '* "LR" migrate the running request longest.\n'
+                            '* "FCW" migrate the waiting request first come.\n'
+                            '* "FCWSR" migrate the waiting request first come and running request shortest.\n')
         parser.add_argument('--enable-defrag',
                             type=bool,
                             default=None,

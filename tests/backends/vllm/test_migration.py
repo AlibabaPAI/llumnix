@@ -17,12 +17,13 @@ import ray
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
+from vllm.sequence import SequenceStatus
 
 from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
 from tests.utils import setup_ray_env
 from tests.rpc.test_queue import request_output_queue_server
@@ -51,11 +52,12 @@ class MockLlumlet(Llumlet):
 # @pytest.mark.skipif(torch.cuda.device_count() < 2,
 #                     reason="Need at least 2 GPUs to run the test.")
 # FIXME(ZeldaHuang) this test is currently unstable
+# TODO(s5u13b): Test migrate waiting request.
 @pytest.mark.skip(reason="Regression Test")
 def test_migration_correctness(setup_ray_env, request_output_queue_server, server_info):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", "gloo",16,1,4,5,20)
+    migration_config = MigrationConfig("LCR", "gloo",16,1,4,5,20)
     que = request_output_queue_server
 
     llumlet_0:Llumlet = Llumlet.from_args(
@@ -131,13 +133,17 @@ def test_migration_correctness(setup_ray_env, request_output_queue_server, serve
 
 def test_clear_migration_states():
     llumlet = MockLlumlet()
-    llumlet.backend_engine.pre_alloc("0", 1)
+    llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, 1)
     num_gpu_blocks = 8
     block_size = 4
 
     llumlet.clear_migration_states(is_migrate_in=True)
-    assert len(llumlet.backend_engine.pre_alloc("0", num_gpu_blocks)) == num_gpu_blocks
-    _, seq_group = create_dummy_prompt("0",7,block_size)
+    assert len(llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks)) == num_gpu_blocks
+    _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.RUNNING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
     llumlet.clear_migration_states(is_migrate_in=False)
-    assert len(llumlet.backend_engine.get_running_queue()) > 0
+    assert len(llumlet.backend_engine.get_running_queue()) == 1
+    _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.WAITING)
+    llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
+    llumlet.clear_migration_states(is_migrate_in=False)
+    assert len(llumlet.backend_engine.get_waiting_queue()) == 1

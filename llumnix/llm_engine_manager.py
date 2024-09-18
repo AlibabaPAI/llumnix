@@ -212,8 +212,10 @@ class LLMEngineManager:
 
     async def _migrate(self) -> None:
         async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
-            self.instance_migrating[migrate_instance_pair[0]] = False
-            self.instance_migrating[migrate_instance_pair[1]] = False
+            if migrate_instance_pair[0] in self.instance_migrating:
+                self.instance_migrating[migrate_instance_pair[0]] = False
+            if migrate_instance_pair[1] in self.instance_migrating:
+                self.instance_migrating[migrate_instance_pair[1]] = False
             if isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):

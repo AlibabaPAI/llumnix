@@ -115,136 +115,106 @@ class EngineManagerArgs:
             parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--disable-fixed-node-init-instance',
                             action='store_true',
-                            default=None,
                             help='disable fixing the placement of instance to current node')
         parser.add_argument('--disable-init-instance-by-manager',
                             action='store_true',
-                            default=None,
                             help='disable initializing instance by manager')
         parser.add_argument('--initial-instances',
                             type=int,
-                            default=None,
                             help='number of instances created at initialzation')
 
         parser.add_argument('--load-metric',
                             type=str,
-                            default=None,
                             choices=['remaining_steps', 'usage_ratio'],
                             help='instance load metric')
         parser.add_argument('--polling-interval',
                             type=float,
-                            default=None,
                             help='time interval(s) to update instance info and pair migration')
 
         parser.add_argument('--dispatch-policy',
                             type=str,
-                            default=None,
                             choices=['balanced', 'load', 'queue', 'flood'],
                             help='request dispatch policy')
 
         parser.add_argument('--enable-migration',
                             action='store_true',
-                            default=None,
                             help='enable migrate requests between instances')
         parser.add_argument('--pair-migration-frequency',
                             type=int,
-                            default=None,
                             help='pair migration frequency')
         parser.add_argument('--pair-migration-policy',
                             type=str,
-                            default=None,
                             choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
                             help='pair migration policy')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
-                            default=None,
                             help='migrate out instance load threshold')
         parser.add_argument('--request-migration-policy',
                             type=str,
-                            default=None,
                             choices=['LCFS', 'SJF', 'LJF'],
                             help='request migration policy')
         parser.add_argument('--enable-defrag',
                             type=bool,
-                            default=None,
                             help='enable defragmentation through migration based on virtual usage')
 
         parser.add_argument('--enable-scaling',
                             action='store_true',
-                            default=None,
                             help='enable auto scaling')
         parser.add_argument('--min-instances',
                             type=int,
-                            default=None,
                             help='minimum number of instances')
         parser.add_argument('--max-instances',
                             type=int,
-                            default=None,
                             help='maximum number of instances')
         parser.add_argument('--scaling-interval',
                             type=int,
-                            default=None,
                             help='interval time of check scaling')
         parser.add_argument('--scaling-policy',
                             type=str,
-                            default=None,
                             choices=['max_load', 'avg_load'],
                             help='scaling policy')
         parser.add_argument('--scale-up-threshold',
                             type=float,
-                            default=None,
                             help='scale up threshold')
         parser.add_argument('--scale-down-threshold',
                             type=float,
-                            default=None,
                             help='scale down threshold')
 
         parser.add_argument('--disable-log-requests-manager',
                             action='store_true',
-                            default=None,
                             help='disable logging requests in manager')
         parser.add_argument('--log-instance-info',
                             action='store_true',
-                            default=None,
                             help='enable logging instance info')
         parser.add_argument('--log-filename',
                             type=str,
-                            default=None,
                             help='log filename')
         parser.add_argument('--profiling-result-file-path',
                             type=str,
-                            default=None,
                             help='profiling result file path')
 
         parser.add_argument('--gpu-type',
                             type=str,
-                            default=None,
                             help='gpu type specified when using simulator')
 
         parser.add_argument('--migration-backend',
                             type=str,
-                            default=None,
                             choices=['gloo','nccl','rpc'],
                             help='communication backend of migration')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
-                            default=None,
                             help='timeout(s) for initializing migration backend')
         parser.add_argument('--migration-cache-blocks',
                             type=int,
-                            default=None,
                             help='number of cache blocks in migration')
         parser.add_argument('--migration-num-layers',
                             type=int,
-                            default=None,
                             help='number of kv-cache layers to transfer in each round during migration')
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
-                            default=None,
                             help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
         parser.add_argument('--max-stages',
                             type=int,
-                            default=None,
                             help='drop migration if the number of stages > max_stages')
 
         return parser

@@ -168,7 +168,7 @@ class LLMEngineManager:
                 self.request_instance[request_id] = instance_id
 
     async def _update_instance_info_loop(self, interval: float) -> None:
-        def update_instance_info_callback(instance_id, fut):
+        def update_instance_info_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
             if not isinstance(ret, ray.exceptions.RayActorError):
                 if ret is not None:
@@ -183,10 +183,9 @@ class LLMEngineManager:
                 instance_infos = []
                 dead_instance_ids = []
                 for instance_id, instance in self.instances.items():
-                    # Use asyncio.gather to wrap ray remote call to add done callback
+                    # Use asyncio.gather to wrap ray remote call to add done callback.
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
-                    callback = partial(update_instance_info_callback, instance_id)
-                    task.add_done_callback(callback)
+                    task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
                     tasks.append(task)
                 await asyncio.gather(*tasks, return_exceptions=True)
                 if len(dead_instance_ids) > 0:
@@ -211,37 +210,41 @@ class LLMEngineManager:
             await asyncio.sleep(interval)
             self.request_instance = {}
 
-    async def _post_migrate(self, rets: List[str], call_migrate_instance_pairs: List[Tuple[str, str]]) -> None:
-        for i, ret in enumerate(rets):
-            self.instance_migrating[call_migrate_instance_pairs[i][0]] = False
-            self.instance_migrating[call_migrate_instance_pairs[i][1]] = False
+    async def _migrate(self) -> None:
+        async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
+            if migrate_instance_pair[0] in self.instance_migrating:
+                self.instance_migrating[migrate_instance_pair[0]] = False
+            if migrate_instance_pair[1] in self.instance_migrating:
+                self.instance_migrating[migrate_instance_pair[1]] = False
             if isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
-                has_error_pair = await self._check_instance_error(call_migrate_instance_pairs[i])
-                for j, has_error in enumerate(has_error_pair):
+                has_error_pair = await self._check_instance_error(migrate_instance_pair)
+                for i, has_error in enumerate(has_error_pair):
                     # Instance without error should clear migration states.
                     if not has_error:
                         try:
-                            await self.instances[call_migrate_instance_pairs[i][j]].clear_migration_states.remote(is_migrate_in=bool(j))
+                            await self.instances[migrate_instance_pair[i]].clear_migration_states.remote(is_migrate_in=bool(i))
                         except (ray.exceptions.RayActorError, KeyError):
                             has_error = True
-                for j, has_error in enumerate(has_error_pair):
+                for i, has_error in enumerate(has_error_pair):
                     if has_error:
-                        instance_id = call_migrate_instance_pairs[i][j]
+                        instance_id = migrate_instance_pair[i]
                         logger.info("[_migrate] instance {} is dead".format(instance_id))
                         self.scale_down(instance_id)
             else:
                 migrate_out_request_ids = ret
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
-                    self.request_instance[migrate_out_request_id] = call_migrate_instance_pairs[i][1]
+                    self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
                 logger.info("{}->{} migrate done, migrate request {}".format(
-                    call_migrate_instance_pairs[i][0], call_migrate_instance_pairs[i][1], migrate_out_request_ids))
+                    migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
+        def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
+            ret = fut.result()
+            loop = asyncio.get_event_loop()
+            loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
 
-    async def _migrate(self) -> None:
         migrate_instance_pairs = self.global_scheduler.pair_migration()
         try:
             migration_tasks = []
-            call_migrate_instance_pairs: List[Tuple[str, str]] = []
             for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
                 migrate_out_instance_id, migrate_in_instance_id = migrate_instance_pair
                 if self.instance_migrating[migrate_out_instance_id] or self.instance_migrating[migrate_in_instance_id]:
@@ -250,12 +253,13 @@ class LLMEngineManager:
                 self.instance_migrating[migrate_in_instance_id] = True
                 migrate_in_instance_name = "instance_{}".format(migrate_in_instance_id)
                 logger.info("{}->{} begin migrate out".format(migrate_out_instance_id, migrate_in_instance_id))
-                call_migrate_instance_pairs.append(migrate_instance_pair)
-                task = self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name)
+                # Use asyncio.gather to wrap ray remote call to add done callback.
+                task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name),
+                                      return_exceptions=True)
+                task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
             # TODO(s5u13b): Migration failover could be implemented in Llumlet rather than manager.
-            rets = await asyncio.gather(*migration_tasks, return_exceptions=True)
-            await self._post_migrate(rets, call_migrate_instance_pairs)
+            await asyncio.gather(*migration_tasks, return_exceptions=True)
         # pylint: disable=W0703
         except Exception as e:
             logger.error("unexpected exception occurs: {}".format(e))

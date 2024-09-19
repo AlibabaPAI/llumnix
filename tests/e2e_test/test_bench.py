@@ -127,7 +127,7 @@ async def test_simple_benchmark(model):
         bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=500,
                                                dataset_type="sharegpt",
                                                dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
-                                               qps=3,
+                                               qps=2,
                                                results_filename=f"{base_port+i}.out")
         tasks.append(run_bench_command(bench_command))
 

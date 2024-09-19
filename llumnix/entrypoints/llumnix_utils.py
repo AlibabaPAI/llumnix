@@ -17,6 +17,7 @@ import os
 import time
 from typing import List, Tuple
 import asyncio
+import socket
 import ray
 
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
@@ -38,10 +39,9 @@ RESTART_INTERVALS = 1
 MAX_TASK_RETRIES = 300
 RETRIES_INTERVALS = 0.1
 
-
 def get_ip_address():
-    result = subprocess.run(['hostname', '-i'], stdout=subprocess.PIPE, check=True)
-    ip_address = result.stdout.decode('utf-8').strip()
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
     return ip_address
 
 def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:

@@ -22,9 +22,9 @@ from llumnix.backends.vllm.worker import MigrationWorker
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.utils import random_uuid
 
-from tests.backends.vllm.test_worker import create_worker
-from tests.utils import setup_ray_env
-
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
+from .test_worker import create_worker
 
 class MockMigrationWorker(MigrationWorker):
     def set_gpu_cache(self, data):
@@ -44,10 +44,10 @@ def test_migrate_cache(setup_ray_env, backend):
     migraiton_config.migration_backend = backend
 
     worker0 = create_worker(rank=0, local_rank=0, engine_config=engine_config,
-                            worker_module_name="tests.backends.vllm.test_migration_backend",
+                            worker_module_name="tests.unit_test.backends.vllm.test_migration_backend",
                             worker_class_name="MockMigrationWorker")
     worker1 = create_worker(rank=0, local_rank=0, engine_config=engine_config,
-                            worker_module_name="tests.backends.vllm.test_migration_backend",
+                            worker_module_name="tests.unit_test.backends.vllm.test_migration_backend",
                             worker_class_name="MockMigrationWorker")
 
     ray.get(worker0.execute_method.remote('init_device'))

@@ -24,9 +24,10 @@ from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
-from tests.utils import setup_ray_env
-from tests.rpc.test_queue import request_output_queue_server
-
+# pylint: disable=unused-import
+from tests.unit_test.rpc.test_queue import request_output_queue_server
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt

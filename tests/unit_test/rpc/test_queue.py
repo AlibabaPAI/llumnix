@@ -22,17 +22,16 @@ from llumnix.rpc.queue_server import QueueServer
 from llumnix.rpc.queue_client import QueueClient
 from llumnix.rpc.utils import get_open_zmq_ipc_path
 from llumnix.utils import random_uuid
-from llumnix.entrypoints.llumnix_utils import get_ip_address
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.llumnix_utils import init_request_output_queue
 
 # pylint: disable=W0611
-from tests.utils import setup_ray_env
+from tests.conftest import setup_ray_env
 
 
 def init_server_info():
     server_id = random_uuid()
-    ip = get_ip_address()
+    ip = '127.0.0.1'
     port = 1234
     server_info = ServerInfo(server_id, ip, port)
     return server_info
@@ -125,6 +124,6 @@ async def benchmark_queue(qps, ip=None, port=None):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("qps", [128.0, 256.0, 512.0, 1024.0])
 async def test_queue_zeromq(setup_ray_env, qps):
-    ip = get_ip_address()
+    ip = '127.0.0.1'
     port = 1234
     await benchmark_queue(qps, ip, port)

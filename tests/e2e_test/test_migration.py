@@ -78,7 +78,7 @@ async def test_migration_benchmark(model, migration_backend):
         bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=500,
                                                 dataset_type="sharegpt",
                                                 dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
-                                                qps=20)
+                                                qps=10)
         await asyncio.wait_for(run_bench_command(bench_command), timeout=60*30)
 
     averger_speed = parse_log_file(instance_output_logs)

@@ -436,9 +436,7 @@ class LLMEngineManager:
 
     # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
     # TODO(s5u13b): Fix the logger when enabling init instance by manager.
-    def init_llumlets(self,
-                      engine_args,
-                      node_id: str) -> Tuple[List[str], List[Llumlet]]:
+    def init_llumlets(self, engine_args, node_id: str, output_queue_type: str) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
         engine_config = engine_args.create_engine_config()
         parallel_config = engine_config.parallel_config
@@ -448,6 +446,7 @@ class LLMEngineManager:
             instance_id = random_uuid()
             if not engine_manager_args.profiling_result_file_path:
                 llumlet = Llumlet.from_args(
+                    output_queue_type,
                     engine_manager_args.disable_fixed_node_init_instance,
                     True,
                     node_id,
@@ -459,6 +458,7 @@ class LLMEngineManager:
                 )
             else:
                 llumlet = Llumlet.from_args(
+                    output_queue_type,
                     engine_manager_args.disable_fixed_node_init_instance,
                     True,
                     node_id,

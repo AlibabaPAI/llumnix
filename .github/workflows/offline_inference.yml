@@ -1,9 +1,6 @@
 name: offline_inference
 
 on:
-  push:
-    branches:
-    - main
   pull_request:
     branches:
     - main

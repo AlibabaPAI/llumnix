@@ -26,10 +26,6 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.rpc.utils import get_open_zmq_ipc_path
-from llumnix.server_info import ServerInfo
-from llumnix.rpc.queue_server import QueueServer
-
 
 logger = init_logger(__name__)
 
@@ -131,9 +127,8 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
         logger.info("Get existing LLMEngineManager")
     return engine_manager
 
-def init_llumlets(engine_manager_args: EngineManagerArgs,
-                  engine_args,
-                  node_id: str) -> Tuple[List[str], List[Llumlet]]:
+def init_llumlets(engine_manager_args: EngineManagerArgs, engine_args, node_id: str,
+                  output_queue_type: str) -> Tuple[List[str], List[Llumlet]]:
     engine_config = engine_args.create_engine_config()
     parallel_config = engine_config.parallel_config
     instance_ids: List[str] = []
@@ -146,6 +141,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
         instance_id = instance_ids[idx]
         if not engine_manager_args.profiling_result_file_path:
             llumlet = Llumlet.from_args(
+                output_queue_type,
                 engine_manager_args.disable_fixed_node_init_instance,
                 False,
                 node_id,
@@ -157,6 +153,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
             )
         else:
             llumlet = Llumlet.from_args(
+                output_queue_type,
                 engine_manager_args.disable_fixed_node_init_instance,
                 False,
                 node_id,
@@ -170,22 +167,16 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
         llumlets.append(llumlet)
     return instance_ids, llumlets
 
-def init_request_output_queue(server_info: ServerInfo) -> QueueServer:
-    rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
-    request_output_queue = QueueServer(rpc_path)
-    return request_output_queue
-
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,
                             engine_args,
                             node_id: str,
-                            server_info: ServerInfo) -> Tuple[LLMEngineManager, List[Llumlet], QueueServer]:
-    request_output_queue = init_request_output_queue(server_info)
-
+                            output_queue_type: str):
     engine_manager = init_manager(engine_manager_args)
     if engine_manager_args.disable_init_instance_by_manager:
-        instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id)
+        instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id, output_queue_type)
     else:
-        instance_ids, llumlets = retry_manager_method_sync(engine_manager.init_llumlets.remote, 'init_llumlets', engine_args, node_id)
+        instance_ids, llumlets = retry_manager_method_sync(
+            engine_manager.init_llumlets.remote, 'init_llumlets', engine_args, node_id, output_queue_type)
 
     available_instance_ids = []
     dead_instance_ids = []
@@ -210,4 +201,4 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
                     .format(len(available_instance_ids), available_instance_ids))
 
-    return engine_manager, available_instance_ids, available_llumlets, request_output_queue
+    return engine_manager, available_instance_ids, available_llumlets

@@ -14,6 +14,7 @@
 import os
 import threading
 from typing import List
+import ray.actor
 
 from vllm.engine.arg_utils import EngineArgs
 
@@ -31,6 +32,7 @@ class BackendSimVLLM(BackendVLLM):
     def __init__(
         self,
         instance_id: str,
+        output_queue_type: str,
         migration_config: MigrationConfig,
         profiling_result_file_path: str,
         engine_args: EngineArgs,
@@ -52,11 +54,19 @@ class BackendSimVLLM(BackendVLLM):
                                                 parallel_config.pipeline_parallel_size)
         assert sim_parallel_config in profiling_result.para_dict.keys(), "sim parallel config not in database"
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
+<<<<<<< HEAD
         # multi-instance args
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           latency_mem=latency_mem)
+=======
+
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(migration_config=migration_config,
+                                                                          output_queue_type=output_queue_type,
+                                                                          latency_mem=latency_mem,
+                                                                          engine_args=engine_args)
+>>>>>>> 1bfae5a ([Misc] ray queue)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
@@ -66,5 +76,6 @@ class BackendSimVLLM(BackendVLLM):
         )
         self._thread.start()
 
-    def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    # pylint: disable=unused-argument
+    def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         self.engine.model_executor.send_blocks(len(src_blocks))

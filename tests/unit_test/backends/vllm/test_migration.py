@@ -15,7 +15,6 @@ from typing import List
 import asyncio
 import pytest
 import ray
-import torch
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -27,7 +26,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 # pylint: disable=unused-import
-from tests.unit_test.rpc.test_queue import init_request_output_queue, init_server_info
+from tests.unit_test.output_queue.utils import request_output_queue_server
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -51,19 +50,19 @@ class MockLlumlet(Llumlet):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
 
-@pytest.mark.skipif(torch.cuda.device_count() < 2,
-                    reason="Need at least 2 GPUs to run the test.")
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_migration_correctness(setup_ray_env, migration_backend):
-    engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
-    id_rank_map = {"0":0,"1":1}
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
-    server_info = init_server_info()
-    que = init_request_output_queue(server_info)
+
+    output_queue_type = "rayqueue"
+    que, server_info = request_output_queue_server(output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
-    llumlet_0:Llumlet = Llumlet.from_args(
+    llumlet_0: Llumlet = Llumlet.from_args(
+                            output_queue_type,
                             False,
                             True,
                             ray.get_runtime_context().get_node_id(),
@@ -71,9 +70,10 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
                             BackendType.VLLM,
                             1,
                             migration_config,
-                            engine_args,)
+                            engine_args)
 
-    llumlet_1:Llumlet = Llumlet.from_args(
+    llumlet_1: Llumlet = Llumlet.from_args(
+                            output_queue_type,
                             False,
                             True,
                             ray.get_runtime_context().get_node_id(),
@@ -81,14 +81,16 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
                             BackendType.VLLM,
                             1,
                             migration_config,
-                            engine_args,
-                     )
+                            engine_args)
+
     while True:
         res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])
         if all(res):
             break
-    ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
-            llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
+
+    ray.get([llumlet_0.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
+            llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
+
     # empty instance migrate out
     res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res
@@ -116,6 +118,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
         # migrate request
         res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
         assert len(res) == 1
+
         request_output_queue = que
         output = None
         finished = False
@@ -130,6 +133,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
 
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob
+
     for prompt in TEST_PROMPTS:
         await test_correctness(prompt)
     que.cleanup()

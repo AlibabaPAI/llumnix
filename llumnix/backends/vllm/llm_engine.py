@@ -35,16 +35,19 @@ from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
-from llumnix.rpc.queue_client import QueueClient
+from llumnix.queue.queue_client_base import QueueClientBase
+from llumnix.queue.utils import get_output_queue_client
 
 logger = init_logger(__name__)
 
 
 class AsyncPutQueueThread(threading.Thread):
-    def __init__(self, instance_id):
+    def __init__(self, instance_id, output_queue_type: str):
         super().__init__()
         self.instance_id = instance_id
-        self.request_output_queue_client = QueueClient()
+
+        self.request_output_queue_client: QueueClientBase \
+            = get_output_queue_client(output_queue_type)
         self.engine_actor_handle = None
         self.loop = asyncio.new_event_loop()
         self.daemon = True
@@ -82,13 +85,13 @@ class AsyncPutQueueThread(threading.Thread):
 
 
 class LLMEngineLlumnix(LLMEngine):
-    def __init__(self, instance_id: str, *arg, **kwargs) -> None:
+    def __init__(self, instance_id: str, output_queue_type: str, *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
         # TODO(s5u13b): Reduce the overhead.
-        self.async_put_queue_thread = AsyncPutQueueThread(instance_id)
+        self.async_put_queue_thread = AsyncPutQueueThread(instance_id, output_queue_type)
         self.async_put_queue_thread.start()
 
     # pylint: disable=W0221
@@ -96,6 +99,7 @@ class LLMEngineLlumnix(LLMEngine):
     def from_engine_args(
         cls,
         engine_args: EngineArgs,
+        output_queue_type: str,
         migration_config: MigrationConfig,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
@@ -124,6 +128,7 @@ class LLMEngineLlumnix(LLMEngine):
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
+            output_queue_type=output_queue_type,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -217,12 +222,14 @@ class BackendVLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
+        output_queue_type: str,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
         placement_group: PlacementGroup = None,
         node_id: str = None
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
+                                                                          output_queue_type=output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,

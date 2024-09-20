@@ -12,6 +12,7 @@
 # limitations under the License.
 
 from contextlib import contextmanager
+from collections.abc import Iterable
 
 import zmq
 import zmq.asyncio
@@ -20,14 +21,14 @@ import cloudpickle
 from llumnix.logger import init_logger
 from llumnix.server_info import ServerInfo
 
-from llumnix.rpc.utils import (RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RPC_SUCCESS_STR,
+from llumnix.queue.zmq_utils import (RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RPC_SUCCESS_STR,
                                RPCClientClosedError, RPC_REQUEST_TYPE, RPCUtilityRequest, RPCPutNoWaitBatchQueueRequest,
                                get_open_zmq_ipc_path)
 
 logger = init_logger(__name__)
 
 
-class QueueClient:
+class ZmqClient:
     def __init__(self):
         self.context = zmq.asyncio.Context()
         self._data_timeout = RPC_GET_DATA_TIMEOUT_MS
@@ -103,9 +104,7 @@ class QueueClient:
                         rpc_path=rpc_path,
                         error_message="Unable to start RPC Server")
 
-    async def put_nowait_batch(self,
-                               items,
-                               server_info: ServerInfo):
+    async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
         rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitBatchQueueRequest(items=items),

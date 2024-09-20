@@ -40,7 +40,7 @@ class MockRequest(LlumnixRequest):
 
     @property
     def arrival_time(self) -> float:
-        self._arrival_time
+        return self._arrival_time
 
     @property
     def status(self) -> RequestStatus:
@@ -89,7 +89,7 @@ def test_scheduler_policy():
     engine.add_request_waiting(request_id="5", length=2, arrival_time=1.0)
     scheduler.request_migration_policy = "FCW"
     assert scheduler.get_migrate_out_requests()[0].request_id == "5"
-    
+
     scheduler.request_migration_policy = "FCWSR"
     assert scheduler.get_migrate_out_requests()[0].request_id == "5"
     assert scheduler.get_migrate_out_requests()[1].request_id == "0"

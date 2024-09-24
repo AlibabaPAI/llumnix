@@ -33,15 +33,27 @@ def test_add_instance_and_remove_instance(dispatch_scheduler):
     dispatch_scheduler.add_instance('instance_1')
     assert dispatch_scheduler.num_instances == 1
     assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    dispatch_scheduler.remove_instance('instance_1')
+    assert dispatch_scheduler.num_instances == 0
+    assert len(dispatch_scheduler.available_dispatch_instance_set) == 0
+
     dispatch_scheduler.add_instance('instance_2')
+    assert dispatch_scheduler.num_instances == 1
+    assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    dispatch_scheduler.add_instance('instance_3')
     assert dispatch_scheduler.num_instances == 2
     if dispatch_scheduler.num_dispatch_instances <= 0:
         assert len(dispatch_scheduler.available_dispatch_instance_set) == 2
     else:
         assert len(dispatch_scheduler.available_dispatch_instance_set) == min(2, dispatch_scheduler.num_dispatch_instances)
-    dispatch_scheduler.remove_instance('instance_1')
-    assert dispatch_scheduler.num_instances == 1
+
     dispatch_scheduler.remove_instance('instance_2')
+    assert dispatch_scheduler.num_instances == 1
+    if dispatch_scheduler.num_dispatch_instances <= 0:
+        assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    else:
+        assert len(dispatch_scheduler.available_dispatch_instance_set) == min(1, dispatch_scheduler.num_dispatch_instances-1)
+    dispatch_scheduler.remove_instance('instance_3')
     assert dispatch_scheduler.num_instances == 0
 
 def test_dispatch_balanced():
@@ -76,7 +88,7 @@ def test_dispatch_load():
                 instance_num_requests[instance_id] = 0
         dispatch_scheduler.instance_num_requests = instance_num_requests
         dispatch_scheduler.instance_info = instance_info_dict
-        available_instance_dict = {key: instance_info_dict[key] for key in instance_info_dict
+        available_instance_dict = {key: value for key, value in instance_info_dict.items()
                                    if key in dispatch_scheduler.available_dispatch_instance_set}
         min_instance_id = next(key for key, value in sorted(available_instance_dict.items(),
                                                             key=lambda item: item[1].instance_load_dispatch_scale))
@@ -100,7 +112,7 @@ def test_dispatch_queue():
                 instance_num_requests[instance_id] = 0
         dispatch_scheduler.instance_num_requests = instance_num_requests
         dispatch_scheduler.instance_info = instance_info_dict
-        available_instance_dict = {key: instance_info_dict[key] for key in instance_info_dict
+        available_instance_dict = {key: value for key, value in instance_info_dict.items()
                                    if key in dispatch_scheduler.available_dispatch_instance_set}
         min_instance_id = next(key for key, value in sorted(available_instance_dict.items(),
                                                             key=lambda item: item[1].num_waiting_requests))

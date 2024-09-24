@@ -15,6 +15,7 @@ import asyncio
 import time
 import csv
 import os
+import math
 from typing import Dict, List, Tuple, Union, Iterable
 from collections import defaultdict
 import traceback
@@ -217,12 +218,12 @@ class LLMEngineManager:
     async def _push_migrations(self) -> None:
         # Push migrate when the instance_info have updated a certain number of times.
         if self.enable_pd_disagg:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODING, -1))
+            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODING, math.inf))
             asyncio.create_task(self._migrate(PairMigrationConstraints.DECODING_2_DECODING, 1))
         else:
             asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS, 1))
 
-    async def _migrate(self, pair_migration_type:str, migrate_in_num_requests:int) -> None:
+    async def _migrate(self, pair_migration_type: PairMigrationConstraints, migrate_in_num_requests: int) -> None:
         async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
             if migrate_instance_pair[0] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[0]] = False

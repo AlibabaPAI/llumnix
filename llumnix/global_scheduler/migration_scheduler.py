@@ -56,12 +56,12 @@ class MigrationScheduler:
         self.instance_info: Dict[str, InstanceInfo] = None
         self.sorted_instance_infos: List[InstanceInfo] = None
 
-    def pair_migration(self, pair_migration_type:str) -> List[Tuple[str, str]]:
+    def pair_migration(self, pair_migration_type: PairMigrationConstraints) -> List[Tuple[str, str]]:
         self._sort_instance_infos(descending=False)
         sorted_src_instance_infos, sorted_dst_instance_infos = self._get_migration_instance_infos(pair_migration_type)
         return self.pair_migration_policy.pair_migration(sorted_src_instance_infos, sorted_dst_instance_infos)
 
-    def _get_migration_instance_infos(self, pair_migration_type:str) -> Dict[str, InstanceInfo]:
+    def _get_migration_instance_infos(self, pair_migration_type: PairMigrationConstraints) -> Dict[str, InstanceInfo]:
         filter_instance_infos_policy = FilteringInstanceInfosPolicyFactory.get_policy(pair_migration_type,
                                                         migrate_out_load_threshold=self.migrate_out_load_threshold)
         return filter_instance_infos_policy.filter_instances(self.sorted_instance_infos,pair_migration_type)
@@ -98,7 +98,8 @@ class FilteringInstanceInfosPolicy(ABC):
             PairMigrationConstraints.PREFILL_2_DECODING: (InstanceType.PREFILL, InstanceType.DECODE),
         }
 
-    def filter_instances(self, sorted_instance_infos: List[InstanceInfo], pair_migration_type: str = None) -> Dict[str, InstanceInfo]:
+    def filter_instances(self, sorted_instance_infos: List[InstanceInfo],
+                         pair_migration_type: PairMigrationConstraints = None) -> Dict[str, InstanceInfo]:
         src_type, dst_type = self.filter_instances_rules[pair_migration_type]
         filtered_src_instance_infos = [info for info in sorted_instance_infos if info.instance_type == src_type]
         filtered_dst_instance_infos = [info for info in sorted_instance_infos if info.instance_type == dst_type]

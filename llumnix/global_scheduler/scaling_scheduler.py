@@ -14,6 +14,7 @@
 from typing import Dict, List, Tuple, Set
 from abc import ABC, abstractmethod
 from enum import Enum
+import math
 import numpy as np
 
 from llumnix.logger import init_logger
@@ -77,18 +78,22 @@ class ScalingScheduler:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
         instance_type = None
-        if self.maximum_prefill_instance_num > 0:
+        if self.maximum_prefill_instance_num == math.inf:
+            instance_type = InstanceType.NO_CONSTRAINTS
+        else:
             if len(self.instance_type_id_set[InstanceType.PREFILL]) < self.maximum_prefill_instance_num:
                 instance_type = InstanceType.PREFILL
             else:
                 instance_type = InstanceType.DECODE
-        else:
-            instance_type = InstanceType.NO_CONSTRAINTS
         self.instance_type_id_set[instance_type].add(instance_id)
         return instance_type
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
+        for instance_type in InstanceType:
+            if instance_id in self.instance_type_id_set[instance_type]:
+                self.instance_type_id_set[instance_type].remove(instance_id)
+                break
         self.num_instances = len(self.instance_id_set)
 
     def get_empty_instance_info(self) -> InstanceInfo:

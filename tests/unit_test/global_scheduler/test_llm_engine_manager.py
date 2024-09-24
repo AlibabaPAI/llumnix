@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import time
-
+import math
 import ray
 import pytest
 import numpy as np
@@ -171,7 +171,7 @@ def test_generate_and_abort(setup_ray_env, engine_manager, llumlet):
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
     server_info = ServerInfo(None, None, None, None, None)
-    ray.get(engine_manager.generate.remote(request_id, server_info, -1, None, None))
+    ray.get(engine_manager.generate.remote(request_id, server_info, math.inf, None, None))
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 1
     ray.get(engine_manager.abort.remote(request_id))
@@ -189,8 +189,8 @@ def test_get_request_instance(setup_ray_env):
     llumlet, llumlet_1 = llumlets[0], llumlets[1]
     request_id = random_uuid()
     request_id_1 = random_uuid()
-    ray.get(llumlet.generate.remote(request_id, None, -1, None, None))
-    ray.get(llumlet_1.generate.remote(request_id_1, None, -1, None, None))
+    ray.get(llumlet.generate.remote(request_id, None, math.inf, None, None))
+    ray.get(llumlet_1.generate.remote(request_id_1, None, math.inf, None, None))
     num_requests = ray.get(llumlet.get_num_requests.remote())
     num_requests_1 = ray.get(llumlet_1.get_num_requests.remote())
     assert num_requests == 1
@@ -227,8 +227,8 @@ def test_update_instance_info_loop_and_migrate(setup_ray_env, engine_manager):
     llumlet, llumlet_1 = llumlets[0], llumlets[1]
     request_id = random_uuid()
     request_id_1 = random_uuid()
-    ray.get(llumlet.generate.remote(request_id, None, -1, None, None))
-    ray.get(llumlet_1.generate.remote(request_id_1, None, -1, None, None))
+    ray.get(llumlet.generate.remote(request_id, None, math.inf, None, None))
+    ray.get(llumlet_1.generate.remote(request_id_1, None, math.inf, None, None))
     instance_info_migrate_out = get_instance_info_migrate_out(instance_id)
     instance_info_migrate_in = get_instance_info_migrate_in(instance_id_1)
     ray.get(llumlet.set_instance_info.remote(instance_info_migrate_out))

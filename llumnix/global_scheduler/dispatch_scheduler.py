@@ -69,6 +69,8 @@ class DispatchScheduler:
         self.num_instances = len(self.instance_id_set)
         if instance_id in self.instance_num_requests:
             del self.instance_num_requests[instance_id]
+        if instance_id in self.available_dispatch_instance_set:
+            self.available_dispatch_instance_set.remove(instance_id)
 
     def _sort_instance_infos(self,
                             descending: bool = True) -> None:

@@ -13,6 +13,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import math
 import ray
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
@@ -96,7 +97,7 @@ def test_migrate_out_multistage(_, setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
-    migrate_out_request = MockRequest("1", 1, -1)
+    migrate_out_request = MockRequest("1", 1, math.inf)
 
     # Create an instance of MigrationCoordinator
     max_stages = 3

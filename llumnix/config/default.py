@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 from .config import LlumnixConfig as LC
 
 # -----------------------------------------------------------------------------
@@ -78,7 +80,7 @@ _C.MANAGER.LOAD_METRIC = 'remaining_steps'
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
 # Number of available dispatch instances. -1 indicates that all instances can be used for dispatching
-_C.MANAGER.NUM_DISPATCH_INSTANCES = -1
+_C.MANAGER.NUM_DISPATCH_INSTANCES = math.inf
 
 # -----------------------------------------------------------------------------
 # MIGRATION CONFIGURATION

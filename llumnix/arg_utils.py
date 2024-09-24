@@ -61,9 +61,14 @@ class EngineManagerArgs:
     last_stage_max_blocks: int = None
     max_stages: int = None
 
-    enable_pd_disagg: bool = False
+    enable_pd_disagg: bool = None
 
     def __post_init__(self):
+        # Check if all fields default to None
+        for field_info in dataclasses.fields(self):
+            if field_info.default is not None:
+                raise ValueError(f"The default value of '{field_info.name}' should be None")
+
         for attr in dataclasses.fields(self):
             if getattr(self, attr.name) is None:
                 setattr(self, attr.name, getattr(_C.MANAGER, attr.name.upper()))
@@ -143,7 +148,6 @@ class EngineManagerArgs:
                             help='request dispatch policy')
         parser.add_argument('--num-available-dispatch-instances',
                             type=int,
-                            default=None,
                             help='number of available instances for dispatching')
 
         parser.add_argument('--enable-migration',
@@ -224,6 +228,5 @@ class EngineManagerArgs:
                             help='drop migration if the number of stages > max_stages')
         parser.add_argument('--enable-pd-disagg',
                             type=bool,
-                            default=None,
                             help='enable prefill decoding disaggregation')
         return parser

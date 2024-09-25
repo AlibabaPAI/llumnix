@@ -58,7 +58,8 @@ def test_get_migration_instance_infos(pair_migration_type):
                 constraint_prefill_instance_num = random.randint(-1, INSTANCE_NUM)
             migration_scheduler = init_migration_scheduler()
             if constraint_prefill_instance_num > 0:
-                if len([info for info in instance_info_dict.values() if info.instance_type == InstanceType.PREFILL]) < constraint_prefill_instance_num:
+                if len([info for info in instance_info_dict.values()
+                        if info.instance_type == InstanceType.PREFILL]) < constraint_prefill_instance_num:
                     instance_info.instance_type = InstanceType.PREFILL
                 else:
                     instance_info.instance_type = InstanceType.DECODE
@@ -105,11 +106,11 @@ def test_pair_migration(policy):
             instance_info_dict[instance_id] = instance_info
         migration_scheduler.instance_info = instance_info_dict
         migration_scheduler._sort_instance_infos(descending=False)
-        sorted_src_instance_infos = [i for i in reversed(migration_scheduler.sorted_instance_infos) 
-                                     if i.instance_type == InstanceType.NO_CONSTRAINTS 
+        sorted_src_instance_infos = [i for i in reversed(migration_scheduler.sorted_instance_infos)
+                                     if i.instance_type == InstanceType.NO_CONSTRAINTS
                                      and (i.num_killed_requests > 0 or i.instance_load_migrate > migration_scheduler.migrate_out_load_threshold)]
         sorted_dst_instance_infos = [i for i in migration_scheduler.sorted_instance_infos
-                                     if i.instance_type == InstanceType.NO_CONSTRAINTS 
+                                     if i.instance_type == InstanceType.NO_CONSTRAINTS
                                     and (i.num_killed_requests == 0 and i.instance_load_migrate < migration_scheduler.migrate_out_load_threshold)]
         migrate_instance_pairs = migration_scheduler.pair_migration_policy.pair_migration(sorted_src_instance_infos, sorted_dst_instance_infos)
         for migrate_out_instance, migrate_in_instance in migrate_instance_pairs:

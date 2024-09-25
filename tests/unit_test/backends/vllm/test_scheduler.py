@@ -156,7 +156,7 @@ def test_schedule_running():
     policy = PolicyFactory.get_policy(policy_name="fcfs")
     budget = create_token_budget()
     curr_loras = None
-    
+
     _, seq_group_0 = create_dummy_prompt("0", prompt_length=1, expected_steps=math.inf)
     scheduler._allocate_and_set_running(seq_group_0)
     append_new_token_seq_group(1, seq_group_0, 1)

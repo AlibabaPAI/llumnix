@@ -21,8 +21,9 @@ from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, Sequ
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import RequestInferenceType
 from llumnix.backends.vllm.utils import scheduler_lock
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 
 logger = init_logger(__name__)
 
@@ -55,15 +56,15 @@ class SchedulerLlumnix(Scheduler):
             enable_caching=self.cache_config.enable_prefix_caching)
         self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
         self.scheduler_lock = threading.Lock()
-        self.migrating_out_request_last_stage: List[LlumnixRequest] = []
+        self.migrating_out_request_last_stage: List[SequenceGroupLlumnix] = []
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
-        self.update_instance_info_callback(self._get_instance_info())
+        self.update_instance_info_callback(self._get_instance_info([]))
 
     def _preempt(
         self,
-        seq_group: LlumnixRequest,
+        seq_group: SequenceGroupLlumnix,
         blocks_to_swap_out: Dict[int, int],
         preemption_mode: Optional[PreemptionMode] = None,
     ) -> PreemptionMode:
@@ -90,7 +91,7 @@ class SchedulerLlumnix(Scheduler):
         return request_ids
 
     @scheduler_lock
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
+    def get_request_incremental_blocks(self, backend_request: SequenceGroupLlumnix, pre_stage_num_blocks: int) -> List[int]:
         seq = backend_request.get_seqs()[0]
         blocks = self.block_manager.get_block_table(seq)
         return blocks[pre_stage_num_blocks:]
@@ -104,13 +105,13 @@ class SchedulerLlumnix(Scheduler):
                 seq.status = SequenceStatus.WAITING
                 break
 
-    def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def add_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
         self.migrating_out_request_last_stage.append(backend_request)
 
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def remove_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
         self.migrating_out_request_last_stage.remove(backend_request)
 
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
+    def pop_migrating_out_requests_last_stage(self) -> List[SequenceGroupLlumnix]:
         migrating_out_request_last_stage = self.migrating_out_request_last_stage.copy()
         self.migrating_out_request_last_stage.clear()
         return migrating_out_request_last_stage
@@ -125,13 +126,13 @@ class SchedulerLlumnix(Scheduler):
         return blocks
 
     @scheduler_lock
-    def add_running_request(self, backend_request: LlumnixRequest) -> None:
+    def add_running_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.status = SequenceStatus.RUNNING
         self.running.append(backend_request)
 
     @scheduler_lock
-    def is_request_running(self, backend_request: LlumnixRequest) -> bool:
+    def is_request_running(self, backend_request: SequenceGroupLlumnix) -> bool:
         return backend_request in self.running
 
     @scheduler_lock
@@ -149,12 +150,12 @@ class SchedulerLlumnix(Scheduler):
                 self.block_manager._free_block_table(blocks)
 
     @scheduler_lock
-    def free_src_request(self, backend_request: LlumnixRequest) -> None:
+    def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         logger.info("free seq {}".format(seq.seq_id))
         self.free_seq(seq)
 
-    def _get_instance_info(self) -> InstanceInfo:
+    def _get_instance_info(self, scheduled_seq_groups: List[SequenceGroupLlumnix]) -> InstanceInfo:
         num_total_gpu_blocks = self.cache_config.num_gpu_blocks
         num_free_gpu_blocks = self.block_manager.get_num_free_gpu_blocks()
         num_used_gpu_blocks = num_total_gpu_blocks - num_free_gpu_blocks
@@ -188,13 +189,13 @@ class SchedulerLlumnix(Scheduler):
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
         )
-        for seq_group in self.running:
+        for seq_group in scheduled_seq_groups:
             instance_info.running_seq_lens.extend([seq.get_len() for seq in seq_group.get_seqs()])
-            instance_info.num_seq = len(instance_info.running_seq_lens)
-        if self.running:
-            instance_info.inference_type = self.running[-1].inference_type
+            instance_info.num_seqs = len(instance_info.running_seq_lens)
+        if scheduled_seq_groups:
+            instance_info.inference_type = scheduled_seq_groups[-1].inference_type
         # TODO(ZeldaHuang) adapt chunked-prefill
-        instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in self.running])\
+        instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in scheduled_seq_groups])\
                                             if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]
         return instance_info
@@ -202,7 +203,8 @@ class SchedulerLlumnix(Scheduler):
     @scheduler_lock
     def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
         seq_group_metadata_list, scheduler_outputs = super().schedule()
-        self.update_instance_info_callback(self._get_instance_info())
+        self.update_instance_info_callback(self._get_instance_info([scheduled_seq_group.seq_group \
+                                            for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups]))
         return seq_group_metadata_list, scheduler_outputs
 
     def add_seq_group(self, *args, **kwargs):

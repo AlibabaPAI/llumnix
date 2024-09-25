@@ -501,7 +501,7 @@ class LLMEngineManager:
             'num_killed_requests',
             'inference_type',
             'bs',
-            'latency',
+            'profiling_data',
             'seq_lens',
             'num_instances',
             'num_seqs',
@@ -511,24 +511,25 @@ class LLMEngineManager:
 
     def _log_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
         for instance_info in instance_infos:
-            self.instance_info_csv.writerow([
-                instance_info.timestamp,
-                instance_info.instance_id,
-                instance_info.step_id,
-                instance_info.gpu_cache_usage,
-                instance_info.num_available_gpu_blocks,
-                instance_info.instance_load_migrate,
-                instance_info.max_tot_tokens,
-                instance_info.num_running_requests,
-                instance_info.num_waiting_requests,
-                instance_info.num_killed_requests,
-                instance_info.inference_type,
-                instance_info.num_batched_tokens,
-                instance_info.latency,
-                instance_info.running_seq_lens,
-                self.num_instances,
-                instance_info.num_seqs,
-                instance_info.num_blocks_first_waiting_request,
-                instance_info.num_blocks_all_waiting_requests,
-                instance_info.waiting_time_first_waiting_request])
+            if instance_info.gpu_cache_usage > 0:
+                self.instance_info_csv.writerow([
+                    instance_info.timestamp,
+                    instance_info.instance_id,
+                    instance_info.step_id,
+                    instance_info.gpu_cache_usage,
+                    instance_info.num_available_gpu_blocks,
+                    instance_info.instance_load_migrate,
+                    instance_info.max_tot_tokens,
+                    instance_info.num_running_requests,
+                    instance_info.num_waiting_requests,
+                    instance_info.num_killed_requests,
+                    instance_info.inference_type,
+                    instance_info.num_batched_tokens,
+                    instance_info.profiling_data,
+                    instance_info.running_seq_lens,
+                    self.num_instances,
+                    instance_info.num_seqs,
+                    instance_info.num_blocks_first_waiting_request,
+                    instance_info.num_blocks_all_waiting_requests,
+                    instance_info.waiting_time_first_waiting_request])
         self.instance_info_file.flush()

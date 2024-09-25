@@ -12,9 +12,9 @@
 # limitations under the License.
 
 import os
+import threading
 from typing import List
 
-from vllm.utils import Counter
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.logger import init_logger
@@ -30,7 +30,7 @@ class BackendSimVLLM(BackendVLLM):
     # pylint: disable=super-init-not-called
     def __init__(
         self,
-        instance_id: int,
+        instance_id: str,
         migration_config: MigrationConfig,
         profiling_result_file_path: str,
         gpu_type: str,
@@ -48,18 +48,24 @@ class BackendSimVLLM(BackendVLLM):
         model_name = os.path.basename(model_name)
         # get latency mem
         profiling_result: ProfilingResult = profiling_database.get(model_name)
+        assert profiling_result is not None, f"can't find {model_name} in profiling database"
         sim_parallel_config = SimParallelConfig(gpu_type, parallel_config.tensor_parallel_size,
                                                 parallel_config.pipeline_parallel_size)
         assert sim_parallel_config in profiling_result.para_dict.keys(), "sim parallel config not in database"
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
-
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(migration_config=migration_config,
-                                                                          latency_mem=latency_mem, engine_args=engine_args)
+        # multi-instance args
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
+                                                                          migration_config=migration_config,
+                                                                          instance_id=instance_id,
+                                                                          latency_mem=latency_mem)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
+        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
-        self.migration_config = migration_config
         self.instance_id = instance_id
-        self.step_counter = Counter()
+        self._thread = threading.Thread(
+            target=self._start_engine_loop, args=(), daemon=True, name="engine_loop"
+        )
+        self._thread.start()
 
     def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         self.engine.model_executor.send_blocks(len(src_blocks))

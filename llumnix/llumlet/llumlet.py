@@ -17,6 +17,7 @@ from typing import List, Union, Iterable
 import time
 
 import ray
+import os
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
 from llumnix.logger import init_logger
@@ -75,8 +76,8 @@ class Llumlet:
                   node_id: str,
                   instance_id: str,
                   backend_type: BackendType,
-                  world_size: int,
                   migration_config: MigrationConfig,
+                  world_size: int,
                   *args,
                   **kwargs):
         try:
@@ -207,13 +208,23 @@ class Llumlet:
         return migrated_request
 
     def get_instance_info(self) -> InstanceInfo:
-        return self.backend_engine.engine.instance_info
+        try:
+            return self.backend_engine.engine.instance_info
+        except Exception as e:
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc())) 
+            return None
 
     def is_ready(self) -> InstanceArgs:
         return self.instance_args
 
     def get_all_request_ids(self) -> List[str]:
-        return self.backend_engine.get_all_request_ids()
+        try:
+            return self.backend_engine.get_all_request_ids()
+        except Exception as e:
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc())) 
+            return None
 
     def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         # This should not be used for logging, as it is monotonic time.
@@ -254,3 +265,7 @@ class Llumlet:
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
+    
+    def exec_entrypoint_method(self, method, *args, **kwargs):
+        executor = getattr(self.backend_engine, "exec_entrypoint_method")
+        return executor(method, *args, **kwargs)

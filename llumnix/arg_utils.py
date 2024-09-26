@@ -15,15 +15,15 @@
 
 import dataclasses
 from dataclasses import dataclass
-import argparse
-from typing import Tuple
+from simple_parsing import ArgumentParser
+from typing import Tuple, Optional
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
 
-class LlumnixArgumentParser(argparse.ArgumentParser):
+class LlumnixArgumentParser(ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -68,14 +68,15 @@ class LlumnixEntrypointsArgs:
         return llumnix_entrypoints_args
 
     @classmethod
-    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
                 assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
+    # TODO(KuilongCui): check this, inplace-update, no-need to return
     @staticmethod
-    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def add_cli_args(parser: ArgumentParser) -> ArgumentParser:
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
                             help='if launch ray cluster in api server')
@@ -174,12 +175,12 @@ class EngineManagerArgs:
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
+                                           self.migration_backend_transfer_type,
                                            self.migration_buffer_blocks,
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
                                            self.migration_backend_init_timeout,
-                                           self.migration_backend_transfer_type,
                                            self.migration_backend_server_address,
                                            self.migration_backend_kvtransfer_naming_url)
         return migration_config
@@ -194,7 +195,7 @@ class EngineManagerArgs:
         return engine_manager_args
 
     @classmethod
-    def check_args(cls, args: 'EngineManagerArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'EngineManagerArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -315,9 +316,18 @@ class EngineManagerArgs:
                             help='profiling result file path')
         parser.add_argument('--migration-backend',
                             type=str,
+<<<<<<< HEAD
                             choices=['gloo','nccl','rayrpc','grpc','kvtransfer'],
                             help='communication backend of migration, [gloo, rayrpc, nccl] are available for vllm \
                                 and [grpc, kvtransfer] are available for bladellm')
+=======
+<<<<<<< HEAD
+                            choices=['gloo', 'nccl', 'rpc'],
+=======
+                            choices=['gloo','nccl','rpc','grpc','kvtransfer'],
+>>>>>>> 7e56177 ([WIP] adata tp bladellm)
+                            help='communication backend of migration')
+>>>>>>> ad6bcce ([WIP] adata tp bladellm)
         parser.add_argument('--migration-backend-transfer-type',
                             type=str,
                             choices=['cuda_ipc','rdma', ''],

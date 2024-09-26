@@ -174,7 +174,6 @@ class LLMEngineManager:
                 dead_instance_ids.append(instance_id)
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(ret))
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(self.instances))
-
         while True:
             try:
                 await asyncio.sleep(interval)

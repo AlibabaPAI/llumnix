@@ -14,6 +14,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from blade_llm.generation.request_state import RequestGroup
 
 class MigrationBackendBase(ABC):
     @abstractmethod
@@ -31,11 +32,7 @@ class MigrationBackendBase(ABC):
     @abstractmethod
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         raise NotImplementedError
-
+    
     @abstractmethod
-    def do_send(self, dst_handle, blocks: List[int]):
-        raise NotImplementedError
-
-    @abstractmethod
-    def do_recv(self, src_handle, blocks: List[int]):
+    def migrate_request_group(self, src_handle, request_id) -> None:
         raise NotImplementedError

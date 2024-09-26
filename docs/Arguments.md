@@ -163,6 +163,19 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - URL of naming server for kvtransfer migration backend
 - Default: "file:/tmp/llumnix/naming/"
 
+`--migration-backend-transfer-type`
+- Transfer type for migration backend grpc and kvTransfer.
+- Possible choices: cuda_ipc, rdma, ""
+- Default: ""
+
+`--migration-backend-server-address`
+- Address of grpc server for migration backend
+- Default: "127.0.0.1:50051"
+
+`--migration-backend-kvtransfer-naming-url`
+- URL of naming server for kvtransfer migration backend
+- Default: ""
+
 `--migration-buffer-blocks`
 - Number of buffer blocks in migration.
 - Default: 512

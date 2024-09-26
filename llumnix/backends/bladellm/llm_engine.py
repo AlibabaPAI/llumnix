@@ -20,6 +20,11 @@ import asyncio
 import queue
 
 import ray
+from aiohttp import web
+import ray
+import grpc
+import pickle
+import zmq
 from loguru import logger
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
@@ -128,6 +133,7 @@ class AsyncLLMEngineLlumnixMixin:
                  placement_group: Optional[PlacementGroup],
                  node_id: Optional[str],
                  ) -> None:
+        self._worker_processes = launch_worker(self._args, instance_id, migration_config)
         self.instance_id = instance_id
 
         self.state = EngineState.INIT
@@ -286,56 +292,40 @@ class BackendBladeLLM(BackendInterface):
             request_id = (request_id,)
         request_ids = set(request_id)
         for req_id in request_ids:
-            self.engine.drop_request(int(req_id))
+            self.engine.drop_request(req_id)
+    
+    def get_running_queue(self ) -> List[ServerRequestLlumnix]:
+        return self.engine._scheduler.get_running_queue()
 
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
-        pass
+    def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
+        return self.engine._scheduler.get_request_incremental_blocks(*args, **kwargs)
 
-    def get_running_queue(self) -> Deque[LlumnixRequest]:
-        pass
+    def remove_running_request(self, *args, **kwargs) -> None:
+        return self.engine._scheduler.remove_running_request(*args, **kwargs)
 
-    def get_waiting_queue(self) -> Deque[LlumnixRequest]:
-        pass
+    def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
+        return self.engine._scheduler.add_migrating_out_request_last_stage(*args, **kwargs)
 
-    def remove_running_request(self, request_id: str) -> bool:
-        pass
+    def remove_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
+        return self.engine._scheduler.remove_migrating_out_request_last_stage(*args, **kwargs)
 
-    def remove_waiting_request(self, request_id: str) -> bool:
-        pass
+    def pop_migrating_out_requests_last_stage(self, *args, **kwargs) -> List[Any]:
+        return self.engine._scheduler.pop_migrating_out_requests_last_stage(*args, **kwargs)
 
-    def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
-        pass
+    def pre_alloc(self, *args, **kwargs) -> List[int]:
+        return self.engine._scheduler.pre_alloc(*args, **kwargs)
 
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
-        pass
+    def add_running_request(self, *args, **kwargs) -> None:
+        return self.engine._scheduler.add_running_request(*args, **kwargs)
 
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
-        pass
+    def is_request_running(self, *args, **kwargs) -> bool:
+        return self.engine._scheduler.is_request_running(*args, **kwargs)
 
-    def pre_alloc(self,
-                  request_id: str,
-                  request_status: RequestStatus,
-                  request_arrival_time: float,
-                  block_num: int) -> List[int]:
-        pass
-
-    def add_running_request(self, backend_request: LlumnixRequest) -> None:
-        pass
-
-    def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
-        pass
-
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
-        pass
+    def free_dst_pre_alloc_cache(self, *args, **kwargs) -> None:
+        return self.engine._scheduler.free_dst_pre_alloc_cache(*args, **kwargs)
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
-        pass
-
-    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, src_blocks: List[int], dst_blocks: List[int]):
-        pass
-
-    def commit_dst_request(self, backend_request: LlumnixRequest) -> None:
-        pass
+        return self.engine._scheduler.free_src_request(backend_request)
 
     def get_all_request_ids(self) -> List[str]:
-        pass
+        return self.engine._scheduler.get_all_request_ids()

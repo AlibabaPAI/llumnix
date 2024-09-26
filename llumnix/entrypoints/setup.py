@@ -15,7 +15,7 @@ import subprocess
 import sys
 import os
 import time
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
 import asyncio
 import socket
 import ray
@@ -75,7 +75,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         sys.exit(1)
     ray_start_command = None
     if 'HEAD_NODE' in os.environ:
-        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
+        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port} --log-dir=/mnt/xinyi/custom_logs"
         try:
             result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
         except subprocess.CalledProcessError as e:
@@ -186,6 +186,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs, instance_args: Instanc
                 BackendType.SIM_VLLM,
                 world_size,
                 migration_configs,
+                world_size,
                 engine_manager_args.profiling_result_file_path,
             )
         llumlets.append(llumlet)

@@ -11,9 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import vllm
-from vllm import *
-
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.setup import (launch_ray_cluster,
                                        connect_to_ray_cluster,
@@ -23,8 +20,8 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
-
-from .version import __version__
+from llumnix.backends.backend_interface import BackendType
+from llumnix.version import __version__
 
 __all__ = [
     "__version__",
@@ -37,6 +34,20 @@ __all__ = [
     "LLMEngineManager",
     "Llumlet",
     "QueueType",
+    "BackendType",
 ]
 
-__all__.extend(getattr(vllm, "__all__", []))
+try:
+    import vllm
+    from vllm import *
+    __all__.extend(getattr(vllm, "__all__", []))
+except ImportError:
+    pass
+
+# TODO(KuilongCui): import blade_llm after cuda is ready
+# try:
+#     import blade_llm
+#     from blade_llm import *
+#     __all__.extend(getattr(blade_llm, "__all__", []))
+# except ImportError:
+#     pass

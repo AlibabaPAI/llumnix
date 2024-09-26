@@ -27,6 +27,7 @@ class EngineState(str, Enum):
 class BackendType(str, Enum):
     VLLM = "VLLM"
     SIM_VLLM = "SIM_VLLM"
+    BLADELLM = "BLADELLM"
 
     @staticmethod
     def is_sim_backend(status: "BackendType") -> bool:
@@ -64,12 +65,6 @@ class BackendInterface(ABC):
 
         Args:
             request_id: A single request ID or an iterable of request IDs to abort.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    async def _start_engine_step_loop(self) -> None:
-        """Start step loop of backend engine.
         """
         raise NotImplementedError
 
@@ -292,6 +287,24 @@ class BackendInterface(ABC):
                              cache that need to be sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's
                              cache where the incoming blocks should be stored.
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    async def send_request_group(self, dst_ray_actor: "ray.actor.ActorHandle", request_id: int):
+        """
+        Sends request group from the source instance to the destination instance, specific to BladeLLM.
+
+        This method transfers the request group information between instances. It is responsible for ensuring that
+        the request group information corresponding to the specified request ID from the source instance's state
+        manager is sent to and properly received by the destination instance.
+
+        Args:
+            dst_ray_actor: A handle to the Ray actor representing the destination instance where the request group
+                           information is to be sent. This handle is used to reference the destination's
+                           execution context and manage the request group information transfer.
+            request_id :  A string representing the unique identifier of the request for which request group
+                            information is to be freed on the destination instance.
         """
         raise NotImplementedError
 

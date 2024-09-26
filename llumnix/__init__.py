@@ -11,8 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import vllm
-from vllm import *
+# import vllm
+# from vllm import *
 
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.setup import (launch_ray_cluster,
@@ -24,19 +24,19 @@ from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 
-from .version import __version__
+# from .version import __version__
 
-__all__ = [
-    "__version__",
-    "ServerInfo",
-    "launch_ray_cluster",
-    "connect_to_ray_cluster",
-    "init_manager",
-    "init_llumlets",
-    "EngineManagerArgs",
-    "LLMEngineManager",
-    "Llumlet",
-    "QueueType",
-]
+# __all__ = [
+#     "__version__",
+#     "ServerInfo",
+#     "launch_ray_cluster",
+#     "connect_to_ray_cluster",
+#     "init_manager",
+#     "init_llumlets",
+#     "EngineManagerArgs",
+#     "LLMEngineManager",
+#     "Llumlet",
+#     "QueueType",
+# ]
 
-__all__.extend(getattr(vllm, "__all__", []))
+# __all__.extend(getattr(vllm, "__all__", []))

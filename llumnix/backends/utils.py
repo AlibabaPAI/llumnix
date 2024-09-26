@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 
 import ray
 from ray.util.placement_group import PlacementGroup
+import random
 
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
@@ -29,6 +30,10 @@ def init_backend_engine(instance_id: str, request_output_queue_type: QueueType,
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.simulator import BackendSimVLLM
         backend_engine = BackendSimVLLM(instance_id, request_output_queue_type, *args, **kwargs)
+    elif backend_type == BackendType.BLADELLM:
+        # pylint: disable=import-outside-toplevel
+        from llumnix.backends.bladellm.llm_engine import BackendBladeLLM
+        backend_engine = BackendBladeLLM(instance_id, request_output_queue_type, *args, **kwargs)
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine
@@ -91,3 +96,8 @@ def initialize_placement_group(
         ray.get(current_placement_group.ready(), timeout=1800)
 
     return current_placement_group
+
+
+# Generate a random request_id specifically for BladeLLM requests.
+def random_positive_id() -> str:
+    return random.randint(1, 10**6)

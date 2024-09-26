@@ -68,6 +68,7 @@ async def async_request_gen(generator, qps: float, distribution="uniform", coeff
 
 class GenerationBackend(str, Enum):
     vLLM = "vLLM"
+    BladeLLM="BladeLLM"
     NaiveHfPipeline = "NaiveHfPipeline"
     RayGen = "RayGen"
     FasterTransformer = "FasterTransformer"
@@ -111,6 +112,43 @@ async def query_model_vllm(prompt, verbose, ip_ports):
                     print(json.dumps(output['generated_text']))
                 num_finished_requests += 1
                 print("num_finised_requests: {}".format(num_finished_requests))
+                return (prompt, output)
+        except aiohttp.ClientError as e:
+            print(f"Connect to {ip_ports[server_id]} failed with: {str(e)}")
+            sys.exit(1)
+
+async def query_model_bladellm(prompt, verbose, ip_ports):
+    prompt, prompt_len, expected_response_len = prompt
+
+    # Randomly dispatch request to the given api servers.
+    server_id = min(server_num_requests, key=server_num_requests.get)
+
+    timeout = aiohttp.ClientTimeout(total=4*60*60)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+         # TODO(xinyi): Remove hard codes of params.
+        output_len = expected_response_len
+        request_dict = {
+            "prompt": prompt,
+            "temperature": -0.9,
+            "top_p": 0.9,
+            "top_k": 1,
+            "max_new_tokens": max(output_len, 1),
+            "ignore_eos": True,
+        }
+        if verbose:
+            print('Querying model')
+        try:
+            async with session.post(f'http://{ip_ports[server_id]}/generate_benchmark', json=request_dict) as resp:
+                if verbose:
+                    print('Done')
+
+                output = await resp.json()
+                # necessary for latency calc
+                output['response_len'] = expected_response_len
+                if verbose and 'generated_text' in output:
+                    print(json.dumps(output['generated_text']))
+
                 return (prompt, output)
         except aiohttp.ClientError as e:
             print(f"Connect to {ip_ports[server_id]} failed with: {str(e)}")
@@ -430,6 +468,8 @@ async def benchmark(
 
     if backend == GenerationBackend.vLLM:
         query_model = query_model_vllm
+    elif backend == GenerationBackend.BladeLLM:
+        query_model = query_model_bladellm
     else:
         raise ValueError(f'unknown backend {backend}')
 

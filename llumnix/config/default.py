@@ -25,7 +25,7 @@ _C = LC()
 # -----------------------------------------------------------------------------
 _C.SERVER = LC()
 # Hostname for the server
-_C.SERVER.HOST = "localhost"
+_C.SERVER.HOST = "172.23.75.207"
 # Port number for the server
 _C.SERVER.PORT = 8000
 # Path to SSL key file for secure connections
@@ -47,7 +47,7 @@ _C.SERVER.CONFIG_FILE = None
 # RAY CONFIGURATION
 # -----------------------------------------------------------------------------
 # If True, launch Ray cluster in API server
-_C.SERVER.LAUNCH_RAY_CLUSTER = False
+_C.SERVER.LAUNCH_RAY_CLUSTER = True
 # Port number for the Ray cluster
 _C.SERVER.RAY_CLUSTER_PORT = 6379
 
@@ -65,9 +65,9 @@ _C.MANAGER.LOG_FILENAME = "server.log"
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = ""
 
 # Disable fixing the placement of instance to current node
-_C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = False
+_C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = True
 # Disable initializing instance by manager
-_C.MANAGER.DISABLE_INIT_INSTANCE_BY_MANAGER = False
+_C.MANAGER.DISABLE_INIT_INSTANCE_BY_MANAGER = True
 # Number of instances created at initialization
 _C.MANAGER.INITIAL_INSTANCES = 1
 # Time interval(s) to update instance info and pair migration
@@ -104,7 +104,13 @@ _C.MANAGER.MAX_STAGES = 3
 _C.MANAGER.LAST_STAGE_MAX_BLOCKS = 16
 
 # Communication backend of migration
-_C.MANAGER.MIGRATION_BACKEND = "gloo"
+_C.MANAGER.MIGRATION_BACKEND = "grpc"
+# Transfer type for migration backend grpc and kvTransfer
+_C.MANAGER.MIGRATION_BACKEND_TRANSFER_TYPE = ""
+# Address of grpc server for migration backend
+_C.MANAGER.MIGRATION_BACKEND_SERVER_ADDRESS = "127.0.0.1:50051"
+# URL of naming server for kvtransfer migration backend
+_C.MANAGER.MIGRATION_BACKEND_KVTRANSFER_NAMING_URL = ""
 # Timeout(s) for initializing migration backend
 _C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 # Number of cache blocks in migration

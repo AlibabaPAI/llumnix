@@ -11,8 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 from .config import LlumnixConfig as LC
 
 # -----------------------------------------------------------------------------
@@ -47,9 +45,7 @@ _C.SERVER.CONFIG_FILE = None
 # Disable keep serve process alive
 _C.SERVER.DISABLE_KEEP_SERVE_PROCESS_ALIVE = False
 
-# -----------------------------------------------------------------------------
-# RAY CONFIGURATION
-# -----------------------------------------------------------------------------
+# ----------------------------- RAY CONFIGURATION -----------------------------
 # If True, launch Ray cluster in API server
 _C.SERVER.LAUNCH_RAY_CLUSTER = False
 # Port number for the Ray cluster
@@ -71,63 +67,34 @@ _C.MANAGER.DISABLE_LOG_REQUESTS_MANAGER = False
 _C.MANAGER.LOG_INSTANCE_INFO = False
 # Log filename
 _C.MANAGER.LOG_FILENAME = "server.log"
-# Enable simulator mode
-_C.MANAGER.SIMULATOR_MODE = False
-# Profiling result file path when using simulator
-_C.MANAGER.PROFILING_RESULT_FILE_PATH = None
 # Enable port increment when deploying multiple servers
 _C.MANAGER.ENABLE_PORT_INCREMENT = False
 # Enable store port offset when deploying multiple servers
 _C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
+# Enable prefill decoding disaggregation
+_C.MANAGER.ENABLE_PD_DISAGG = False
+# The p:d ratio used in gloabl launch model
+_C.MANAGER.PD_RATIO = "1:1"
 
-# -----------------------------------------------------------------------------
-# DISPATCH CONFIGURATION
-# -----------------------------------------------------------------------------
-# Instance load metric
-_C.MANAGER.LOAD_METRIC = 'remaining_steps'
+# -------------------------- DISPATCH CONFIGURATION ---------------------------
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
 
-# -----------------------------------------------------------------------------
-# MIGRATION CONFIGURATION
-# -----------------------------------------------------------------------------
+# -------------------------- MIGRATION CONFIGURATION --------------------------
 # Enable migrate requests between instances
 _C.MANAGER.ENABLE_MIGRATION = False
-# Enable defragmentation through migration based on virtual usage
-_C.MANAGER.ENABLE_DEFRAG = False
 # Pair migration frequency
 _C.MANAGER.PAIR_MIGRATION_FREQUENCY = 1
 # Pair migration policy
 _C.MANAGER.PAIR_MIGRATION_POLICY = 'defrag_constrained'
 # Migrate out instance load threshold
-_C.MANAGER.MIGRATE_OUT_THRESHOLD = 3.0
-# Request migration policy
-_C.MANAGER.REQUEST_MIGRATION_POLICY = 'SR'
-# Drop migration if the number of stages > max_stages
-_C.MANAGER.MAX_STAGES = 3
-# If the number of remain blocks < last_stage_max_blocks, do last stage migration
-_C.MANAGER.LAST_STAGE_MAX_BLOCKS = 16
+_C.MANAGER.MIGRATE_OUT_THRESHOLD = -3.0
 
-# Communication backend of migration
-_C.MANAGER.MIGRATION_BACKEND = "gloo"
-# Number of cache blocks in migration
-_C.MANAGER.MIGRATION_BUFFER_BLOCKS = 512
-# Number of kv-cache layers to transfer in each round during migration
-_C.MANAGER.MIGRATION_NUM_LAYERS = 1
-# Timeout(s) for initializing migration backend
-_C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
-# Transfer type for migration backend kvTransfer
-_C.MANAGER.MIGRATION_BACKEND_TRANSFER_TYPE = "rdma"
-# Address of grpc server for migration backend
-_C.MANAGER.GRPC_MIGRATION_BACKEND_SERVER_ADDRESS = "127.0.0.1:50051"
-# URL of naming server for kvtransfer migration backend
-_C.MANAGER.KVTRANSFER_MIGRATION_BACKEND_NAMING_URL = "file:/tmp/llumnix/naming/"
-
-# -----------------------------------------------------------------------------
-# SCALING CONFIGURATION
-# -----------------------------------------------------------------------------
+# --------------------------- SCALING CONFIGURATION ---------------------------
 # Enable auto scaling
 _C.MANAGER.ENABLE_SCALING = False
+# Instance scaling load metric
+_C.MANAGER.SCALING_LOAD_METRIC = 'remaining_steps'
 # Minimum number of instances
 _C.MANAGER.MIN_INSTANCES = 1
 # Maximum number of instances
@@ -137,14 +104,47 @@ _C.MANAGER.SCALING_INTERVAL = 10
 # Scaling policy
 _C.MANAGER.SCALING_POLICY = 'avg_load'
 # Scale up threshold
-_C.MANAGER.SCALE_UP_THRESHOLD = 10
+_C.MANAGER.SCALE_UP_THRESHOLD = -10
 # Scale down threshold
-_C.MANAGER.SCALE_DOWN_THRESHOLD = 60
+_C.MANAGER.SCALE_DOWN_THRESHOLD = -60
 
 # -----------------------------------------------------------------------------
-# PREFILL DECODING DISAGGREGATION CONFIGURATION
+# INSTANCE CONFIGURATION
 # -----------------------------------------------------------------------------
-# Enable prefill decoding disaggregation
-_C.MANAGER.ENABLE_PD_DISAGG = False
-# Number of available instances for dispatch. math.inf indicates that all instances can be used for dispatching
-_C.MANAGER.NUM_DISPATCH_INSTANCES = math.inf
+_C.INSTANCE = LC()
+# Engine types: prefill, decode, no_constraints
+_C.INSTANCE.INSTANCE_TYPE = "no_constraints"
+# Enable simulator mode
+_C.INSTANCE.SIMULATOR_MODE = False
+# Profiling result file path when using simulator
+_C.INSTANCE.PROFILING_RESULT_FILE_PATH = None
+
+# ------------------------- LOAD METRICS CONFIGURATION ------------------------
+# Instance dispatch load metric
+_C.INSTANCE.DISPATCH_LOAD_METRIC = 'remaining_steps'
+# Instance migration load metric
+_C.INSTANCE.MIGRATION_LOAD_METRIC = 'remaining_steps'
+
+# -------------------------- MIGRATION CONFIGURATION --------------------------
+# Enable defragmentation through migration based on virtual usage
+_C.INSTANCE.ENABLE_DEFRAG = False
+# Request migration policy
+_C.INSTANCE.REQUEST_MIGRATION_POLICY = 'SR'
+# Drop migration if the number of stages > migration_max_stages
+_C.INSTANCE.MIGRATION_MAX_STAGES = 3
+# If the number of remain blocks < migration_last_stage_max_blocks, do last stage migration
+_C.INSTANCE.MIGRATION_LAST_STAGE_MAX_BLOCKS = 16
+# Communication backend of migration
+_C.INSTANCE.MIGRATION_BACKEND = "gloo"
+# Number of cache blocks in migration
+_C.INSTANCE.MIGRATION_BUFFER_BLOCKS = 512
+# Number of kv-cache layers to transfer in each round during migration
+_C.INSTANCE.MIGRATION_NUM_LAYERS = 1
+# Timeout(s) for initializing migration backend
+_C.INSTANCE.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
+# Transfer type for migration backend kvTransfer
+_C.INSTANCE.MIGRATION_BACKEND_TRANSFER_TYPE = "rdma"
+# Address of grpc server for migration backend
+_C.INSTANCE.GRPC_MIGRATION_BACKEND_SERVER_ADDRESS = "127.0.0.1:50051"
+# URL of naming server for kvtransfer migration backend
+_C.INSTANCE.KVTRANSFER_MIGRATION_BACKEND_NAMING_URL = "file:/tmp/llumnix/naming/"

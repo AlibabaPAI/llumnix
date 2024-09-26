@@ -14,31 +14,26 @@
 import math
 import random
 import pytest
-import numpy as np
 
-from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
+from llumnix.instance_info import InstanceInfo
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
-from llumnix.global_scheduler.scaling_scheduler import InstanceType
+from llumnix.instance_info import InstanceType
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
+from llumnix.arg_utils import InstanceArgs
 
-MIGRATE_OUT_LOAD_THRESHOLD = 3.0
+MIGRATE_OUT_LOAD_THRESHOLD = -3.0
 INSTANCE_NUM = 16
 
 def init_migration_scheduler(policy='balanced'):
-    instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
-    migration_scheduler = MigrationScheduler(policy, MIGRATE_OUT_LOAD_THRESHOLD, instance_load_calculator, 'rayrpc')
+    migration_scheduler = MigrationScheduler(policy, MIGRATE_OUT_LOAD_THRESHOLD, False)
     return migration_scheduler
 
-@pytest.fixture
-def migration_scheduler():
-    migration_scheduler = init_migration_scheduler()
-    yield migration_scheduler
-
-def test_add_instance_and_remove_instance(migration_scheduler):
-    migration_scheduler.add_instance('instance_1')
+def test_add_instance_and_remove_instance():
+    migration_scheduler = init_migration_scheduler('balanced')
+    migration_scheduler.add_instance('instance_1', InstanceArgs(instance_type="no_constraints"))
     assert migration_scheduler.num_instances == 1
-    migration_scheduler.add_instance('instance_2')
+    migration_scheduler.add_instance('instance_2', InstanceArgs(instance_type="no_constraints"))
     assert migration_scheduler.num_instances == 2
     migration_scheduler.remove_instance('instance_1')
     assert migration_scheduler.num_instances == 1
@@ -58,7 +53,7 @@ def test_migration_filter(pair_migration_type):
         for instance_id in range(1, INSTANCE_NUM + 1):
             instance_info = InstanceInfo()
             instance_info.instance_id = instance_id
-            instance_info.instance_load_migrate = MIGRATE_OUT_LOAD_THRESHOLD + random.uniform(-1, 1)
+            instance_info.migration_load_metric = MIGRATE_OUT_LOAD_THRESHOLD + random.uniform(-1, 1)
             instance_info.num_killed_requests = random.randint(0, 1)
 
             if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
@@ -82,7 +77,7 @@ def test_migration_filter(pair_migration_type):
         for instance in src_instance_infos:
             if pair_migration_type != PairMigrationConstraints.PREFILL_2_DECODING:
                 assert instance.num_killed_requests > 0 \
-                    or instance.instance_load_migrate > MIGRATE_OUT_LOAD_THRESHOLD
+                    or instance.migration_load_metric > MIGRATE_OUT_LOAD_THRESHOLD
                 if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
                     assert instance.instance_type == InstanceType.NO_CONSTRAINTS
                 elif pair_migration_type == PairMigrationConstraints.DECODING_2_DECODING:
@@ -92,7 +87,7 @@ def test_migration_filter(pair_migration_type):
 
         for instance in dst_instance_infos:
             if pair_migration_type != PairMigrationConstraints.PREFILL_2_DECODING:
-                assert instance.num_killed_requests == 0 and instance.instance_load_migrate < MIGRATE_OUT_LOAD_THRESHOLD
+                assert instance.num_killed_requests == 0 and instance.migration_load_metric < MIGRATE_OUT_LOAD_THRESHOLD
                 if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
                     assert instance.instance_type == InstanceType.NO_CONSTRAINTS
                 elif pair_migration_type == PairMigrationConstraints.DECODING_2_DECODING:
@@ -104,6 +99,7 @@ def test_migration_filter(pair_migration_type):
 @pytest.mark.parametrize("policy", ['balanced', 'defrag_constrained'])
 def test_pair_migration(policy):
     num_tests = 1000
+    exist_migration = False
 
     for _ in range(num_tests):
         migration_scheduler = init_migration_scheduler(policy)
@@ -111,18 +107,22 @@ def test_pair_migration(policy):
         for instance_id in [f'instance_{i}' for i in range(1, INSTANCE_NUM + 1)]:
             instance_info = InstanceInfo()
             instance_info.instance_id = instance_id
-            instance_info.instance_load_migrate = MIGRATE_OUT_LOAD_THRESHOLD + random.uniform(-1, 1)
+            instance_info.migration_load_metric = MIGRATE_OUT_LOAD_THRESHOLD + random.uniform(-6, 3)
+            instance_info.migration_load_metric_after_migrate_out = instance_info.migration_load_metric - random.uniform(0, 1)
+            instance_info.migration_load_metric_after_migrate_in = instance_info.migration_load_metric + random.uniform(0, 1)
             instance_info.num_killed_requests = random.randint(0, 1)
-            instance_info.num_blocks_last_running_request = random.randint(0, 1) * np.inf
             instance_info.instance_type = InstanceType.NO_CONSTRAINTS
             instance_info_dict[instance_id] = instance_info
         migration_scheduler.instance_info = instance_info_dict
 
         migrate_instance_pairs = migration_scheduler.pair_migration(PairMigrationConstraints.NO_CONSTRAINTS)
+        exist_migration = exist_migration or len(migrate_instance_pairs) > 0
 
         for migrate_out_instance, migrate_in_instance in migrate_instance_pairs:
             assert migrate_out_instance != migrate_in_instance
             if policy == 'balanced':
                 assert instance_info_dict[migrate_out_instance].num_blocks_last_running_request == 0
             if instance_info_dict[migrate_out_instance].num_killed_requests == 0:
-                assert instance_info_dict[migrate_out_instance].instance_load_migrate > instance_info_dict[migrate_in_instance].instance_load_migrate
+                assert instance_info_dict[migrate_out_instance].migration_load_metric > instance_info_dict[migrate_in_instance].migration_load_metric
+
+    assert exist_migration

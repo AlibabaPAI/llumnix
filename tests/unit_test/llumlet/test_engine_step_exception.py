@@ -19,9 +19,9 @@ import pytest
 
 from vllm.engine.arg_utils import EngineArgs
 
+from llumnix.arg_utils import InstanceArgs
 from llumnix.backends.backend_interface import BackendType
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.utils import initialize_placement_group, get_placement_group_name
 
@@ -54,10 +54,9 @@ class MockLlumlet(Llumlet):
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
-    migration_config = MigrationConfig("SR", "rayrpc", 16, 1, 4, 5, 20)
 
+    # wait previous test to release the GPU memory
     time.sleep(5.0)
-
     device_count = torch.cuda.device_count()
     origin_free_memory_list = []
     for device_id in range(device_count):
@@ -67,9 +66,9 @@ def test_engine_step_exception(ray_env):
     actor_name = "instance_0"
     llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix').remote(
         instance_id="0",
+        instance_args=InstanceArgs(),
         request_output_queue_type=QueueType.RAYQUEUE,
         backend_type=BackendType.VLLM,
-        migration_config=migration_config,
         engine_args=engine_args,
     )
     ray.get(llumlet.is_ready.remote())

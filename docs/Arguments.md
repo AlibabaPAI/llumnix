@@ -20,7 +20,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--log-request-timestamps]
             [--config-file CONFIG_FILE]
             [--initial-instances INITIAL_INSTANCES]
-            [--load-metric {remaining_steps,usage_ratio}]
+            [--dispatch-load-metric {remaining_steps,usage_ratio}]
+            [--migration-load-metric {remaining_steps,usage_ratio}]
+            [--scaling-load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue,rr}]
             [--enable-migration]
@@ -49,12 +51,14 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-backend-transfer-type {cuda_ipc,rdma,}]
             [--grpc-migration-backend-server-address GRPC_MIGRATION_BACKEND_SERVER_ADDRESS]
             [--kvtransfer-migration-backend-naming-url KVTRANSFER_MIGRATION_BACKEND_NAMING_URL]
-            [--max-stages MAX_STAGES]
-            [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
+            [--migration-max-stages MIGRATION_MAX_STAGES]
+            [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
             [--enable-pd-disagg]
-            [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
+            [--pd-ratio PD_RATIO]
             [--enable-port-increment]
             [--enable-port-offset-store]
+            [--instance-type INSTANCE_TYPE]
+
 ```
 
 `--host`
@@ -111,8 +115,18 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Number of instances created at initialization.
 - Default: 1
 
-`--load-metric`
-- Instance load metric.
+`--dispatch-load-metric`
+- Instance dispatch load metric.
+- Possible choices: remaining_steps, usage_ratio
+- Default: "remaining_steps"
+
+`--migration-load-metric`
+- Instance migration load metric.
+- Possible choices: remaining_steps, usage_ratio
+- Default: "remaining_steps"
+
+`--scaling-load-metric`
+- Instance scaling load metric.
 - Possible choices: remaining_steps, usage_ratio
 - Default: "remaining_steps"
 
@@ -224,26 +238,30 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - URL of naming server for kvtransfer migration backend
 - Default: "file:/tmp/llumnix/naming/"
 
-`--max-stages`
-- Drop migration if the number of stages > max_stages.
+`--migration-max-stages`
+- Drop migration if the number of stages > migration_max_stages.
 - Default: 3
 
-`--last-stage-max-blocks`
-- If the number of remaining blocks < last_stage_max_blocks, do last stage migration.
+`--migration-last-stage-max-blocks`
+- If the number of remaining blocks < migration_last_stage_max_blocks, do last stage migration.
 - Default: 16
 
 `--enable-pd-disagg`
 - Enable prefill decoding disaggregation.
 
-`--num-dispatch-instances`
-- Number of available instances for dispatch.
-- Default: math.inf
+`--pd-ratio`
+- The p:d ratio used in gloabl launch model.
+- Default: "1:1"
 
 `--enable-port-increment`
 - Enable port increment when desploying multiple servers.
 
 `--enable-port-offset-store`
 - Enable store port offset when desploying multiple servers.
+
+`--instance-type`
+- Instance types for the engine.
+- Possible choices: prefill, decode, no_constraints
 
 # Unsupported vLLM feature options
 

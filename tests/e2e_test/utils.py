@@ -29,7 +29,9 @@ def generate_launch_command(result_filename: str = "",
                             max_model_len: int = 4096,
                             log_instance_info: bool = False,
                             request_migration_policy: str = 'SR',
-                            max_num_batched_tokens: int = 16000):
+                            max_num_batched_tokens: int = 16000,
+                            enable_pd_disagg: bool = False,
+                            instance_type: str = "no_constraints"):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -50,6 +52,8 @@ def generate_launch_command(result_filename: str = "",
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
+        f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
+        f"--instance-type {instance_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -64,7 +68,9 @@ def generate_serve_command(result_filename: str = "",
                            max_model_len: int = 4096,
                            log_instance_info: bool = False,
                            request_migration_policy: str = 'SR',
-                           max_num_batched_tokens: int = 16000):
+                           max_num_batched_tokens: int = 16000,
+                           enable_pd_disagg: bool = False,
+                           pd_ratio: str = "1:1"):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "
@@ -84,7 +90,9 @@ def generate_serve_command(result_filename: str = "",
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
+        f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
+        f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command

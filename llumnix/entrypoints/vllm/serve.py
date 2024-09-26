@@ -23,9 +23,9 @@ if __name__ == "__main__":
 
     cli_args = add_cli_args(parser)
     cfg = get_llumnix_config(cli_args.config_file, cli_args)
-    entrypoints_args, manager_args, engine_args = get_args(cfg, parser, cli_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(cfg, LaunchMode.GLOBAL, parser, cli_args)
 
-    backend_type = BackendType.VLLM if not manager_args.simulator_mode else BackendType.SIM_VLLM
+    backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=BackendType.VLLM)
 
     # Assume that there is an existing ray cluster when using centralized deployment.
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})
 
-    setup_llumnix(manager_args, entrypoints_args, engine_args, launch_args)
+    setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 
     # keep the process alive to get the terminal output.
     if not entrypoints_args.disable_keep_serve_process_alive:

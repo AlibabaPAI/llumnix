@@ -5,7 +5,7 @@ import asyncio
 import ray
 
 from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager
-from llumnix import (ManagerArgs, EngineArgs, Manager,
+from llumnix import (ManagerArgs, InstanceArgs, EngineArgs, Manager,
                      Llumlet, ServerInfo, QueueType, BackendType,
                      SamplingParams)
 from llumnix.utils import random_uuid
@@ -35,6 +35,7 @@ connect_to_ray_cluster(port=ray_cluster_port)
 
 # Set manager args and engine args.
 manager_args = ManagerArgs()
+instance_args = InstanceArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370)
 
@@ -45,7 +46,8 @@ ray.get(manager.is_ready.remote())
 # Create instances.
 instance_ids: List[str] = None
 instances: List[Llumlet] = None
-instance_ids, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+instance_ids, instances = ray.get(manager.init_instances.remote(
+    QueueType("rayqueue"), BackendType.VLLM, instance_args, engine_args))
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()

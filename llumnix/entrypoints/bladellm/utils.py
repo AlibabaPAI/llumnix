@@ -13,13 +13,14 @@
 
 from blade_llm.service.args import ServingArgs
 
-from llumnix.arg_utils import EntrypointsArgs, ManagerArgs
 from llumnix.logging.logger import init_logger
+from llumnix.backends.backend_interface import BackendType
+from llumnix.arg_utils import EntrypointsArgs, ManagerArgs, InstanceArgs, LaunchMode
 
 logger = init_logger(__name__)
 
 
-def detect_unsupported_feature(engine_args: ServingArgs) -> None:
+def detect_unsupported_engine_feature(engine_args: ServingArgs) -> None:
     unsupported_feature = None
     if engine_args.enable_lora:
         unsupported_feature = "multi-lora serving"
@@ -29,28 +30,33 @@ def detect_unsupported_feature(engine_args: ServingArgs) -> None:
         unsupported_feature = "speculative decoding"
     elif engine_args.enable_remote_worker:
         unsupported_feature = "enable_remote_worker"
+    elif engine_args.enable_hybrid_dp:
+        unsupported_feature = "hybrid data parallel"
 
     if unsupported_feature:
         raise ValueError(f'Llumnix does not support "{unsupported_feature}" for bladeLLM currently.')
 
-def check_engine_args(engine_args: ServingArgs, manager_args: ManagerArgs) -> None:
-    migration_config = manager_args.create_migration_config()
-    if (engine_args.tensor_parallel_size > 1 or engine_args.tensor_parallel_size > 1) and \
-        migration_config.migration_backend == 'nccl':
-        logger.warning("Llumnix does not support TP or PP when the migration backend is nccl, \
-                       change migration backend to gloo.")
-        manager_args.migration_backend = 'gloo'
-    detect_unsupported_feature(engine_args)
-
-def get_args(llumnix_cfg, llumnix_parser, engine_args):
-    entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_cfg)
-    EntrypointsArgs.check_args(entrypoints_args, llumnix_parser)
+def get_args(llumnix_cfg, llumnix_parser, engine_args: ServingArgs):
+    instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)
+    instance_args.init_from_engine_args(engine_args, BackendType.BLADELLM)
     manager_args = ManagerArgs.from_llumnix_config(llumnix_cfg)
+    manager_args.init_from_instance_args(instance_args)
+    entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_cfg)
+
+    EntrypointsArgs.check_args(entrypoints_args, llumnix_parser)
+    instance_args.check_args(instance_args, manager_args, LaunchMode.LOCAL, llumnix_parser)
     ManagerArgs.check_args(manager_args, llumnix_parser)
-    check_engine_args(engine_args, manager_args)
+
+    assert not manager_args.simulator_mode, "Only support the simulator mode for vLLM."
+
+    assert not (engine_args.enable_disagg and manager_args.enable_pd_disagg), \
+        "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Lluminx."
+
+    detect_unsupported_engine_feature(engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))
     logger.info("manager_args: {}".format(manager_args))
+    logger.info("instance_args: {}".format(instance_args))
     logger.info("engine_args: {}".format(engine_args))
 
-    return entrypoints_args, manager_args, engine_args
+    return entrypoints_args, manager_args, instance_args, engine_args

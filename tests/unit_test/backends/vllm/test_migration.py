@@ -28,6 +28,7 @@ from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
+from llumnix.arg_utils import InstanceArgs
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -87,6 +88,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
 async def test_migration_correctness(setup_ray_env, migration_backend, migration_request_status):
+    instance_args = InstanceArgs(instance_type="no_constraints")
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0": 0, "1": 1, "2": 2}
     if migration_request_status == 'running':
@@ -102,6 +104,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
     scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
 
     llumlet_0: Llumlet = Llumlet.from_args(
+                            instance_args,
                             request_output_queue_type,
                             False,
                             False,
@@ -113,6 +116,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
                             engine_args)
 
     llumlet_1: Llumlet = Llumlet.from_args(
+                            instance_args,
                             request_output_queue_type,
                             False,
                             False,
@@ -127,6 +131,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
         name='instance_2',
         namespace='llumnix',
         scheduling_strategy=scheduling_strategy).remote(
+            instance_args=instance_args,
             instance_id="2",
             request_output_queue_type=request_output_queue_type,
             backend_type=BackendType.VLLM,
@@ -206,6 +211,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
+    instance_args = InstanceArgs(instance_type="no_constraints")
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
@@ -215,6 +221,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     asyncio.create_task(que.run_server_loop())
 
     llumlet_0:Llumlet = Llumlet.from_args(
+                            instance_args,
                             request_output_queue_type,
                             False,
                             True,
@@ -226,6 +233,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
                             engine_args,)
 
     llumlet_1:Llumlet = Llumlet.from_args(
+                            instance_args,
                             request_output_queue_type,
                             False,
                             True,

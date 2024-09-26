@@ -5,8 +5,8 @@ import asyncio
 import ray
 
 from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager, init_llumlets
-from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
-                     EngineArgs, QueueType, BackendType)
+from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, InstanceArgs,
+                     Llumlet, EngineArgs, QueueType, BackendType)
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
 
@@ -39,8 +39,8 @@ engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
 llumlet_ids: List[str] = None
 llumlets: List[Llumlet] = None
 llumlet_ids, llumlets = init_llumlets(
-    manager_args, engine_args, ray.get_runtime_context().get_node_id(),
-    QueueType("rayqueue"), BackendType.VLLM, 1,
+    manager_args, InstanceArgs("no_constraints"), engine_args, BackendType.VLLM, False, 1,
+    ray.get_runtime_context().get_node_id(), QueueType("rayqueue"),
 )
 
 

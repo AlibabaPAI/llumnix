@@ -110,7 +110,6 @@ class EngineManagerArgs:
     polling_interval: float = None
 
     dispatch_policy: str = None
-    num_dispatch_instances: int = None
 
     enable_migration: bool = None
     enable_defrag: bool = None
@@ -162,7 +161,6 @@ class EngineManagerArgs:
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.load_metric,
                                                         self.dispatch_policy,
-                                                        self.num_dispatch_instances,
                                                         self.pair_migration_policy,
                                                         self.migrate_out_threshold,
                                                         self.enable_defrag,
@@ -351,4 +349,48 @@ class EngineManagerArgs:
         parser.add_argument('--num-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatch')
+        return parser
+
+@dataclass
+class InstanceArgs:
+    instance_type: str = None
+
+    def __post_init__(self):
+        # Check if all fields default to None
+        for field_info in dataclasses.fields(self):
+            if field_info.default is not None:
+                raise ValueError(f"The default value of '{field_info.name}' should be None")
+
+        for attr in dataclasses.fields(self):
+            if getattr(self, attr.name) is None:
+                setattr(self, attr.name, getattr(_C.INSTANCE, attr.name.upper()))
+
+    @classmethod
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'InstanceArgs':
+        # Get the list of attributes of this dataclass.
+        attrs = [attr.name for attr in dataclasses.fields(cls)]
+        # Set the attributes from the parsed arguments.
+        # The defalut values of attributes are defined in default.py.
+        instance_args = cls(**{attr: getattr(cfg.INSTANCE, attr.upper()) for attr in attrs})
+        return instance_args
+
+    @classmethod
+    def check_args(cls, args: 'InstanceArgs', manager_args: EngineManagerArgs, parser: argparse.ArgumentParser):
+        # pylint: disable=protected-access
+        for action in parser._optionals._actions:
+            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
+                assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
+
+        # instance_type check
+        if manager_args.enable_pd_disagg:
+            assert args.instance_type in ['prefill', 'decode'], \
+                "instance_type should be prefill or decode if enable_pd_disagg is set."
+
+    @staticmethod
+    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        parser.add_argument('--instance-type',
+                            type=str,
+                            choices=['prefill', 'decode', 'no_constraints'],
+                            help='instance type for the engine')
+
         return parser

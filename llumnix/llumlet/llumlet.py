@@ -29,6 +29,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
+from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
 
@@ -37,6 +38,7 @@ CHECK_ENGINE_STATE_INTERVAL = 1.0
 
 class Llumlet:
     def __init__(self,
+                 instance_args: InstanceArgs,
                  instance_id: str,
                  request_output_queue_type: QueueType,
                  backend_type: BackendType,
@@ -44,6 +46,7 @@ class Llumlet:
                  *args,
                  **kwargs) -> None:
         try:
+            self.instance_args = instance_args
             self.instance_id = instance_id
             self.actor_name = f"instance_{instance_id}"
             self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
@@ -57,8 +60,6 @@ class Llumlet:
                                                             migration_config.max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                             self.backend_engine)
-            self.log_requests = True
-
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
@@ -67,6 +68,7 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
+                  instance_args: InstanceArgs,
                   request_output_queue_type: QueueType,
                   disable_fixed_node_init_instance: bool,
                   detached: bool,
@@ -127,7 +129,7 @@ class Llumlet:
                                                     soft=False,
                                                 )
                                             )
-            llumlet = engine_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
+            llumlet = engine_class.remote(instance_args, instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))
@@ -207,8 +209,8 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         return self.backend_engine.engine.instance_info
 
-    def is_ready(self) -> bool:
-        return True
+    def is_ready(self) -> InstanceArgs:
+        return self.instance_args
 
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()

@@ -29,6 +29,10 @@ def init_backend_engine(instance_id: str, output_queue_type: QueueType,
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.simulator import BackendSimVLLM
         backend_engine = BackendSimVLLM(instance_id, output_queue_type, *args, **kwargs)
+    elif backend_type == BackendType.BLADELLM:
+        # pylint: disable=import-outside-toplevel
+        from llumnix.backends.bladellm.llm_engine import BackendBladeLLM
+        backend_engine = BackendBladeLLM(instance_id, *args, **kwargs)
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine

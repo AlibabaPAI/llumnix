@@ -12,10 +12,10 @@
 # limitations under the License.
 
 from typing import List
+import asyncio
 import pytest
 import ray
 import torch
-import asyncio
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid

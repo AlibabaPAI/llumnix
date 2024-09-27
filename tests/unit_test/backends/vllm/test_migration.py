@@ -27,7 +27,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 # pylint: disable=unused-import
-from tests.unit_test.rpc.test_queue import request_output_queue_server, init_server_info
+from tests.unit_test.rpc.test_queue import init_request_output_queue, init_server_info
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -53,13 +53,14 @@ class MockLlumlet(Llumlet):
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2,
                     reason="Need at least 2 GPUs to run the test.")
+@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
-async def test_migration_correctness(setup_ray_env, request_output_queue_server):
+async def test_migration_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", "nccl",16,1,4,5,20)
-    que = request_output_queue_server
+    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
     server_info = init_server_info()
+    que = init_request_output_queue(server_info)
     asyncio.create_task(que.run_server_loop())
 
     llumlet_0:Llumlet = Llumlet.from_args(
@@ -131,6 +132,7 @@ async def test_migration_correctness(setup_ray_env, request_output_queue_server)
         assert output.cumulative_logprob == origin_output.cumulative_logprob
     for prompt in TEST_PROMPTS:
         await test_correctness(prompt)
+    que.cleanup()
 
 def test_clear_migration_states():
     llumlet = MockLlumlet()

@@ -12,8 +12,10 @@
 # limitations under the License.
 
 from typing import List
+import asyncio
 import pytest
 import ray
+import torch
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -25,7 +27,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 # pylint: disable=unused-import
-from tests.unit_test.rpc.test_queue import request_output_queue_server
+from tests.unit_test.rpc.test_queue import init_request_output_queue, init_server_info
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -49,15 +51,17 @@ class MockLlumlet(Llumlet):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
 
-# @pytest.mark.skipif(torch.cuda.device_count() < 2,
-#                     reason="Need at least 2 GPUs to run the test.")
-# FIXME(ZeldaHuang) this test is currently unstable
-@pytest.mark.skip(reason="Regression Test")
-def test_migration_correctness(setup_ray_env, request_output_queue_server, server_info):
+@pytest.mark.skipif(torch.cuda.device_count() < 2,
+                    reason="Need at least 2 GPUs to run the test.")
+@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.asyncio
+async def test_migration_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", "gloo",16,1,4,5,20)
-    que = request_output_queue_server
+    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
+    server_info = init_server_info()
+    que = init_request_output_queue(server_info)
+    asyncio.create_task(que.run_server_loop())
 
     llumlet_0:Llumlet = Llumlet.from_args(
                             False,
@@ -90,7 +94,7 @@ def test_migration_correctness(setup_ray_env, request_output_queue_server, serve
     assert not res
 
     # running without migration
-    def test_correctness(prompt):
+    async def test_correctness(prompt):
         sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
         request_id0 = random_uuid()
         llumlet_0.generate.remote(request_id0, server_info, prompt, sampling_params)
@@ -98,11 +102,9 @@ def test_migration_correctness(setup_ray_env, request_output_queue_server, serve
         origin_output = None
         finished = False
         while not finished:
-            qsize = request_output_queue.qsize()
-            request_outputs = request_output_queue.get_nowait_batch(qsize)
-            for request_output in request_outputs:
-                origin_output = request_output.outputs[0]
-                finished = request_output.finished
+            request_output = await request_output_queue.get()
+            origin_output = request_output.outputs[0]
+            finished = request_output.finished
 
         request_id1 = random_uuid()
         ray.get(llumlet_0.generate.remote(request_id1, server_info, prompt, sampling_params))
@@ -118,17 +120,19 @@ def test_migration_correctness(setup_ray_env, request_output_queue_server, serve
         output = None
         finished = False
         while not finished:
-            qsize = request_output_queue.qsize()
-            request_outputs = request_output_queue.get_nowait_batch(qsize)
-            for request_output in request_outputs:
-                if request_output.request_id != request_id1:
-                    continue
-                output = request_output.outputs[0]
-                finished = request_output.finished
+            request_output = await request_output_queue.get()
+            origin_output = request_output.outputs[0]
+            finished = request_output.finished
+            if request_output.request_id != request_id1:
+                continue
+            output = request_output.outputs[0]
+            finished = request_output.finished
+
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob
     for prompt in TEST_PROMPTS:
-        test_correctness(prompt)
+        await test_correctness(prompt)
+    que.cleanup()
 
 def test_clear_migration_states():
     llumlet = MockLlumlet()

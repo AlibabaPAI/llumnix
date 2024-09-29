@@ -33,7 +33,6 @@ class BackendSimVLLM(BackendVLLM):
         instance_id: str,
         migration_config: MigrationConfig,
         profiling_result_file_path: str,
-        gpu_type: str,
         engine_args: EngineArgs,
     ) -> None:
         # load database
@@ -49,7 +48,7 @@ class BackendSimVLLM(BackendVLLM):
         # get latency mem
         profiling_result: ProfilingResult = profiling_database.get(model_name)
         assert profiling_result is not None, f"can't find {model_name} in profiling database"
-        sim_parallel_config = SimParallelConfig(gpu_type, parallel_config.tensor_parallel_size,
+        sim_parallel_config = SimParallelConfig(parallel_config.tensor_parallel_size,
                                                 parallel_config.pipeline_parallel_size)
         assert sim_parallel_config in profiling_result.para_dict.keys(), "sim parallel config not in database"
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]

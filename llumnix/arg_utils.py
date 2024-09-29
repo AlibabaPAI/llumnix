@@ -53,7 +53,6 @@ class EngineManagerArgs:
     log_instance_info: bool = None
     profiling_result_file_path: str = None
 
-    gpu_type: str = None
     migration_backend_init_timeout: float = None
     migration_backend: str = None
     migration_cache_blocks: int = None
@@ -192,10 +191,6 @@ class EngineManagerArgs:
         parser.add_argument('--profiling-result-file-path',
                             type=str,
                             help='profiling result file path')
-
-        parser.add_argument('--gpu-type',
-                            type=str,
-                            help='gpu type specified when using simulator')
 
         parser.add_argument('--migration-backend',
                             type=str,

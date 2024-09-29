@@ -56,8 +56,6 @@ _C.MANAGER.LOG_INSTANCE_INFO = False
 _C.MANAGER.LOG_FILENAME = "server.log"
 # Profiling result file path
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = ""
-# GPU type specified when using simulator
-_C.MANAGER.GPU_TYPE = "a10"
 
 # Disable fixing the placement of instance to current node
 _C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = False

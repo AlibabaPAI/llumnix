@@ -56,15 +56,16 @@ manager_available = True
 
 async def _background_process_outputs():
     while True:
-        request_output = await request_output_queue.get()
-        request_id = request_output.request_id
-        # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-        if request_id not in request_streams:
-            continue
-        request_streams[request_id].put(request_output)
-        if request_output.finished:
-            request_streams[request_id].finish()
-            del request_streams[request_id]
+        request_outputs = await request_output_queue.get()
+        for request_output in request_outputs:
+            request_id = request_output.request_id
+            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+            if request_id not in request_streams:
+                continue
+            request_streams[request_id].put(request_output)
+            if request_output.finished:
+                request_streams[request_id].finish()
+                del request_streams[request_id]
 
 # pylint: disable=unused-argument
 @asynccontextmanager

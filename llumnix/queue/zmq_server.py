@@ -121,7 +121,7 @@ class ZmqServer:
 
     async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
         try:
-            self.put_nowait_batch(put_nowait_batch_queue_request.items)
+            self.put_nowait(put_nowait_batch_queue_request.items)
             await self.socket.send_multipart(
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
         # pylint: disable=W0703

@@ -23,8 +23,7 @@ import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo
 from llumnix.utils import random_uuid
-from llumnix.queue.utils import get_output_queue_server
-from llumnix.queue.utils import get_output_queue_client
+from llumnix.queue.utils import get_output_queue_server, get_output_queue_client, QueueType
 
 app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
@@ -33,7 +32,7 @@ MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 
 @ray.remote(num_cpus=0)
 class MockLLMEngineManager:
-    def __init__(self, output_queue_type):
+    def __init__(self, output_queue_type: QueueType):
         self._num_generates = 0
         self._num_aborts = 0
         self.request_output_queue = get_output_queue_client(output_queue_type)
@@ -51,7 +50,7 @@ class MockLLMEngineManager:
         return {"num_aborted_requests": self._num_aborts}
 
 
-def init_manager(output_queue_type: str):
+def init_manager(output_queue_type: QueueType):
     engine_manager = MockLLMEngineManager.options(name=MANAGER_ACTOR_NAME,
                                                   namespace='llumnix').remote(output_queue_type)
     return engine_manager
@@ -69,8 +68,8 @@ if __name__ == "__main__":
     parser.add_argument("--output-queue-type", type=str, choices=["zmq", "rayqueue"])
     parser = EngineManagerArgs.add_cli_args(parser)
     args = parser.parse_args()
-    print(args)
-    output_queue_type = args.output_queue_type
+
+    output_queue_type = QueueType(args.output_queue_type)
     engine_manager = init_manager(output_queue_type)
     llumnix.entrypoints.vllm.api_server.engine_manager = engine_manager
 
@@ -80,7 +79,7 @@ if __name__ == "__main__":
         get_output_queue_server(ip, port, output_queue_type)
 
     ray_queue_server = None
-    if output_queue_type == "rayqueue":
+    if output_queue_type == QueueType.RAYQUEUE:
         ray_queue_server = llumnix.entrypoints.vllm.api_server.request_output_queue
     server_info = ServerInfo(random_uuid(), output_queue_type, ray_queue_server, ip, port)
     llumnix.entrypoints.vllm.api_server.server_info = server_info

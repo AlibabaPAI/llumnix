@@ -19,6 +19,8 @@ from pathlib import Path
 import pytest
 import requests
 
+from llumnix.queue.utils import QueueType
+
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -45,7 +47,7 @@ def _query_server_generate_benchmark(prompt: str) -> dict:
 
 @pytest.fixture(params=["zmq", "rayqueue"])
 def api_server(request):
-    output_queue_type = request.param
+    output_queue_type = QueueType(request.param)
     script_path = Path(__file__).parent.joinpath(
         "api_server_manager.py").absolute()
     commands = [

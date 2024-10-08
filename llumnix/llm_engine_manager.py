@@ -31,7 +31,7 @@ from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import random_uuid
-
+from llumnix.queue.utils import QueueType
 
 logger = init_logger(__name__)
 
@@ -436,7 +436,7 @@ class LLMEngineManager:
 
     # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
     # TODO(s5u13b): Fix the logger when enabling init instance by manager.
-    def init_llumlets(self, engine_args, node_id: str, output_queue_type: str) -> Tuple[List[str], List[Llumlet]]:
+    def init_llumlets(self, engine_args, node_id: str, output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
         engine_config = engine_args.create_engine_config()
         parallel_config = engine_config.parallel_config

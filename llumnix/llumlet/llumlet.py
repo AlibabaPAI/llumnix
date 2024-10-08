@@ -25,6 +25,7 @@ from llumnix.llumlet.migration_coordinator import MigrationCoordinator, Migratio
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
+from llumnix.queue.utils import QueueType
 
 logger = init_logger(__name__)
 
@@ -33,7 +34,7 @@ class Llumlet:
     # TODO(KuilongCui): catch the exception generated in ctor
     def __init__(self,
                  instance_id: str,
-                 output_queue_type: str,
+                 output_queue_type: QueueType,
                  backend_type: BackendType,
                  migration_config: MigrationConfig,
                  *args,
@@ -55,7 +56,7 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
-                  output_queue_type: str,
+                  output_queue_type: QueueType,
                   disable_fixed_node_init_instance: bool,
                   detached: bool,
                   node_id: str,

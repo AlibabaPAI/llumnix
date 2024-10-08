@@ -12,14 +12,14 @@
 # limitations under the License.
 
 from typing import Optional, Tuple
+
 import ray
-# pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.backends.backend_interface import BackendInterface, BackendType
+from llumnix.queue.utils import QueueType
 
-
-def init_backend_engine(instance_id: str, output_queue_type: str,
+def init_backend_engine(instance_id: str, output_queue_type: QueueType,
                         backend_type: BackendType, *args, **kwargs) -> BackendInterface:
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
@@ -36,7 +36,7 @@ def init_backend_engine(instance_id: str, output_queue_type: str,
 def initialize_placement_group(
     world_size: int = 1,
     detached: bool = False
-) -> Tuple[str, Optional["PlacementGroup"]]:
+) -> Tuple[str, Optional[PlacementGroup]]:
     """Initialize the distributed cluster probably with Ray.
 
     Args:

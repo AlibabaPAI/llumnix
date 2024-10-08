@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from enum import Enum
+
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.zmq_server import ZmqServer
@@ -19,20 +21,24 @@ from llumnix.queue.zmq_client import ZmqClient
 from llumnix.queue.ray_queue_client import RayQueueClient
 from llumnix.queue.zmq_utils import get_open_zmq_ipc_path
 
-def get_output_queue_server(zmq_ip: str, zmq_port: int, queue_type: str) -> QueueServerBase:
+
+class QueueType(str, Enum):
+    RAYQUEUE = "rayqueue"
+    ZMQ = "zmq"
+
+def get_output_queue_server(zmq_ip: str, zmq_port: int, queue_type: QueueType) -> QueueServerBase:
     output_queue_server: QueueServerBase = None
-    if queue_type == "zmq":
+    if queue_type == QueueType.ZMQ:
         rpc_path = get_open_zmq_ipc_path(zmq_ip, zmq_port)
         output_queue_server = ZmqServer(rpc_path)
     else:
         output_queue_server = RayQueueServer()
     return output_queue_server
 
-# TODO(KuilongCui): use enum for queue_type
-def get_output_queue_client(queue_type: str) -> QueueClientBase:
+def get_output_queue_client(queue_type: QueueType) -> QueueClientBase:
     output_queue_client: QueueClientBase = None
-    if queue_type == 'zmq':
-        output_queue_client=  ZmqClient()
+    if queue_type == QueueType.ZMQ:
+        output_queue_client= ZmqClient()
     else:
         output_queue_client = RayQueueClient()
     return output_queue_client

@@ -36,13 +36,13 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_client_base import QueueClientBase
-from llumnix.queue.utils import get_output_queue_client
+from llumnix.queue.utils import get_output_queue_client, QueueType
 
 logger = init_logger(__name__)
 
 
 class AsyncPutQueueThread(threading.Thread):
-    def __init__(self, instance_id, output_queue_type: str):
+    def __init__(self, instance_id, output_queue_type: QueueType):
         super().__init__()
         self.instance_id = instance_id
 
@@ -85,7 +85,7 @@ class AsyncPutQueueThread(threading.Thread):
 
 
 class LLMEngineLlumnix(LLMEngine):
-    def __init__(self, instance_id: str, output_queue_type: str, *arg, **kwargs) -> None:
+    def __init__(self, instance_id: str, output_queue_type: QueueType, *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
@@ -99,7 +99,7 @@ class LLMEngineLlumnix(LLMEngine):
     def from_engine_args(
         cls,
         engine_args: EngineArgs,
-        output_queue_type: str,
+        output_queue_type: QueueType,
         migration_config: MigrationConfig,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
@@ -222,7 +222,7 @@ class BackendVLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
-        output_queue_type: str,
+        output_queue_type: QueueType,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
         placement_group: PlacementGroup = None,

@@ -23,7 +23,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM
 from llumnix.backends.profiling import ProfilingDatabase, LatencyMemData, ProfilingResult, SimParallelConfig
-
+from llumnix.queue.utils import QueueType
 
 logger = init_logger(__name__)
 
@@ -32,7 +32,7 @@ class BackendSimVLLM(BackendVLLM):
     def __init__(
         self,
         instance_id: str,
-        output_queue_type: str,
+        output_queue_type: QueueType,
         migration_config: MigrationConfig,
         profiling_result_file_path: str,
         engine_args: EngineArgs,

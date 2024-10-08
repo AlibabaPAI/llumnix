@@ -24,8 +24,8 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.queue.utils import QueueType
 
-# pylint: disable=unused-import
 from tests.unit_test.output_queue.utils import request_output_queue_server
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
@@ -57,7 +57,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
     id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
 
-    output_queue_type = "rayqueue"
+    output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
     asyncio.create_task(que.run_server_loop())
 

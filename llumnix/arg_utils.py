@@ -148,7 +148,6 @@ class EngineManagerArgs:
                             help='request dispatch policy')
         parser.add_argument('--num-available-dispatch-instances',
                             type=int,
-                            default=None,
                             help='number of available instances for dispatching')
 
         parser.add_argument('--enable-migration',
@@ -229,6 +228,5 @@ class EngineManagerArgs:
                             help='drop migration if the number of stages > max_stages')
         parser.add_argument('--enable-pd-disagg',
                             type=bool,
-                            default=None,
                             help='enable prefill decoding disaggregation')
         return parser

@@ -83,7 +83,7 @@ class LLMEngineLlumnix(LLMEngine):
             soft=False
         )
         self.async_put_queue_actor = ray.remote(
-            num_cpus=1, 
+            num_cpus=1,
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
 

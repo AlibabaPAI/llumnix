@@ -17,7 +17,7 @@ import ray
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.backends.backend_interface import BackendInterface, BackendType
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 def init_backend_engine(instance_id: str, output_queue_type: QueueType,
                         backend_type: BackendType, *args, **kwargs) -> BackendInterface:

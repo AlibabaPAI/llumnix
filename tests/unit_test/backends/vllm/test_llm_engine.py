@@ -25,7 +25,7 @@ from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix
 from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor, SimGPUExecutor
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 from .utils import create_dummy_prompt, initialize_scheduler
 

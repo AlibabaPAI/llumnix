@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 import requests
 
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env

@@ -25,7 +25,7 @@ from llumnix.llumlet.migration_coordinator import MigrationCoordinator, Migratio
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
 

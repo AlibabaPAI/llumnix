@@ -12,7 +12,7 @@
 # limitations under the License.
 
 from llumnix.queue.ray_queue_server import RayQueueServer
-from llumnix .queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 class ServerInfo:
     def __init__(self,

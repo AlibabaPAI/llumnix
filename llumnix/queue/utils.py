@@ -11,8 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from enum import Enum
-
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.zmq_server import ZmqServer
@@ -20,11 +18,7 @@ from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.queue.zmq_client import ZmqClient
 from llumnix.queue.ray_queue_client import RayQueueClient
 from llumnix.queue.zmq_utils import get_open_zmq_ipc_path
-
-
-class QueueType(str, Enum):
-    RAYQUEUE = "rayqueue"
-    ZMQ = "zmq"
+from llumnix.queue.queue_type import QueueType
 
 def get_output_queue_server(zmq_ip: str, zmq_port: int, queue_type: QueueType) -> QueueServerBase:
     output_queue_server: QueueServerBase = None

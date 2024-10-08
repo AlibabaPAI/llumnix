@@ -23,7 +23,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM
 from llumnix.backends.profiling import ProfilingDatabase, LatencyMemData, ProfilingResult, SimParallelConfig
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
 

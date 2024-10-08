@@ -26,7 +26,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
 

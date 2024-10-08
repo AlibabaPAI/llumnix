@@ -31,7 +31,7 @@ from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import random_uuid
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
 

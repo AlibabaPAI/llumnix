@@ -24,7 +24,7 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
-from llumnix.queue.utils import QueueType
+from llumnix.queue.queue_type import QueueType
 
 from tests.unit_test.output_queue.utils import request_output_queue_server
 # pylint: disable=unused-import

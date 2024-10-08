@@ -221,7 +221,7 @@ class LLMEngineManager:
         else:
             asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS, 1))
 
-    async def _migrate(self, pair_migration_type:str, migrate_in_num_requests:int) -> None:
+    async def _migrate(self, pair_migration_type: str, migrate_in_num_requests: int) -> None:
         async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
             if migrate_instance_pair[0] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[0]] = False

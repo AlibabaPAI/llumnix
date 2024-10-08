@@ -89,6 +89,10 @@ class ScalingScheduler:
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
+        for instance_type in InstanceType:
+            if instance_id in self.instance_type_id_set[instance_type]:
+                self.instance_type_id_set[instance_type].remove(instance_id)
+                break
         self.num_instances = len(self.instance_id_set)
 
     def get_empty_instance_info(self) -> InstanceInfo:

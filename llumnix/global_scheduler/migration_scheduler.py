@@ -56,12 +56,12 @@ class MigrationScheduler:
         self.instance_info: Dict[str, InstanceInfo] = None
         self.sorted_instance_infos: List[InstanceInfo] = None
 
-    def pair_migration(self, pair_migration_type:str) -> List[Tuple[str, str]]:
+    def pair_migration(self, pair_migration_type: str) -> List[Tuple[str, str]]:
         self._sort_instance_infos(descending=False)
         sorted_src_instance_infos, sorted_dst_instance_infos = self._get_migration_instance_infos(pair_migration_type)
         return self.pair_migration_policy.pair_migration(sorted_src_instance_infos, sorted_dst_instance_infos)
 
-    def _get_migration_instance_infos(self, pair_migration_type:str) -> Dict[str, InstanceInfo]:
+    def _get_migration_instance_infos(self, pair_migration_type: str) -> Dict[str, InstanceInfo]:
         filter_instance_infos_policy = FilteringInstanceInfosPolicyFactory.get_policy(pair_migration_type,
                                                         migrate_out_load_threshold=self.migrate_out_load_threshold)
         return filter_instance_infos_policy.filter_instances(self.sorted_instance_infos,pair_migration_type)

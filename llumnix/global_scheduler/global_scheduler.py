@@ -69,7 +69,7 @@ class GlobalScheduler:
         request_expected_steps = 1 if self.enable_pd_disagg else math.inf
         return instance_id, request_expected_steps
 
-    def pair_migration(self, pair_migration_type:str) -> List[Tuple[str, str]]:
+    def pair_migration(self, pair_migration_type: str) -> List[Tuple[str, str]]:
         self.migration_scheduler.update_instance_infos(self.instance_info)
         migrate_instance_pairs = self.migration_scheduler.pair_migration(pair_migration_type)
         return migrate_instance_pairs

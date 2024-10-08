@@ -46,4 +46,6 @@ def test_executor():
     assert len(outputs[0].outputs) == 2
 
 def test_backend():
+    # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
+    # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
     pass

@@ -19,6 +19,7 @@ import threading
 import asyncio
 import ray
 from ray.util.placement_group import PlacementGroup
+from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
@@ -42,24 +43,15 @@ from llumnix.queue.utils import get_output_queue_client, QueueType
 logger = init_logger(__name__)
 
 
-class AsyncPutQueueThread(threading.Thread):
+class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
-        super().__init__()
         self.instance_id = instance_id
-
-        self.request_output_queue_client: QueueClientBase \
-            = get_output_queue_client(output_queue_type)
+        self.request_output_queue_client: QueueClientBase = get_output_queue_client(output_queue_type)
         self.engine_actor_handle = None
-        self.loop = asyncio.new_event_loop()
-        self.daemon = True
 
-    def run(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
-
-    async def _put_nowait_batch_to_servers(self,
-                                           server_request_outputs: Dict[str, List[RequestOutput]],
-                                           server_info_dict: Dict[str, ServerInfo]) -> None:
+    async def put_nowait_batch_to_servers(self,
+                                          server_request_outputs: Dict[str, List[RequestOutput]],
+                                          server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
         tasks = []
@@ -78,12 +70,6 @@ class AsyncPutQueueThread(threading.Thread):
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)
 
-    def put_nowait_batch_to_servers(self,
-                                    server_request_outputs: Dict[str, List[RequestOutput]],
-                                    server_info_dict: Dict[str, ServerInfo]) -> None:
-        asyncio.run_coroutine_threadsafe(self._put_nowait_batch_to_servers(server_request_outputs, server_info_dict),
-                                         self.loop)
-
 
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self, instance_id: str, output_queue_type: QueueType, *arg, **kwargs) -> None:
@@ -91,9 +77,15 @@ class LLMEngineLlumnix(LLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        # TODO(s5u13b): Reduce the overhead.
-        self.async_put_queue_thread = AsyncPutQueueThread(instance_id, output_queue_type)
-        self.async_put_queue_thread.start()
+        # TODO(s5u13b): Reduce the cross-actor overhead.
+        scheduling_strategy = NodeAffinitySchedulingStrategy(
+            node_id=ray.get_runtime_context().get_node_id(),
+            soft=False
+        )
+        self.async_put_queue_actor = ray.remote(
+            num_cpus=1, 
+            scheduling_strategy=scheduling_strategy
+        )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
 
     # pylint: disable=W0221
     @classmethod
@@ -217,7 +209,7 @@ class LLMEngineLlumnix(LLMEngine):
             server_request_outputs[server_id].append(request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        self.async_put_queue_thread.put_nowait_batch_to_servers(server_request_outputs, server_info_dict)
+        self.async_put_queue_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
     def __init__(

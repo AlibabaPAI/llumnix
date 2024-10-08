@@ -15,8 +15,7 @@ import threading
 from typing import List, Union, Iterable
 import time
 import ray
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo

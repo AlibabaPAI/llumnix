@@ -181,11 +181,11 @@ async def generate_benchmark(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
+    start = time.time()
+
     results_generator = await manager_generate(prompt, sampling_params, request_id)
 
     per_token_latency = []
-    start = time.time()
-
     # Non-streaming case
     final_output = None
     async for request_output in results_generator:

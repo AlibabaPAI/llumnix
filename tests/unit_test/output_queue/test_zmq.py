@@ -39,10 +39,10 @@ class Server:
 
     async def _background_process_outputs(self, request_output_queue):
         while True:
-            request_output = await request_output_queue.get()
-            if request_output.finished:
-                break
-        self.stop_signal.set()
+            request_outputs = await request_output_queue.get()
+            for request_output in request_outputs:
+                if request_output.finished:
+                    self.stop_signal.set()
 
     async def _wait_until_done(self):
         await self.stop_signal.wait()

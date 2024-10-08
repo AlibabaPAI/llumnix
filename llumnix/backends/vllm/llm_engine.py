@@ -168,8 +168,10 @@ class LLMEngineLlumnix(LLMEngine):
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
-        instance_info.latency = self.model_executor.last_inference_latency
-
+        instance_info.profiling_data=(instance_info.inference_type.value,
+                                      instance_info.num_seqs,
+                                      sum(instance_info.running_seq_lens),
+                                      self.model_executor.last_inference_latency)
         seq_groups = self.scheduler.running
         if seq_groups:
             tot_blocks = []
@@ -189,7 +191,7 @@ class LLMEngineLlumnix(LLMEngine):
             instance_info.instance_id = self.instance_info.instance_id
             instance_info.step_id = self.instance_info.step_id
             instance_info.timestamp = self.instance_info.timestamp
-            instance_info.latency = self.instance_info.latency
+            instance_info.profiling_data = self.instance_info.profiling_data
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 

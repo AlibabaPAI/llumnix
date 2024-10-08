@@ -204,6 +204,7 @@ class SimGPUExecutor(GPUExecutor):
                 decode_bs += meta_data.token_chunk_size
                 decode_seq_len += list(meta_data.seq_data.values())[0].get_len()
         decode_bs = _pad_to_alignment(decode_bs, 8)
+        prefill_seq_len = _pad_to_alignment(prefill_seq_len, 8)
         latency = 0
         if prefill_seq_len:
             latency += self.latency_mem.prefill_latency[prefill_seq_len][0] if prefill_seq_len in self.latency_mem.prefill_latency \

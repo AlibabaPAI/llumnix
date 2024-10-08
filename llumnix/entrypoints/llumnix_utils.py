@@ -165,7 +165,6 @@ def init_llumlets(engine_manager_args: EngineManagerArgs,
                 parallel_config.world_size,
                 migration_configs,
                 engine_manager_args.profiling_result_file_path,
-                engine_manager_args.gpu_type,
                 engine_args,
             )
         llumlets.append(llumlet)

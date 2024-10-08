@@ -34,7 +34,7 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         return self.get_seqs()[0].get_output_len()
 
     @property
-    def inference_type(self) -> bool:
+    def inference_type(self) -> RequestInferenceType:
         if self.is_prefill():
             return RequestInferenceType.PREFILL
         return RequestInferenceType.DECODE

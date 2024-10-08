@@ -28,7 +28,7 @@ from llumnix.llumlet.request import RequestInferenceType
 
 # 2D parallel configuration
 # (gpu, tensor parallel, pipeline parallel)
-SimParallelConfig = namedtuple("SimParallelConfig", ("gpu", "tp", "pp"))
+SimParallelConfig = namedtuple("SimParallelConfig", ("tp", "pp"))
 # vllm blocks gpu cache configuration
 SimCacheConfig = namedtuple("SimCacheConfig", ("gpu_memory_utilization", "block_size", "max_num_batched_tokens"))
 
@@ -56,7 +56,7 @@ class LatencyMemData:
 
     def add_latency_result(self, inference_type: RequestInferenceType, batch_size: int, tot_seq_len: int, latency: List[float]):
         if inference_type == RequestInferenceType.PREFILL:
-            self.prefill_latency[batch_size] = latency
+            self.prefill_latency[tot_seq_len] = latency
         else:
             self.decode_latency[(batch_size, tot_seq_len)] = latency
 
@@ -146,20 +146,17 @@ class ProfilingDatabase:
 
     def _extract_data(self, row):
         """Extract the profiling results from a row of the profiling CSV file."""
-        inference_type = RequestInferenceType.PREFILL if row["inference_type"] == "prefill" else RequestInferenceType.DECODE
         # assert pp==1
-        stage_latencies = [float(row["latency"])]
-        batch_size = _pad_to_alignment(int(row["bs"]), 8)
-        tot_seq_len = 0
-        seq_lens_str = row["seq_lens"].strip('"[]"').split(",")
-        for len_str in seq_lens_str:
-            if len_str != "":
-                tot_seq_len += int(len_str)
-        tot_seq_len = _pad_to_alignment(tot_seq_len, 8)
+        profiling_data = row["profiling_data"].strip('"()"').split(",")
+        inference_type = RequestInferenceType.PREFILL if profiling_data[0] == "'prefill'" else RequestInferenceType.DECODE
+        batch_size = _pad_to_alignment(int(profiling_data[1]), 8)
+        tot_seq_len =_pad_to_alignment(int(profiling_data[2]), 8)
+        stage_latencies = [float(profiling_data[3])]
+
         return stage_latencies, inference_type, batch_size, tot_seq_len
 
     def update_from_instance_log(self, file_name: str, model: str, parallel_config: SimParallelConfig):
-        df = pd.read_csv(file_name+"_instance.csv")
+        df = pd.read_csv(file_name)
         df = df[df['bs'] > 0]
         # read lines
         if model not in self.results:
@@ -180,7 +177,7 @@ def model_decode(x, a, b, c):
     bs, tot_seq_len = x
     return a * bs + b * tot_seq_len + c
 
-def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingDatabase, gpu_type: str, **backend_args):
+def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingDatabase, **backend_args):
     assert BackendType.is_sim_backend(backend_type)
     if backend_type == BackendType.SIM_VLLM:
         # TODO(ZeldaHuang): support multi-lora, more device, vision language model
@@ -194,7 +191,7 @@ def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingData
             model_name = model_name[:-1]
         model_name = os.path.basename(model_name)
         profiling_result: ProfilingResult = profiling_database.get(model_name)
-        sim_parallel_config = SimParallelConfig(gpu_type, parallel_config.tensor_parallel_size,
+        sim_parallel_config = SimParallelConfig(parallel_config.tensor_parallel_size,
                                                 parallel_config.pipeline_parallel_size)
         assert sim_parallel_config in profiling_result.para_dict.keys(), "sim parallel config not in database"
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
@@ -205,29 +202,24 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", type=str, default="profiling.pkl")
-    parser.add_argument("--log-path", type=str)
-    parser.add_argument("--model", type=str)
-    parser.add_argument("--gpu", type=str, default="a10")
+    parser.add_argument("--log-csv-path", type=str, required=True)
+    parser.add_argument("--model", type=str, help="filename of your model, like 'Meta-Llama-3-8B-Instruct'")
     parser.add_argument("--tp", type=int, default=1)
     parser.add_argument("--pp", type=int, default=1)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
     parser.add_argument("--block-size", type=int, default=16)
     parser.add_argument("--max-num-batched-tokens", type=int, default=8000)
-    parser.add_argument("--num-gpu-blocks", type=int, default=0)
+    parser.add_argument("--num-gpu-blocks", type=int, required=True, help="kv cache blocks number")
     parser.add_argument("--new-data", action="store_true")
-    parser.add_argument("--fit", action="store_true")
 
     args = parser.parse_args()
-    args_parallel_config = SimParallelConfig(args.gpu, args.tp, args.pp)
+    args_parallel_config = SimParallelConfig(args.tp, args.pp)
     args_cache_config = SimCacheConfig(args.gpu_memory_utilization, args.block_size, args.max_num_batched_tokens)
     database = ProfilingDatabase(args.database, args.new_data)
-    if args.log_path:
-        database.update_from_instance_log(args.log_path, args.model, args_parallel_config)
-    if args.fit:
-        model_result = database.get(args.model)
-        model_result.fit_from_database(parallel_config=args_parallel_config)
-    if args.num_gpu_blocks:
-        model_result = database.get(args.model)
-        model_result.add_cache_result(args_parallel_config, args_cache_config, args.num_gpu_blocks)
+    database.update_from_instance_log(args.log_csv_path, args.model, args_parallel_config)
+    model_result = database.get(args.model)
+    model_result.fit_from_database(parallel_config=args_parallel_config)
+    model_result = database.get(args.model)
+    model_result.add_cache_result(args_parallel_config, args_cache_config, args.num_gpu_blocks)
 
     database.materialize()

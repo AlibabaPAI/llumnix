@@ -16,6 +16,7 @@ from typing import Dict
 import numpy as np
 
 from llumnix.logger import init_logger
+from llumnix.llumlet.request import RequestInferenceType
 
 logger = init_logger(__name__)
 
@@ -33,7 +34,7 @@ class InstanceInfo:
                  num_blocks_first_waiting_request: int = 0,
                  waiting_time_first_waiting_request: int = 0,
                  num_blocks_all_waiting_requests: int = 0,
-                 inference_type: str = "",
+                 inference_type: RequestInferenceType = RequestInferenceType.PREFILL,
                  num_batched_tokens: int = 0) -> None:
         self.num_total_gpu_blocks = num_total_gpu_blocks
         self.num_watermark_blocks = num_watermark_blocks
@@ -67,7 +68,7 @@ class InstanceInfo:
         self.instance_id = None
         self.step_id = None
         self.timestamp = None
-        self.latency = 0.0
+        self.profiling_data = ()
 
 class InstanceLoadInfo:
     def __init__(self, instance_info: InstanceInfo) -> None:

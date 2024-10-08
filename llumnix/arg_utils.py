@@ -32,6 +32,7 @@ class EngineManagerArgs:
     polling_interval: float = None
 
     dispatch_policy: str = None
+    num_dispatch_instances: int = None
 
     enable_migration: bool = None
     enable_defrag: bool = None
@@ -60,7 +61,14 @@ class EngineManagerArgs:
     last_stage_max_blocks: int = None
     max_stages: int = None
 
+    enable_pd_disagg: bool = None
+
     def __post_init__(self):
+        # Check if all fields default to None
+        for field_info in dataclasses.fields(self):
+            if field_info.default is not None:
+                raise ValueError(f"The default value of '{field_info.name}' should be None")
+
         for attr in dataclasses.fields(self):
             if getattr(self, attr.name) is None:
                 setattr(self, attr.name, getattr(_C.MANAGER, attr.name.upper()))
@@ -68,15 +76,19 @@ class EngineManagerArgs:
     def create_global_scheduler_configs(
         self,
     ) -> Tuple[GlobalSchedulerConfig]:
+
+        # Create the GlobalScheduler Configuration.
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.load_metric,
                                                         self.dispatch_policy,
+                                                        self.num_dispatch_instances,
                                                         self.pair_migration_policy,
                                                         self.migrate_out_threshold,
                                                         self.enable_defrag,
                                                         self.scaling_policy,
                                                         self.scale_up_threshold,
-                                                        self.scale_down_threshold)
+                                                        self.scale_down_threshold,
+                                                        self.enable_pd_disagg)
         return global_scheduler_config
 
     def create_migration_config(self) -> MigrationConfig:
@@ -134,6 +146,9 @@ class EngineManagerArgs:
                             type=str,
                             choices=['balanced', 'load', 'queue', 'flood'],
                             help='request dispatch policy')
+        parser.add_argument('--num-available-dispatch-instances',
+                            type=int,
+                            help='number of available instances for dispatching')
 
         parser.add_argument('--enable-migration',
                             action='store_true',
@@ -211,5 +226,7 @@ class EngineManagerArgs:
         parser.add_argument('--max-stages',
                             type=int,
                             help='drop migration if the number of stages > max_stages')
-
+        parser.add_argument('--enable-pd-disagg',
+                            type=bool,
+                            help='enable prefill decoding disaggregation')
         return parser

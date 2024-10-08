@@ -52,7 +52,7 @@ class MigrationCoordinator:
         incremental_blocks = self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
         # live migration, transfer all blocks except last one(currently updating)
         migration_status = MigrationStatus.RUNNING
-        is_last_stage = (len(incremental_blocks) <= self.last_stage_max_blocks)
+        is_last_stage = (len(incremental_blocks) <= self.last_stage_max_blocks) or migrate_out_request.blocking_migration
         if not is_last_stage:
             src_blocks = incremental_blocks[:-1]
             stage_block_num = len(incremental_blocks) - 1

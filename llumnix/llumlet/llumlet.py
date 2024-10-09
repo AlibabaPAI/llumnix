@@ -85,7 +85,9 @@ class Llumlet:
                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,
-                                                    placement_group_bundle_index=0,))
+                                                    placement_group_bundle_index=0,
+                                                )
+                                            )
             else:
                 kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
@@ -95,16 +97,21 @@ class Llumlet:
                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                     node_id=node_id,
-                                                    soft=False,))
+                                                    soft=False,
+                                                )
+                                            )
         else: # backend_type == backend_type.SIM_VLLM:
+            kwargs["node_id"] = node_id
             engine_class = ray.remote(num_cpus=1,
                                       name=actor_name,
                                       namespace='llumnix',
                                       max_concurrency=4,
                                       lifetime=lifetime)(cls).options(
-                                        scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                            node_id=node_id,
-                                            soft=False,))
+                                            scheduling_strategy=NodeAffinitySchedulingStrategy(
+                                                node_id=node_id,
+                                                soft=False,
+                                            )
+                                        )
         llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 

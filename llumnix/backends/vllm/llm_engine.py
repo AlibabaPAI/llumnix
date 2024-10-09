@@ -17,6 +17,7 @@ from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
 import threading
 import asyncio
+import queue
 import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
@@ -72,20 +73,36 @@ class AsyncPutQueueActor:
 
 
 class LLMEngineLlumnix(LLMEngine):
-    def __init__(self, instance_id: str, output_queue_type: QueueType, *arg, **kwargs) -> None:
+    def __init__(self,
+                 instance_id: str,
+                 output_queue_type: QueueType,
+                 placement_group: Optional[PlacementGroup],
+                 node_id: Optional[str],
+                 *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        # TODO(s5u13b): Reduce the cross-actor overhead.
-        scheduling_strategy = NodeAffinitySchedulingStrategy(
-            node_id=ray.get_runtime_context().get_node_id(),
-            soft=False
+        # Place the async put queue actor together with the instance.
+        if placement_group:
+            scheduling_strategy = PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_capture_child_tasks=True,
+            )
+        else:
+            scheduling_strategy = NodeAffinitySchedulingStrategy(
+                node_id=node_id,
+                soft=False,
+            )
+        self.put_queue_args_queue = queue.Queue()
+        self.put_queue_loop_thread = threading.Thread(
+            target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
         )
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
+        self.put_queue_loop_thread.start()
 
     # pylint: disable=W0221
     @classmethod
@@ -97,7 +114,7 @@ class LLMEngineLlumnix(LLMEngine):
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
         placement_group: Optional[PlacementGroup] = None,
-        node_id: str = None,
+        node_id: Optional[str] = None,
         latency_mem: Optional[LatencyMemData] = None
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
@@ -122,6 +139,8 @@ class LLMEngineLlumnix(LLMEngine):
         engine = cls(
             instance_id=instance_id,
             output_queue_type=output_queue_type,
+            placement_group=placement_group,
+            node_id=node_id,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -178,10 +197,12 @@ class LLMEngineLlumnix(LLMEngine):
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
-
         if request_outputs:
-            self._put_request_outputs_to_server(request_outputs, server_infos)
+            self.put_queue_args_queue.put((request_outputs, server_infos))
         self.instance_info = instance_info
+        num_request_outputs = len(request_outputs)
+
+        return num_request_outputs
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
@@ -200,7 +221,13 @@ class LLMEngineLlumnix(LLMEngine):
                                         seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
         self.scheduler.scheduler_lock.release()
 
-    def _put_request_outputs_to_server(self, request_outputs, server_infos: List[ServerInfo]) -> None:
+    def _start_put_queue_loop(self):
+        while True:
+            args = self.put_queue_args_queue.get()
+            request_outputs, server_infos = args
+            self._put_request_outputs_to_server(request_outputs, server_infos)
+
+    def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in orther to put request output to queue in batch at one time.
@@ -209,6 +236,7 @@ class LLMEngineLlumnix(LLMEngine):
             server_request_outputs[server_id].append(request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
+        # TODO(s5u13b): Reduce the cross-actor overhead.
         self.async_put_queue_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
@@ -243,12 +271,12 @@ class BackendVLLM(BackendInterface):
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
         self._stop_event = threading.Event()
-        self._thread = threading.Thread(
-            target=self._start_engine_loop, args=(), daemon=True, name="engine_loop"
+        self.engine_step_loop_thread = threading.Thread(
+            target=self._start_engine_step_loop, args=(), daemon=True, name="engine_step_loop"
         )
-        self._thread.start()
+        self.engine_step_loop_thread.start()
 
-    def _start_engine_loop(self) -> None:
+    def _start_engine_step_loop(self) -> None:
         self._stop_event.clear()
 
         with self.state_lock:
@@ -258,7 +286,9 @@ class BackendVLLM(BackendInterface):
 
         while not self._stop_event.is_set():
             try:
-                self.engine.step()
+                num_request_outputs = self.engine.step()
+                if num_request_outputs == 0:
+                    time.sleep(0.01)
             # pylint: disable=broad-except
             except Exception as e:
                 logger.error("Error in engine loop: {}".format(e))

@@ -6,7 +6,7 @@ on:
     - main
   push:
     branches:
-      - main
+    - main
 
 jobs:
   cancel_previous_workflows:

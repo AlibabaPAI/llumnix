@@ -6,7 +6,7 @@ import ray
 
 from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager, init_llumlets
 from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
-                     EngineArgs)
+                     EngineArgs, QueueType)
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
 
@@ -38,7 +38,10 @@ engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
 # Create llumlets.
 llumlet_ids: List[str] = None
 llumlets: List[Llumlet] = None
-llumlet_ids, llumlets = init_llumlets(manager_args, engine_args, ray.get_runtime_context().get_node_id(), "rayqueue")
+llumlet_ids, llumlets = init_llumlets(
+    manager_args, engine_args, ray.get_runtime_context().get_node_id(),
+    QueueType("rayqueue")
+)
 
 
 # Create a manager. If the manager is created first, and then the llumlets are created, manager.scale_up
@@ -48,7 +51,7 @@ manager: LLMEngineManager = init_manager(manager_args)
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()
 request_output_queue = RayQueueServer()
-server_info = ServerInfo(server_id, "rayqueue", request_output_queue, None, None)
+server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue, None, None)
 
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.

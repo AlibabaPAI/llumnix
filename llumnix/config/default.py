@@ -97,7 +97,7 @@ _C.MANAGER.MAX_STAGES = 3
 _C.MANAGER.LAST_STAGE_MAX_BLOCKS = 16
 
 # Communication backend of migration
-_C.MANAGER.MIGRATION_BACKEND = "rpc"
+_C.MANAGER.MIGRATION_BACKEND = "gloo"
 # Timeout(s) for initializing migration backend
 _C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 # Number of cache blocks in migration

@@ -1,9 +1,6 @@
 name: whl_build
 
 on:
-  push:
-    branches:
-    - main
   pull_request:
     branches:
     - main

@@ -25,13 +25,16 @@ from llumnix.llumlet.migration_coordinator import MigrationCoordinator, Migratio
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
+from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
 
 
 class Llumlet:
+    # TODO(KuilongCui): catch the exception generated in ctor
     def __init__(self,
                  instance_id: str,
+                 output_queue_type: QueueType,
                  backend_type: BackendType,
                  migration_config: MigrationConfig,
                  *args,
@@ -39,6 +42,7 @@ class Llumlet:
         self.instance_id = instance_id
         self.actor_name = f"instance_{instance_id}"
         self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
+                                                                    output_queue_type,
                                                                     backend_type,
                                                                     migration_config,
                                                                     *args,
@@ -52,6 +56,7 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
+                  output_queue_type: QueueType,
                   disable_fixed_node_init_instance: bool,
                   detached: bool,
                   node_id: str,
@@ -95,7 +100,7 @@ class Llumlet:
                                         scheduling_strategy=NodeAffinitySchedulingStrategy(
                                             node_id=node_id,
                                             soft=False,))
-        llumlet = engine_class.remote(instance_id, backend_type, migration_config, *args, **kwargs)
+        llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 
     def migrate_out(self, dst_instance_name: str) -> List[str]:

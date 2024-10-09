@@ -23,7 +23,7 @@ from vllm import EngineArgs
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.instance_info import InstanceInfo
-
+from llumnix.queue.queue_type import QueueType
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -81,7 +81,7 @@ class MockLlumlet:
 
 def init_manager():
     try:
-        engine_manager_args = EngineManagerArgs()
+        engine_manager_args = EngineManagerArgs(migration_backend="rpc")
         engine_manager_args.log_instance_info = False
         engine_manager = LLMEngineManager.from_args(engine_manager_args, None)
     except ValueError:
@@ -130,7 +130,7 @@ def test_init_llumlet(setup_ray_env, llumlet):
 def test_init_llumlets(setup_ray_env, engine_manager):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     node_id = ray.get_runtime_context().get_node_id()
-    instance_ids, llumlets = ray.get(engine_manager.init_llumlets.remote(engine_args, node_id))
+    instance_ids, llumlets = ray.get(engine_manager.init_llumlets.remote(engine_args, node_id, QueueType("rayqueue")))
     num_instances = ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
     engine_manager_args = EngineManagerArgs()
     assert num_instances == engine_manager_args.initial_instances

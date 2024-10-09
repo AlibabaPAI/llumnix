@@ -34,7 +34,8 @@ from llumnix.entrypoints.llumnix_utils import (get_ip_address,
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.backends.vllm.utils import check_engine_args
-from llumnix.rpc.queue_server import QueueServer
+from llumnix.queue.queue_server_base import QueueServerBase
+from llumnix.queue.utils import get_output_queue_server
 from llumnix.config import get_llumnix_config, LlumnixConfig
 
 logger = init_logger("llumnix.api_server")
@@ -43,7 +44,7 @@ engine_manager = None
 instances = {}
 instance_num_requests: Dict[str, int] = {}
 # request_output_queue could be None if initialzed in lifespan.
-request_output_queue: QueueServer = None
+request_output_queue: QueueServerBase = None
 server_info = None
 TIMEOUT_KEEP_ALIVE = 5  # seconds.
 request_streams: Dict[str, AsyncStream] = {}
@@ -250,7 +251,8 @@ if __name__ == "__main__":
     parser.add_argument('--disable-log-requests-server', action='store_true', help='disable logging requests in server')
     parser.add_argument("--ray-cluster-port", type=int)
     parser.add_argument('--launch-ray-cluster', action='store_true', help='if launch ray cluster in api server')
-    parser.add_argument("--request-output-queue-port", type=int)
+    parser.add_argument("--queue-type", type=str, choices=['rayqueue', 'zmq'], help='queue type for request output queue')
+    parser.add_argument("--request-output-queue-port", type=int, help='port for zeromq')
     parser.add_argument("--config-file", help="path to config file")
     parser = EngineManagerArgs.add_cli_args(parser)
 
@@ -278,10 +280,12 @@ if __name__ == "__main__":
         # Launch the Llumnix componets on current node.
         server_id = random_uuid()
         ip = get_ip_address()
-        server_info = ServerInfo(server_id, ip, cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
         node_id = ray.get_runtime_context().get_node_id()
-        engine_manager, instance_ids, llumlets, request_output_queue = \
-            init_llumnix_components(engine_manager_args, engine_args, node_id, server_info)
+        engine_manager, instance_ids, llumlets = \
+            init_llumnix_components(engine_manager_args, engine_args, node_id, cfg.SERVER.QUEUE_TYPE)
+        request_output_queue = get_output_queue_server(ip, cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT, cfg.SERVER.QUEUE_TYPE)
+        server_info = ServerInfo(server_id, cfg.SERVER.QUEUE_TYPE, request_output_queue, ip,
+                                 cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
 
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]

@@ -14,6 +14,7 @@
 import os
 import threading
 from typing import List
+import ray.actor
 
 from vllm.engine.arg_utils import EngineArgs
 
@@ -22,7 +23,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM
 from llumnix.backends.profiling import ProfilingDatabase, LatencyMemData, ProfilingResult, SimParallelConfig
-
+from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
 
@@ -31,6 +32,7 @@ class BackendSimVLLM(BackendVLLM):
     def __init__(
         self,
         instance_id: str,
+        output_queue_type: QueueType,
         migration_config: MigrationConfig,
         profiling_result_file_path: str,
         engine_args: EngineArgs,
@@ -54,6 +56,7 @@ class BackendSimVLLM(BackendVLLM):
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
         # multi-instance args
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
+                                                                          output_queue_type=output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           latency_mem=latency_mem)
@@ -66,5 +69,6 @@ class BackendSimVLLM(BackendVLLM):
         )
         self._thread.start()
 
-    def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    # pylint: disable=unused-argument
+    def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         self.engine.model_executor.send_blocks(len(src_blocks))

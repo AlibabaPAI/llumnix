@@ -25,6 +25,7 @@ from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix
 from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor, SimGPUExecutor
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
+from llumnix.queue.queue_type import QueueType
 
 from .utils import create_dummy_prompt, initialize_scheduler
 
@@ -85,16 +86,19 @@ def test_llm_engine_process_model_outputs():
 
 def test_llm_engine_from_engine_args():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = MockEngine.from_engine_args(engine_args, instance_id="0", migration_config=None)
+    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
+                                             instance_id="0", migration_config=None)
     assert llm_engine.executor_class == LlumnixRayGPUExecutor
 
     latency_data = LatencyMemData({},{},{})
-    llm_engine = MockEngine.from_engine_args(engine_args, instance_id="0", migration_config=None, latency_mem=latency_data)
+    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
+                                             instance_id="0", migration_config=None, latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
 
 def test_llm_engine_add_requset():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args, instance_id="0", migration_config=None, latency_mem=MagicMock(sepc=LatencyMemData))
+    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE, instance_id="0",
+                                                   migration_config=None, latency_mem=MagicMock(sepc=LatencyMemData))
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     llm_engine.scheduler.scheduler_lock = MagicMock()
     llm_engine.add_request("0", None, "prompt", sampling_params)

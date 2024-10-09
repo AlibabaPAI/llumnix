@@ -1,21 +1,14 @@
 from typing import List
 import os
-import uuid
 import asyncio
 
 import ray
-from ray.util.queue import Queue as RayQueue
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager, init_llumlets
 from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
-                     EngineArgs, RequestOutput)
+                     EngineArgs, QueueType)
 from llumnix.utils import random_uuid
-from llumnix.rpc.queue_server import QueueServer
-from llumnix.rpc.queue_client import QueueClient
-from llumnix.rpc.utils import get_open_zmq_ipc_path
-from llumnix.entrypoints.llumnix_utils import get_ip_address
-
+from llumnix.queue.ray_queue_server import RayQueueServer
 
 # Sample prompts.
 prompts = [
@@ -45,8 +38,10 @@ engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
 # Create llumlets.
 llumlet_ids: List[str] = None
 llumlets: List[Llumlet] = None
-llumlet_ids, llumlets = init_llumlets(manager_args, engine_args,
-                                      node_id=ray.get_runtime_context().get_node_id())
+llumlet_ids, llumlets = init_llumlets(
+    manager_args, engine_args, ray.get_runtime_context().get_node_id(),
+    QueueType("rayqueue")
+)
 
 
 # Create a manager. If the manager is created first, and then the llumlets are created, manager.scale_up
@@ -55,11 +50,8 @@ manager: LLMEngineManager = init_manager(manager_args)
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()
-ip = get_ip_address()
-port = 1234
-server_info = ServerInfo(server_id, ip, port)
-rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
-request_output_queue = QueueServer(rpc_path)
+request_output_queue = RayQueueServer()
+server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue, None, None)
 
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.
@@ -94,9 +86,6 @@ named_actors = ray.util.list_named_actors(True)
 for actor in named_actors:
     try:
         actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-    except:
-        continue
-    try:
         ray.kill(actor_handle)
     except:
         continue

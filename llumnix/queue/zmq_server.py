@@ -19,7 +19,7 @@ import zmq
 import zmq.asyncio
 import cloudpickle
 
-from llumnix.rpc.utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR, RPC_SOCKET_LIMIT_CUTOFF,
+from llumnix.queue.zmq_utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR, RPC_SOCKET_LIMIT_CUTOFF,
                                RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
 from llumnix.logger import init_logger
 
@@ -32,7 +32,7 @@ class Full(Exception):
     pass
 
 
-class QueueServer:
+class ZmqServer:
     def __init__(self, rpc_path: str, maxsize=0):
         self.context = zmq.asyncio.Context()
 

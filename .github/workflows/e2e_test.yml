@@ -1,9 +1,6 @@
 name: e2e_test
 
 on:
-  push:
-    branches:
-    - main
   pull_request:
     branches:
     - main

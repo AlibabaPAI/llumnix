@@ -20,6 +20,7 @@ from llumnix.entrypoints.llumnix_utils import (launch_ray_cluster, connect_to_ra
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.llumlet.llumlet import Llumlet
+from llumnix.queue.queue_type import QueueType
 
 from .version import __version__
 
@@ -32,7 +33,8 @@ __all__ = [
     "init_llumlets",
     "EngineManagerArgs",
     "LLMEngineManager",
-    "Llumlet"
+    "Llumlet",
+    "QueueType",
 ]
 
 __all__.extend(getattr(vllm, "__all__", []))

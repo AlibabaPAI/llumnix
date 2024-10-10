@@ -21,13 +21,9 @@ from vllm.outputs import CompletionOutput, RequestOutput
 import llumnix.entrypoints.vllm.api_server
 import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.rpc.queue_client import QueueClient
-from llumnix.entrypoints.llumnix_utils import init_request_output_queue
 from llumnix.server_info import ServerInfo, RequestStatistics
 from llumnix.utils import random_uuid
 from llumnix.queue.utils import get_output_queue_server, get_output_queue_client, QueueType
-
-from tests.rpc.test_queue import init_server_info
 
 
 app = llumnix.entrypoints.vllm.api_server.app

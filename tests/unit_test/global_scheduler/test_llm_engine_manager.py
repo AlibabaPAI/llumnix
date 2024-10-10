@@ -168,7 +168,7 @@ def test_generate_and_abort(setup_ray_env, engine_manager, llumlet):
     request_id = random_uuid()
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
-    server_info = ServerInfo(None, None, None)
+    server_info = ServerInfo(None, None, None, None, None)
     ray.get(engine_manager.generate.remote(request_id, server_info, None, None))
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 1

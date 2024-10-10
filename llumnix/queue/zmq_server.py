@@ -12,9 +12,9 @@
 # limitations under the License.
 
 import asyncio
+import time
 from typing import (Coroutine, Any)
 from typing_extensions import Never
-import time
 
 import zmq
 import zmq.asyncio

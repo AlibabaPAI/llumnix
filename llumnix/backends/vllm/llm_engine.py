@@ -242,6 +242,7 @@ class LLMEngineLlumnix(LLMEngine):
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
+        # TODO(s5u13b): It is not necessary to use async_put_queue_actor when output_queue_type is RayQueue.
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):

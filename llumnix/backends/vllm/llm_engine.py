@@ -61,7 +61,7 @@ class AsyncPutQueueActor:
             tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, ret in enumerate(rets):
-            if isinstance(ret, TimeoutError) or isinstance(ret, ray.exceptions.RayActorError):
+            if isinstance(ret, (TimeoutError, ray.exceptions.RayActorError)):
                 server_id = list(server_request_outputs.keys())[idx]
                 server_info = server_info_dict[server_id]
                 logger.info("Server {} is dead".format(server_id))

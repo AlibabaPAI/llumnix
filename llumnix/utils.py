@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import uuid
-
+import ray
 
 def random_uuid() -> str:
     return str(uuid.uuid4().hex)
@@ -30,3 +30,11 @@ def convert_bytes(bytes_size):
         index += 1
 
     return f"{bytes_size:.2f} {size_suffixes[index]}"
+
+def clear_gloo_backend_state():
+    try:
+        # clear gloo migrate backend intermediate state
+        ray.kill(ray.get_actor("gloo_queue", "llumnix"))
+    except ValueError:
+        # gloo_queue may not have been created yet; just ignore this error.
+        pass

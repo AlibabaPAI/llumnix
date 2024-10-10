@@ -30,7 +30,7 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, clear_gloo_backend_state
 from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
@@ -291,18 +291,16 @@ class LLMEngineManager:
                 self.scale_down(dead_instances, rebuild_migrate_backend=False)
 
                 if self.engine_manager_args.migration_backend == 'gloo':
-                    try:
-                        # clear gloo migrate backend intermediate state
-                        ray.kill(ray.get_actor("gloo_queue", "llumnix"))
-                    except ValueError:
-                        # gloo_queue may not have been created yet; just ignore this error.
-                        pass
+                    clear_gloo_backend_state()
 
             return dead_instances
 
         alive_instances = sorted(self.instances.keys())
         pending_task = self.pending_rebuild_migration_instances
         group_name = None
+
+        if self.engine_manager_args.migration_backend == 'gloo':
+            clear_gloo_backend_state()
 
         while len(alive_instances) > 0 and self.pending_rebuild_migration_instances > 0:
             dead_instances = set()
@@ -376,6 +374,9 @@ class LLMEngineManager:
         if self.engine_manager_args.migration_backend != 'rpc':
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
+
+                if self.engine_manager_args.migration_backend == 'gloo':
+                    clear_gloo_backend_state()
             elif indeed_update and no_pending_instance and rebuild_migrate_backend:
                 asyncio.create_task(self.rebuild_migrate_backend())
 

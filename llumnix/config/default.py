@@ -27,7 +27,7 @@ _C.SERVER.HOST = "localhost"
 # Port number for the server
 _C.SERVER.PORT = 8000
 # Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "rayqueue"
+_C.SERVER.QUEUE_TYPE = "zmq"
 # Port number for the request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Path to SSL key file for secure connections
@@ -42,7 +42,7 @@ _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
 # -----------------------------------------------------------------------------
 _C.RAY = LC()
 # Port number for the Ray cluster
-_C.RAY.RAY_CLUSTER_PORT = 30050
+_C.RAY.RAY_CLUSTER_PORT = 6379
 # If True, launch Ray cluster in API server
 _C.RAY.LAUNCH_RAY_CLUSTER = False
 

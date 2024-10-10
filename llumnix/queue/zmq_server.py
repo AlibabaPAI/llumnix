@@ -20,7 +20,7 @@ import zmq.asyncio
 import cloudpickle
 
 from llumnix.queue.zmq_utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR, RPC_SOCKET_LIMIT_CUTOFF,
-                               RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
+                                     RPCPutNoWaitQueueRequest, RPCUtilityRequest)
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
@@ -110,8 +110,8 @@ class ZmqServer:
         request = cloudpickle.loads(message)
         if request == RPCUtilityRequest.IS_SERVER_READY:
             return self._is_server_ready(identity)
-        if isinstance(request, RPCPutNoWaitBatchQueueRequest):
-            return self._put_nowait_batch(identity, request)
+        if isinstance(request, RPCPutNoWaitQueueRequest):
+            return self._put_nowait(identity, request)
 
         raise ValueError(f"Unknown RPCRequest type: {request}")
 
@@ -119,9 +119,9 @@ class ZmqServer:
         await self.socket.send_multipart(
             [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
 
-    async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
+    async def _put_nowait(self, identity, put_nowait_queue_request: RPCPutNoWaitQueueRequest):
         try:
-            self.put_nowait(put_nowait_batch_queue_request.items)
+            self.put_nowait(put_nowait_queue_request.items)
             await self.socket.send_multipart(
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
         # pylint: disable=W0703

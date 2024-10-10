@@ -18,5 +18,5 @@ from llumnix.server_info import ServerInfo
 
 class QueueClientBase(ABC):
     @abstractmethod
-    async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
+    async def put_nowait(self, items: Iterable, server_info: ServerInfo):
         raise NotImplementedError

@@ -22,8 +22,8 @@ from llumnix.logger import init_logger
 from llumnix.server_info import ServerInfo
 
 from llumnix.queue.zmq_utils import (RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RPC_SUCCESS_STR,
-                               RPCClientClosedError, RPC_REQUEST_TYPE, RPCUtilityRequest, RPCPutNoWaitBatchQueueRequest,
-                               get_open_zmq_ipc_path)
+                                     RPCClientClosedError, RPC_REQUEST_TYPE, RPCUtilityRequest, RPCPutNoWaitQueueRequest,
+                                     get_open_zmq_ipc_path)
 
 logger = init_logger(__name__)
 
@@ -104,9 +104,9 @@ class ZmqClient:
                         rpc_path=rpc_path,
                         error_message="Unable to start RPC Server")
 
-    async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
+    async def put_nowait(self, items: Iterable, server_info: ServerInfo):
         rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
         await self._send_one_way_rpc_request(
-                        request=RPCPutNoWaitBatchQueueRequest(items=items),
+                        request=RPCPutNoWaitQueueRequest(items=items),
                         rpc_path=rpc_path,
                         error_message="Unable to put items into queue.")

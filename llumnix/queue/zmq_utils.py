@@ -21,14 +21,14 @@ RPC_ZMQ_HWM = 0
 RPC_SUCCESS_STR = "SUCCESS"
 
 @dataclass
-class RPCPutNoWaitBatchQueueRequest:
+class RPCPutNoWaitQueueRequest:
     items: List[Any] = None
 
 class RPCUtilityRequest(Enum):
     IS_SERVER_READY = 1
 
 # pylint: disable=C0103
-RPC_REQUEST_TYPE = Union[RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest]
+RPC_REQUEST_TYPE = Union[RPCPutNoWaitQueueRequest, RPCUtilityRequest]
 
 class RPCClientClosedError(Exception):
     """Exception class raised when the client is used post-close.

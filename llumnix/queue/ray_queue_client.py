@@ -18,6 +18,6 @@ from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_client_base import QueueClientBase
 
 class RayQueueClient(QueueClientBase):
-    async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
+    async def put_nowait(self, items: Iterable, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
-        return await output_queue.actor.put_nowait_batch.remote(items)
+        return await output_queue.actor.put_nowait.remote(items)

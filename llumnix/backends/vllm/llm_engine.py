@@ -50,15 +50,15 @@ class AsyncPutQueueActor:
         self.request_output_queue_client: QueueClientBase = get_output_queue_client(output_queue_type)
         self.engine_actor_handle = None
 
-    async def put_nowait_batch_to_servers(self,
-                                          server_request_outputs: Dict[str, List[RequestOutput]],
-                                          server_info_dict: Dict[str, ServerInfo]) -> None:
+    async def put_nowait_to_servers(self,
+                                    server_request_outputs: Dict[str, List[RequestOutput]],
+                                    server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
-            tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait_batch(req_outputs, server_info)))
+            tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, ret in enumerate(rets):
             if isinstance(ret, TimeoutError):
@@ -237,7 +237,7 @@ class LLMEngineLlumnix(LLMEngine):
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the cross-actor overhead.
-        self.async_put_queue_actor.put_nowait_batch_to_servers.remote(server_request_outputs, server_info_dict)
+        self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
     def __init__(

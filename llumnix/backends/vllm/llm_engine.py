@@ -248,7 +248,7 @@ class BackendVLLM(BackendInterface):
 
         self.state_lock = threading.Lock()
         self.state = EngineState.INIT
-        logger.info("{} current state {}".format(self.instance_id, self.state))
+        logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
         self._stop_event = threading.Event()
         self._thread = threading.Thread(
@@ -262,7 +262,7 @@ class BackendVLLM(BackendInterface):
         with self.state_lock:
             previous_state = self.state
             self.state = EngineState.RUNNING
-            logger.info("{} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+            logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
 
         while not self._stop_event.is_set():
             try:
@@ -276,13 +276,13 @@ class BackendVLLM(BackendInterface):
                 with self.state_lock:
                     previous_state = self.state
                     self.state = EngineState.CRASHED
-                    logger.info("{} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+                    logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
                 break
 
         with self.state_lock:
             if self.state == EngineState.RUNNING:
                 self.state = EngineState.STOPPED
-                logger.info("{} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+                logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def execute_worker_method(self, method, *args, **kwargs):
         return self.engine.model_executor.driver_worker.execute_method(method, *args, **kwargs)

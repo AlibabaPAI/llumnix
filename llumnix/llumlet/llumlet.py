@@ -55,8 +55,9 @@ class Llumlet:
                                                            self.backend_engine)
         self.log_requests = True
 
-        self.state_check_thread = threading.Thread(target=self.check_state, daemon=True)
-        self.state_check_thread.start()
+        self.check_state_thread = threading.Thread(target=self.check_state, daemon=True,
+                                                   name="llumlet_check_state_loop")
+        self.check_state_thread.start()
 
     @classmethod
     def from_args(cls,
@@ -114,7 +115,7 @@ class Llumlet:
 
             with self.backend_engine.state_lock:
                 if self.backend_engine.state == EngineState.CRASHED:
-                    logger.warning("llumlet({}) detected backend engine crashed. Stopping...".format(self.instance_id))
+                    logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
                     # pylint: disable=protected-access
                     self.backend_engine._stop_event.set()
                     if self.backend_engine._thread.is_alive():

@@ -403,7 +403,7 @@ class MeasureLatency:
                 self._decode_sum_latencies.append(decode_sum_latency)
                 self._all_decode_token_latencies.extend(lat_arr[1:,1])
             if 'per_token_latency_breakdown_dict' in output:
-                self._inference_latencies.append(np.mean(output['per_token_latency_breakdown_dict']['step_latency']))
+                self._inference_latencies.append(np.mean(output['per_token_latency_breakdown_dict']['step_latency_engine']))
                 self._per_token_latencies_breakdown_dict.append(output['per_token_latency_breakdown_dict'])
             return prompt, output
         return measured

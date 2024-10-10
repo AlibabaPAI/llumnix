@@ -203,11 +203,6 @@ class SchedulerLlumnix(Scheduler):
     @scheduler_lock
     def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
         seq_group_metadata_list, scheduler_outputs = super().schedule()
-        for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups:
-            seq_group = scheduled_seq_group.seq_group
-            seq_group.server_info.request_statistics.scheduler_schedule_timestamp = time.time()
-        for seq_group in scheduler_outputs.ignored_seq_groups:
-            seq_group.server_info.request_statistics.scheduler_schedule_timestamp = time.time()
         self.update_instance_info_callback(self._get_instance_info([scheduled_seq_group.seq_group \
                                             for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups]))
         return seq_group_metadata_list, scheduler_outputs

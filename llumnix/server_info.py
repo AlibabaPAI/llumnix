@@ -20,9 +20,9 @@ class RequestStatistics:
         self.manager_generate_timestamp = -1.0
         self.llumlet_generate_timestamp = -1.0
         self.engine_add_request_timestamp = -1.0
-        self.scheduler_schedule_timestamp = -1.0
         self.engine_process_model_outputs_timestamp_begin = -1.0
         self.engine_process_model_outputs_timestamp_end = -1.0
+        self.engine_step_timestamp_begin = -1.0
         self.engine_step_timestamp_end = -1.0
         self.engine_step_postprocess_timestamp_end = -1.0
         self.engine_thread_put_queue_timestamp = -1.0
@@ -37,8 +37,8 @@ class RequestStatistics:
         return (self.engine_process_model_outputs_timestamp_end - self.engine_process_model_outputs_timestamp_begin)*1000
 
     @property
-    def step_latency(self):
-        return (self.engine_step_timestamp_end - self.scheduler_schedule_timestamp)*1000
+    def step_latency_engine(self):
+        return (self.engine_step_timestamp_end - self.engine_step_timestamp_begin)*1000
 
     @property
     def step_postprocess_latency(self):

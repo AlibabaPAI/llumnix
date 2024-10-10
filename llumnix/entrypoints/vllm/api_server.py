@@ -179,7 +179,7 @@ async def generate(request: Request) -> Response:
 
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {
-        'step_latency': [],
+        'step_latency_engine': [],
         'process_model_outputs_latency': [],
         'step_postprocess_latency': [],
         'across_async_put_queue_thread_latency': [],
@@ -191,7 +191,7 @@ def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     return per_token_latency_breakdown_dict
 
 def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_statistics: RequestStatistics):
-    per_token_latency_breakdown_dict['step_latency'].append(request_statistics.step_latency)
+    per_token_latency_breakdown_dict['step_latency_engine'].append(request_statistics.step_latency_engine)
     per_token_latency_breakdown_dict['process_model_outputs_latency'].append(request_statistics.process_model_outputs_latency)
     per_token_latency_breakdown_dict['step_postprocess_latency'].append(request_statistics.step_postprocess_latency)
     per_token_latency_breakdown_dict['across_async_put_queue_thread_latency'].append(request_statistics.across_async_put_queue_thread_latency)

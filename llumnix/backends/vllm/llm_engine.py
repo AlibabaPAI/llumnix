@@ -195,7 +195,7 @@ class LLMEngineLlumnix(LLMEngine):
         for request_output in request_outputs:
             request_output.request_statistics.engine_step_timestamp_begin = step_begin_time
             request_output.request_statistics.engine_step_timestamp_end = time.time()
-            
+
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)

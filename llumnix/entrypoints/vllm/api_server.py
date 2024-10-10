@@ -184,7 +184,7 @@ def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
         'step_postprocess_latency': [],
         'across_async_put_queue_thread_latency': [],
         'across_async_put_queue_actor_latency': [],
-        'zeromq_rpc_latency': [],
+        'zmq_rpc_latency': [],
         'background_process_get_queue_latency': [],
         'generate_benchmark_return_output_latency': []
     }
@@ -196,7 +196,7 @@ def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[st
     per_token_latency_breakdown_dict['step_postprocess_latency'].append(request_statistics.step_postprocess_latency)
     per_token_latency_breakdown_dict['across_async_put_queue_thread_latency'].append(request_statistics.across_async_put_queue_thread_latency)
     per_token_latency_breakdown_dict['across_async_put_queue_actor_latency'].append(request_statistics.across_async_put_queue_actor_latency)
-    per_token_latency_breakdown_dict['zeromq_rpc_latency'].append(request_statistics.zeromq_rpc_latency)
+    per_token_latency_breakdown_dict['zmq_rpc_latency'].append(request_statistics.zmq_rpc_latency)
     per_token_latency_breakdown_dict['background_process_get_queue_latency'].append(request_statistics.background_process_get_queue_latency)
     per_token_latency_breakdown_dict['generate_benchmark_return_output_latency'].append(request_statistics.generate_benchmark_return_output_latency)
 
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     parser.add_argument("--ray-cluster-port", type=int)
     parser.add_argument('--launch-ray-cluster', action='store_true', help='if launch ray cluster in api server')
     parser.add_argument("--queue-type", type=str, choices=['rayqueue', 'zmq'], help='queue type for request output queue')
-    parser.add_argument("--request-output-queue-port", type=int, help='port for zeromq')
+    parser.add_argument("--request-output-queue-port", type=int, help='port for zmq')
     parser.add_argument("--config-file", help="path to config file")
     parser = EngineManagerArgs.add_cli_args(parser)
 

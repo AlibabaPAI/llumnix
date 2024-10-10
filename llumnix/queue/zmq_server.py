@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import asyncio
+import time
 from typing import (Coroutine, Any)
 from typing_extensions import Never
 
@@ -20,7 +21,7 @@ import zmq.asyncio
 import cloudpickle
 
 from llumnix.queue.zmq_utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR, RPC_SOCKET_LIMIT_CUTOFF,
-                               RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
+                                     RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
@@ -110,6 +111,8 @@ class ZmqServer:
         request = cloudpickle.loads(message)
         if request == RPCUtilityRequest.IS_SERVER_READY:
             return self._is_server_ready(identity)
+        if isinstance(request, RPCPutNoWaitQueueRequest):
+            return self._put_nowait(identity, request)
         if isinstance(request, RPCPutNoWaitBatchQueueRequest):
             return self._put_nowait_batch(identity, request)
 
@@ -118,6 +121,19 @@ class ZmqServer:
     async def _is_server_ready(self, identity):
         await self.socket.send_multipart(
             [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
+
+    async def _put_nowait(self, identity, put_nowait_queue_request: RPCPutNoWaitQueueRequest):
+        try:
+            item = put_nowait_queue_request.item
+            if item and (isinstance(item, list) and hasattr(item[0], 'request_statistics')):
+                for request_output in item:
+                    request_output.request_statistics.queue_server_receive_timestamp = time.time()
+            self.put_nowait(item)
+            await self.socket.send_multipart(
+                [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
+        # pylint: disable=W0703
+        except Exception as e:
+            await self.socket.send_multipart([identity, cloudpickle.dumps(e)])
 
     async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
         try:

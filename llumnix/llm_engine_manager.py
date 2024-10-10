@@ -115,6 +115,7 @@ class LLMEngineManager:
             await asyncio.sleep(RETRIES_INTERVALS)
         instance_id = self.global_scheduler.dispatch()
         try:
+            server_info.request_statistics.manager_generate_timestamp = time.time()
             await self.instances[instance_id].generate.remote(request_id, server_info, *args, **kwargs)
             if self.log_requests:
                 logger.info("received request {}.".format(request_id))

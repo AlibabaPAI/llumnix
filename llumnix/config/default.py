@@ -42,7 +42,7 @@ _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
 # -----------------------------------------------------------------------------
 _C.RAY = LC()
 # Port number for the Ray cluster
-_C.RAY.RAY_CLUSTER_PORT = 30050
+_C.RAY.RAY_CLUSTER_PORT = 6379
 # If True, launch Ray cluster in API server
 _C.RAY.LAUNCH_RAY_CLUSTER = False
 

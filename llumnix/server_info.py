@@ -14,6 +14,56 @@
 from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.queue.queue_type import QueueType
 
+class RequestStatistics:
+    def __init__(self):
+        self.api_server_manager_generate_timestamp = -1.0
+        self.manager_generate_timestamp = -1.0
+        self.llumlet_generate_timestamp = -1.0
+        self.engine_add_request_timestamp = -1.0
+        self.engine_process_model_outputs_timestamp_begin = -1.0
+        self.engine_process_model_outputs_timestamp_end = -1.0
+        self.engine_step_timestamp_begin = -1.0
+        self.engine_step_timestamp_end = -1.0
+        self.engine_step_postprocess_timestamp_end = -1.0
+        self.engine_thread_put_queue_timestamp = -1.0
+        self.engine_actor_put_queue_timestamp = -1.0
+        self.queue_client_send_timestamp = -1.0
+        self.queue_server_receive_timestamp = -1.0
+        self.api_server_background_process_get_queue_timestamp = -1.0
+        self.api_server_generate_benchmark_timestamp_end = -1.0
+
+    @property
+    def process_model_outputs_latency(self):
+        return (self.engine_process_model_outputs_timestamp_end - self.engine_process_model_outputs_timestamp_begin)*1000
+
+    @property
+    def step_latency_engine(self):
+        return (self.engine_step_timestamp_end - self.engine_step_timestamp_begin)*1000
+
+    @property
+    def step_postprocess_latency(self):
+        return (self.engine_step_postprocess_timestamp_end - self.engine_step_timestamp_end)*1000
+
+    @property
+    def across_async_put_queue_thread_latency(self):
+        return (self.engine_thread_put_queue_timestamp - self.engine_step_timestamp_end)*1000
+
+    @property
+    def across_async_put_queue_actor_latency(self):
+        return (self.engine_actor_put_queue_timestamp - self.engine_thread_put_queue_timestamp)*1000
+
+    @property
+    def zmq_rpc_latency(self):
+        return (self.queue_server_receive_timestamp - self.queue_client_send_timestamp)*1000
+
+    @property
+    def background_process_get_queue_latency(self):
+        return (self.api_server_background_process_get_queue_timestamp - self.queue_server_receive_timestamp)*1000
+
+    @property
+    def generate_benchmark_return_output_latency(self):
+        return (self.api_server_generate_benchmark_timestamp_end - self.api_server_background_process_get_queue_timestamp)*1000
+
 class ServerInfo:
     def __init__(self,
                  server_id: str,
@@ -23,10 +73,10 @@ class ServerInfo:
                  request_output_queue_port: int) -> None:
         self.server_id = server_id
         self.output_queue_type = output_queue_type
-
         if output_queue_type == QueueType.RAYQUEUE:
-            assert request_output_queue is not None and hasattr(request_output_queue, "queue")
-        self.request_output_queue = request_output_queue.queue if hasattr(request_output_queue, "queue") else None
-
+            assert request_output_queue is not None
+        self.request_output_queue = request_output_queue.queue if output_queue_type == QueueType.RAYQUEUE else None
         self.request_output_queue_ip = request_output_queue_ip
         self.request_output_queue_port = request_output_queue_port
+        # Hack request statistics in server_info for latency breakdown.
+        self.request_statistics = RequestStatistics()

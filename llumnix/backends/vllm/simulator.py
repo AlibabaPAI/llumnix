@@ -64,10 +64,10 @@ class BackendSimVLLM(BackendVLLM):
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
-        self._thread = threading.Thread(
-            target=self._start_engine_loop, args=(), daemon=True, name="engine_loop"
+        self.engine_step_loop_thread = threading.Thread(
+            target=self._start_engine_step_loop, args=(), daemon=True, name="engine_loop"
         )
-        self._thread.start()
+        self.engine_step_loop_thread.start()
 
     # pylint: disable=unused-argument
     def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, src_blocks: List[int], dst_blocks: List[int]) -> None:

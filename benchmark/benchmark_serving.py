@@ -163,12 +163,11 @@ def calculate_throughput(queries,
     prompt_ids = [p for p in tokenizer.batch_encode_plus(prompts)['input_ids']]
     response_ids = [r for r in tokenizer.batch_encode_plus(responses)['input_ids']]
 
-    print(f'check_len actual {list(sorted(len(response) for response in response_ids))}')
-    print(f'check_len expect {list(sorted(expected_response_lens))}')
-    print(f'self-reported {list(sorted(cf_gen_lens))}')
-
-    for prompt, response, expected_response_len in zip(prompt_ids, response_ids, expected_response_lens):
-        print(f'check lens {len(prompt)=} {len(response)=} {expected_response_len=}')
+    # print(f'check_len actual {list(sorted(len(response) for response in response_ids))}')
+    # print(f'check_len expect {list(sorted(expected_response_lens))}')
+    # print(f'self-reported {list(sorted(cf_gen_lens))}')
+    # for prompt, response, expected_response_len in zip(prompt_ids, response_ids, expected_response_lens):
+    #     print(f'check lens {len(prompt)=} {len(response)=} {expected_response_len=}')
 
     try:
         prompt_lens = get_tok_id_lens(tokenizer, prompts)
@@ -178,11 +177,13 @@ def calculate_throughput(queries,
         print(responses)
         raise
 
-    print(f'naive_hf_lens {list(sorted(naive_hf_lens))}')
+    if naive_hf_lens:
+        print(f'naive_hf_lens {list(sorted(naive_hf_lens))}')
     print(f'prompt_lens {list(sorted(prompt_lens))}')
-    print(f'calc_throughput response_lens {list(sorted(response_lens))}')
+    print(f'response_lens {list(sorted(response_lens))}')
     print(f'expected_response_lens {list(sorted(expected_response_lens))}')
-    print(f'ray_gen_lens {list(sorted(ray_gen_lens))}')
+    if ray_gen_lens:
+        print(f'ray_gen_lens {list(sorted(ray_gen_lens))}')
 
     prompt_token_count = sum(prompt_lens)
     response_token_count = sum(response_lens)
@@ -209,7 +210,7 @@ def calculate_throughput(queries,
     if cf_gen_lens:
         response_token_count = sum(cf_gen_lens)
 
-    print(f'prompt_token_count {prompt_token_count} response_token_count {response_token_count}')
+    # print(f'prompt_token_count {prompt_token_count} response_token_count {response_token_count}')
     throughput_tok_s = (prompt_token_count + response_token_count) / dur_s
     print(f'throughput_tok_s {throughput_tok_s:.02f}')
     qps = len(responses) / dur_s
@@ -218,10 +219,9 @@ def calculate_throughput(queries,
     msg3 = f'{median_token_latency=:.04f}, {median_e2e_latency=:.04f}, {median_inference_latency=:.04f}\n'
     msg = msg1 + msg2 + msg3
     if log_latencies:
+        msg += f'{all_request_lens=}\n{all_request_ids=}\n'
         msg += f'{all_total_tokens=}\n{all_prompt_lens=}\n{all_response_lens=}\n'
-        msg += f'{all_e2e_latencies=}\n{all_per_token_latencies=}\n{all_inference_latencies=}\n{all_waiting_latencies=}\n'
-        msg += f'{all_request_ids=}\n{all_decode_token_latencies=}\n'
-        msg += f'{all_request_lens=}\n'
+        msg += f'{all_e2e_latencies=}\n{all_per_token_latencies=}\n{all_inference_latencies=}\n{all_waiting_latencies=}\n{all_decode_token_latencies=}\n'
     print(msg)
 
     if fail_on_response_failure:
@@ -403,7 +403,7 @@ class MeasureLatency:
                 self._decode_sum_latencies.append(decode_sum_latency)
                 self._all_decode_token_latencies.extend(lat_arr[1:,1])
             if 'per_token_latency_breakdown_dict' in output:
-                self._inference_latencies.append(output['per_token_latency_breakdown_dict']['step_latency'])
+                self._inference_latencies.append(np.mean(output['per_token_latency_breakdown_dict']['step_latency']))
                 self._per_token_latencies_breakdown_dict.append(output['per_token_latency_breakdown_dict'])
             return prompt, output
         return measured
@@ -485,6 +485,7 @@ async def benchmark(
     save_all_decode_token_latencies_npy(m._all_token_latencies, log_filename)
     # avg_instance_num = plot_instance(log_filename)
     avg_instance_num = 0.0
+
     return throughput, \
            m._prefill_token_latencies, \
            m._decode_token_latencies, \

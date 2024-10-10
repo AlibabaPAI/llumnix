@@ -59,7 +59,7 @@ async def _background_process_outputs():
     while True:
         request_outputs = await request_output_queue.get()
         for request_output in request_outputs:
-            request_output.request_statistics.api_server_get_queue_timestamp = time.time()
+            request_output.request_statistics.api_server_background_process_get_queue_timestamp = time.time()
         for request_output in request_outputs:
             request_id = request_output.request_id
             # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
@@ -222,7 +222,7 @@ async def generate_benchmark(request: Request) -> Response:
             await manager_abort(request_id)
             return Response(status_code=499)
         now = time.time()
-        per_token_latency.append([now, int((now - start)*1000)])
+        per_token_latency.append([now, (now - start)*1000])
         request_output.request_statistics.api_server_generate_benchmark_timestamp_end = now
         request_statistics = request_output.request_statistics
         record_per_token_latency_breakdown(per_token_latency_breakdown_dict, request_statistics)

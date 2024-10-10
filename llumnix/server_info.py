@@ -16,53 +16,53 @@ from llumnix.queue.queue_type import QueueType
 
 class RequestStatistics:
     def __init__(self):
-        self.api_server_manager_generate_timestamp = -1
-        self.manager_generate_timestamp = -1
-        self.llumlet_generate_timestamp = -1
-        self.engine_add_request_timestamp = -1
-        self.scheduler_schedule_timestamp = -1
-        self.engine_process_model_outputs_timestamp_begin = -1
-        self.engine_process_model_outputs_timestamp_end = -1
-        self.engine_step_timestamp_end = -1
-        self.engine_step_postprocess_timestamp_end = -1
-        self.engine_thread_put_queue_timestamp = -1
-        self.engine_actor_put_queue_timestamp = -1
-        self.queue_client_send_timestamp = -1
-        self.queue_server_receive_timestamp = -1
-        self.api_server_background_process_get_queue_timestamp = -1
-        self.api_server_generate_benchmark_timestamp_end = -1
+        self.api_server_manager_generate_timestamp = -1.0
+        self.manager_generate_timestamp = -1.0
+        self.llumlet_generate_timestamp = -1.0
+        self.engine_add_request_timestamp = -1.0
+        self.scheduler_schedule_timestamp = -1.0
+        self.engine_process_model_outputs_timestamp_begin = -1.0
+        self.engine_process_model_outputs_timestamp_end = -1.0
+        self.engine_step_timestamp_end = -1.0
+        self.engine_step_postprocess_timestamp_end = -1.0
+        self.engine_thread_put_queue_timestamp = -1.0
+        self.engine_actor_put_queue_timestamp = -1.0
+        self.queue_client_send_timestamp = -1.0
+        self.queue_server_receive_timestamp = -1.0
+        self.api_server_background_process_get_queue_timestamp = -1.0
+        self.api_server_generate_benchmark_timestamp_end = -1.0
 
     @property
     def process_model_outputs_latency(self):
-        return int((self.engine_process_model_outputs_timestamp_end - self.engine_process_model_outputs_timestamp_begin)*1000)
+        return (self.engine_process_model_outputs_timestamp_end - self.engine_process_model_outputs_timestamp_begin)*1000
 
     @property
     def step_latency(self):
-        return int((self.engine_step_timestamp_end - self.scheduler_schedule_timestamp)*1000)
+        return (self.engine_step_timestamp_end - self.scheduler_schedule_timestamp)*1000
 
     @property
     def step_postprocess_latency(self):
-        return int((self.engine_step_postprocess_timestamp_end - self.engine_step_timestamp_end)*1000)
+        return (self.engine_step_postprocess_timestamp_end - self.engine_step_timestamp_end)*1000
 
     @property
     def across_async_put_queue_thread_latency(self):
-        return int((self.engine_thread_put_queue_timestamp - self.engine_step_timestamp_end)*1000)
+        return (self.engine_thread_put_queue_timestamp - self.engine_step_timestamp_end)*1000
 
     @property
     def across_async_put_queue_actor_latency(self):
-        return int((self.engine_actor_put_queue_timestamp - self.engine_thread_put_queue_timestamp)*1000)
+        return (self.engine_actor_put_queue_timestamp - self.engine_thread_put_queue_timestamp)*1000
 
     @property
     def zeromq_rpc_latency(self):
-        return int((self.queue_server_receive_timestamp - self.queue_client_send_timestamp)*1000)
+        return (self.queue_server_receive_timestamp - self.queue_client_send_timestamp)*1000
 
     @property
     def background_process_get_queue_latency(self):
-        return int((self.api_server_background_process_get_queue_timestamp - self.queue_server_receive_timestamp)*1000)
+        return (self.api_server_background_process_get_queue_timestamp - self.queue_server_receive_timestamp)*1000
 
     @property
     def generate_benchmark_return_output_latency(self):
-        return int((self.api_server_generate_benchmark_timestamp_end - self.api_server_background_process_get_queue_timestamp)*1000)
+        return (self.api_server_generate_benchmark_timestamp_end - self.api_server_background_process_get_queue_timestamp)*1000
 
 class ServerInfo:
     def __init__(self,

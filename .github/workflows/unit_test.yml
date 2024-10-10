@@ -2,7 +2,7 @@ name: unit_test
 
 on:
   workflow_run:
-    workflows: [pylint]
+    workflows: ["pylint"]
     types:
       - completed
 

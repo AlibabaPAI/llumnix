@@ -22,6 +22,7 @@ from vllm.config import SchedulerConfig, CacheConfig
 
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
+from llumnix.server_info import ServerInfo
 
 
 class SchedulerLlumnixTest(SchedulerLlumnix):
@@ -62,8 +63,9 @@ def create_dummy_prompt(
     prompt_tokens = list(range(prompt_length))
     prompt_str = " ".join([str(t) for t in prompt_tokens])
     prompt = Sequence(int(request_id), prompt_str, prompt_tokens, block_size)
+    server_info = ServerInfo(None, None, None)
     seq_group = SequenceGroupLlumnix(
-        request_id, None, [prompt],
+        request_id, server_info, [prompt],
         SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
         time.time(), lora_request)
 

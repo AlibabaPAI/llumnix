@@ -58,6 +58,8 @@ class AsyncPutQueueActor:
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
+            for req_output in req_outputs:
+                req_output.request_statistics.engine_actor_put_queue_timestamp = time.time()
             tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, ret in enumerate(rets):
@@ -70,7 +72,6 @@ class AsyncPutQueueActor:
                 req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)
-
 
 class LLMEngineLlumnix(LLMEngine):
     def __init__(self,
@@ -179,13 +180,20 @@ class LLMEngineLlumnix(LLMEngine):
                 seq_group_metadata_list = new_seq_group_metadata_list
             for ignored_seq_group in ignored_seq_groups:
                 server_infos.append(ignored_seq_group.server_info)
+            for server_info in server_infos:
+                server_info.request_statistics.engine_process_model_outputs_timestamp_begin = time.time()
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+            for request_output, server_info in zip(request_outputs, server_infos):
+                request_output.request_statistics = server_info.request_statistics
+                request_output.request_statistics.engine_process_model_outputs_timestamp_end = time.time()
             # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
             return request_outputs, server_infos
 
     def step(self) -> None:
         request_outputs, server_infos = super().step()
 
+        for request_output in request_outputs:
+            request_output.request_statistics.engine_step_timestamp_end = time.time()
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
@@ -205,9 +213,10 @@ class LLMEngineLlumnix(LLMEngine):
         if request_outputs:
             self.put_queue_args_queue.put((request_outputs, server_infos))
         self.instance_info = instance_info
-        num_request_outputs = len(request_outputs)
+        for request_output in request_outputs:
+            request_output.request_statistics.engine_step_postprocess_timestamp_end = time.time()
 
-        return num_request_outputs
+        return request_outputs, server_infos
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
@@ -222,6 +231,7 @@ class LLMEngineLlumnix(LLMEngine):
     def add_request(self, request_id: str, server_info: ServerInfo, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler.waiting[-1]
+        server_info.request_statistics.engine_add_request_timestamp = time.time()
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, [seq_group.get_seqs()[0]], seq_group.sampling_params,
                                         seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
         self.scheduler.scheduler_lock.release()
@@ -230,6 +240,8 @@ class LLMEngineLlumnix(LLMEngine):
         while True:
             args = self.put_queue_args_queue.get()
             request_outputs, server_infos = args
+            for request_output in request_outputs:
+                request_output.request_statistics.engine_thread_put_queue_timestamp = time.time()
             self._put_request_outputs_to_server(request_outputs, server_infos)
 
     def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
@@ -241,7 +253,7 @@ class LLMEngineLlumnix(LLMEngine):
             server_request_outputs[server_id].append(request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        # TODO(s5u13b): Reduce the cross-actor overhead.
+        # TODO(s5u13b): Reduce the across-actor overhead.
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
@@ -291,8 +303,8 @@ class BackendVLLM(BackendInterface):
 
         while not self._stop_event.is_set():
             try:
-                num_request_outputs = self.engine.step()
-                if num_request_outputs == 0:
+                request_outputs, _ = self.engine.step()
+                if len(request_outputs) == 0:
                     time.sleep(0.01)
             # pylint: disable=broad-except
             except Exception as e:

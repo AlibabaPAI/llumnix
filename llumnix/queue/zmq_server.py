@@ -14,6 +14,7 @@
 import asyncio
 from typing import (Coroutine, Any)
 from typing_extensions import Never
+import time
 
 import zmq
 import zmq.asyncio
@@ -123,7 +124,11 @@ class ZmqServer:
 
     async def _put_nowait(self, identity, put_nowait_queue_request: RPCPutNoWaitQueueRequest):
         try:
-            self.put_nowait(put_nowait_queue_request.item)
+            item = put_nowait_queue_request.item
+            if item and (isinstance(item, list) and hasattr(item[0], 'request_statistics')):
+                for request_output in item:
+                    request_output.request_statistics.queue_server_receive_timestamp = time.time()
+            self.put_nowait(item)
             await self.socket.send_multipart(
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
         # pylint: disable=W0703

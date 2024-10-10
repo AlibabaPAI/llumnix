@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import threading
 from typing import List, Union, Iterable
 import time
 import ray
@@ -19,7 +20,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.backends.backend_interface import BackendInterface, BackendType
+from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
 from llumnix.backends.utils import init_backend_engine, initialize_placement_group
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
@@ -54,6 +55,10 @@ class Llumlet:
                                                            self.backend_engine)
         self.log_requests = True
 
+        self.check_state_thread = threading.Thread(target=self.check_state, daemon=True,
+                                                   name="llumlet_check_state_loop")
+        self.check_state_thread.start()
+
     @classmethod
     def from_args(cls,
                   output_queue_type: QueueType,
@@ -68,13 +73,14 @@ class Llumlet:
                   **kwargs):
         lifetime = "detached" if detached else None
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
+        actor_name = f"instance_{instance_id}"
         if backend_type == backend_type.VLLM:
             if disable_fixed_node_init_instance:
                 # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
                 placement_group = initialize_placement_group(world_size, detached=detached)
                 kwargs["placement_group"] = placement_group
                 engine_class = ray.remote(num_cpus=1,
-                                          name=f"instance_{instance_id}",
+                                          name=actor_name,
                                           namespace='llumnix',
                                           max_concurrency=4,
                                           lifetime=lifetime)(cls).options(
@@ -84,7 +90,7 @@ class Llumlet:
             else:
                 kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
-                                          name=f"instance_{instance_id}",
+                                          name=actor_name,
                                           namespace='llumnix',
                                           max_concurrency=4,
                                           lifetime=lifetime)(cls).options(
@@ -93,7 +99,7 @@ class Llumlet:
                                                     soft=False,))
         else: # backend_type == backend_type.SIM_VLLM:
             engine_class = ray.remote(num_cpus=1,
-                                      name=f"instance_{instance_id}",
+                                      name=actor_name,
                                       namespace='llumnix',
                                       max_concurrency=4,
                                       lifetime=lifetime)(cls).options(
@@ -102,6 +108,21 @@ class Llumlet:
                                             soft=False,))
         llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
+
+    def check_state(self):
+        while True:
+            time.sleep(1)
+
+            with self.backend_engine.state_lock:
+                if self.backend_engine.state == EngineState.CRASHED:
+                    logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
+                    # pylint: disable=protected-access
+                    self.backend_engine._stop_event.set()
+                    if self.backend_engine._thread.is_alive():
+                        self.backend_engine._thread.join()
+
+                    self_actor = ray.get_actor(self.actor_name)
+                    ray.kill(self_actor)
 
     def migrate_out(self, dst_instance_name: str) -> List[str]:
         try:

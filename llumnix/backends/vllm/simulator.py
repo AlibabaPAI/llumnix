@@ -14,8 +14,8 @@
 import os
 import threading
 from typing import List
-import ray.actor
 
+import ray.actor
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.logger import init_logger

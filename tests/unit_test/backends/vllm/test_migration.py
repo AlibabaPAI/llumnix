@@ -26,7 +26,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 from llumnix.queue.queue_type import QueueType
 
-from tests.unit_test.output_queue.utils import request_output_queue_server
+from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 

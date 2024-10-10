@@ -61,12 +61,13 @@ class AsyncPutQueueActor:
             tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, ret in enumerate(rets):
-            if isinstance(ret, TimeoutError):
+            if isinstance(ret, TimeoutError) or isinstance(ret, ray.exceptions.RayActorError):
                 server_id = list(server_request_outputs.keys())[idx]
                 server_info = server_info_dict[server_id]
                 logger.info("Server {} is dead".format(server_id))
-                logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                           server_info.request_output_queue_port))
+                if output_queue_type == QueueType.ZMQ:
+                    logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
+                                                                               server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)

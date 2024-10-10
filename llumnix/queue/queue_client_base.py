@@ -21,7 +21,7 @@ class QueueClientBase(ABC):
     @abstractmethod
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         raise NotImplementedError
-    
+
     @abstractmethod
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
         raise NotImplementedError

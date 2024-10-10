@@ -89,9 +89,14 @@ class LLMEngineLlumnix(LLMEngine):
                 placement_group=placement_group,
                 placement_group_capture_child_tasks=True,
             )
-        else:
+        elif node_id:
             scheduling_strategy = NodeAffinitySchedulingStrategy(
                 node_id=node_id,
+                soft=False,
+            )
+        else: # When use simulator, placement_group and node_id are both None.
+            scheduling_strategy = NodeAffinitySchedulingStrategy(
+                node_id=ray.get_runtime_context().get_node_id(),
                 soft=False,
             )
         self.put_queue_args_queue = queue.Queue()

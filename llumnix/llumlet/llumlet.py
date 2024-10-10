@@ -124,8 +124,8 @@ class Llumlet:
                     logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
                     # pylint: disable=protected-access
                     self.backend_engine._stop_event.set()
-                    if self.backend_engine._thread.is_alive():
-                        self.backend_engine._thread.join()
+                    if self.backend_engine.engine_step_loop_thread.is_alive():
+                        self.backend_engine.engine_step_loop_thread.join()
 
                     self_actor = ray.get_actor(self.actor_name)
                     ray.kill(self_actor)

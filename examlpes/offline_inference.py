@@ -58,12 +58,13 @@ server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue,
 async def background_process_outputs(num_tasks):
     finish_task = 0
     while finish_task != num_tasks:
-        request_output = await request_output_queue.get()
-        if request_output.finished:
-            finish_task += 1
-            prompt = request_output.prompt
-            generated_text = request_output.outputs[0].text
-            print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
+        request_outputs = await request_output_queue.get()
+        for request_output in request_outputs:
+            if request_output.finished:
+                finish_task += 1
+                prompt = request_output.prompt
+                generated_text = request_output.outputs[0].text
+                print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
     request_output_queue.cleanup()
 
 async def main():

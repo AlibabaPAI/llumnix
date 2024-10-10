@@ -63,7 +63,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _start_engine_loop(self) -> None:
+    def _start_engine_step_loop(self) -> None:
         """Start step loop of backend engine.
         """
         raise NotImplementedError

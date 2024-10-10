@@ -26,7 +26,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 from llumnix.queue.queue_type import QueueType
 
-from tests.unit_test.output_queue.utils import request_output_queue_server
+from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -104,9 +104,10 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
         origin_output = None
         finished = False
         while not finished:
-            request_output = await request_output_queue.get()
-            origin_output = request_output.outputs[0]
-            finished = request_output.finished
+            request_outputs = await request_output_queue.get()
+            for request_output in request_outputs:
+                origin_output = request_output.outputs[0]
+                finished = request_output.finished
 
         request_id1 = random_uuid()
         ray.get(llumlet_0.generate.remote(request_id1, server_info, prompt, sampling_params))
@@ -123,13 +124,14 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
         output = None
         finished = False
         while not finished:
-            request_output = await request_output_queue.get()
-            origin_output = request_output.outputs[0]
-            finished = request_output.finished
-            if request_output.request_id != request_id1:
-                continue
-            output = request_output.outputs[0]
-            finished = request_output.finished
+            request_outputs = await request_output_queue.get()
+            for request_output in request_outputs:
+                origin_output = request_output.outputs[0]
+                finished = request_output.finished
+                if request_output.request_id != request_id1:
+                    continue
+                output = request_output.outputs[0]
+                finished = request_output.finished
 
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob

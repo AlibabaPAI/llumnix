@@ -56,15 +56,16 @@ manager_available = True
 
 async def _background_process_outputs():
     while True:
-        request_output = await request_output_queue.get()
-        request_id = request_output.request_id
-        # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-        if request_id not in request_streams:
-            continue
-        request_streams[request_id].put(request_output)
-        if request_output.finished:
-            request_streams[request_id].finish()
-            del request_streams[request_id]
+        request_outputs = await request_output_queue.get()
+        for request_output in request_outputs:
+            request_id = request_output.request_id
+            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+            if request_id not in request_streams:
+                continue
+            request_streams[request_id].put(request_output)
+            if request_output.finished:
+                request_streams[request_id].finish()
+                del request_streams[request_id]
 
 # pylint: disable=unused-argument
 @asynccontextmanager
@@ -180,11 +181,11 @@ async def generate_benchmark(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
+    start = time.time()
+
     results_generator = await manager_generate(prompt, sampling_params, request_id)
 
     per_token_latency = []
-    start = time.time()
-
     # Non-streaming case
     final_output = None
     async for request_output in results_generator:

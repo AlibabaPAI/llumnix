@@ -50,6 +50,7 @@ class AsyncPutQueueActor:
         self.output_queue_type = output_queue_type
         self.request_output_queue_client: QueueClientBase = get_output_queue_client(output_queue_type)
         self.engine_actor_handle = None
+        self.output_queue_type = output_queue_type
 
     async def put_nowait_to_servers(self,
                                     server_request_outputs: Dict[str, List[RequestOutput]],

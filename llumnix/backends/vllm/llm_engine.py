@@ -20,7 +20,7 @@ import asyncio
 import queue
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy, PlacementGroupSchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
@@ -47,31 +47,39 @@ logger = init_logger(__name__)
 class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
         self.instance_id = instance_id
+        self.output_queue_type = output_queue_type
         self.request_output_queue_client: QueueClientBase = get_output_queue_client(output_queue_type)
         self.engine_actor_handle = None
-        self.output_queue_type = output_queue_type
 
     async def put_nowait_to_servers(self,
                                     server_request_outputs: Dict[str, List[RequestOutput]],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
-        if self.engine_actor_handle is None:
-            self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
-        tasks = []
-        for server_id, req_outputs in server_request_outputs.items():
-            server_info = server_info_dict[server_id]
-            tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
-        rets = await asyncio.gather(*tasks, return_exceptions=True)
-        for idx, ret in enumerate(rets):
-            if isinstance(ret, (TimeoutError, ray.exceptions.RayActorError)):
-                server_id = list(server_request_outputs.keys())[idx]
+        try:
+            if self.engine_actor_handle is None:
+                self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
+            tasks = []
+            for server_id, req_outputs in server_request_outputs.items():
                 server_info = server_info_dict[server_id]
-                logger.info("Server {} is dead".format(server_id))
-                if self.output_queue_type == QueueType.ZMQ:
-                    logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                               server_info.request_output_queue_port))
-                req_outputs = list(server_request_outputs.values())[idx]
-                request_ids = [req_output.request_id for req_output in req_outputs]
-                self.engine_actor_handle.abort_request.remote(request_ids)
+                for req_output in req_outputs:
+                    if hasattr(req_output, 'request_timestamps'):
+                        req_output.request_timestamps.engine_actor_put_queue_timestamp = time.time()
+                tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
+            rets = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, ret in enumerate(rets):
+                if isinstance(ret, (TimeoutError, ray.exceptions.RayActorError)):
+                    server_id = list(server_request_outputs.keys())[idx]
+                    server_info = server_info_dict[server_id]
+                    logger.info("Server {} is dead".format(server_id))
+                    if self.output_queue_type == QueueType.ZMQ:
+                        logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
+                                                                                server_info.request_output_queue_port))
+                    req_outputs = list(server_request_outputs.values())[idx]
+                    request_ids = [req_output.request_id for req_output in req_outputs]
+                    self.engine_actor_handle.abort_request.remote(request_ids)
+        # pylint: disable=W0703
+        except Exception as e:
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
 
 
 class LLMEngineLlumnix(LLMEngine):
@@ -181,12 +189,24 @@ class LLMEngineLlumnix(LLMEngine):
                 seq_group_metadata_list = new_seq_group_metadata_list
             for ignored_seq_group in ignored_seq_groups:
                 server_infos.append(ignored_seq_group.server_info)
+            for server_info in server_infos:
+                if hasattr(server_info, 'request_timestamps'):
+                    server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+            for request_output, server_info in zip(request_outputs, server_infos):
+                if hasattr(server_info, 'request_timestamps'):
+                    request_output.request_timestamps = server_info.request_timestamps
+                    request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
             # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
             return request_outputs, server_infos
 
     def step(self) -> None:
+        step_begin_time = time.time()
         request_outputs, server_infos = super().step()
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
+                request_output.request_timestamps.engine_step_timestamp_end = time.time()
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -207,9 +227,11 @@ class LLMEngineLlumnix(LLMEngine):
         if request_outputs:
             self.put_queue_args_queue.put((request_outputs, server_infos))
         self.instance_info = instance_info
-        num_request_outputs = len(request_outputs)
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
 
-        return num_request_outputs
+        return request_outputs, server_infos
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
@@ -224,6 +246,8 @@ class LLMEngineLlumnix(LLMEngine):
     def add_request(self, request_id: str, server_info: ServerInfo, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler.waiting[-1]
+        if hasattr(server_info, 'request_timestamps'):
+            server_info.request_timestamps.engine_add_request_timestamp = time.time()
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, [seq_group.get_seqs()[0]], seq_group.sampling_params,
                                         seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
         self.scheduler.scheduler_lock.release()
@@ -232,6 +256,9 @@ class LLMEngineLlumnix(LLMEngine):
         while True:
             args = self.put_queue_args_queue.get()
             request_outputs, server_infos = args
+            for request_output in request_outputs:
+                if hasattr(request_output, 'request_timestamps'):
+                    request_output.request_timestamps.engine_thread_put_queue_timestamp = time.time()
             self._put_request_outputs_to_server(request_outputs, server_infos)
 
     def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
@@ -244,7 +271,6 @@ class LLMEngineLlumnix(LLMEngine):
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
-        # TODO(s5u13b): It is not necessary to use async_put_queue_actor when output_queue_type is RayQueue.
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
 class BackendVLLM(BackendInterface):
@@ -294,8 +320,8 @@ class BackendVLLM(BackendInterface):
 
         while not self._stop_event.is_set():
             try:
-                num_request_outputs = self.engine.step()
-                if num_request_outputs == 0:
+                request_outputs, _ = self.engine.step()
+                if len(request_outputs) == 0:
                     time.sleep(0.01)
             # pylint: disable=broad-except
             except Exception as e:
@@ -354,7 +380,7 @@ class BackendVLLM(BackendInterface):
         request_ids = set(request_id)
         return self.engine.abort_request(request_ids)
 
-    def get_running_queue(self ) -> List[SequenceGroupLlumnix]:
+    def get_running_queue(self) -> List[SequenceGroupLlumnix]:
         return self.engine.scheduler.get_running_queue()
 
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:

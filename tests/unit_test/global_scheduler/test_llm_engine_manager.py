@@ -23,6 +23,7 @@ from vllm import EngineArgs
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.instance_info import InstanceInfo
+from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
@@ -167,7 +168,8 @@ def test_generate_and_abort(setup_ray_env, engine_manager, llumlet):
     request_id = random_uuid()
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
-    ray.get(engine_manager.generate.remote(request_id, None, None, None))
+    server_info = ServerInfo(None, None, None, None, None)
+    ray.get(engine_manager.generate.remote(request_id, server_info, None, None))
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 1
     ray.get(engine_manager.abort.remote(request_id))

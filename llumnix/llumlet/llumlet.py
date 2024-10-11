@@ -181,6 +181,8 @@ class Llumlet:
         **kwargs,
     ) -> None:
         # This should not be used for logging, as it is monotonic time.
+        if hasattr(server_info, 'request_timestamps'):
+            server_info.request_timestamps.llumlet_generate_timestamp = time.time()
         self.backend_engine.add_request(request_id, server_info, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:

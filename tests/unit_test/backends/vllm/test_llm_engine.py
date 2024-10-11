@@ -12,6 +12,7 @@
 # limitations under the License.
 
 from unittest.mock import MagicMock
+import ray
 
 from vllm.sequence import (Logprob, SequenceGroupOutput, SequenceOutput,
                            SequenceStatus,SamplerOutput)
@@ -26,6 +27,7 @@ from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor, SimGPUExecutor
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
+from llumnix.server_info import ServerInfo
 
 from .utils import create_dummy_prompt, initialize_scheduler
 
@@ -97,11 +99,17 @@ def test_llm_engine_from_engine_args():
 
 def test_llm_engine_add_requset():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE, instance_id="0",
-                                                   migration_config=None, latency_mem=MagicMock(sepc=LatencyMemData))
+    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
+                                                   output_queue_type=QueueType.RAYQUEUE,
+                                                   instance_id="0",
+                                                   placement_group=None,
+                                                   node_id=ray.get_runtime_context().get_node_id(),
+                                                   migration_config=None,
+                                                   latency_mem=MagicMock(sepc=LatencyMemData))
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     llm_engine.scheduler.scheduler_lock = MagicMock()
-    llm_engine.add_request("0", None, "prompt", sampling_params)
+    server_info = ServerInfo(None, None, None, None, None)
+    llm_engine.add_request("0", server_info, "prompt", sampling_params)
     assert len(llm_engine.scheduler.waiting) == 1
     assert llm_engine.scheduler.waiting[-1].request_id == "0"
     assert isinstance(llm_engine.scheduler.waiting[-1], LlumnixRequest)

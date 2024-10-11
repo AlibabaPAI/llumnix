@@ -99,8 +99,8 @@ def parse_log_file():
 
         return data
 
-    decode_data = get_markdown_data('decode_latencies', 'decode')
-    prefill_data = get_markdown_data('prefill_latencies', 'prefill')
+    decode_data = get_markdown_data('decode_token_latencies', 'decode')
+    prefill_data = get_markdown_data('prefill_token_latencies', 'prefill')
 
     return to_markdown_table(prefill_data) + "\n\n" + to_markdown_table(decode_data)
 

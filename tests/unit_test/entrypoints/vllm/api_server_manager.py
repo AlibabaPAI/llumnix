@@ -21,9 +21,10 @@ from vllm.outputs import CompletionOutput, RequestOutput
 import llumnix.entrypoints.vllm.api_server
 import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.server_info import ServerInfo
+from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.utils import random_uuid
 from llumnix.queue.utils import get_output_queue_server, get_output_queue_client, QueueType
+
 
 app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
@@ -41,6 +42,7 @@ class MockLLMEngineManager:
         self._num_generates += 1
         completion_output = CompletionOutput(0, "", [], 0.0, None)
         request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=True)
+        request_output.request_timestamps = RequestTimestamps()
         await self.request_output_queue.put_nowait([request_output], server_info)
 
     async def abort(self, request_id):

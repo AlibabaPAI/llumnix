@@ -107,7 +107,7 @@ async def benchmark_queue(qps, ip=None, port=None):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("qps", [128.0, 256.0, 512.0, 1024.0])
-async def test_queue_zeromq(setup_ray_env, qps):
+async def test_queue_zmq(setup_ray_env, qps):
     ip = '127.0.0.1'
     port = 1234
     await benchmark_queue(qps, ip, port)

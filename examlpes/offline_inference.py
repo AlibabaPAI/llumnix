@@ -24,7 +24,7 @@ sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 # Launch ray cluster
 os.environ['HEAD_NODE'] = '1'
 os.environ['HEAD_NODE_IP'] = '127.0.0.1'
-ray_cluster_port=37000
+ray_cluster_port=6379
 
 # Note: launch_ray_cluster will stop current ray cluster first, then init a new one.
 launch_ray_cluster(ray_cluster_port=ray_cluster_port)
@@ -58,12 +58,13 @@ server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue,
 async def background_process_outputs(num_tasks):
     finish_task = 0
     while finish_task != num_tasks:
-        request_output = await request_output_queue.get()
-        if request_output.finished:
-            finish_task += 1
-            prompt = request_output.prompt
-            generated_text = request_output.outputs[0].text
-            print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
+        request_outputs = await request_output_queue.get()
+        for request_output in request_outputs:
+            if request_output.finished:
+                finish_task += 1
+                prompt = request_output.prompt
+                generated_text = request_output.outputs[0].text
+                print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
     request_output_queue.cleanup()
 
 async def main():

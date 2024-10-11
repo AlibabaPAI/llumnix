@@ -19,7 +19,7 @@ import pytest
 def pytest_sessionstart(session):
     subprocess.run(["ray", "stop", "--force"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     sleep(3)
-    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=30050"], check=True,
+    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     sleep(3)
 

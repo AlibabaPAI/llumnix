@@ -15,8 +15,7 @@ import threading
 from typing import List, Union, Iterable
 import time
 import ray
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
@@ -86,7 +85,9 @@ class Llumlet:
                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,
-                                                    placement_group_bundle_index=0,))
+                                                    placement_group_bundle_index=0,
+                                                )
+                                            )
             else:
                 kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
@@ -96,16 +97,21 @@ class Llumlet:
                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                     node_id=node_id,
-                                                    soft=False,))
+                                                    soft=False,
+                                                )
+                                            )
         else: # backend_type == backend_type.SIM_VLLM:
+            kwargs["node_id"] = node_id
             engine_class = ray.remote(num_cpus=1,
                                       name=actor_name,
                                       namespace='llumnix',
                                       max_concurrency=4,
                                       lifetime=lifetime)(cls).options(
-                                        scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                            node_id=node_id,
-                                            soft=False,))
+                                            scheduling_strategy=NodeAffinitySchedulingStrategy(
+                                                node_id=node_id,
+                                                soft=False,
+                                            )
+                                        )
         llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 
@@ -118,8 +124,8 @@ class Llumlet:
                     logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
                     # pylint: disable=protected-access
                     self.backend_engine._stop_event.set()
-                    if self.backend_engine._thread.is_alive():
-                        self.backend_engine._thread.join()
+                    if self.backend_engine.engine_step_loop_thread.is_alive():
+                        self.backend_engine.engine_step_loop_thread.join()
 
                     self_actor = ray.get_actor(self.actor_name)
                     ray.kill(self_actor)

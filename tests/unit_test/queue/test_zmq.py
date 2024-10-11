@@ -39,10 +39,10 @@ class Server:
 
     async def _background_process_outputs(self, request_output_queue):
         while True:
-            request_output = await request_output_queue.get()
-            if request_output.finished:
-                break
-        self.stop_signal.set()
+            request_outputs = await request_output_queue.get()
+            for request_output in request_outputs:
+                if request_output.finished:
+                    self.stop_signal.set()
 
     async def _wait_until_done(self):
         await self.stop_signal.wait()
@@ -68,7 +68,7 @@ async def async_request_output_gen(generator, qps):
             return
 
 async def put_queue(request_output_queue, request_output, server_info):
-    await request_output_queue.put_nowait_batch([request_output], server_info)
+    await request_output_queue.put_nowait([request_output], server_info)
 
 class TimeoutException(Exception):
     pass

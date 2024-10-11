@@ -41,7 +41,7 @@ class MockLLMEngineManager:
         self._num_generates += 1
         completion_output = CompletionOutput(0, "", [], 0.0, None)
         request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=True)
-        await self.request_output_queue.put_nowait_batch([request_output], server_info)
+        await self.request_output_queue.put_nowait([request_output], server_info)
 
     async def abort(self, request_id):
         self._num_aborts += 1

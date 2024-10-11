@@ -290,6 +290,7 @@ if __name__ == "__main__":
     parser.add_argument('--launch-ray-cluster', action='store_true', help='if launch ray cluster in api server')
     parser.add_argument("--queue-type", type=str, choices=['rayqueue', 'zmq'], help='queue type for request output queue')
     parser.add_argument("--request-output-queue-port", type=int, help='port for zmq')
+    # TODO(KuilongCui): Fix default.py cannot take effects to cli arguments of action type.
     parser.add_argument("--log-request-timestamps", action='store_true', help='if log request timestamps')
     parser.add_argument("--config-file", help="path to config file")
     parser = EngineManagerArgs.add_cli_args(parser)

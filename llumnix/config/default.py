@@ -36,7 +36,6 @@ _C.SERVER.SSL_KEYFILE = None
 _C.SERVER.SSL_CERTFILE = None
 # Disable logging requests in server
 _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
-# TODO(KuilongCui): Fix default.py cannot take effects to cli arguments of action type.
 # Enable logging request timestamp
 _C.SERVER.LOG_REQUEST_TIMESTAMPS = False
 

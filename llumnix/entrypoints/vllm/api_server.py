@@ -59,10 +59,9 @@ manager_available = True
 async def _background_process_outputs():
     while True:
         request_outputs = await request_output_queue.get()
-        if log_request_timestamp:
-            for request_output in request_outputs:
-                if hasattr(request_output, 'request_timestamps'):
-                    request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
         for request_output in request_outputs:
             request_id = request_output.request_id
             # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.

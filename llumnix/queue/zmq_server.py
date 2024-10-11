@@ -14,8 +14,8 @@
 import asyncio
 import time
 from typing import (Coroutine, Any)
-from typing_extensions import Never
 from collections.abc import Iterable
+from typing_extensions import Never
 
 import zmq
 import zmq.asyncio

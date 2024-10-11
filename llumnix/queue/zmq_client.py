@@ -15,7 +15,6 @@ from typing import Any
 from contextlib import contextmanager
 from collections.abc import Iterable
 import time
-from collections.abc import Iterable
 
 import zmq
 import zmq.asyncio

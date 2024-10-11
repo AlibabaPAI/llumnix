@@ -59,7 +59,8 @@ class AsyncPutQueueActor:
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
             for req_output in req_outputs:
-                req_output.request_statistics.engine_actor_put_queue_timestamp = time.time()
+                if hasatrr(req_output, 'request_timestamps'):
+                    req_output.request_timestamps.engine_actor_put_queue_timestamp = time.time()
             tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, ret in enumerate(rets):
@@ -183,11 +184,13 @@ class LLMEngineLlumnix(LLMEngine):
             for ignored_seq_group in ignored_seq_groups:
                 server_infos.append(ignored_seq_group.server_info)
             for server_info in server_infos:
-                server_info.request_statistics.engine_process_model_outputs_timestamp_begin = time.time()
+                if hasattr(server_info, 'request_timestamps'):
+                    server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
             request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
             for request_output, server_info in zip(request_outputs, server_infos):
-                request_output.request_statistics = server_info.request_statistics
-                request_output.request_statistics.engine_process_model_outputs_timestamp_end = time.time()
+                if hasattr(server_info, 'request_timestamps'):
+                    request_output.request_timestamps = server_info.request_timestamps
+                    request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
             # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
             return request_outputs, server_infos
 
@@ -195,8 +198,9 @@ class LLMEngineLlumnix(LLMEngine):
         step_begin_time = time.time()
         request_outputs, server_infos = super().step()
         for request_output in request_outputs:
-            request_output.request_statistics.engine_step_timestamp_begin = step_begin_time
-            request_output.request_statistics.engine_step_timestamp_end = time.time()
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
+                request_output.request_timestamps.engine_step_timestamp_end = time.time()
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -218,7 +222,8 @@ class LLMEngineLlumnix(LLMEngine):
             self.put_queue_args_queue.put((request_outputs, server_infos))
         self.instance_info = instance_info
         for request_output in request_outputs:
-            request_output.request_statistics.engine_step_postprocess_timestamp_end = time.time()
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
 
         return request_outputs, server_infos
 
@@ -235,7 +240,8 @@ class LLMEngineLlumnix(LLMEngine):
     def add_request(self, request_id: str, server_info: ServerInfo, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler.waiting[-1]
-        server_info.request_statistics.engine_add_request_timestamp = time.time()
+        if hasattr(server_info, 'request_timestamps'):
+            server_info.request_timestamps.engine_add_request_timestamp = time.time()
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, [seq_group.get_seqs()[0]], seq_group.sampling_params,
                                         seq_group.metrics.arrival_time, seq_group.lora_request, seq_group.multi_modal_data)
         self.scheduler.scheduler_lock.release()
@@ -245,7 +251,8 @@ class LLMEngineLlumnix(LLMEngine):
             args = self.put_queue_args_queue.get()
             request_outputs, server_infos = args
             for request_output in request_outputs:
-                request_output.request_statistics.engine_thread_put_queue_timestamp = time.time()
+                if hasattr(request_output, 'request_timestamps'):
+                    request_output.request_timestamps.engine_thread_put_queue_timestamp = time.time()
             self._put_request_outputs_to_server(request_outputs, server_infos)
 
     def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
@@ -367,7 +374,7 @@ class BackendVLLM(BackendInterface):
         request_ids = set(request_id)
         return self.engine.abort_request(request_ids)
 
-    def get_running_queue(self ) -> List[SequenceGroupLlumnix]:
+    def get_running_queue(self) -> List[SequenceGroupLlumnix]:
         return self.engine.scheduler.get_running_queue()
 
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:

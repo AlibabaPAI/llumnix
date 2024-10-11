@@ -14,7 +14,7 @@
 from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.queue.queue_type import QueueType
 
-class RequestStatistics:
+class RequestTimestamps:
     def __init__(self):
         self.api_server_manager_generate_timestamp = -1.0
         self.manager_generate_timestamp = -1.0
@@ -78,5 +78,3 @@ class ServerInfo:
         self.request_output_queue = request_output_queue.queue if output_queue_type == QueueType.RAYQUEUE else None
         self.request_output_queue_ip = request_output_queue_ip
         self.request_output_queue_port = request_output_queue_port
-        # Hack request statistics in server_info for latency breakdown.
-        self.request_statistics = RequestStatistics()

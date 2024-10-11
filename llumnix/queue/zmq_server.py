@@ -125,9 +125,9 @@ class ZmqServer:
     async def _put_nowait(self, identity, put_nowait_queue_request: RPCPutNoWaitQueueRequest):
         try:
             item = put_nowait_queue_request.item
-            if item and (isinstance(item, list) and hasattr(item[0], 'request_statistics')):
-                for request_output in item:
-                    request_output.request_statistics.queue_server_receive_timestamp = time.time()
+            for request_output in item:
+                if hasattr(request_output, 'request_timestamps'):
+                    request_output.request_timestamps.queue_server_receive_timestamp = time.time()
             self.put_nowait(item)
             await self.socket.send_multipart(
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])

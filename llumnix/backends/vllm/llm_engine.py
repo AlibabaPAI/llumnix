@@ -20,7 +20,7 @@ import asyncio
 import queue
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy, PlacementGroupSchedulingStrategy
 
 from vllm.engine.llm_engine import LLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
@@ -49,6 +49,7 @@ class AsyncPutQueueActor:
         self.instance_id = instance_id
         self.request_output_queue_client: QueueClientBase = get_output_queue_client(output_queue_type)
         self.engine_actor_handle = None
+        self.output_queue_type = output_queue_type
 
     async def put_nowait_to_servers(self,
                                     server_request_outputs: Dict[str, List[RequestOutput]],
@@ -65,7 +66,7 @@ class AsyncPutQueueActor:
                 server_id = list(server_request_outputs.keys())[idx]
                 server_info = server_info_dict[server_id]
                 logger.info("Server {} is dead".format(server_id))
-                if output_queue_type == QueueType.ZMQ:
+                if self.output_queue_type == QueueType.ZMQ:
                     logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
                                                                                server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]

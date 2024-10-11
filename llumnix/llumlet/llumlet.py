@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import threading
+import traceback
 from typing import List, Union, Iterable
 import time
 import ray
@@ -31,7 +32,6 @@ logger = init_logger(__name__)
 
 
 class Llumlet:
-    # TODO(KuilongCui): catch the exception generated in ctor
     def __init__(self,
                  instance_id: str,
                  output_queue_type: QueueType,
@@ -39,24 +39,29 @@ class Llumlet:
                  migration_config: MigrationConfig,
                  *args,
                  **kwargs) -> None:
-        self.instance_id = instance_id
-        self.actor_name = f"instance_{instance_id}"
-        self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
-                                                                    output_queue_type,
-                                                                    backend_type,
-                                                                    migration_config,
-                                                                    *args,
-                                                                    **kwargs)
-        self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                          migration_config.last_stage_max_blocks,
-                                                          migration_config.max_stages)
-        self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
-                                                           self.backend_engine)
-        self.log_requests = True
+        try:
+            self.instance_id = instance_id
+            self.actor_name = f"instance_{instance_id}"
+            self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
+                                                                        output_queue_type,
+                                                                        backend_type,
+                                                                        migration_config,
+                                                                        *args,
+                                                                        **kwargs)
+            self.migration_coordinator = MigrationCoordinator(self.backend_engine,
+                                                            migration_config.last_stage_max_blocks,
+                                                            migration_config.max_stages)
+            self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
+                                                            self.backend_engine)
+            self.log_requests = True
 
-        self.check_state_thread = threading.Thread(target=self.check_state, daemon=True,
-                                                   name="llumlet_check_state_loop")
-        self.check_state_thread.start()
+            self.check_state_thread = threading.Thread(target=self.check_state, daemon=True,
+                                                    name="llumlet_check_state_loop")
+            self.check_state_thread.start()
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.error("Failed to initialize llumlet: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
 
     @classmethod
     def from_args(cls,

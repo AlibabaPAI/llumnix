@@ -15,6 +15,7 @@ from typing import Any
 from contextlib import contextmanager
 from collections.abc import Iterable
 import time
+from collections.abc import Iterable
 
 import zmq
 import zmq.asyncio
@@ -108,6 +109,10 @@ class ZmqClient:
 
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
+        if isinstance(item, Iterable):
+            for request_output in item:
+                if hasattr(request_output, 'request_timestamps'):
+                    request_output.request_timestamps.queue_client_send_timestamp = time.time()
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitQueueRequest(item=item),
                         rpc_path=rpc_path,

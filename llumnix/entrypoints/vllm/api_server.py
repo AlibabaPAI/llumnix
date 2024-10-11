@@ -189,7 +189,7 @@ def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
         'step_postprocess_latency': [],
         'across_async_put_queue_thread_latency': [],
         'across_async_put_queue_actor_latency': [],
-        'zmq_rpc_latency': [],
+        'queue_rpc_latency': [],
         'background_process_get_queue_latency': [],
         'generate_benchmark_return_output_latency': []
     }
@@ -201,7 +201,7 @@ def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[st
     per_token_latency_breakdown_dict['step_postprocess_latency'].append(request_timestamps.step_postprocess_latency)
     per_token_latency_breakdown_dict['across_async_put_queue_thread_latency'].append(request_timestamps.across_async_put_queue_thread_latency)
     per_token_latency_breakdown_dict['across_async_put_queue_actor_latency'].append(request_timestamps.across_async_put_queue_actor_latency)
-    per_token_latency_breakdown_dict['zmq_rpc_latency'].append(request_timestamps.zmq_rpc_latency)
+    per_token_latency_breakdown_dict['queue_rpc_latency'].append(request_timestamps.queue_rpc_latency)
     per_token_latency_breakdown_dict['background_process_get_queue_latency'].append(request_timestamps.background_process_get_queue_latency)
     per_token_latency_breakdown_dict['generate_benchmark_return_output_latency'].append(request_timestamps.generate_benchmark_return_output_latency)
 

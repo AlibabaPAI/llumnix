@@ -27,7 +27,7 @@ _C.SERVER.HOST = "localhost"
 # Port number for the server
 _C.SERVER.PORT = 8000
 # Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "rayqueue"
+_C.SERVER.QUEUE_TYPE = "zmq"
 # Port number for the request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Path to SSL key file for secure connections
@@ -37,7 +37,7 @@ _C.SERVER.SSL_CERTFILE = None
 # Disable logging requests in server
 _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
 # Enable logging request timestamp
-_C.SERVER.LOG_REQUEST_TIMESTAMP = False
+_C.SERVER.LOG_REQUEST_TIMESTAMP = True
 
 # -----------------------------------------------------------------------------
 # RAY CONFIGURATION

@@ -53,7 +53,7 @@ class RequestTimestamps:
         return (self.engine_actor_put_queue_timestamp - self.engine_thread_put_queue_timestamp)*1000
 
     @property
-    def zmq_rpc_latency(self):
+    def queue_rpc_latency(self):
         return (self.queue_server_receive_timestamp - self.queue_client_send_timestamp)*1000
 
     @property

@@ -50,7 +50,7 @@ server_info = None
 TIMEOUT_KEEP_ALIVE = 5  # seconds.
 request_streams: Dict[str, AsyncStream] = {}
 log_requests = None
-log_request_timestamp = None
+log_request_timestamps = None
 num_finished_requests = 0
 WAIT_MANAGER_INTERVAL = 5
 manager_available = True
@@ -92,7 +92,7 @@ async def manager_generate(prompt, sampling_params, request_id) -> AsyncStream:
     global manager_available
     try:
         server_info_copy = copy.deepcopy(server_info)
-        if log_request_timestamp:
+        if log_request_timestamps:
             # Hack request timestamps in server_info for latency breakdown.
             server_info_copy.request_timestamps = RequestTimestamps()
             server_info_copy.request_timestamps.api_server_manager_generate_timestamp = time.time()
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     parser.add_argument('--launch-ray-cluster', action='store_true', help='if launch ray cluster in api server')
     parser.add_argument("--queue-type", type=str, choices=['rayqueue', 'zmq'], help='queue type for request output queue')
     parser.add_argument("--request-output-queue-port", type=int, help='port for zmq')
-    parser.add_argument("--log-request-timestamp", action='store_true', help='if log request timestamp')
+    parser.add_argument("--log-request-timestamps", action='store_true', help='if log request timestamps')
     parser.add_argument("--config-file", help="path to config file")
     parser = EngineManagerArgs.add_cli_args(parser)
 
@@ -329,9 +329,10 @@ if __name__ == "__main__":
             instances[ins_id] = llumlets[idx]
             instance_num_requests[ins_id] = 0
         log_requests = not cfg.SERVER.DISABLE_LOG_REQUESTS_SERVER
-        log_request_timestamp = cfg.SERVER.LOG_REQUEST_TIMESTAMP
+        log_request_timestamps = cfg.SERVER.LOG_REQUEST_TIMESTAMPS
         # Start the api server after all the components of llumnix are ready.
         logger.info("Start Api Server on '{}:{}'".format(cfg.SERVER.HOST, cfg.SERVER.PORT))
+        logger.info("log_requests: {}, log_request_timestamps: {}".format(log_requests, log_request_timestamps))
         uvicorn.run(app,
                     host=cfg.SERVER.HOST,
                     port=cfg.SERVER.PORT,

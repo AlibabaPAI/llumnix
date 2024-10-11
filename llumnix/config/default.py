@@ -37,7 +37,7 @@ _C.SERVER.SSL_CERTFILE = None
 # Disable logging requests in server
 _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
 # Enable logging request timestamp
-_C.SERVER.LOG_REQUEST_TIMESTAMP = True
+_C.SERVER.LOG_REQUEST_TIMESTAMPS = False
 
 # -----------------------------------------------------------------------------
 # RAY CONFIGURATION

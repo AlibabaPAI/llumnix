@@ -38,7 +38,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
-            [--log-request-timestamp]
+            [--log-request-timestamps]
 
 ```
 
@@ -165,8 +165,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Drop migration if the number of stages > max_stages.
 - Default: 3
 
-`--log-request-timestamp`
-- Enable logging request timestamp.
+`--log-request-timestamps`
+- Enable logging request timestamps.
 
 # Unsupported vLLM feature options
 

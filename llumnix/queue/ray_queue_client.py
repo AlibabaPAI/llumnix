@@ -13,6 +13,7 @@
 
 from typing import Any
 from collections.abc import Iterable
+import time
 
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_client_base import QueueClientBase

@@ -27,7 +27,7 @@ _C.SERVER.HOST = "localhost"
 # Port number for the server
 _C.SERVER.PORT = 8000
 # Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "zmq"
+_C.SERVER.QUEUE_TYPE = "rayqueue"
 # Port number for the request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Path to SSL key file for secure connections

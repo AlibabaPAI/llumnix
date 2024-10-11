@@ -31,6 +31,7 @@ lint: check_pylint_installed check_pytest_installed
 test: check_pytest_installed
 	@pytest -x -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
 	@python examlpes/offline_inference.py
+	@pytest -v tests/e2e_test/test_e2e.py
 
 #################### pygloo install for gloo migration backend begin ####################
 

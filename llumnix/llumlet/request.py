@@ -34,6 +34,9 @@ class LlumnixRequest:
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
 
+    def is_finished(self) -> bool:
+        raise NotImplementedError
+
     @property
     def inference_type(self) -> RequestInferenceType:
         raise NotImplementedError
@@ -53,4 +56,5 @@ class LlumnixRequest:
     def should_abort_migration(self) -> bool:
         return self.output_len == 0 \
             or (self.last_preemption_time and self.last_preemption_time > self.stage_timestamps[-1]) \
-            or self.inference_type == RequestInferenceType.PREFILL
+            or self.inference_type == RequestInferenceType.PREFILL \
+            or self.is_finished()

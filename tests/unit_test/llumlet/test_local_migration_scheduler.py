@@ -20,6 +20,9 @@ class MockRequest(LlumnixRequest):
         self.length = length
         self.status = RequestInferenceType.DECODE
 
+    def is_finished(self) -> bool:
+        return False
+
     @property
     def inference_type(self) -> RequestInferenceType:
         return self.status

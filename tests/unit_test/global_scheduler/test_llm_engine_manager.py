@@ -82,7 +82,7 @@ class MockLlumlet:
 
 def init_manager():
     try:
-        engine_manager_args = EngineManagerArgs(migration_backend="rpc")
+        engine_manager_args = EngineManagerArgs(migration_backend="rpc", enable_migration=True)
         engine_manager_args.log_instance_info = False
         engine_manager = LLMEngineManager.from_args(engine_manager_args, None)
     except ValueError:

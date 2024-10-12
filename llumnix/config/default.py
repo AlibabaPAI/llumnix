@@ -82,7 +82,7 @@ _C.MANAGER.DISPATCH_POLICY = 'load'
 # MIGRATION CONFIGURATION
 # -----------------------------------------------------------------------------
 # Enable migrate requests between instances
-_C.MANAGER.ENABLE_MIGRATION = True
+_C.MANAGER.ENABLE_MIGRATION = False
 # Pair migration frequency
 _C.MANAGER.PAIR_MIGRATION_FREQUENCY = 1
 # Pair migration policy
@@ -92,7 +92,7 @@ _C.MANAGER.MIGRATE_OUT_THRESHOLD = 3.0
 # Request migration policy
 _C.MANAGER.REQUEST_MIGRATION_POLICY = 'SJF'
 # Enable defragmentation through migration based on virtual usage
-_C.MANAGER.ENABLE_DEFRAG = True
+_C.MANAGER.ENABLE_DEFRAG = False
 # Drop migration if the number of stages > max_stages
 _C.MANAGER.MAX_STAGES = 3
 # If the number of remain blocks < last_stage_max_blocks, do last stage migration

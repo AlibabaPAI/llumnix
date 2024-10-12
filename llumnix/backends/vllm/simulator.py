@@ -38,7 +38,7 @@ class BackendSimVLLM(BackendVLLM):
         engine_args: EngineArgs,
     ) -> None:
         # multi-instance args
-        latency_mem = self._get_lantecy_mem(profiling_result_file_path)
+        latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           output_queue_type=output_queue_type,
                                                                           migration_config=migration_config,

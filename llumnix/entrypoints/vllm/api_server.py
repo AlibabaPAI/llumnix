@@ -273,7 +273,7 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
     def add_argument(self, *args, **kwargs):
         if self.cur_namespace == 'llumnix' and "--help" not in args:
             assert 'default' not in kwargs or kwargs['default'] is None, \
-                f"Do not set the default value for '{args[0]}' in CLI, or default value it to None. " \
+                f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
                 f"The default value will be retrieved from config/default.py in get_llumnix_config."
 
             if kwargs.get('action') == 'store_true':

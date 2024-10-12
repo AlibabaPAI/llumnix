@@ -114,7 +114,7 @@ class LLMEngineLlumnix(LLMEngine):
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
         )
         self.async_put_queue_actor = ray.remote(
-            num_cpus=1,
+            num_cpus=0,
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
         self.put_queue_loop_thread.start()

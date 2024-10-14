@@ -1,7 +1,7 @@
 import asyncio
+import math
 import pytest
 import ray
-import math
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid

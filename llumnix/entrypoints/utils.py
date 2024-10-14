@@ -27,9 +27,8 @@ from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
-from llumnix.server_info import RequestTimestamps
+from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.queue.utils import init_output_queue_server
-from llumnix.server_info import ServerInfo
 
 logger = init_logger("llumnix.api_server")
 

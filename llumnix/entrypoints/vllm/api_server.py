@@ -185,7 +185,7 @@ async def generate_benchmark(request: Request) -> Response:
 
 @app.get("/is_ready")
 async def is_ready():
-    return manager_is_ready(llumnix_context)
+    return await manager_is_ready(llumnix_context)
 
 
 if __name__ == "__main__":

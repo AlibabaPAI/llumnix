@@ -1,4 +1,5 @@
 import copy
+import time
 import asyncio
 import ray
 
@@ -10,6 +11,7 @@ from llumnix.backends.vllm.utils import check_engine_args
 from llumnix.arg_utils import LlumnixEntrypointsArgs, EngineManagerArgs
 from llumnix.logger import init_logger
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
+from llumnix.server_info import RequestTimestamps
 
 logger = init_logger("llumnix.api_server")
 
@@ -79,7 +81,7 @@ async def manager_generate(prompt: str,
                 logger.info("[manager_generate] instance {} is dead".format(instance_id))
                 del llumnix_context.instances[instance_id]
                 del llumnix_context.instance_num_requests[instance_id]
-            return await asyncio.create_task(manager_generate(prompt, sampling_params, request_id, llumnix_context))
+                return await asyncio.create_task(manager_generate(prompt, sampling_params, request_id, llumnix_context))
 
     return results_generator
 

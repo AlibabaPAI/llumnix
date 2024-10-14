@@ -21,34 +21,35 @@ from .config import LlumnixConfig as LC
 _C = LC()
 
 # -----------------------------------------------------------------------------
-# API SERVER CONFIGURATION
+# SERVER CONFIGURATION
 # -----------------------------------------------------------------------------
 _C.SERVER = LC()
 # Hostname for the server
 _C.SERVER.HOST = "localhost"
 # Port number for the server
 _C.SERVER.PORT = 8000
-# Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "rayqueue"
-# Port number for the request output queue
-_C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Path to SSL key file for secure connections
 _C.SERVER.SSL_KEYFILE = None
 # Path to SSL certificate file for secure connections
 _C.SERVER.SSL_CERTFILE = None
+# Queue type for request output queue
+_C.SERVER.QUEUE_TYPE = "rayqueue"
+# Port number for the request output queue
+_C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Disable logging requests in server
 _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
 # Enable logging request timestamp
 _C.SERVER.LOG_REQUEST_TIMESTAMPS = False
+# Config file of Llumnix arguments
+_C.SERVER.CONFIG_FILE = None
 
 # -----------------------------------------------------------------------------
 # RAY CONFIGURATION
 # -----------------------------------------------------------------------------
-_C.RAY = LC()
-# Port number for the Ray cluster
-_C.RAY.RAY_CLUSTER_PORT = 6379
 # If True, launch Ray cluster in API server
-_C.RAY.LAUNCH_RAY_CLUSTER = False
+_C.SERVER.LAUNCH_RAY_CLUSTER = False
+# Port number for the Ray cluster
+_C.SERVER.RAY_CLUSTER_PORT = 6379
 
 # -----------------------------------------------------------------------------
 # MANAGER CONFIGURATION

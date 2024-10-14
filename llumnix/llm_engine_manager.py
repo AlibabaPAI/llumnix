@@ -443,7 +443,6 @@ class LLMEngineManager:
                                               os.getcwd(),
                                               log_requests=not engine_manager_args.disable_log_requests_manager,
                                               profiling_database=profiling_database)
-        logger.info("engine_manager_args: {}".format(engine_manager_args))
         return engine_manager
 
     # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.

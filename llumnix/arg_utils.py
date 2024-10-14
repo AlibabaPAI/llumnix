@@ -43,6 +43,59 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
         super().add_argument(*args, **kwargs)
 
 
+# All the default values of llumnix arguments are setted in default.py. So all the arguments here are setted to None.
+
+@dataclass
+class LlumnixEntrypointsArgs:
+    launch_ray_cluster: bool = None
+    ray_cluster_port: int = None
+    queue_type: str = None
+    request_output_queue_port: int = None
+    disable_log_requests_server: bool = None
+    log_request_timestamps: bool = None
+    config_file: bool = None
+
+    def __post_init__(self):
+        for attr in dataclasses.fields(self):
+            if getattr(self, attr.name) is None:
+                setattr(self, attr.name, getattr(_C.SERVER, attr.name.upper()))
+
+    @classmethod
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'LlumnixEntrypointsArgs':
+        # Get the list of attributes of this dataclass.
+        attrs = [attr.name for attr in dataclasses.fields(cls)]
+        # Set the attributes from the parsed arguments.
+        # The defalut values of attributes are defined in default.py.
+        llumnix_entrypoints_args = cls(**{attr: getattr(cfg.SERVER, attr.upper()) for attr in attrs})
+        return llumnix_entrypoints_args
+
+    @staticmethod
+    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        parser.add_argument('--launch-ray-cluster',
+                            action='store_true',
+                            help='if launch ray cluster in api server')
+        parser.add_argument("--ray-cluster-port",
+                            type=int,
+                            help='ray cluster port')
+        parser.add_argument("--queue-type",
+                            type=str,
+                            choices=['rayqueue', 'zmq'],
+                            help='queue type for request output queue')
+        parser.add_argument("--request-output-queue-port",
+                            type=int,
+                            help='port for zmq')
+        parser.add_argument('--disable-log-requests-server',
+                            action='store_true',
+                            help='disable logging requests in server')
+        parser.add_argument("--log-request-timestamps",
+                            action='store_true',
+                            help='if log request timestamps')
+        parser.add_argument("--config-file",
+                            type=str,
+                            help="path to config file")
+
+        return parser
+
 @dataclass
 class EngineManagerArgs:
     disable_init_instance_by_manager: bool = None
@@ -127,6 +180,7 @@ class EngineManagerArgs:
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
+        # The defalut values of attributes are defined in default.py.
         engine_manager_args = cls(**{attr: getattr(cfg.MANAGER, attr.upper()) for attr in attrs})
         return engine_manager_args
 

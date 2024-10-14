@@ -13,7 +13,6 @@
 
 from typing import Dict, AsyncGenerator
 from contextlib import asynccontextmanager
-import argparse
 import time
 import asyncio
 import json
@@ -27,7 +26,9 @@ from vllm.sampling_params import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncStream
 
-from llumnix.arg_utils import LlumnixArgumentParser, EngineManagerArgs
+from llumnix.arg_utils import (LlumnixArgumentParser,
+                               LlumnixEntrypointsArgs,
+                               EngineManagerArgs)
 from llumnix.entrypoints.llumnix_entrypoints import (get_ip_address,
                                                      launch_ray_cluster,
                                                      connect_to_ray_cluster,
@@ -247,38 +248,34 @@ async def is_ready():
 if __name__ == "__main__":
     parser: LlumnixArgumentParser = LlumnixArgumentParser()
 
-    parser.set_namespace("llumnix")
     parser.add_argument("--host", type=str)
     parser.add_argument("--port", type=int)
     parser.add_argument("--ssl-keyfile", type=str)
     parser.add_argument("--ssl-certfile", type=str)
-    parser.add_argument('--disable-log-requests-server', action='store_true', help='disable logging requests in server')
-    parser.add_argument("--ray-cluster-port", type=int)
-    parser.add_argument('--launch-ray-cluster', action='store_true', help='if launch ray cluster in api server')
-    parser.add_argument("--queue-type", type=str, choices=['rayqueue', 'zmq'], help='queue type for request output queue')
-    parser.add_argument("--request-output-queue-port", type=int, help='port for zmq')
-    parser.add_argument("--log-request-timestamps", action='store_true', help='if log request timestamps')
-    parser.add_argument("--config-file", help="path to config file")
-    parser = EngineManagerArgs.add_cli_args(parser)
 
+    parser.set_namespace("llumnix")
+    parser = LlumnixEntrypointsArgs.add_cli_args(parser)
+    parser = EngineManagerArgs.add_cli_args(parser)
     parser.set_namespace("vllm")
     parser = AsyncEngineArgs.add_cli_args(parser)
-
     cli_args = parser.parse_args()
-    cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
 
+    cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
+    llumnix_entrypoints_args = LlumnixEntrypointsArgs.from_llumnix_config(cfg)
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
     EngineManagerArgs.check_args(engine_manager_args, parser)
     engine_args = AsyncEngineArgs.from_cli_args(cli_args)
     check_engine_args(engine_args, engine_manager_args)
 
+    logger.info("llumnix_entrypoints_args: {}".format(llumnix_entrypoints_args))
+    logger.info("engine_manager_args: {}".format(engine_manager_args))
     logger.info("engine_args: {}".format(engine_args))
 
-    if cfg.RAY.LAUNCH_RAY_CLUSTER:
+    if cfg.SERVER.LAUNCH_RAY_CLUSTER:
         # Launch the ray cluster for multi-node serving.
-        launch_ray_cluster(cfg.RAY.RAY_CLUSTER_PORT)
+        launch_ray_cluster(cfg.SERVER.RAY_CLUSTER_PORT)
     # Connect to a ray cluster.
-    connect_to_ray_cluster(port=cfg.RAY.RAY_CLUSTER_PORT)
+    connect_to_ray_cluster(port=cfg.SERVER.RAY_CLUSTER_PORT)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():

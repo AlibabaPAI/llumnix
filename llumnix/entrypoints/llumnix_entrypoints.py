@@ -38,25 +38,6 @@ RESTART_INTERVALS = 1
 MAX_TASK_RETRIES = 300
 RETRIES_INTERVALS = 0.1
 
-class LlumnixArgumentParser(argparse.ArgumentParser):
-    def __init__(self, *args, **kwargs):
-        self.cur_namespace = "llumnix"
-        super().__init__(*args, **kwargs)
-
-    def set_namespace(self, namespace: str):
-        self.cur_namespace = namespace
-
-    def add_argument(self, *args, **kwargs):
-        if self.cur_namespace == 'llumnix' and "--help" not in args:
-            assert 'default' not in kwargs or kwargs['default'] is None, \
-                f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
-                f"The default value will be retrieved from config/default.py in get_llumnix_config."
-
-            if kwargs.get('action') == 'store_true':
-                kwargs['default'] = None
-
-        super().add_argument(*args, **kwargs)
-
 
 def get_ip_address():
     hostname = socket.gethostname()

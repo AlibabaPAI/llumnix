@@ -16,11 +16,11 @@ import pytest
 import ray
 
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.entrypoints.llumnix_utils import (get_ip_address,
-                                               launch_ray_cluster,
-                                               init_manager,
-                                               retry_manager_method_sync,
-                                               retry_manager_method_async)
+from llumnix.entrypoints.llumnix_entrypoints import (get_ip_address,
+                                                     launch_ray_cluster,
+                                                     init_manager,
+                                                     retry_manager_method_sync,
+                                                     retry_manager_method_async)
 from llumnix.llm_engine_manager import MANAGER_ACTOR_NAME
 from llumnix.queue.utils import get_output_queue_server
 

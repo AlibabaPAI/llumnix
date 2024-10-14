@@ -15,8 +15,10 @@ import vllm
 from vllm import *
 
 from llumnix.server_info import ServerInfo
-from llumnix.entrypoints.llumnix_utils import (launch_ray_cluster, connect_to_ray_cluster,
-                                               init_manager, init_llumlets)
+from llumnix.entrypoints.llumnix_entrypoints import (launch_ray_cluster,
+                                                     connect_to_ray_cluster,
+                                                     init_manager,
+                                                     init_llumlets)
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.llumlet.llumlet import Llumlet

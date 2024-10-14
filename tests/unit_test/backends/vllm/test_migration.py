@@ -141,19 +141,19 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
         await test_correctness(prompt)
     que.cleanup()
 
-@pytest.mark.skipif(torch.cuda.device_count() < 2,
-                    reason="Need at least 2 GPUs to run the test.")
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
     migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
-    server_info = init_server_info()
-    que = init_request_output_queue(server_info)
+
+    output_queue_type = QueueType.RAYQUEUE
+    que, server_info = request_output_queue_server(output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
     llumlet_0:Llumlet = Llumlet.from_args(
+                            output_queue_type,
                             False,
                             True,
                             ray.get_runtime_context().get_node_id(),
@@ -164,6 +164,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
                             engine_args,)
 
     llumlet_1:Llumlet = Llumlet.from_args(
+                            output_queue_type,
                             False,
                             True,
                             ray.get_runtime_context().get_node_id(),
@@ -193,9 +194,10 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
         origin_output = None
         finished = False
         while not finished:
-            request_output = await request_output_queue.get()
-            origin_output = request_output.outputs[0]
-            finished = request_output.finished
+            request_outputs = await request_output_queue.get()
+            for request_output in request_outputs:
+                origin_output = request_output.outputs[0]
+                finished = request_output.finished
 
         request_id1 = random_uuid()
         request_expected_steps_id1 = 1
@@ -209,11 +211,12 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
         output = None
         finished = False
         while not finished:
-            request_output = await request_output_queue.get()
-            origin_output = request_output.outputs[0]
-            finished = request_output.finished
-            if request_output.request_id != request_id1:
-                continue
+            request_outputs = await request_output_queue.get()
+            for request_output in request_outputs:
+                origin_output = request_output.outputs[0]
+                finished = request_output.finished
+                if request_output.request_id != request_id1:
+                    continue
             output = request_output.outputs[0]
             finished = request_output.finished
 

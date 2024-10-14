@@ -21,7 +21,7 @@ INSTANCE_NUM = 4
 
 def init_dispatch_scheduler(policy='load'):
     instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
-    dispatch_scheduler = DispatchScheduler(policy, instance_load_calculator, random.randint(-1,4))
+    dispatch_scheduler = DispatchScheduler(policy, instance_load_calculator, random.randint(1,4))
     return dispatch_scheduler
 
 @pytest.fixture
@@ -42,17 +42,11 @@ def test_add_instance_and_remove_instance(dispatch_scheduler):
     assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
     dispatch_scheduler.add_instance('instance_3')
     assert dispatch_scheduler.num_instances == 2
-    if dispatch_scheduler.num_dispatch_instances <= 0:
-        assert len(dispatch_scheduler.available_dispatch_instance_set) == 2
-    else:
-        assert len(dispatch_scheduler.available_dispatch_instance_set) == min(2, dispatch_scheduler.num_dispatch_instances)
+    assert len(dispatch_scheduler.available_dispatch_instance_set) == min(2, dispatch_scheduler.num_dispatch_instances)
 
     dispatch_scheduler.remove_instance('instance_2')
     assert dispatch_scheduler.num_instances == 1
-    if dispatch_scheduler.num_dispatch_instances <= 0:
-        assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
-    else:
-        assert len(dispatch_scheduler.available_dispatch_instance_set) == min(1, dispatch_scheduler.num_dispatch_instances-1)
+    assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
     dispatch_scheduler.remove_instance('instance_3')
     assert dispatch_scheduler.num_instances == 0
 
@@ -62,8 +56,7 @@ def test_dispatch_balanced():
         dispatch_scheduler = init_dispatch_scheduler('balanced')
         instance_num_requests = {}
         for instance_id in [f'instance_{i}' for i in range(1, INSTANCE_NUM + 1)]:
-            if dispatch_scheduler.num_dispatch_instances <= 0 or (dispatch_scheduler.num_dispatch_instances > 0
-                and len(dispatch_scheduler.available_dispatch_instance_set) < dispatch_scheduler.num_dispatch_instances):
+            if len(dispatch_scheduler.available_dispatch_instance_set) < dispatch_scheduler.num_dispatch_instances:
                 dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
                 instance_num_requests[instance_id] = random.randint(1, 10)
         dispatch_scheduler.instance_num_requests = instance_num_requests
@@ -106,8 +99,7 @@ def test_dispatch_queue():
             instance_info.instance_id = instance_id
             instance_info.num_waiting_requests = random.randint(1, 10)
             instance_info_dict[instance_id] = instance_info
-            if dispatch_scheduler.num_dispatch_instances <= 0 or (dispatch_scheduler.num_dispatch_instances > 0
-                and len(dispatch_scheduler.available_dispatch_instance_set) < dispatch_scheduler.num_dispatch_instances):
+            if  len(dispatch_scheduler.available_dispatch_instance_set) < dispatch_scheduler.num_dispatch_instances:
                 dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
                 instance_num_requests[instance_id] = 0
         dispatch_scheduler.instance_num_requests = instance_num_requests

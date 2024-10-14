@@ -56,16 +56,16 @@ def test_get_migration_instance_infos(pair_migration_type):
             if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
                 constraint_prefill_instance_num = math.inf
             else:
-                constraint_prefill_instance_num = random.randint(-1, INSTANCE_NUM)
+                constraint_prefill_instance_num = random.randint(1, INSTANCE_NUM)
             migration_scheduler = init_migration_scheduler()
-            if constraint_prefill_instance_num > 0:
+            if constraint_prefill_instance_num == math.inf:
+                instance_info.instance_type = InstanceType.NO_CONSTRAINTS
+            else:
                 if len([info for info in instance_info_dict.values()
                         if info.instance_type == InstanceType.PREFILL]) < constraint_prefill_instance_num:
                     instance_info.instance_type = InstanceType.PREFILL
                 else:
                     instance_info.instance_type = InstanceType.DECODE
-            else:
-                instance_info.instance_type = InstanceType.NO_CONSTRAINTS
             instance_info_dict[instance_id] = instance_info
     migration_scheduler.instance_info = instance_info_dict
     migration_scheduler._sort_instance_infos(descending=False)

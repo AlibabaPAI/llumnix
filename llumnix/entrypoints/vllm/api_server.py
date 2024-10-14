@@ -28,16 +28,18 @@ from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncStream
 
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.entrypoints.llumnix_utils import (get_ip_address,
                                                launch_ray_cluster, connect_to_ray_cluster,
-                                               is_gpu_available, init_llumnix_components)
+                                               is_gpu_available, init_llumnix_components,
+                                               LlumnixArgumentParser,
+                                               init_per_token_latency_breakdown_dict, record_per_token_latency_breakdown)
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.backends.vllm.utils import check_engine_args
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.utils import get_output_queue_server
 from llumnix.config import get_llumnix_config, LlumnixConfig
+from llumnix.server_info import ServerInfo, RequestTimestamps
 
 logger = init_logger("llumnix.api_server")
 
@@ -182,29 +184,6 @@ async def generate(request: Request) -> Response:
     ret = {"text": text_outputs}
     return JSONResponse(ret)
 
-def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
-    per_token_latency_breakdown_dict = {
-        'step_latency_engine': [],
-        'process_model_outputs_latency': [],
-        'step_postprocess_latency': [],
-        'across_async_put_queue_thread_latency': [],
-        'across_async_put_queue_actor_latency': [],
-        'queue_rpc_latency': [],
-        'background_process_get_queue_latency': [],
-        'generate_benchmark_return_output_latency': []
-    }
-    return per_token_latency_breakdown_dict
-
-def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_timestamps: RequestTimestamps):
-    per_token_latency_breakdown_dict['step_latency_engine'].append(request_timestamps.step_latency_engine)
-    per_token_latency_breakdown_dict['process_model_outputs_latency'].append(request_timestamps.process_model_outputs_latency)
-    per_token_latency_breakdown_dict['step_postprocess_latency'].append(request_timestamps.step_postprocess_latency)
-    per_token_latency_breakdown_dict['across_async_put_queue_thread_latency'].append(request_timestamps.across_async_put_queue_thread_latency)
-    per_token_latency_breakdown_dict['across_async_put_queue_actor_latency'].append(request_timestamps.across_async_put_queue_actor_latency)
-    per_token_latency_breakdown_dict['queue_rpc_latency'].append(request_timestamps.queue_rpc_latency)
-    per_token_latency_breakdown_dict['background_process_get_queue_latency'].append(request_timestamps.background_process_get_queue_latency)
-    per_token_latency_breakdown_dict['generate_benchmark_return_output_latency'].append(request_timestamps.generate_benchmark_return_output_latency)
-
 @app.post("/generate_benchmark")
 async def generate_benchmark(request: Request) -> Response:
     request_dict = await request.json()
@@ -262,24 +241,6 @@ async def is_ready():
     ready_status = await engine_manager.is_ready.remote()
     return ready_status
 
-class LlumnixArgumentParser(argparse.ArgumentParser):
-    def __init__(self, *args, **kwargs):
-        self.cur_namespace = "llumnix"
-        super().__init__(*args, **kwargs)
-
-    def set_namespace(self, namespace: str):
-        self.cur_namespace = namespace
-
-    def add_argument(self, *args, **kwargs):
-        if self.cur_namespace == 'llumnix' and "--help" not in args:
-            assert 'default' not in kwargs or kwargs['default'] is None, \
-                f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
-                f"The default value will be retrieved from config/default.py in get_llumnix_config."
-
-            if kwargs.get('action') == 'store_true':
-                kwargs['default'] = None
-
-        super().add_argument(*args, **kwargs)
 
 if __name__ == "__main__":
     parser: LlumnixArgumentParser = LlumnixArgumentParser()

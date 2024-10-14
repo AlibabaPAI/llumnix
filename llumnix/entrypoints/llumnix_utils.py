@@ -15,7 +15,8 @@ import subprocess
 import sys
 import os
 import time
-from typing import List, Tuple
+import argparse
+from typing import List, Tuple, Dict
 import asyncio
 import socket
 import ray
@@ -27,6 +28,7 @@ from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
+from llumnix.server_info import RequestTimestamps
 
 logger = init_logger(__name__)
 
@@ -35,6 +37,26 @@ MAX_RESTARTS = 30
 RESTART_INTERVALS = 1
 MAX_TASK_RETRIES = 300
 RETRIES_INTERVALS = 0.1
+
+class LlumnixArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        self.cur_namespace = "llumnix"
+        super().__init__(*args, **kwargs)
+
+    def set_namespace(self, namespace: str):
+        self.cur_namespace = namespace
+
+    def add_argument(self, *args, **kwargs):
+        if self.cur_namespace == 'llumnix' and "--help" not in args:
+            assert 'default' not in kwargs or kwargs['default'] is None, \
+                f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
+                f"The default value will be retrieved from config/default.py in get_llumnix_config."
+
+            if kwargs.get('action') == 'store_true':
+                kwargs['default'] = None
+
+        super().add_argument(*args, **kwargs)
+
 
 def get_ip_address():
     hostname = socket.gethostname()
@@ -202,3 +224,26 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
                     .format(len(available_instance_ids), available_instance_ids))
 
     return engine_manager, available_instance_ids, available_llumlets
+
+def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
+    per_token_latency_breakdown_dict = {
+        'step_latency_engine': [],
+        'process_model_outputs_latency': [],
+        'step_postprocess_latency': [],
+        'across_async_put_queue_thread_latency': [],
+        'across_async_put_queue_actor_latency': [],
+        'queue_rpc_latency': [],
+        'background_process_get_queue_latency': [],
+        'generate_benchmark_return_output_latency': []
+    }
+    return per_token_latency_breakdown_dict
+
+def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_timestamps: RequestTimestamps):
+    per_token_latency_breakdown_dict['step_latency_engine'].append(request_timestamps.step_latency_engine)
+    per_token_latency_breakdown_dict['process_model_outputs_latency'].append(request_timestamps.process_model_outputs_latency)
+    per_token_latency_breakdown_dict['step_postprocess_latency'].append(request_timestamps.step_postprocess_latency)
+    per_token_latency_breakdown_dict['across_async_put_queue_thread_latency'].append(request_timestamps.across_async_put_queue_thread_latency)
+    per_token_latency_breakdown_dict['across_async_put_queue_actor_latency'].append(request_timestamps.across_async_put_queue_actor_latency)
+    per_token_latency_breakdown_dict['queue_rpc_latency'].append(request_timestamps.queue_rpc_latency)
+    per_token_latency_breakdown_dict['background_process_get_queue_latency'].append(request_timestamps.background_process_get_queue_latency)
+    per_token_latency_breakdown_dict['generate_benchmark_return_output_latency'].append(request_timestamps.generate_benchmark_return_output_latency)

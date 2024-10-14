@@ -12,12 +12,13 @@
 # limitations under the License.
 
 from typing import Dict, List, Tuple, Union, Iterable, Set
+import math
 
 from llumnix.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
-from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
+from llumnix.global_scheduler.migration_scheduler import MigrationScheduler, PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 
 logger = init_logger(__name__)
@@ -30,12 +31,14 @@ class GlobalScheduler:
         # instance load and instance info args
         self.load_metric = global_scheduler_config.load_metric
         self.enable_defrag = global_scheduler_config.enable_defrag
+        self.enable_pd_disagg = global_scheduler_config.enable_pd_disagg
         self.instance_load_calculator = InstanceLoadCalculator(load_metric=self.load_metric,
                                                                enable_defrag=self.enable_defrag)
         # dispatch args
         self.dispatch_policy = global_scheduler_config.dispatch_policy
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
-                                                    self.instance_load_calculator)
+                                                    self.instance_load_calculator,
+                                                    global_scheduler_config.num_dispatch_instances)
         # migrate args
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
@@ -44,7 +47,8 @@ class GlobalScheduler:
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,
                                                   global_scheduler_config.scaling_policy,
-                                                  self.instance_load_calculator)
+                                                  self.instance_load_calculator,
+                                                  global_scheduler_config.num_dispatch_instances)
 
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
@@ -56,16 +60,18 @@ class GlobalScheduler:
                 # Llumnix have different instance load compuatation methods for dispatch/migrate/scale.
                 instance_info.instance_load_dispatch_scale = self.instance_load_calculator.compute_instance_load(instance_info, action='dispatch')
                 instance_info.instance_load_migrate = self.instance_load_calculator.compute_instance_load(instance_info, action='migrate')
+                instance_info.instance_type = self.scaling_scheduler.get_instance_type_info(instance_info.instance_id)
                 self.instance_info[instance_info.instance_id] = instance_info
 
     def dispatch(self) -> str:
         self.dispatch_scheduler.update_instance_infos(self.instance_info)
         instance_id = self.dispatch_scheduler.dispatch()
-        return instance_id
+        request_expected_steps = 1 if self.enable_pd_disagg else math.inf
+        return instance_id, request_expected_steps
 
-    def pair_migration(self) -> List[Tuple[str, str]]:
+    def pair_migration(self, pair_migration_type: PairMigrationConstraints) -> List[Tuple[str, str]]:
         self.migration_scheduler.update_instance_infos(self.instance_info)
-        migrate_instance_pairs = self.migration_scheduler.pair_migration()
+        migrate_instance_pairs = self.migration_scheduler.pair_migration(pair_migration_type)
         return migrate_instance_pairs
 
     def check_scale(self) -> Tuple[str, str]:

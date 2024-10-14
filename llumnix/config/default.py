@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 from .config import LlumnixConfig as LC
 
 # -----------------------------------------------------------------------------
@@ -77,6 +79,8 @@ _C.MANAGER.POLLING_INTERVAL = 0.05
 _C.MANAGER.LOAD_METRIC = 'remaining_steps'
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
+# Number of available dispatch instances. -1 indicates that all instances can be used for dispatching
+_C.MANAGER.NUM_DISPATCH_INSTANCES = math.inf
 
 # -----------------------------------------------------------------------------
 # MIGRATION CONFIGURATION
@@ -124,3 +128,9 @@ _C.MANAGER.SCALING_POLICY = 'avg_load'
 _C.MANAGER.SCALE_UP_THRESHOLD = 10
 # Scale down threshold
 _C.MANAGER.SCALE_DOWN_THRESHOLD = 60
+
+# -----------------------------------------------------------------------------
+# PREFILL DECODING DISAGGREGATION CONFIGURATION
+# -----------------------------------------------------------------------------
+# Enable prefill decoding disaggregation
+_C.MANAGER.ENABLE_PD_DISAGG = False

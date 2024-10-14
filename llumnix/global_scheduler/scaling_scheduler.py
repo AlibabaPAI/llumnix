@@ -13,6 +13,8 @@
 
 from typing import Dict, List, Tuple, Set
 from abc import ABC, abstractmethod
+from enum import Enum
+import math
 import numpy as np
 
 from llumnix.logger import init_logger
@@ -20,13 +22,21 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 
 logger = init_logger(__name__)
 
+class InstanceType(str, Enum):
+    NO_CONSTRAINTS = "NO_CONSTRAINTS"
+
+    # Specific to Prefill-Decoding disaggregation.
+    PREFILL = "PREFILL"
+    DECODE = "DECODE"
+
 
 class ScalingScheduler:
     def __init__(self,
                  scale_up_threshold: float,
                  scale_down_threshold: float,
                  scaling_policy: str,
-                 instance_load_calculator: InstanceLoadCalculator) -> None:
+                 instance_load_calculator: InstanceLoadCalculator,
+                 maximum_prefill_instance_num: int) -> None:
         self.scale_up_threshold = scale_up_threshold
         self.scale_down_threshold = scale_down_threshold
         self.scaling_policy = ScalePolicyFactory.get_policy(scaling_policy,
@@ -35,9 +45,13 @@ class ScalingScheduler:
 
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
+        self.maximum_prefill_instance_num = maximum_prefill_instance_num
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
         self.sorted_instance_infos: List[InstanceInfo] = None
+
+        # TODO(Xinyi): Tag instance type for scheduler, should be extended to auto-scaling for prefill/decoding instances.
+        self.instance_type_id_set: Dict[InstanceType, Set[str]] = {instance_type: set() for instance_type in InstanceType}
 
     def check_scale(self) -> Tuple[str, str]:
         scale_up_num = 0
@@ -63,9 +77,23 @@ class ScalingScheduler:
     def add_instance(self, instance_id: str) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
+        instance_type = None
+        if self.maximum_prefill_instance_num == math.inf:
+            instance_type = InstanceType.NO_CONSTRAINTS
+        else:
+            if len(self.instance_type_id_set[InstanceType.PREFILL]) < self.maximum_prefill_instance_num:
+                instance_type = InstanceType.PREFILL
+            else:
+                instance_type = InstanceType.DECODE
+        self.instance_type_id_set[instance_type].add(instance_id)
+        return instance_type
 
     def remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)
+        for instance_type in InstanceType:
+            if instance_id in self.instance_type_id_set[instance_type]:
+                self.instance_type_id_set[instance_type].remove(instance_id)
+                break
         self.num_instances = len(self.instance_id_set)
 
     def get_empty_instance_info(self) -> InstanceInfo:
@@ -78,6 +106,12 @@ class ScalingScheduler:
         dummy_intance_info.num_free_gpu_blocks = np.inf
         dummy_intance_info.num_available_gpu_blocks_waiting = np.inf
         return dummy_intance_info
+
+    def get_instance_type_info(self, instance_id: str) -> InstanceInfo:
+        for instance_type in InstanceType:
+            if instance_id in self.instance_type_id_set[instance_type]:
+                return instance_type
+        return self.add_instance(instance_id)
 
 class ScalePolicy(ABC):
     def __init__(self,

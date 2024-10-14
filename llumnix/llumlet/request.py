@@ -12,6 +12,7 @@
 # limitations under the License.
 
 from enum import Enum
+import math
 
 from llumnix.server_info import ServerInfo
 
@@ -20,9 +21,12 @@ class RequestInferenceType(str, Enum):
     DECODE = "decode"
 
 class LlumnixRequest:
-    def __init__(self, request_id: int, server_info: ServerInfo) -> None:
+    def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
         self.request_id = request_id
         self.server_info = server_info
+
+        # strict pre-migration args
+        self.expected_steps = expected_steps
 
         # migration args
         self.last_preemption_time = None
@@ -33,6 +37,8 @@ class LlumnixRequest:
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
+        # By default, there is no limit on the number of steps expected for the request.
+        self.expected_steps = math.inf
 
     @property
     def inference_type(self) -> RequestInferenceType:
@@ -49,6 +55,12 @@ class LlumnixRequest:
     @property
     def output_len(self) -> int:
         raise NotImplementedError
+
+    # Whether the migration of request is completed within one stage. For requests that have already reached
+    # the expected steps, blocking_migration is True.
+    @property
+    def blocking_migration(self) -> bool:
+        return self.output_len >= self.expected_steps
 
     def should_abort_migration(self) -> bool:
         return self.output_len == 0 \

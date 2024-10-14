@@ -135,30 +135,35 @@ class Llumlet:
                     self_actor = ray.get_actor(self.actor_name)
                     ray.kill(self_actor)
 
-    def migrate_out(self, dst_instance_name: str) -> List[str]:
+    def migrate_out(self, dst_instance_name: str, num_requests: int) -> List[str]:
         try:
-            t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
             dst_instance_id = dst_instance_name[len("instance_"):]
-            logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
-            migrate_out_request = self.migration_scheduler.get_migrate_out_request()
             migrated_request_list = []
-            if migrate_out_request is None:
-                return migrated_request_list
-            status = self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
-            if status == MigrationStatus.FINISHED_DONE:
-                ray.get(migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request))
-                self.backend_engine.free_src_request(migrate_out_request)
-                migrated_request_list.append(migrate_out_request.request_id)
-                migrate_out_request.stage_timestamps.append(time.time())
-                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-            else:
-                migrate_out_request.reset_migration_args()
-                ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
-            t1 = time.time()
-            logger.info("{}->{} migrate done, migrate request {}, status:{}, len:{} blocks, cost:{} ms" \
-                  .format(self.instance_id, dst_instance_id, migrated_request_list, status, \
-                   sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
+            continue_migrate = True
+            while continue_migrate and len(migrated_request_list) < num_requests:
+                t0 = time.time()
+                migrate_out_request = self.migration_scheduler.get_migrate_out_request()
+                if migrate_out_request is not None:
+                    logger.info("migrate_out {}".format(migrate_out_request.request_id))
+                if migrate_out_request is None:
+                    return migrated_request_list
+                logger.info("{}->{} begin migrate out {}".format(self.instance_id, dst_instance_id, migrate_out_request.request_id))
+                status = self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
+                if status == MigrationStatus.FINISHED_DONE:
+                    ray.get(migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request))
+                    self.backend_engine.free_src_request(migrate_out_request)
+                    migrated_request_list.append(migrate_out_request.request_id)
+                    migrate_out_request.stage_timestamps.append(time.time())
+                    self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                else:
+                    migrate_out_request.reset_migration_args()
+                    ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
+                    continue_migrate = False
+                t1 = time.time()
+                logger.info("{}->{} migrate done, migrate request {}, status:{}, len:{} blocks, cost:{} ms" \
+                    .format(self.instance_id, dst_instance_id, migrated_request_list, status, \
+                    sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:
             logger.info("[migrate_out] instance {} is dead".format(dst_instance_name[len("instance_"):]))
             raise
@@ -177,13 +182,14 @@ class Llumlet:
         self,
         request_id: str,
         server_info: ServerInfo,
+        expected_steps: int,
         *args,
         **kwargs,
     ) -> None:
         # This should not be used for logging, as it is monotonic time.
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.llumlet_generate_timestamp = time.time()
-        self.backend_engine.add_request(request_id, server_info, *args, **kwargs)
+        self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):

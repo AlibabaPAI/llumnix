@@ -11,11 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 from vllm.sequence import Sequence
 from vllm.sequence import Logprob
+from vllm.core.policy import PolicyFactory
+
 from llumnix.backends.vllm.scheduler import BlockManagerLlumnix
 from llumnix.llumlet.request import RequestInferenceType
-from .utils import create_dummy_prompt, initialize_scheduler
+from .utils import create_dummy_prompt, initialize_scheduler, create_token_budget
 
 
 def get_sequence_groups(scheduler_output):
@@ -26,6 +30,11 @@ def schedule_and_update_computed_tokens(scheduler):
     for s, meta in zip(out.scheduled_seq_groups, metas):
         s.seq_group.update_num_computed_tokens(meta.token_chunk_size)
     return metas, out
+
+def append_new_token_seq_group(token_chunk_size, seq_group, token_id: int):
+    seq_group.update_num_computed_tokens(token_chunk_size)
+    for seq in seq_group.get_seqs():
+        seq.append_token_id(token_id, {token_id: Logprob(token_id)})
 
 def append_new_token(out, token_id: int):
     seq_groups = get_sequence_groups(out)
@@ -141,3 +150,29 @@ def test_scheduler_pre_alloc():
     assert len(scheduler.pre_alloc_cache_dict["1"]) == 6
     blocks = scheduler.pre_alloc("2,", 4)
     assert len(blocks) == 0
+
+def test_schedule_running():
+    scheduler = initialize_scheduler()
+    policy = PolicyFactory.get_policy(policy_name="fcfs")
+    budget = create_token_budget()
+    curr_loras = None
+
+    _, seq_group_0 = create_dummy_prompt("0", prompt_length=1, expected_steps=math.inf)
+    scheduler._allocate_and_set_running(seq_group_0)
+    append_new_token_seq_group(1, seq_group_0, 1)
+    scheduler.running.append(seq_group_0)
+    remainig_running, running_scheduled = scheduler._schedule_running(
+        scheduler.running, budget, curr_loras, policy)
+    assert len(running_scheduled.decode_seq_groups) == 1
+    assert len(running_scheduled.prefill_seq_groups) == 0
+    assert len(remainig_running) == 0
+
+    _, seq_group_1 = create_dummy_prompt("1", prompt_length=1, expected_steps=1)
+    scheduler._allocate_and_set_running(seq_group_1)
+    append_new_token_seq_group(1, seq_group_1, 1)
+    scheduler.running.append(seq_group_1)
+    remainig_running, running_scheduled = scheduler._schedule_running(
+        scheduler.running, budget, curr_loras, policy)
+    assert len(running_scheduled.decode_seq_groups) == 1
+    assert len(running_scheduled.prefill_seq_groups) == 0
+    assert len(remainig_running) == 1

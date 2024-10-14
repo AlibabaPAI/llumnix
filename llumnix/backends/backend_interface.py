@@ -37,7 +37,7 @@ class BackendType(str, Enum):
 class BackendInterface(ABC):
     # Methods for inference
     @abstractmethod
-    def add_request(self, request_id: str, server_info: ServerInfo,
+    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
                     *args, **kwargs) -> None:
         """Adds a new inference request to the backend's processing queue.
 
@@ -47,6 +47,11 @@ class BackendInterface(ABC):
         Args:
             request_id: Request ID.
             server_info: The information of the api server where the request come.
+            expected_steps: The expected number of steps for the request to run. The number of steps
+                                    represents the times 'engine.step()' has been called by the backend
+                                    instances for the request. Currently, `expected_steps` is used
+                                    to implement prefill-decoding disaggregation. For requests dispatched to
+                                    prefill instances `expected_steps` is set to 1.
             *args: Positional arguments that represent request-specific data.
             **kwargs: Keyword arguments that contain metadata of the backend request
                       (request_id, arrival_time, etc.).

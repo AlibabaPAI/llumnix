@@ -15,6 +15,7 @@ import asyncio
 import time
 import csv
 import os
+import math
 from typing import Dict, List, Tuple, Union, Iterable
 from collections import defaultdict
 import traceback
@@ -24,6 +25,7 @@ import ray
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
+from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.instance_info import InstanceInfo
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.arg_utils import EngineManagerArgs
@@ -61,6 +63,8 @@ class LLMEngineManager:
         self.enable_scaling = engine_manager_args.enable_scaling
         self.max_instances = engine_manager_args.max_instances
         self.min_instances = engine_manager_args.min_instances
+
+        self.enable_pd_disagg = global_scheduler_config.enable_pd_disagg
 
         logger.info("LLMEngineManager starts")
         logger.info("enable_migration: {}".format(self.enable_migration))
@@ -113,11 +117,11 @@ class LLMEngineManager:
             logger.info("No instance available temporarily, sleep {}s, "
                         "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
             await asyncio.sleep(RETRIES_INTERVALS)
-        instance_id = self.global_scheduler.dispatch()
+        instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:
             if hasattr(server_info, 'request_timestamps'):
                 server_info.request_timestamps.manager_generate_timestamp = time.time()
-            await self.instances[instance_id].generate.remote(request_id, server_info, *args, **kwargs)
+            await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
             if self.log_requests:
                 logger.info("received request {}.".format(request_id))
                 logger.info("dispath to instance {}".format(instance_id))
@@ -197,7 +201,7 @@ class LLMEngineManager:
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \
                     and self.num_instance_info_updates % self.pair_migration_frequency == 0:
-                    asyncio.create_task(self._migrate())
+                    asyncio.create_task(self._push_migrations())
                 if self.log_instance_info:
                     self._log_instance_infos_to_csv(instance_infos)
             # pylint: disable=W0703
@@ -211,8 +215,15 @@ class LLMEngineManager:
         while True:
             await asyncio.sleep(interval)
             self.request_instance = {}
+    async def _push_migrations(self) -> None:
+        # Push migrate when the instance_info have updated a certain number of times.
+        if self.enable_pd_disagg:
+            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODING, math.inf))
+            asyncio.create_task(self._migrate(PairMigrationConstraints.DECODING_2_DECODING, 1))
+        else:
+            asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS, 1))
 
-    async def _migrate(self) -> None:
+    async def _migrate(self, pair_migration_type: PairMigrationConstraints, migrate_in_num_requests: int) -> None:
         async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
             if migrate_instance_pair[0] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[0]] = False
@@ -243,8 +254,7 @@ class LLMEngineManager:
             ret = fut.result()
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
-
-        migrate_instance_pairs = self.global_scheduler.pair_migration()
+        migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
         try:
             migration_tasks = []
             for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
@@ -254,9 +264,8 @@ class LLMEngineManager:
                 self.instance_migrating[migrate_out_instance_id] = True
                 self.instance_migrating[migrate_in_instance_id] = True
                 migrate_in_instance_name = "instance_{}".format(migrate_in_instance_id)
-                logger.info("{}->{} begin migrate out".format(migrate_out_instance_id, migrate_in_instance_id))
                 # Use asyncio.gather to wrap ray remote call to add done callback.
-                task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name),
+                task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name, migrate_in_num_requests),
                                       return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)

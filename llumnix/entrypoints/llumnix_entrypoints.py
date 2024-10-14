@@ -29,7 +29,7 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import RequestTimestamps
 
-logger = init_logger(__name__)
+logger = init_logger("llumnix.api_server")
 
 # TODO(s5u13b): Set the values through tests.
 MAX_RESTARTS = 30
@@ -84,6 +84,13 @@ def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
 def connect_to_ray_cluster(port: int, namespace="llumnix") -> None:
     head_node_ip = os.getenv('HEAD_NODE_IP')
     ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace)
+
+def setup_ray_cluster(cfg):
+    if cfg.SERVER.LAUNCH_RAY_CLUSTER:
+        # Launch the ray cluster for multi-node serving.
+        launch_ray_cluster(cfg.SERVER.RAY_CLUSTER_PORT)
+    # Connect to a ray cluster.
+    connect_to_ray_cluster(port=cfg.SERVER.RAY_CLUSTER_PORT)
 
 def is_gpu_available() -> bool:
     try:

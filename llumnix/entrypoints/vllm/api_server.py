@@ -25,10 +25,9 @@ import ray
 from vllm.sampling_params import SamplingParams
 from vllm.engine.async_llm_engine import AsyncStream
 
-from llumnix.arg_utils import LlumnixArgumentParse
-from llumnix.entrypoints.llumnix_entrypoints import (get_ip_address,
-                                                     launch_ray_cluster,
-                                                     connect_to_ray_cluster,
+from llumnix.arg_utils import LlumnixArgumentParser
+from llumnix.entrypoints.llumnix_entrypoints import (setup_ray_cluster,
+                                                     get_ip_address,
                                                      is_gpu_available,
                                                      init_llumnix_components,
                                                      init_per_token_latency_breakdown_dict,
@@ -262,12 +261,8 @@ if __name__ == "__main__":
     cli_args = add_cli_args(parser)
     cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
     _, engine_manager_args, engine_args = get_args(cfg, parser, cli_args)
-
-    if cfg.SERVER.LAUNCH_RAY_CLUSTER:
-        # Launch the ray cluster for multi-node serving.
-        launch_ray_cluster(cfg.SERVER.RAY_CLUSTER_PORT)
-    # Connect to a ray cluster.
-    connect_to_ray_cluster(port=cfg.SERVER.RAY_CLUSTER_PORT)
+    
+    setup_ray_cluster(cfg)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():

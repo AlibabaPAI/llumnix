@@ -4,7 +4,7 @@ from llumnix.backends.vllm.utils import check_engine_args
 from llumnix.arg_utils import LlumnixEntrypointsArgs, EngineManagerArgs
 from llumnix.logger import init_logger
 
-logger = init_logger(__name__)
+logger = init_logger("llumnix.api_server")
 
 
 def add_cli_args(parser):
@@ -28,4 +28,3 @@ def get_args(cfg, parser, cli_args):
     logger.info("engine_args: {}".format(engine_args))
 
     return llumnix_entrypoints_args, engine_manager_args, engine_args
-

@@ -26,13 +26,17 @@ logger = init_logger(__name__)
 class MigrationStatus(enum.Enum):
     """Status of Migration."""
     RUNNING = enum.auto()
-    FINISHED_ABORTED = enum.auto()
+    # aborted by src instance
+    ABORTED_SRC = enum.auto()
+    # aborted by dst instance
+    ABORTED_DST = enum.auto()
     FINISHED_DONE = enum.auto()
 
     @staticmethod
     def is_finished(status: "MigrationStatus") -> bool:
         return status in [
-            MigrationStatus.FINISHED_ABORTED,
+            MigrationStatus.ABORTED_SRC,
+            MigrationStatus.ABORTED_DST,
             MigrationStatus.FINISHED_DONE
         ]
 
@@ -73,7 +77,7 @@ class MigrationCoordinator:
             if is_last_stage:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-            migration_status = MigrationStatus.FINISHED_ABORTED
+            migration_status = MigrationStatus.ABORTED_DST
             return migration_status
         # do stage send/recv
         migrate_out_request.stage_timestamps.append(time.time())
@@ -82,7 +86,7 @@ class MigrationCoordinator:
         self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
         if not is_last_stage and migrate_out_request.should_abort_migration():
             # migrate-out request abort by scheduler during send/recv
-            migration_status = MigrationStatus.FINISHED_ABORTED
+            migration_status = MigrationStatus.ABORTED_SRC
 
         return migration_status
 
@@ -98,7 +102,7 @@ class MigrationCoordinator:
             if MigrationStatus.is_finished(status):
                 return status
         # exceed max stages
-        return MigrationStatus.FINISHED_ABORTED
+        return MigrationStatus.ABORTED_SRC
 
     def migrate_in_pre_alloc(self, request_id: str, block_num: int) -> List[int]:
         """prev alloc blocks to migrate in request

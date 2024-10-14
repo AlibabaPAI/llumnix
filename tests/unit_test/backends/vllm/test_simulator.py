@@ -1,10 +1,30 @@
-from vllm import EngineArgs
+import asyncio
+import math
+import pytest
+import ray
+
+from vllm import EngineArgs, SamplingParams
+from vllm.utils import random_uuid
 from vllm.sequence import ExecuteModelRequest
 
 from llumnix.backends.vllm.executor import SimGPUExecutor
+from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
-from .utils import create_dummy_prompt, initialize_scheduler
+from llumnix.internal_config import MigrationConfig
+from llumnix.queue.queue_type import QueueType
 
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
+from tests.unit_test.queue.utils import request_output_queue_server
+
+from .utils import create_dummy_prompt, initialize_scheduler
+class MockBackendSim(BackendSimVLLM):
+
+    def _get_lantecy_mem(self, *args, **kwargs):
+        latency_mem = LatencyMemData({}, {}, {})
+        latency_mem.prefill_model_params = (0,0)
+        latency_mem.decode_model_params = (0,0,0)
+        return latency_mem
 
 def test_executor():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
@@ -45,7 +65,45 @@ def test_executor():
     outputs = executor.execute_model(execute_model_req)
     assert len(outputs[0].outputs) == 2
 
-def test_backend():
+@pytest.mark.asyncio
+async def test_backend(setup_ray_env):
     # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
-    pass
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    migration_config = MigrationConfig("LCFS", "gloo", 16, 1, 4, 5, 20)
+
+    output_queue_type = QueueType.RAYQUEUE
+    que, server_info = request_output_queue_server(output_queue_type)
+    asyncio.create_task(que.run_server_loop())
+    class DummyActor:
+        def __init__(self):
+            pass
+    dummy_actor = ray.remote(num_cpus=1,
+                                name="instance_0",
+                                namespace='llumnix',
+                                max_concurrency=4)(DummyActor)
+    dummy_actor = dummy_actor.remote()
+    sim_backend = MockBackendSim(instance_id="0",
+                                 output_queue_type=output_queue_type,
+                                 migration_config=migration_config,
+                                 profiling_result_file_path="",
+                                 engine_args=engine_args)
+
+    sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
+    request_id0 = random_uuid()
+    sim_backend.add_request(request_id0, server_info, math.inf, "hello world", sampling_params)
+
+    async def check_output_len():
+        request_output_queue = que
+        finished = False
+        output = None
+        while not finished:
+            request_outputs = await request_output_queue.get()
+            for request_output in request_outputs:
+                output = request_output.outputs[0]
+                finished = request_output.finished
+        assert output is not None and len(output.token_ids)==100
+
+    await check_output_len()
+
+    que.cleanup()

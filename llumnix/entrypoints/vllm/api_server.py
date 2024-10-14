@@ -186,6 +186,14 @@ async def generate(request: Request) -> Response:
 
 @app.post("/generate_benchmark")
 async def generate_benchmark(request: Request) -> Response:
+    """Generate completion for the request.
+
+    The request should be a JSON object with the following fields:
+    - prompt: the prompt to use for the generation.
+    - stream: whether to stream the results or not.
+    - other fields: the sampling parameters (See `SamplingParams` for details).
+    """
+    # We add some benchmark-related codes comparing to the generate API.
     request_dict = await request.json()
     prompt = request_dict.pop("prompt")
     _ = request_dict.pop("stream", False)
@@ -212,11 +220,12 @@ async def generate_benchmark(request: Request) -> Response:
         if hasattr(request_output, 'request_timestamps'):
             request_output.request_timestamps.api_server_generate_benchmark_timestamp_end = now
             record_per_token_latency_breakdown(per_token_latency_breakdown_dict, request_output.request_timestamps)
+    assert final_output is not None
 
     global num_finished_requests
     if log_requests:
-        logger.info("Finished request {}.".format(request_id))
         num_finished_requests += 1
+        logger.info("Finished request {}.".format(request_id))
         logger.info("num_finished_requests {}.".format(num_finished_requests))
 
     generation = final_output.outputs[0].text

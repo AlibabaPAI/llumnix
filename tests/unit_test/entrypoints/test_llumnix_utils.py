@@ -16,13 +16,13 @@ import pytest
 import ray
 
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.entrypoints.llumnix_entrypoints import (get_ip_address,
-                                                     launch_ray_cluster,
-                                                     init_manager,
-                                                     retry_manager_method_sync,
-                                                     retry_manager_method_async)
+from llumnix.entrypoints.utils import (get_ip_address,
+                                       launch_ray_cluster,
+                                       init_manager,
+                                       retry_manager_method_sync,
+                                       retry_manager_method_async)
 from llumnix.llm_engine_manager import MANAGER_ACTOR_NAME
-from llumnix.queue.utils import get_output_queue_server
+from llumnix.queue.utils import init_output_queue_server
 
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
@@ -46,7 +46,7 @@ def test_init_manager(setup_ray_env):
 def test_init_zmq(setup_ray_env):
     ip = '127.0.0.1'
     port = 1234
-    request_output_queue = get_output_queue_server(ip, port, 'zmq')
+    request_output_queue = init_output_queue_server(ip, port, 'zmq')
     assert request_output_queue is not None
 
 def test_retry_manager_method_sync(setup_ray_env):

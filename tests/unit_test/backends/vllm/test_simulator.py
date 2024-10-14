@@ -1,6 +1,7 @@
 import asyncio
 import pytest
 import ray
+import math
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -90,7 +91,7 @@ async def test_backend(setup_ray_env):
 
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     request_id0 = random_uuid()
-    sim_backend.add_request(request_id0, server_info, "hello world", sampling_params)
+    sim_backend.add_request(request_id0, server_info, math.inf, "hello world", sampling_params)
 
     async def check_output_len():
         request_output_queue = que

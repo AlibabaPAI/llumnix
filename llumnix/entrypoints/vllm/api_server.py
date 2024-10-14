@@ -23,12 +23,9 @@ import uvicorn
 import ray
 
 from vllm.sampling_params import SamplingParams
-from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncStream
 
-from llumnix.arg_utils import (LlumnixArgumentParser,
-                               LlumnixEntrypointsArgs,
-                               EngineManagerArgs)
+from llumnix.arg_utils import LlumnixArgumentParse
 from llumnix.entrypoints.llumnix_entrypoints import (get_ip_address,
                                                      launch_ray_cluster,
                                                      connect_to_ray_cluster,
@@ -36,9 +33,9 @@ from llumnix.entrypoints.llumnix_entrypoints import (get_ip_address,
                                                      init_llumnix_components,
                                                      init_per_token_latency_breakdown_dict,
                                                      record_per_token_latency_breakdown)
+from llumnix.entrypoints.vllm.utils import add_cli_args, get_args
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
-from llumnix.backends.vllm.utils import check_engine_args
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.utils import get_output_queue_server
 from llumnix.config import get_llumnix_config, LlumnixConfig
@@ -210,11 +207,11 @@ async def generate_benchmark(request: Request) -> Response:
             return Response(status_code=499)
         now = time.time()
         per_token_latency.append([now, (now - start)*1000])
+        start = now
+        final_output = request_output
         if hasattr(request_output, 'request_timestamps'):
             request_output.request_timestamps.api_server_generate_benchmark_timestamp_end = now
             record_per_token_latency_breakdown(per_token_latency_breakdown_dict, request_output.request_timestamps)
-        start = now
-        final_output = request_output
 
     global num_finished_requests
     if log_requests:
@@ -253,23 +250,9 @@ if __name__ == "__main__":
     parser.add_argument("--ssl-keyfile", type=str)
     parser.add_argument("--ssl-certfile", type=str)
 
-    parser.set_namespace("llumnix")
-    parser = LlumnixEntrypointsArgs.add_cli_args(parser)
-    parser = EngineManagerArgs.add_cli_args(parser)
-    parser.set_namespace("vllm")
-    parser = AsyncEngineArgs.add_cli_args(parser)
-    cli_args = parser.parse_args()
-
+    cli_args = add_cli_args(parser)
     cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
-    llumnix_entrypoints_args = LlumnixEntrypointsArgs.from_llumnix_config(cfg)
-    engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
-    EngineManagerArgs.check_args(engine_manager_args, parser)
-    engine_args = AsyncEngineArgs.from_cli_args(cli_args)
-    check_engine_args(engine_args, engine_manager_args)
-
-    logger.info("llumnix_entrypoints_args: {}".format(llumnix_entrypoints_args))
-    logger.info("engine_manager_args: {}".format(engine_manager_args))
-    logger.info("engine_args: {}".format(engine_args))
+    _, engine_manager_args, engine_args = get_args(cfg, parser, cli_args)
 
     if cfg.SERVER.LAUNCH_RAY_CLUSTER:
         # Launch the ray cluster for multi-node serving.
@@ -288,7 +271,6 @@ if __name__ == "__main__":
         request_output_queue = get_output_queue_server(ip, cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT, cfg.SERVER.QUEUE_TYPE)
         server_info = ServerInfo(server_id, cfg.SERVER.QUEUE_TYPE, request_output_queue, ip,
                                  cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
-
         for idx, ins_id in enumerate(instance_ids):
             instances[ins_id] = llumlets[idx]
             instance_num_requests[ins_id] = 0

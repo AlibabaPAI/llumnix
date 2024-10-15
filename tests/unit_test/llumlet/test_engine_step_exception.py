@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import threading
+import asyncio
 import time
 import ray
 import torch
@@ -32,24 +32,21 @@ from tests.conftest import setup_ray_env
 class MockLlumlet(Llumlet):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.origin_step = self.backend_engine.engine.step
+        self.origin_step = self.backend_engine.engine.step_async
 
     def set_error_step(self, broken: bool):
         self.backend_engine._stop_event.set()
 
-        def raise_error_step():
-            self.origin_step()
+        async def raise_error_step():
+            await self.origin_step()
             raise ValueError("Mock engine step error")
 
         if broken:
-            self.backend_engine.engine.step = raise_error_step
+            self.backend_engine.engine.step_async = raise_error_step
         else:
-            self.backend_engine.engine.step = self.origin_step
+            self.backend_engine.engine.step_async = self.origin_step
 
-        self.backend_engine.engine_step_loop_thread = threading.Thread(
-            target=self.backend_engine._start_engine_step_loop, args=(), daemon=True, name="engine_loop"
-        )
-        self.backend_engine.engine_step_loop_thread.start()
+        asyncio.create_task(self.backend_engine._start_engine_step_loop())
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(setup_ray_env):

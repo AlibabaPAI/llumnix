@@ -83,7 +83,7 @@ class MigrationCoordinator:
         migrate_out_request.stage_timestamps.append(time.time())
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)
         # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
-        self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
+        await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
         if not is_last_stage and migrate_out_request.should_abort_migration():
             # migrate-out request abort by scheduler during send/recv
             migration_status = MigrationStatus.ABORTED_SRC

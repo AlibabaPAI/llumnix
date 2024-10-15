@@ -59,7 +59,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
+    status = await coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.FINISHED_DONE
 
     migrate_out_request = MagicMock()
@@ -70,7 +70,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
+    status = await coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.ABORTED_DST
 
     migrate_out_request = MagicMock()
@@ -80,7 +80,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     migrate_out_request.should_abort_migration.return_value = True
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
+    status = await coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.ABORTED_SRC
 
     migrate_out_request = MagicMock()
@@ -90,12 +90,13 @@ async def test_migrate_out_onestage(setup_ray_env):
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = True
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
+    status = await coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.ABORTED_DST
 
 # setup_ray_env should be passed after migrate_out_onestage
 @patch.object(MigrationCoordinator, 'migrate_out_onestage')
-def test_migrate_out_multistage(_, setup_ray_env):
+@pytest.mark.asyncio
+async def test_migrate_out_multistage(_, setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
@@ -110,7 +111,7 @@ def test_migrate_out_multistage(_, setup_ray_env):
     migrate_in_ray_actor.execute_engine_method.remote.return_value = ray_remote_call.remote([1])
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote([1])
     coordinator.migrate_out_onestage.side_effect = [MigrationStatus.FINISHED_DONE]
-    status = coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
+    status = await coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
     assert coordinator.migrate_out_onestage.call_count == 1
     assert status == MigrationStatus.FINISHED_DONE
 
@@ -119,6 +120,6 @@ def test_migrate_out_multistage(_, setup_ray_env):
                                                     MigrationStatus.RUNNING,
                                                     MigrationStatus.RUNNING,
                                                     MigrationStatus.RUNNING]
-    status = coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
+    status = await coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
     assert coordinator.migrate_out_onestage.call_count == max_stages + 1
     assert status == MigrationStatus.ABORTED_SRC

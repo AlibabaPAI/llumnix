@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import math
 import ray
+import pytest
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.backends.backend_interface import BackendInterface
@@ -29,7 +30,8 @@ from .test_local_migration_scheduler import MockRequest
 def ray_remote_call(ret):
     return ret
 
-def test_migrate_out_onestage(setup_ray_env):
+@pytest.mark.asyncio
+async def test_migrate_out_onestage(setup_ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
@@ -47,7 +49,7 @@ def test_migrate_out_onestage(setup_ray_env):
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
 
     # Test normal migration scenario
-    status = coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
+    status = await coordinator.migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.RUNNING
 
     # Test the last stage of migration

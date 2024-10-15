@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import os
-import threading
+import asyncio
 from typing import List
 
 import ray.actor
@@ -49,15 +49,11 @@ class BackendSimVLLM(BackendVLLM):
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
 
-        self.state_lock = threading.Lock()
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
-        self._stop_event = threading.Event()
-        self.engine_step_loop_thread = threading.Thread(
-            target=self._start_engine_step_loop, args=(), daemon=True, name="engine_step_loop"
-        )
-        self.engine_step_loop_thread.start()
+        self._stop_event = asyncio.Event()
+        asyncio.create_task(self._start_engine_step_loop())
 
     def _get_lantecy_mem(self, profiling_result_file_path: str, engine_args: EngineArgs) -> LatencyMemData:
         # load database

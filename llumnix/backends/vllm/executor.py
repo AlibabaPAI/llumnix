@@ -12,6 +12,8 @@
 # limitations under the License.
 
 import time
+import asyncio
+
 from collections import defaultdict
 from typing import List, Optional, Tuple
 import ray
@@ -19,8 +21,9 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, Nod
 # pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
 
+from vllm.executor.executor_base import ExecutorBase
 from vllm.executor.gpu_executor import GPUExecutor
-from vllm.executor.ray_gpu_executor import RayGPUExecutor, RayWorkerWrapper, get_distributed_init_method,\
+from vllm.executor.ray_gpu_executor import RayGPUExecutorAsync, RayWorkerWrapper, get_distributed_init_method,\
                                            get_ip, get_vllm_instance_id, get_open_port
 
 from vllm import envs
@@ -34,7 +37,7 @@ from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_pre
 
 logger = init_logger(__name__)
 
-class LlumnixRayGPUExecutor(RayGPUExecutor):
+class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     node_id: str = None
     migration_config: MigrationConfig = None
 
@@ -157,17 +160,18 @@ class LlumnixRayGPUExecutor(RayGPUExecutor):
                           cache_config=self.cache_config,
                           parallel_config=self.parallel_config)
 
-    def execute_model(self, *args, **kwargs):
+    async def execute_model_async(self, *args, **kwargs):
         t0 = time.time()
-        outputs = super().execute_model(*args, **kwargs)
+        outputs = await super().execute_model_async(*args, **kwargs)
         t1 = time.time()
         self.last_inference_latency = (t1 - t0) * 1000
         return outputs
 
-class SimGPUExecutor(GPUExecutor):
+class SimGPUExecutor(RayGPUExecutorAsync):
     latency_mem: LatencyMemData = None
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+        ExecutorBase.__init__(self, *args, **kwargs)
+        # super().__init__(*args, **kwargs)
         self.last_inference_latency = 0
         self.migration_bandwidth = self.latency_mem.migration_bandwidth
         # TODO(ZeldaHuang): add swap bandwidth
@@ -191,7 +195,7 @@ class SimGPUExecutor(GPUExecutor):
                          num_cpu_blocks: int) -> None:
         logger.info("# GPU blocks: %d, # CPU blocks: %d", num_gpu_blocks, num_cpu_blocks)
 
-    def execute_model(
+    async def execute_model_async(
             self,
             execute_model_req: ExecuteModelRequest) -> List[SamplerOutput]:
         prefill_seq_len = 0
@@ -213,7 +217,7 @@ class SimGPUExecutor(GPUExecutor):
             decode_meta_data = (decode_bs, decode_seq_len)
             latency += self.latency_mem.decode_latency[decode_meta_data][0] if decode_meta_data in self.latency_mem.decode_latency \
                        else model_decode((decode_bs, decode_seq_len), *self.latency_mem.decode_model_params)
-        time.sleep(latency/1000)
+        await asyncio.sleep(latency/1000)
         sampler_outputs = []
         for meta_data in execute_model_req.seq_group_metadata_list:
             samples = []
@@ -225,6 +229,6 @@ class SimGPUExecutor(GPUExecutor):
                 sampler_outputs.append(output)
         return [SamplerOutput(outputs=sampler_outputs)]
 
-    def send_blocks(self, blocks_len) -> None:
+    async def send_blocks(self, blocks_len) -> None:
         migration_latency = (self.cache_block_size * blocks_len) / self.migration_bandwidth
-        time.sleep(migration_latency)
+        await asyncio.sleep(migration_latency)

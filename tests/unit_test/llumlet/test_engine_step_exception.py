@@ -36,8 +36,6 @@ class MockLlumlet(Llumlet):
 
     def set_error_step(self, broken: bool):
         self.backend_engine._stop_event.set()
-        if self.backend_engine.engine_step_loop_thread.is_alive():
-            self.backend_engine.engine_step_loop_thread.join()
 
         def raise_error_step():
             self.origin_step()

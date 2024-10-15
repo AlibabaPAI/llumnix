@@ -26,7 +26,8 @@ class MockBackendSim(BackendSimVLLM):
         latency_mem.decode_model_params = (0,0,0)
         return latency_mem
 
-def test_executor():
+@pytest.mark.asyncio
+async def test_executor():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     engine_config = engine_args.create_engine_config()
     latency_mem = LatencyMemData({},{},{})
@@ -62,7 +63,7 @@ def test_executor():
                 num_lookahead_slots=out.num_lookahead_slots,
                 running_queue_size=out.running_queue_size,
             )
-    outputs = executor.execute_model(execute_model_req)
+    outputs = await executor.execute_model_async(execute_model_req)
     assert len(outputs[0].outputs) == 2
 
 @pytest.mark.asyncio

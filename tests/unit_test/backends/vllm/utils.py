@@ -30,7 +30,6 @@ from llumnix.server_info import ServerInfo
 class SchedulerLlumnixTest(SchedulerLlumnix):
     def add_seq_group(self, *args, **kwargs):
         ret = super().add_seq_group(*args, **kwargs)
-        self.scheduler_lock.release()
         return ret
 
 

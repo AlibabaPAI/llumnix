@@ -26,25 +26,18 @@ from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 from llumnix.server_info import ServerInfo
 
-
-class SchedulerLlumnixTest(SchedulerLlumnix):
-    def add_seq_group(self, *args, **kwargs):
-        ret = super().add_seq_group(*args, **kwargs)
-        return ret
-
-
 def initialize_scheduler(*,
                          max_num_seqs=1000,
                          max_token_budget=1000,
                          max_model_len=1000,
-                         lora_config=None) -> SchedulerLlumnixTest:
+                         lora_config=None) -> SchedulerLlumnix:
     block_size = 4
     scheduler_config = SchedulerConfig(max_token_budget, max_num_seqs,
                                        max_model_len)
     cache_config = CacheConfig(block_size, 1.0, 1, "auto")
     cache_config.num_cpu_blocks = 8
     cache_config.num_gpu_blocks = 8
-    scheduler = SchedulerLlumnixTest(scheduler_config, cache_config, lora_config)
+    scheduler = SchedulerLlumnix(scheduler_config, cache_config, lora_config)
     scheduler.update_instance_info_callback = MagicMock()
     return scheduler
 

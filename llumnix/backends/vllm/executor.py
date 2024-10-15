@@ -22,8 +22,8 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, Nod
 from ray.util.placement_group import PlacementGroup
 
 from vllm.executor.executor_base import ExecutorBase
-from vllm.executor.ray_gpu_executor import RayGPUExecutorAsync, RayWorkerWrapper, get_distributed_init_method,\
-                                           get_ip, get_vllm_instance_id, get_open_port
+from vllm.executor.ray_gpu_executor import RayGPUExecutor, RayGPUExecutorAsync, RayWorkerWrapper,\
+                                           get_distributed_init_method, get_ip, get_vllm_instance_id, get_open_port
 
 from vllm import envs
 from vllm.sequence import Logprob, SequenceOutput, SequenceGroupOutput, SamplerOutput, ExecuteModelRequest
@@ -166,10 +166,10 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         self.last_inference_latency = (t1 - t0) * 1000
         return outputs
 
-class SimGPUExecutor(RayGPUExecutorAsync, ExecutorBase):
+class SimGPUExecutor(RayGPUExecutor):
     latency_mem: LatencyMemData = None
     def __init__(self, *args, **kwargs) -> None:
-        ExecutorBase.__init__(self, *args, **kwargs)
+        RayGPUExecutor.__init__(self, *args, **kwargs)
         self.last_inference_latency = 0
         self.migration_bandwidth = self.latency_mem.migration_bandwidth
         # TODO(ZeldaHuang): add swap bandwidth

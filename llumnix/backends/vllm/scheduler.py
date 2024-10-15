@@ -13,7 +13,6 @@
 
 from asyncio.log import logger
 import time
-import threading
 from typing import Dict, List, Optional, Tuple
 from collections import deque
 
@@ -23,7 +22,6 @@ from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, Sequ
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
 from llumnix.llumlet.request import RequestInferenceType
-from llumnix.backends.vllm.utils import scheduler_lock
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 
 logger = init_logger(__name__)
@@ -209,11 +207,3 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in remove_running:
             remaining_running.extend([seq_group])
         return remaining_running, running_scheduled
-
-    def add_seq_group(self, *args, **kwargs):
-        # The scheduler lock is mannually released in the end of LLMEngineLlumnix.add_request function.
-        # pylint: disable=R1732
-        return super().add_seq_group(*args, **kwargs)
-
-    def abort_seq_group(self, *args, **kwargs):
-        return super().abort_seq_group(*args, **kwargs)

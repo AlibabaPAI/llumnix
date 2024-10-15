@@ -15,6 +15,7 @@ import time
 import enum
 from typing import List
 
+# pylint: disable=unused-import
 import ray
 
 from llumnix.logger import init_logger

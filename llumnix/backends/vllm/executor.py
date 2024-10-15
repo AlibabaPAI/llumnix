@@ -195,7 +195,7 @@ class SimGPUExecutor(RayGPUExecutor):
 
     async def execute_model_async(
             self,
-            execute_model_req: ExecuteModelRequest, *args) -> List[SamplerOutput]:
+            execute_model_req: ExecuteModelRequest) -> List[SamplerOutput]:
         prefill_seq_len = 0
         decode_seq_len = 0
         decode_bs = 0

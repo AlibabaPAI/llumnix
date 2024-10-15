@@ -27,6 +27,7 @@ from llumnix.entrypoints.utils import (setup_ray_cluster,
                                        setup_llumnix,
                                        is_gpu_available,
                                        LlumnixEntrypointsContext,
+                                       _background_process_outputs,
                                        init_per_token_latency_breakdown_dict,
                                        record_per_token_latency_breakdown)
 from llumnix.entrypoints.vllm.utils import (add_cli_args,
@@ -45,27 +46,11 @@ TIMEOUT_KEEP_ALIVE = 5  # seconds.
 llumnix_context: LlumnixEntrypointsContext = None
 
 
-async def _background_process_outputs():
-    while True:
-        request_outputs = await llumnix_context.request_output_queue.get()
-        for request_output in request_outputs:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
-        for request_output in request_outputs:
-            request_id = request_output.request_id
-            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-            if request_id not in llumnix_context.request_streams:
-                continue
-            llumnix_context.request_streams[request_id].put(request_output)
-            if request_output.finished:
-                llumnix_context.request_streams[request_id].finish()
-                del llumnix_context.request_streams[request_id]
-
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
     asyncio.create_task(llumnix_context.request_output_queue.run_server_loop())
-    asyncio.create_task(_background_process_outputs())
+    asyncio.create_task(_background_process_outputs(llumnix_context))
     yield
     llumnix_context.request_output_queue.cleanup()
 
@@ -93,6 +78,7 @@ async def generate(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
+    # Use manager_generate and manager_abort to replace with vllm async engine generate and abort api.
     results_generator = await manager_generate(prompt, sampling_params, request_id, llumnix_context)
 
     # Streaming case
@@ -132,7 +118,7 @@ async def generate_benchmark(request: Request) -> Response:
     - stream: whether to stream the results or not.
     - other fields: the sampling parameters (See `SamplingParams` for details).
     """
-    # We add some benchmark-related codes comparing to the generate API.
+    # Add some benchmark-related codes comparing to the generate API.
     request_dict = await request.json()
     prompt = request_dict.pop("prompt")
     _ = request_dict.pop("stream", False)
@@ -200,6 +186,7 @@ if __name__ == "__main__":
     cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
     _, engine_manager_args, engine_args = get_args(cfg, parser, cli_args)
 
+    # Launch or connect to the ray cluster for multi-node serving.
     setup_ray_cluster(cfg)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components

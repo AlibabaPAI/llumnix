@@ -36,10 +36,8 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
             assert 'default' not in kwargs or kwargs['default'] is None, \
                 f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
                 f"The default value will be retrieved from config/default.py in get_llumnix_config."
-
             if kwargs.get('action') == 'store_true':
                 kwargs['default'] = None
-
         super().add_argument(*args, **kwargs)
 
 
@@ -93,7 +91,6 @@ class LlumnixEntrypointsArgs:
         parser.add_argument("--config-file",
                             type=str,
                             help="path to config file")
-
         return parser
 
 @dataclass

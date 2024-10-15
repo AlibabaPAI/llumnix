@@ -57,7 +57,7 @@ def get_ip_address():
     ip_address = socket.gethostbyname(hostname)
     return ip_address
 
-def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
+def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     head_node_ip = os.getenv('HEAD_NODE_IP')
     node_ip_address = get_ip_address()
     try:
@@ -72,18 +72,18 @@ def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
         sys.exit(1)
     ray_start_command = None
     if 'HEAD_NODE' in os.environ:
-        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={ray_cluster_port}"
+        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
         try:
-            result = subprocess.run(['ray', 'start', '--head', f'--port={ray_cluster_port}'], check=True, text=True, capture_output=True)
+            result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             logger.info("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
             sys.exit(1)
     else:
-        ray_start_command = f"ray start --address={head_node_ip}:{ray_cluster_port} --node-ip-address={node_ip_address}"
+        ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
         for attempt in range(MAX_RESTARTS):
             try:
                 # wait about 2 mins by default
-                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{ray_cluster_port}'], check=True, text=True, capture_output=True)
+                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'], check=True, text=True, capture_output=True)
                 break
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RESTARTS:
@@ -101,9 +101,7 @@ def connect_to_ray_cluster(port: int, namespace="llumnix") -> None:
 
 def setup_ray_cluster(cfg):
     if cfg.SERVER.LAUNCH_RAY_CLUSTER:
-        # Launch the ray cluster for multi-node serving.
         launch_ray_cluster(cfg.SERVER.RAY_CLUSTER_PORT)
-    # Connect to a ray cluster.
     connect_to_ray_cluster(port=cfg.SERVER.RAY_CLUSTER_PORT)
 
 def is_gpu_available() -> bool:
@@ -261,6 +259,22 @@ def setup_llumnix(engine_manager_args, engine_args, cfg):
     context.log_request_timestamps = log_request_timestamps
 
     return context
+
+async def _background_process_outputs(llumnix_context):
+    while True:
+        request_outputs = await llumnix_context.request_output_queue.get()
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
+        for request_output in request_outputs:
+            request_id = request_output.request_id
+            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+            if request_id not in llumnix_context.request_streams:
+                continue
+            llumnix_context.request_streams[request_id].put(request_output)
+            if request_output.finished:
+                llumnix_context.request_streams[request_id].finish()
+                del llumnix_context.request_streams[request_id]
 
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {

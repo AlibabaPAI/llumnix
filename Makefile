@@ -49,6 +49,10 @@ e2e_test:
 bench_test:
 	@pytest -v ./tests/e2e_test/test_bench.py
 
+.PHONY: migration_test
+migration_test:
+	@pytest -v -x ./tests/e2e_test/test_migration.py
+
 #################### pygloo install for gloo migration backend begin ####################
 
 BAZEL_CMD = bazel

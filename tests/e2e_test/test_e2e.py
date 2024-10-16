@@ -118,6 +118,7 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
             f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
         )
     return command
+
 def launch_llumnix_service(model: str, max_model_len: int, port: int, migration_backend: str, launch_mode: str):
     command = generate_launch_command(model=model, max_model_len=max_model_len,
                                       port=port, migration_backend=migration_backend,

@@ -13,7 +13,6 @@
 
 from asyncio.log import logger
 import time
-import threading
 from typing import Dict, List, Optional, Tuple
 from collections import deque
 
@@ -23,7 +22,6 @@ from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, Sequ
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
 from llumnix.llumlet.request import RequestInferenceType
-from llumnix.backends.vllm.utils import scheduler_lock
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 
 logger = init_logger(__name__)
@@ -56,7 +54,6 @@ class SchedulerLlumnix(Scheduler):
             sliding_window=self.cache_config.sliding_window,
             enable_caching=self.cache_config.enable_prefix_caching)
         self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
-        self.scheduler_lock = threading.Lock()
         self.migrating_out_request_last_stage: List[SequenceGroupLlumnix] = []
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
@@ -79,11 +76,9 @@ class SchedulerLlumnix(Scheduler):
                 cnt += 1
         return cnt
 
-    @scheduler_lock
     def get_running_queue(self):
         return self.running
 
-    @scheduler_lock
     def get_all_request_ids(self) -> List[str]:
         request_ids : List[str] = []
         for state_queue in [self.waiting, self.running, self.swapped]:
@@ -91,13 +86,11 @@ class SchedulerLlumnix(Scheduler):
                 request_ids.append(seq_group.request_id)
         return request_ids
 
-    @scheduler_lock
     def get_request_incremental_blocks(self, backend_request: SequenceGroupLlumnix, pre_stage_num_blocks: int) -> List[int]:
         seq = backend_request.get_seqs()[0]
         blocks = self.block_manager.get_block_table(seq)
         return blocks[pre_stage_num_blocks:]
 
-    @scheduler_lock
     def remove_running_request(self, request_id: str) -> None:
         for seq_group in self.running:
             if seq_group.request_id == request_id:
@@ -117,7 +110,6 @@ class SchedulerLlumnix(Scheduler):
         self.migrating_out_request_last_stage.clear()
         return migrating_out_request_last_stage
 
-    @scheduler_lock
     def pre_alloc(self, request_id: str, block_num: int) -> List[int]:
         blocks = self.block_manager.get_free_blocks(block_num)
         pre_blocks = self.pre_alloc_cache_dict.get(request_id, [])
@@ -126,17 +118,14 @@ class SchedulerLlumnix(Scheduler):
         blocks = [block.block_number for block in blocks]
         return blocks
 
-    @scheduler_lock
     def add_running_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.status = SequenceStatus.RUNNING
         self.running.append(backend_request)
 
-    @scheduler_lock
     def is_request_running(self, backend_request: SequenceGroupLlumnix) -> bool:
         return backend_request in self.running
 
-    @scheduler_lock
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
         if request_id:
             blocks = self.pre_alloc_cache_dict.pop(request_id, [])
@@ -150,7 +139,6 @@ class SchedulerLlumnix(Scheduler):
                 # pylint: disable=protected-access
                 self.block_manager._free_block_table(blocks)
 
-    @scheduler_lock
     def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         logger.info("free seq {}".format(seq.seq_id))
@@ -201,7 +189,6 @@ class SchedulerLlumnix(Scheduler):
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]
         return instance_info
 
-    @scheduler_lock
     def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
         seq_group_metadata_list, scheduler_outputs = super().schedule()
         self.update_instance_info_callback(self._get_instance_info([scheduled_seq_group.seq_group \
@@ -220,13 +207,3 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in remove_running:
             remaining_running.extend([seq_group])
         return remaining_running, running_scheduled
-
-    def add_seq_group(self, *args, **kwargs):
-        # The scheduler lock is mannually released in the end of LLMEngineLlumnix.add_request function.
-        # pylint: disable=R1732
-        self.scheduler_lock.acquire()
-        return super().add_seq_group(*args, **kwargs)
-
-    @scheduler_lock
-    def abort_seq_group(self, *args, **kwargs):
-        return super().abort_seq_group(*args, **kwargs)

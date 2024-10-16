@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import threading
+import asyncio
 import traceback
 from typing import List, Union, Iterable
 import time
@@ -55,9 +55,7 @@ class Llumlet:
                                                             self.backend_engine)
             self.log_requests = True
 
-            self.check_state_thread = threading.Thread(target=self.check_state, daemon=True,
-                                                    name="llumlet_check_state_loop")
-            self.check_state_thread.start()
+            self.check_state_thread = asyncio.create_task(self.check_state())
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))
@@ -120,22 +118,17 @@ class Llumlet:
         llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 
-    def check_state(self):
+    async def check_state(self):
         while True:
-            time.sleep(1)
+            await asyncio.sleep(1)
+            if self.backend_engine.state == EngineState.CRASHED:
+                logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
+                # pylint: disable=protected-access
+                self.backend_engine._stop_event.set()
+                self_actor = ray.get_actor(self.actor_name)
+                ray.kill(self_actor)
 
-            with self.backend_engine.state_lock:
-                if self.backend_engine.state == EngineState.CRASHED:
-                    logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
-                    # pylint: disable=protected-access
-                    self.backend_engine._stop_event.set()
-                    if self.backend_engine.engine_step_loop_thread.is_alive():
-                        self.backend_engine.engine_step_loop_thread.join()
-
-                    self_actor = ray.get_actor(self.actor_name)
-                    ray.kill(self_actor)
-
-    def migrate_out(self, dst_instance_name: str, num_requests: int) -> List[str]:
+    async def migrate_out(self, dst_instance_name: str, num_requests: int) -> List[str]:
         try:
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
             dst_instance_id = dst_instance_name[len("instance_"):]
@@ -149,16 +142,16 @@ class Llumlet:
                 if migrate_out_request is None:
                     return migrated_request_list
                 logger.info("{}->{} begin migrate out {}".format(self.instance_id, dst_instance_id, migrate_out_request.request_id))
-                status = self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
+                status = await self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
                 if status == MigrationStatus.FINISHED_DONE:
-                    ray.get(migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request))
+                    await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
                     self.backend_engine.free_src_request(migrate_out_request)
                     migrated_request_list.append(migrate_out_request.request_id)
                     migrate_out_request.stage_timestamps.append(time.time())
                     self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
                 else:
                     migrate_out_request.reset_migration_args()
-                    ray.get(migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id))
+                    await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
                     continue_migrate = False
                 t1 = time.time()
                 logger.info("{}->{} migrate done, migrate request {}, status:{}, len:{} blocks, cost:{} ms" \

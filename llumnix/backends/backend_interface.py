@@ -68,7 +68,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _start_engine_step_loop(self) -> None:
+    async def _start_engine_step_loop(self) -> None:
         """Start step loop of backend engine.
         """
         raise NotImplementedError
@@ -244,7 +244,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
+    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
         """
         Sends cache blocks from the source instance to the destination instance.
 

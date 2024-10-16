@@ -22,7 +22,7 @@ import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
-from vllm.engine.llm_engine import LLMEngine
+from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
 from vllm.outputs import RequestOutput
 from vllm.sequence import SequenceGroup, SequenceStatus, SamplerOutput, SequenceGroupMetadata
@@ -82,7 +82,7 @@ class AsyncPutQueueActor:
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
 
-class LLMEngineLlumnix(LLMEngine):
+class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
                  output_queue_type: QueueType,
@@ -171,38 +171,37 @@ class LLMEngineLlumnix(LLMEngine):
         seq_group_metadata_list: List[SequenceGroupMetadata],
     ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         # ensure scheduled_seq_groups matching output
-        with self.scheduler.scheduler_lock:
-            server_infos = []
-            if output:
-                new_output = []
-                new_scheduled_seq_groups = []
-                new_seq_group_metadata_list = []
-                for scheduled_seq_group, seq_group_meta, seq_group_output in zip(scheduled_seq_groups, seq_group_metadata_list, output[0].outputs):
-                    seq_group = scheduled_seq_group.seq_group
-                    if seq_group.get_seqs(SequenceStatus.RUNNING):
-                        new_scheduled_seq_groups.append(scheduled_seq_group)
-                        new_seq_group_metadata_list.append(seq_group_meta)
-                        new_output.append(seq_group_output)
-                        server_infos.append(seq_group.server_info)
-                scheduled_seq_groups = new_scheduled_seq_groups
-                output[0].outputs = new_output
-                seq_group_metadata_list = new_seq_group_metadata_list
-            for ignored_seq_group in ignored_seq_groups:
-                server_infos.append(ignored_seq_group.server_info)
-            for server_info in server_infos:
-                if hasattr(server_info, 'request_timestamps'):
-                    server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
-            request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
-            for request_output, server_info in zip(request_outputs, server_infos):
-                if hasattr(server_info, 'request_timestamps'):
-                    request_output.request_timestamps = server_info.request_timestamps
-                    request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
-            # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
-            return request_outputs, server_infos
+        server_infos = []
+        if output:
+            new_output = []
+            new_scheduled_seq_groups = []
+            new_seq_group_metadata_list = []
+            for scheduled_seq_group, seq_group_meta, seq_group_output in zip(scheduled_seq_groups, seq_group_metadata_list, output[0].outputs):
+                seq_group = scheduled_seq_group.seq_group
+                if seq_group.get_seqs(SequenceStatus.RUNNING):
+                    new_scheduled_seq_groups.append(scheduled_seq_group)
+                    new_seq_group_metadata_list.append(seq_group_meta)
+                    new_output.append(seq_group_output)
+                    server_infos.append(seq_group.server_info)
+            scheduled_seq_groups = new_scheduled_seq_groups
+            output[0].outputs = new_output
+            seq_group_metadata_list = new_seq_group_metadata_list
+        for ignored_seq_group in ignored_seq_groups:
+            server_infos.append(ignored_seq_group.server_info)
+        for server_info in server_infos:
+            if hasattr(server_info, 'request_timestamps'):
+                server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
+        request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+        for request_output, server_info in zip(request_outputs, server_infos):
+            if hasattr(server_info, 'request_timestamps'):
+                request_output.request_timestamps = server_info.request_timestamps
+                request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+        # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
+        return request_outputs, server_infos
 
-    def step(self) -> None:
+    async def step_async(self) -> None:
         step_begin_time = time.time()
-        request_outputs, server_infos = super().step()
+        request_outputs, server_infos = await super().step_async()
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
@@ -251,7 +250,6 @@ class LLMEngineLlumnix(LLMEngine):
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
                                                           seq_group.sampling_params, seq_group.metrics.arrival_time, seq_group.lora_request,
                                                           seq_group.multi_modal_data)
-        self.scheduler.scheduler_lock.release()
 
     def _start_put_queue_loop(self):
         while True:
@@ -301,45 +299,38 @@ class BackendVLLM(BackendInterface):
                                                       src_worker_handle_list=self.worker_handle_list,
                                                       placement_group=placement_group, node_id=node_id)
 
-        self.state_lock = threading.Lock()
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
-        self._stop_event = threading.Event()
-        self.engine_step_loop_thread = threading.Thread(
-            target=self._start_engine_step_loop, args=(), daemon=True, name="engine_step_loop"
-        )
-        self.engine_step_loop_thread.start()
+        self._stop_event = asyncio.Event()
+        asyncio.create_task(self._start_engine_step_loop())
 
-    def _start_engine_step_loop(self) -> None:
+    async def _start_engine_step_loop(self) -> None:
         self._stop_event.clear()
 
-        with self.state_lock:
-            previous_state = self.state
-            self.state = EngineState.RUNNING
-            logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+        previous_state = self.state
+        self.state = EngineState.RUNNING
+        logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
 
         while not self._stop_event.is_set():
             try:
-                request_outputs, _ = self.engine.step()
+                request_outputs, _ = await self.engine.step_async()
                 if len(request_outputs) == 0:
-                    time.sleep(0.01)
+                    await asyncio.sleep(0.01)
             # pylint: disable=broad-except
             except Exception as e:
                 logger.error("Error in engine loop: {}".format(e))
                 logger.error("exception traceback: {}".format(traceback.format_exc()))
                 self._run_workers("shutdown")
 
-                with self.state_lock:
-                    previous_state = self.state
-                    self.state = EngineState.CRASHED
-                    logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+                previous_state = self.state
+                self.state = EngineState.CRASHED
+                logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
                 break
 
-        with self.state_lock:
-            if self.state == EngineState.RUNNING:
-                self.state = EngineState.STOPPED
-                logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+        if self.state == EngineState.RUNNING:
+            self.state = EngineState.STOPPED
+            logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def execute_worker_method(self, method, *args, **kwargs):
         return self.engine.model_executor.driver_worker.execute_method(method, *args, **kwargs)
@@ -362,12 +353,12 @@ class BackendVLLM(BackendInterface):
         backend_request.reset_migration_args()
         self.add_running_request(backend_request)
 
-    def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
-        ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",
+    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+        await dst_ray_actor.execute_engine_method.remote("_run_workers",
                                                            "migrate_cache",
                                                            dst_blocks=dst_blocks,
                                                            src_blocks=src_blocks,
-                                                           src_worker_handle_list=self.worker_handle_list))
+                                                           src_worker_handle_list=self.worker_handle_list)
 
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access

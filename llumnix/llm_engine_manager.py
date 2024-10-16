@@ -77,8 +77,6 @@ class LLMEngineManager:
         self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
-        # When manager starts, it automatically connects to all existing instances.
-        self._connect_to_instances()
 
         self.polling_interval = engine_manager_args.polling_interval
         asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
@@ -107,6 +105,9 @@ class LLMEngineManager:
         if self.log_instance_info:
             self._init_instance_info_csv(engine_manager_args)
             self.instance_last_logged_empty = {}
+
+        # When manager starts, it automatically connects to all existing instances.
+        self._connect_to_instances()
 
     async def generate(
             self,

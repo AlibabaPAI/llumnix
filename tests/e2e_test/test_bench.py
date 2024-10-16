@@ -16,7 +16,6 @@ import json
 import os
 import subprocess
 import pytest
-import ray
 import torch
 import numpy as np
 

@@ -122,7 +122,7 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
 def launch_llumnix_service(model: str, max_model_len: int, port: int, migration_backend: str, launch_mode: str):
     command = generate_launch_command(model=model, max_model_len=max_model_len,
                                       port=port, migration_backend=migration_backend,
-                                      launch_mode=launch_mode)    
+                                      launch_mode=launch_mode)
     subprocess.run(command, shell=True, check=True)
 
 def shutdown_llumnix_service():

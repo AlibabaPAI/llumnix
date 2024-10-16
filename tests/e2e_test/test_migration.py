@@ -111,7 +111,7 @@ async def test_migration_benchmark(model, migration_backend):
         assert process.returncode == 0
 
     for i in range(device_count//2):
-        bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=10,
+        bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=300,
                                                dataset_type="sharegpt",
                                                dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
                                                qps=10)

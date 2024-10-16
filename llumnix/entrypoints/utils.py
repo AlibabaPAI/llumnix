@@ -30,7 +30,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.queue.utils import init_output_queue_server
 
-logger = init_logger("llumnix.api_server")
+logger = init_logger(__name__)
 
 # TODO(s5u13b): Set the values through tests.
 MAX_RESTARTS = 30

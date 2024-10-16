@@ -39,7 +39,8 @@ from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config, LlumnixConfig
 
-logger = init_logger("llumnix.api_server")
+# Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
+logger = init_logger("llumnix.entrypoints.vllm.api_server")
 
 TIMEOUT_KEEP_ALIVE = 5  # seconds.
 

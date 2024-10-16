@@ -13,7 +13,7 @@ from llumnix.logger import init_logger
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
 from llumnix.server_info import RequestTimestamps
 
-logger = init_logger("llumnix.api_server")
+logger = init_logger(__name__)
 
 WAIT_MANAGER_INTERVAL = 5
 
@@ -29,6 +29,7 @@ def add_cli_args(parser):
 
 def get_args(cfg, parser, cli_args):
     llumnix_entrypoints_args = LlumnixEntrypointsArgs.from_llumnix_config(cfg)
+    LlumnixEntrypointsArgs.check_args(llumnix_entrypoints_args, parser)
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
     EngineManagerArgs.check_args(engine_manager_args, parser)
     engine_args = AsyncEngineArgs.from_cli_args(cli_args)

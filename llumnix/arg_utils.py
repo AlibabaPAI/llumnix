@@ -41,7 +41,7 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
         super().add_argument(*args, **kwargs)
 
 
-# All the default values of llumnix arguments are setted in default.py. So all the arguments here are setted to None.
+# All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None.
 
 @dataclass
 class LlumnixEntrypointsArgs:
@@ -66,6 +66,13 @@ class LlumnixEntrypointsArgs:
         # The defalut values of attributes are defined in default.py.
         llumnix_entrypoints_args = cls(**{attr: getattr(cfg.SERVER, attr.upper()) for attr in attrs})
         return llumnix_entrypoints_args
+
+    @classmethod
+    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: argparse.ArgumentParser):
+        # pylint: disable=protected-access
+        for action in parser._optionals._actions:
+            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
+                assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:

@@ -21,34 +21,107 @@ import torch
 from vllm import LLM, SamplingParams
 
 def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool = True, HEAD_NODE_IP: str = "127.0.0.1",
-                            ip: str = "127.0.0.1", port: int = 1234, instances_num = 1, dispatch_policy: str = "load",
-                            migration_backend = "rpc", model = "facebook/opt-125m", max_model_len: int = 2048):
-    command = (
-        f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
-        f"nohup python -m llumnix.entrypoints.vllm.api_server "
-        f"--host {ip} "
-        f"--port {port} "
-        f"--initial-instances {instances_num} "
-        f"--enable-migration "
-        f"--model {model} "
-        f"--engine-use-ray "
-        f"--worker-use-ray "
-        f"--max-model-len {max_model_len} "
-        f"--dispatch-policy {dispatch_policy} "
-        f"--trust-remote-code "
-        f"--request-migration-policy LCFS "
-        f"--migration-backend {migration_backend} "
-        f"--migration-cache-blocks 32 "
-        f"--tensor-parallel-size 1 "
-        f"--request-output-queue-port {1234+port} "
-        f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
-        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
-    )
+                            ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
+                            migration_backend = "gloo", model = "facebook/opt-125m", max_model_len: int = 2048,
+                            launch_mode: str = 'eief'):
+    # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
+    if launch_mode == 'eief':
+        command = (
+            f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+            f"nohup python -m llumnix.entrypoints.vllm.api_server "
+            f"--host {ip} "
+            f"--port {port} "
+            f"--initial-instances {instances_num} "
+            f"--enable-migration "
+            f"--model {model} "
+            f"--engine-use-ray "
+            f"--worker-use-ray "
+            f"--max-model-len {max_model_len} "
+            f"--dispatch-policy {dispatch_policy} "
+            f"--trust-remote-code "
+            f"--request-migration-policy LCFS "
+            f"--migration-backend {migration_backend} "
+            f"--migration-cache-blocks 32 "
+            f"--tensor-parallel-size 1 "
+            f"--request-output-queue-port {1234+port} "
+            f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
+            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+        )
+    elif launch_mode == 'eidf':
+        command = (
+            f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+            f"nohup python -m llumnix.entrypoints.vllm.api_server "
+            f"--host {ip} "
+            f"--port {port} "
+            f"--disable-fixed-node-init-instance "
+            f"--initial-instances {instances_num} "
+            f"--enable-migration "
+            f"--model {model} "
+            f"--engine-use-ray "
+            f"--worker-use-ray "
+            f"--max-model-len {max_model_len} "
+            f"--dispatch-policy {dispatch_policy} "
+            f"--trust-remote-code "
+            f"--request-migration-policy LCFS "
+            f"--migration-backend {migration_backend} "
+            f"--migration-cache-blocks 32 "
+            f"--tensor-parallel-size 1 "
+            f"--request-output-queue-port {1234+port} "
+            f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
+            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+        )
+    elif launch_mode == 'dief':
+        command = (
+            f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+            f"nohup python -m llumnix.entrypoints.vllm.api_server "
+            f"--host {ip} "
+            f"--port {port} "
+            f"--disable-init-instance-by-manager "
+            f"--initial-instances {instances_num} "
+            f"--enable-migration "
+            f"--model {model} "
+            f"--engine-use-ray "
+            f"--worker-use-ray "
+            f"--max-model-len {max_model_len} "
+            f"--dispatch-policy {dispatch_policy} "
+            f"--trust-remote-code "
+            f"--request-migration-policy LCFS "
+            f"--migration-backend {migration_backend} "
+            f"--migration-cache-blocks 32 "
+            f"--tensor-parallel-size 1 "
+            f"--request-output-queue-port {1234+port} "
+            f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
+            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+        )
+    else: # launch_mode == 'didf':
+        command = (
+            f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+            f"nohup python -m llumnix.entrypoints.vllm.api_server "
+            f"--host {ip} "
+            f"--port {port} "
+            f"--disable-init-instance-by-manager "
+            f"--disable-fixed-node-init-instance "
+            f"--initial-instances {instances_num} "
+            f"--enable-migration "
+            f"--model {model} "
+            f"--engine-use-ray "
+            f"--worker-use-ray "
+            f"--max-model-len {max_model_len} "
+            f"--dispatch-policy {dispatch_policy} "
+            f"--trust-remote-code "
+            f"--request-migration-policy LCFS "
+            f"--migration-backend {migration_backend} "
+            f"--migration-cache-blocks 32 "
+            f"--tensor-parallel-size 1 "
+            f"--request-output-queue-port {1234+port} "
+            f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
+            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+        )
     return command
-
-def launch_llumnix_service(model: str, max_model_len: int, port: int, migration_backend: str):
+def launch_llumnix_service(model: str, max_model_len: int, port: int, migration_backend: str, launch_mode: str):
     command = generate_launch_command(model=model, max_model_len=max_model_len,
-                                      port=port, migration_backend=migration_backend)
+                                      port=port, migration_backend=migration_backend,
+                                      launch_mode=launch_mode)    
     subprocess.run(command, shell=True, check=True)
 
 def shutdown_llumnix_service():
@@ -110,7 +183,10 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for e2e test")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
-async def test_e2e(model, migration_backend):
+@pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
+async def test_e2e(model, migration_backend, launch_mode):
+    if migration_backend == 'gloo' and launch_mode != 'eief':
+        pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")
     max_model_len = 370
     sampling_params = {
         "n": 1,
@@ -123,7 +199,7 @@ async def test_e2e(model, migration_backend):
 
     # generate llumnix outputs
     base_port = 37037
-    launch_llumnix_service(model, max_model_len, base_port, migration_backend)
+    launch_llumnix_service(model, max_model_len, base_port, migration_backend, launch_mode)
     await asyncio.sleep(60)
 
     llumnix_output = {}

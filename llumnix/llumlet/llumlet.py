@@ -141,14 +141,14 @@ class Llumlet:
                 break
         return migrated_request_list
 
-    async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str):
+    async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
         try:
             t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
             dst_instance_id = dst_instance_name[len("instance_"):]
             logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
             migrated_request = []
-            assert migrate_out_request.status in [RequestStatus.WAITING, RequestStatus.RUNNING], "Only migrate out waiting/running request"
+            assert migrate_out_request.status in [RequestStatus.WAITING, RequestStatus.RUNNING], "Only migrate out waiting and running request"
             if migrate_out_request.status == RequestStatus.RUNNING:
                 status = await self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
             else:

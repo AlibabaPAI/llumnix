@@ -13,7 +13,7 @@
 
 import math
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
 class MockRequest(LlumnixRequest):
     def __init__(self, request_id, length, expected_steps) -> None:
@@ -32,11 +32,11 @@ class MockRequest(LlumnixRequest):
 
     @property
     def request_len(self) -> int:
-        pass
+        return self.length
 
     @property
     def prompt_len(self) -> int:
-        pass
+        return self.length
 
     @property
     def output_len(self) -> int:
@@ -48,7 +48,7 @@ class MockRequest(LlumnixRequest):
 
     @property
     def status(self) -> RequestStatus:
-        pass
+        return self._status
 
     @property
     def prefill_num_blocks(self) -> int:

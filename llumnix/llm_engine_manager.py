@@ -77,8 +77,6 @@ class LLMEngineManager:
         self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
-        # When manager starts, it automatically connects to all existing instances.
-        self._connect_to_instances()
 
         self.polling_interval = engine_manager_args.polling_interval
         asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
@@ -106,6 +104,10 @@ class LLMEngineManager:
         self.log_instance_info = engine_manager_args.log_instance_info
         if self.log_instance_info:
             self._init_instance_info_csv(engine_manager_args)
+            self.instance_last_logged_empty = {}
+
+        # When manager starts, it automatically connects to all existing instances.
+        self._connect_to_instances()
 
     async def generate(
             self,
@@ -352,6 +354,8 @@ class LLMEngineManager:
                 indeed_update = True
                 self.instances[ins_id] = llumlet_actor_handles[idx]
                 self.instance_migrating[ins_id] = False
+                if self.log_instance_info:
+                    self.instance_last_logged_empty[ins_id] = False
                 self.pending_rebuild_migration_instances += 1
         self.global_scheduler.scale_up(instance_ids)
         self.num_instances = len(self.instances)
@@ -378,6 +382,8 @@ class LLMEngineManager:
                 indeed_update = True
                 del self.instances[ins_id]
                 del self.instance_migrating[ins_id]
+                if self.log_instance_info:
+                    del self.instance_last_logged_empty[ins_id]
                 self.pending_rebuild_migration_instances += 1
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
@@ -521,7 +527,11 @@ class LLMEngineManager:
 
     def _log_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
         for instance_info in instance_infos:
-            if instance_info.gpu_cache_usage > 0:
+            instance_id = instance_info.instance_id
+            gpu_cache_usage = instance_info.gpu_cache_usage
+            should_log = (gpu_cache_usage > 0) or (gpu_cache_usage == 0 and not self.instance_last_logged_empty[instance_id])
+            if should_log:
+                self.instance_last_logged_empty[instance_id] = (gpu_cache_usage == 0)
                 self.instance_info_csv.writerow([
                     instance_info.timestamp,
                     instance_info.instance_id,

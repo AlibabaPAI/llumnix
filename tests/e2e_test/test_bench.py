@@ -16,11 +16,10 @@ import json
 import os
 import subprocess
 import pytest
-import ray
 import torch
 import numpy as np
 
-from .test_e2e import generate_launch_command
+from .test_e2e import generate_launch_command, clear_ray_state
 from .utils import to_markdown_table
 
 def launch_llumnix_service(command):
@@ -55,22 +54,6 @@ def shutdown_llumnix_service():
     # pylint: disable=broad-except
     except Exception:
         pass
-
-def clear_ray_state():
-    named_actors = ray.util.list_named_actors(True)
-    for actor in named_actors:
-        try:
-            actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-        # pylint: disable=bare-except
-        except:
-            continue
-
-        try:
-            ray.kill(actor_handle)
-        # pylint: disable=bare-except
-        except:
-            continue
-    ray.shutdown()
 
 def parse_log_file():
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]

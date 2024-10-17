@@ -15,7 +15,6 @@ import asyncio
 import traceback
 from typing import List, Union, Iterable
 import time
-import traceback
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 

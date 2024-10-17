@@ -13,7 +13,7 @@
 
 from asyncio.log import logger
 import time
-from typing import Dict, List, Optional, Tuple, Deque, Union
+from typing import Dict, List, Optional, Tuple, Deque
 from collections import deque
 
 from vllm.core.block_manager_v1 import BlockSpaceManagerV1, BlockTable
@@ -121,7 +121,7 @@ class SchedulerLlumnix(Scheduler):
         self.migrating_out_request_last_stage.clear()
         return migrating_out_request_last_stage
 
-    def pre_alloc(self, 
+    def pre_alloc(self,
                   request_id: str,
                   request_status: RequestStatus,
                   request_arrival_time: float,
@@ -229,7 +229,7 @@ class SchedulerLlumnix(Scheduler):
         # TODO(ZeldaHuang) adapt chunked-prefill
         instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in scheduled_seq_groups])\
                                             if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
-        instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]
+        instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.finished]
         return instance_info
 
     def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:

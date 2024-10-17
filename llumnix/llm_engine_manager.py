@@ -268,7 +268,7 @@ class LLMEngineManager:
                 self.instance_migrating[migrate_in_instance_id] = True
                 migrate_in_instance_name = "instance_{}".format(migrate_in_instance_id)
                 # Use asyncio.gather to wrap ray remote call to add done callback.
-                task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name, migrate_in_num_requests),
+                task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name),
                                       return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)

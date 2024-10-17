@@ -58,7 +58,7 @@ class MockLlumlet(Llumlet):
 async def test_migration_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0":0, "1":1}
-    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
+    migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -95,7 +95,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
             llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests=math.inf))
+    res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res
 
     # running without migration
@@ -120,7 +120,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
             if len(running_queue) > 0 and running_queue[0].inference_type == RequestInferenceType.DECODE:
                 break
         # migrate request
-        res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests=math.inf))
+        res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
         assert len(res) == 1
 
         request_output_queue = que
@@ -148,7 +148,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
+    migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -183,7 +183,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
             llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests=math.inf))
+    res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res
 
     # running without migration
@@ -206,7 +206,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
         ray.get(llumlet_0.generate.remote(request_id1, server_info, request_expected_steps_id1, prompt, sampling_params))
         # migrate request for decoding
         while True:
-            res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests = math.inf))
+            res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
             if len(res) == 1:
                 break
         request_output_queue = que

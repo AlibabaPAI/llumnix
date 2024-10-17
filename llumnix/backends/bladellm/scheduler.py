@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple
 from blade_llm.service.paged_utils import BlockSpaceManager, PreemptionMode
 from blade_llm.service.proto.bladellm_pb2 import BlockTable
 from blade_llm.service.scheduler import PagedScheduler
-from blade_llm.service.scheduler_types import SchedulerStepOutput, GenerationGroupState
+from blade_llm.service.scheduler_types import SchedulerStepOutput, GenerationGroupState, SchedulerAsyncUpdateOutput
 from blade_llm.protocol import ServerRequest
 from blade_llm.service.paged_utils import PagedRequestState, PreemptionMode
 from blade_llm.service.request_utils import server_request_to_worker_request
@@ -67,6 +67,7 @@ class SchedulerLlumnix(PagedScheduler):
         self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
         self.scheduler_lock = threading.Lock()
         self.migrating_out_request_last_stage: List[GenerationGroupStateLlumnix] = []
+        self.request_groups_map: dict[str, GenerationGroupStateLlumnix] = {}
     
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
@@ -206,6 +207,15 @@ class SchedulerLlumnix(PagedScheduler):
         #                                     if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
         # instance_info.finished_request_ids = [gen_group.request_id for gen_group in self.running if gen_group.is_finished()]
         return instance_info
+    
+    def update(self, *args, **kwargs):
+        client_resp = {}
+        update_output = super().update(*args, **kwargs)
+        if not update_output.reset and update_output.response is not None:
+            for req_id, l_resp in update_output.response.items():
+                if req_id in self.running:
+                    client_resp[req_id] = l_resp
+        return SchedulerAsyncUpdateOutput(response=client_resp)
 
     @scheduler_lock
     def step(self) -> SchedulerStepOutput:
@@ -213,8 +223,8 @@ class SchedulerLlumnix(PagedScheduler):
         # TODO[xinyi]: add scheduled_seq_groups
         self.update_instance_info_callback(self._get_instance_info())
         return scheduler_outputs
-    
-    # TODO[xinyi]: hack the funciton
+
+    # TODO[xinyi]: now hack the funciton
     @scheduler_lock
     def add_request(self, server_req_llumnix: ServerRequestLlumnix):
         worker_req = server_request_to_worker_request(server_req_llumnix.server_request)
@@ -225,9 +235,17 @@ class SchedulerLlumnix(PagedScheduler):
         )
         gen_group.add_paged_req_state(PagedRequestState(worker_req, self.block_size, self.gamma_blank))
         gen_group_llumnix = GenerationGroupStateLlumnix(gen_group, server_req_llumnix.llumnix_request)
+        if hasattr(gen_group_llumnix.server_info, 'request_timestamps'):
+            gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
         heapq.heappush(self.waiting, gen_group_llumnix)
         self._detokenizer.add_new_request(worker_req)
+        self.request_groups_map[server_req_llumnix.request_id] = server_req_llumnix
 
     @scheduler_lock
     def abort_seq_group(self, *args, **kwargs):
         return super().drop_request(*args, **kwargs)
+    
+    @scheduler_lock
+    def _free_req(self, group_state: GenerationGroupStateLlumnix):
+        del self.request_groups_map[group_state.request_id]
+        return super()._free_req(group_state)

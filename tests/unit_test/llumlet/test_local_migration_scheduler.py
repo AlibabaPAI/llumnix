@@ -21,6 +21,8 @@ class MockRequest(LlumnixRequest):
         self.length = length
         self._status = RequestInferenceType.DECODE
         self._finished = False
+        self.try_schedule_times = 0
+        self.eom = False
 
     @property
     def finished(self) -> bool:
@@ -57,12 +59,21 @@ class MockRequest(LlumnixRequest):
 class MockeEngine():
     def __init__(self) -> None:
         self.running = []
+        self.waiting = []
 
     def add_request(self, request_id, length, expected_steps) -> None:
         self.running.append(MockRequest(request_id, length, expected_steps))
+    
+    def add_request_waiting(self, request_id, length, expected_steps) -> None:
+        request = MockRequest(request_id, length, expected_steps)
+        request.try_schedule_times += 1
+        self.waiting.append(request)
 
     def get_running_queue(self):
         return self.running
+
+    def get_waiting_queue(self):
+        return self.waiting
 
 def test_scheduler_policy():
     engine = MockeEngine()
@@ -71,6 +82,8 @@ def test_scheduler_policy():
     engine.add_request(request_id="0", length=1, expected_steps=math.inf)
     engine.add_request(request_id="1", length=3, expected_steps=math.inf)
     engine.add_request(request_id="2", length=2, expected_steps=math.inf)
+    engine.add_request_waiting(request_id="3", length=2, expected_steps=math.inf)
+    engine.add_request_waiting(request_id="4", length=2, expected_steps=math.inf)
 
     scheduler.request_migration_policy = "LCR"
     assert scheduler.get_migrate_out_requests()[0].request_id == "2"
@@ -78,15 +91,20 @@ def test_scheduler_policy():
     assert scheduler.get_migrate_out_requests()[0].request_id == "1"
     scheduler.request_migration_policy = "SR"
     assert scheduler.get_migrate_out_requests()[0].request_id == "0"
+    scheduler.request_migration_policy = "FCW"
+    assert scheduler.get_migrate_out_requests()[0].request_id == "3"
+    scheduler.request_migration_policy = "FCWSR"
+    assert scheduler.get_migrate_out_requests()[0].request_id == "3"
+    assert scheduler.get_migrate_out_requests()[1].request_id == "0"
 
-    engine.add_request(request_id="3", length=2, expected_steps=1)
+    engine.add_request(request_id="5", length=2, expected_steps=1)
     request = scheduler.get_migrate_out_requests()[0]
-    assert request.request_id == "3"
+    assert request.request_id == "5"
     assert request.output_len >= request.expected_steps and request.inference_type == RequestInferenceType.DECODE
-    engine.add_request(request_id="4", length=3, expected_steps=math.inf)
+    engine.add_request(request_id="6", length=3, expected_steps=math.inf)
     scheduler.request_migration_policy = "LCR"
     request = scheduler.get_migrate_out_requests()[0]
-    assert request.request_id == "3"
+    assert request.request_id == "5"
     assert request.output_len >= request.expected_steps and request.inference_type == RequestInferenceType.DECODE
 
 def test_scheduler_should_abort_migration():

@@ -40,7 +40,7 @@ class LocalMigrationScheduler:
         return migrate_out_requests
 
     # The function is used to retrieve requests on the backend that have already met the expected_steps.
-    # TODO(xinyi): Currently, the function is only used for Prefill-decoding disaggregation,
+    # (xinyi): Currently, the function is only used for Prefill-decoding disaggregation,
     # and only selects request that migrates from the prefill instance to the decoding instance.
     def get_required_migration_request(self, min_request_len, max_request_len):
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
@@ -84,4 +84,5 @@ class LocalMigrationScheduler:
     def _get_first_waiting_and_shortest_running_requests(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         waiting_requests = self._get_first_waiting_request(min_request_len, max_request_len)
         running_requests = self._get_shortest_running_request(min_request_len, max_request_len)
+        waiting_requests[0].eom = True
         return waiting_requests + running_requests

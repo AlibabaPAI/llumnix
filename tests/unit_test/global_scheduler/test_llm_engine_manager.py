@@ -76,7 +76,7 @@ class MockLlumlet:
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 
-    def migrate_out(self, src_instance_name, dst_instance_name):
+    def migrate_out(self, dst_instance_name):
         self.num_migrate_out += 1
 
     def get_num_migrate_out(self):

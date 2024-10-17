@@ -47,9 +47,6 @@ class LlumnixRequest:
         # By default, there is no limit on the number of steps expected for the request.
         self.expected_steps = math.inf
 
-    def is_finished(self) -> bool:
-        raise NotImplementedError
-
     @property
     def inference_type(self) -> RequestInferenceType:
         raise NotImplementedError

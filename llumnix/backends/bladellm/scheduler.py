@@ -12,6 +12,7 @@
 # limitations under the License.
 
 from asyncio.log import logger
+import heapq
 import time
 import threading
 from typing import Dict, List, Optional, Tuple
@@ -19,12 +20,19 @@ from typing import Dict, List, Optional, Tuple
 from blade_llm.service.paged_utils import BlockSpaceManager, PreemptionMode
 from blade_llm.service.proto.bladellm_pb2 import BlockTable
 from blade_llm.service.scheduler import PagedScheduler
-from blade_llm.service.scheduler_types import SchedulerStepOutput
+from blade_llm.service.scheduler_types import SchedulerStepOutput, GenerationGroupState
+from blade_llm.protocol import ServerRequest
+from blade_llm.service.paged_utils import PagedRequestState, PreemptionMode
+from blade_llm.service.request_utils import server_request_to_worker_request
+
+
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import RequestInferenceType
+from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix, ServerRequestLlumnix
 from llumnix.backends.bladellm.utils import scheduler_lock
+
 
 logger = init_logger(__name__)
 
@@ -58,7 +66,7 @@ class SchedulerLlumnix(PagedScheduler):
         )
         self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
         self.scheduler_lock = threading.Lock()
-        self.migrating_out_request_last_stage: List[LlumnixRequest] = []
+        self.migrating_out_request_last_stage: List[GenerationGroupStateLlumnix] = []
     
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
@@ -66,7 +74,7 @@ class SchedulerLlumnix(PagedScheduler):
 
     def _preempt(
         self,
-        seq_group: LlumnixRequest,
+        seq_group: GenerationGroupStateLlumnix,
         insert=True,
     ) -> PreemptionMode:
         seq_group.last_preemption_time = time.time()
@@ -92,7 +100,7 @@ class SchedulerLlumnix(PagedScheduler):
         return request_ids
 
     @scheduler_lock
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
+    def get_request_incremental_blocks(self, backend_request: GenerationGroupStateLlumnix, pre_stage_num_blocks: int) -> List[int]:
         seq = backend_request.paged_reqs[0]
         blocks = self.block_manager.get_block_table(seq)
         return blocks[pre_stage_num_blocks:]
@@ -104,13 +112,13 @@ class SchedulerLlumnix(PagedScheduler):
                 self.running.remove(seq_group)
                 break
 
-    def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def add_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.migrating_out_request_last_stage.append(backend_request)
 
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def remove_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.migrating_out_request_last_stage.remove(backend_request)
 
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
+    def pop_migrating_out_requests_last_stage(self) -> List[GenerationGroupStateLlumnix]:
         migrating_out_request_last_stage = self.migrating_out_request_last_stage.copy()
         self.migrating_out_request_last_stage.clear()
         return migrating_out_request_last_stage
@@ -125,11 +133,11 @@ class SchedulerLlumnix(PagedScheduler):
         return blocks
 
     @scheduler_lock
-    def add_running_request(self, backend_request: LlumnixRequest) -> None:
+    def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.running.append(backend_request)
 
     @scheduler_lock
-    def is_request_running(self, backend_request: LlumnixRequest) -> bool:
+    def is_request_running(self, backend_request: GenerationGroupStateLlumnix) -> bool:
         return backend_request in self.running
 
     @scheduler_lock
@@ -147,7 +155,9 @@ class SchedulerLlumnix(PagedScheduler):
                 self.block_manager._free_block_table(blocks)
 
     @scheduler_lock
-    def free_src_request(self, backend_request: LlumnixRequest) -> None:
+    def free_src_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
+        seq = backend_request.paged_reqs[0]
+        logger.info("free seq {}".format(seq.request_id))
         self._free_req(backend_request)
 
     def _get_instance_info(self) -> InstanceInfo:
@@ -184,30 +194,39 @@ class SchedulerLlumnix(PagedScheduler):
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
         )
-        for seq_group in self.running:
-            instance_info.running_seq_lens.extend([len(seq.token_ids) for seq in seq_group.paged_reqs])
+        # TODO[xinyi]: revise to scheduld_seq_groups
+        for gen_group in self.running:
+            instance_info.running_seq_lens.extend([len(seq.token_ids) for seq in gen_group.paged_reqs])
             instance_info.num_seqs = len(instance_info.running_seq_lens)
-        if self.running:
-            # TODO(xinyi): inference_type
-            instance_info.inference_type = self.running[-1].inference_type
+        # if self.running:
+        #     # TODO(xinyi): inference_type
+        #     instance_info.inference_type = self.running[-1].inference_type
         # TODO(ZeldaHuang) adapt chunked-prefill
-        instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in self.running])\
-                                            if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
-        # TODO(xinyi): add in llm engine
-        # instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.is_finished()]
+        # instance_info.num_batched_tokens = sum([gen_group.request_len for gen_group in self.running])\
+        #                                     if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
+        # instance_info.finished_request_ids = [gen_group.request_id for gen_group in self.running if gen_group.is_finished()]
         return instance_info
 
     @scheduler_lock
     def step(self) -> SchedulerStepOutput:
         scheduler_outputs = super().step()
+        # TODO[xinyi]: add scheduled_seq_groups
         self.update_instance_info_callback(self._get_instance_info())
         return scheduler_outputs
-
-    def add_request(self, *args, **kwargs):
-        # The scheduler lock is mannually released in the end of LLMEngineLlumnix.add_request function.
-        # pylint: disable=R1732
-        self.scheduler_lock.acquire()
-        return super().add_request(*args, **kwargs)
+    
+    # TODO[xinyi]: hack the funciton
+    @scheduler_lock
+    def add_request(self, server_req_llumnix: ServerRequestLlumnix):
+        worker_req = server_request_to_worker_request(server_req_llumnix.server_request)
+        gen_group: GenerationGroupState = GenerationGroupState.from_request(
+            request=worker_req,
+            total_length=len(worker_req.prompt_tokens),
+            prompt_len_priority_scale=self.prompt_len_priority_scale,
+        )
+        gen_group.add_paged_req_state(PagedRequestState(worker_req, self.block_size, self.gamma_blank))
+        gen_group_llumnix = GenerationGroupStateLlumnix(gen_group, server_req_llumnix.llumnix_request)
+        heapq.heappush(self.waiting, gen_group_llumnix)
+        self._detokenizer.add_new_request(worker_req)
 
     @scheduler_lock
     def abort_seq_group(self, *args, **kwargs):

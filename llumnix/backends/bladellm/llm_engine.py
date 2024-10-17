@@ -13,7 +13,7 @@
 import time
 from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
 from collections import defaultdict
-import threading
+import traceback
 import asyncio
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -22,29 +22,56 @@ from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
 from blade_llm.utils.counter import Counter
 
+from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.bladellm.scheduler import SchedulerLlumnix
-from llumnix.backends.bladellm.sequence import SequenceGroupLlumnix
+from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix, ServerRequestLlumnix
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
-from llumnix.rpc.queue_client import QueueClient
+from llumnix.queue.queue_client_base import QueueClientBase
+from llumnix.queue.utils import get_output_queue_client, QueueType
 
 logger = init_logger(__name__)
 
-class AsyncPutQueueThread(threading.Thread):
-    def __init__(self, instance_id):
-        super().__init__()
-        self.instance_id = instance_id
-        self.request_output_queue_client = QueueClient()
-        self.engine_actor_handle = None
-        self.loop = asyncio.new_event_loop()
-        self.daemon = True
 
-    def run(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
+class AsyncPutQueueActor:
+    def __init__(self, instance_id, output_queue_type: QueueType):
+        self.instance_id = instance_id
+        self.output_queue_type = output_queue_type
+        self.request_output_queue_client: QueueClientBase = get_output_queue_client(output_queue_type)
+        self.engine_actor_handle = None
+
+    async def put_nowait_to_servers(self,
+                                    server_request_outputs: Dict[str, List[RequestOutput]],
+                                    server_info_dict: Dict[str, ServerInfo]) -> None:
+        try:
+            if self.engine_actor_handle is None:
+                self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
+            tasks = []
+            for server_id, req_outputs in server_request_outputs.items():
+                server_info = server_info_dict[server_id]
+                for req_output in req_outputs:
+                    if hasattr(req_output, 'request_timestamps'):
+                        req_output.request_timestamps.engine_actor_put_queue_timestamp = time.time()
+                tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
+            rets = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, ret in enumerate(rets):
+                if isinstance(ret, (TimeoutError, ray.exceptions.RayActorError)):
+                    server_id = list(server_request_outputs.keys())[idx]
+                    server_info = server_info_dict[server_id]
+                    logger.info("Server {} is dead".format(server_id))
+                    if self.output_queue_type == QueueType.ZMQ:
+                        logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
+                                                                                server_info.request_output_queue_port))
+                    req_outputs = list(server_request_outputs.values())[idx]
+                    request_ids = [req_output.request_id for req_output in req_outputs]
+                    self.engine_actor_handle.abort_request.remote(request_ids)
+        # pylint: disable=W0703
+        except Exception as e:
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
 
 class LLMEngineLlumnix(AsyncLLMEngine):
     def __init__(self, instance_id: str, *arg, **kwargs) -> None:
@@ -55,6 +82,8 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         # TODO(s5u13b): Reduce the overhead.
         self.async_put_queue_thread = AsyncPutQueueThread(instance_id)
         self.async_put_queue_thread.start()
+        self.request_server_info: Dict[str, ServerInfo] = {}
+        self.put_queue_args_queue = queue.Queue()
     
     async def _init(self):
         self._worker_processes.start()
@@ -95,16 +124,8 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         # this will take control of exporters if step-wise tracing will trace from the beginning
         self.engine_pre_step_metrics()
     
-    def add_request(self, request_id: str, server_info: ServerInfo, *args, **kwargs):
-        super().add_request(*args, **kwargs)
-        seq_group = self.scheduler.waiting[-1]
-        self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, seq_group.length, seq_group.is_streaming, seq_group.num_generation,
-                                                          seq_group.best_of, seq_group.num_finished, seq_group.finished_gen, seq_group.paged_reqs,
-                                                          seq_group.receive_time, seq_group.join_time, seq_group.prompt_len_priority_scale, seq_group.last_swap_time,
-                                                          seq_group.lora_path)
-        self.scheduler.scheduler_lock.release()
-    
     async def step(self):
+        step_begin_time = time.time()
         await super().step()
 
         instance_info: InstanceInfo = self.instance_info
@@ -124,6 +145,43 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             instance_info.num_blocks_last_running_request = len(tot_blocks)
         
         self.instance_info=instance_info
+    
+    def free_request_states(
+        self, request_id: Union[str, int, Iterable[str], Iterable[int]]
+    ):
+        if isinstance(request_id, (str,int)):
+            request_id = (request_id,)
+        request_ids = set(request_id)
+        for req_id in request_ids:
+            if req_id in self.request_server_info:
+                del self.request_server_info[req_id]
+    
+    async def add_request(self, *args, **kwargs):
+        # TODO[xinyi]: next step split webserver
+        await self._client.add_request(*args, **kwargs)
+    
+    def _start_put_queue_loop(self):
+        while True:
+            args = self.put_queue_args_queue.get()
+            request_outputs, server_infos = args
+            for request_output in request_outputs:
+                if hasattr(request_output, 'request_timestamps'):
+                    request_output.request_timestamps.engine_thread_put_queue_timestamp = time.time()
+            self._put_request_outputs_to_server(request_outputs, server_infos)
+    
+    def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
+        server_request_outputs = defaultdict(list)
+        server_info_dict = {}
+        # Reorganize data in orther to put request output to queue in batch at one time.
+        for request_output, server_info in zip(request_outputs, server_infos):
+            server_id = server_info.server_id
+            server_request_outputs[server_id].append(request_output)
+            if server_id not in server_info_dict:
+                server_info_dict[server_id] = server_info
+        # TODO(s5u13b): Reduce the across-actor overhead.
+        self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+
+    
 
 
 class BackendBladeLLM(BackendInterface):
@@ -142,11 +200,13 @@ class BackendBladeLLM(BackendInterface):
         # self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
     
     def add_request(self,
+                    request_id: str,
+                    server_info: ServerInfo,
+                    expected_steps: int,
                     *args,
                     **kwargs) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        req = args[0]
-        self.engine.add_request(req)
+        self.engine.add_request(ServerRequestLlumnix(request_id, server_info, expected_steps, *args, **kwargs))
 
     def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",
@@ -157,6 +217,8 @@ class BackendBladeLLM(BackendInterface):
 
     def is_ready(self):
         return True
+    
+    
     
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -204,4 +266,7 @@ class BackendBladeLLM(BackendInterface):
     def get_all_request_ids(self) -> List[str]:
         return self.engine.scheduler.get_all_request_ids()
     
+    def get_request_server_info(self, request_id: str) -> ServerInfo:
+        return self.engine.request_server_info[request_id]
+
     

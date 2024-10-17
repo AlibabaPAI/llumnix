@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+message MigrateRequest {
+    repeated int32 src_blocks = 1;
+    repeated int32 dst_blocks = 2;
+}
+
+message AllocRequest {
+    int32 num_migration_cache_blocks = 1;
+}
+
+message SendRequest {
+  repeated int32 blocks = 1;
+}
+
+message SendNumpyResponse {
+  repeated bytes dummy_key_cpu = 1;
+  repeated bytes dummy_value_cpu = 2;
+}
+
+service LlumnixWorker {
+    rpc migrate_gpu_cache_grpc (MigrateRequest) returns (google.protobuf.Empty) {}
+    rpc allocate_migration_cache (AllocRequest) returns (google.protobuf.Empty) {}
+    rpc send_cpu_cache (SendRequest) returns (SendNumpyResponse) {}
+}

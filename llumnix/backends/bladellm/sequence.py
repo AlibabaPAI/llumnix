@@ -12,14 +12,14 @@
 # limitations under the License.
 
 from blade_llm.service.scheduler_types import GenerationGroupState
-
+from blade_llm.protocol import ServerRequest
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 
-class SequenceGroupLlumnix(GenerationGroupState, LlumnixRequest):
-    def __init__(self, request_id, server_info, *args, **kwargs) -> None:
-        GenerationGroupState(request_group_id=request_id)
-        LlumnixRequest.__init__(self, request_id, server_info)
+class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
+    def __init__(self, gen_group: GenerationGroupState, llumnix_request: LlumnixRequest, *args, **kwargs) -> None:
+        GenerationGroupState.__init__(self, **gen_group.__dict__)
+        LlumnixRequest.__init__(self, **llumnix_request.__dict__)
 
     @property
     def prompt_len(self) -> int:
@@ -33,8 +33,14 @@ class SequenceGroupLlumnix(GenerationGroupState, LlumnixRequest):
     def output_len(self) -> int:
         return self.request_len - self.prompt_len
 
-    # @property
-    # def inference_type(self) -> bool:
-    #     if self.is_prefill():
-    #         return RequestInferenceType.PREFILL
-    #     return RequestInferenceType.DECODE
+    @property
+    def inference_type(self) -> bool:
+        if self.is_prefill():
+            return RequestInferenceType.PREFILL
+        return RequestInferenceType.DECODE
+
+
+class ServerRequestLlumnix(ServerRequest):
+    def __init__(self, request_id, server_info, expected_steps: int, request: ServerRequest) -> None:
+        self.server_request = ServerRequest.__init__(self, **request.__dict__)
+        self.llumnix_request = LlumnixRequest.__init__(self, request_id, server_info, expected_steps)

@@ -29,13 +29,13 @@ lint: check_pylint_installed check_pytest_installed
 
 .PHONY: test
 test: check_pytest_installed
-	@pytest -x -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
+	@pytest -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
 	@python examlpes/offline_inference.py
 	@pytest -v tests/e2e_test/test_e2e.py
 
 .PHONY: unit_test
 unit_test: check_pytest_installed
-	@pytest -x -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
+	@pytest -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
 	
 .PHONY: offline_test
 offline_test:

@@ -27,6 +27,7 @@ class EngineState(str, Enum):
 class BackendType(str, Enum):
     VLLM = "VLLM"
     SIM_VLLM = "SIM_VLLM"
+    BLADELLM = "BLADELLM"
 
     @staticmethod
     def is_sim_backend(status: "BackendType") -> bool:

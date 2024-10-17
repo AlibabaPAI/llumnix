@@ -22,9 +22,6 @@ class MockRequest(LlumnixRequest):
         self._status = RequestInferenceType.DECODE
         self._finished = False
 
-    def is_finished(self) -> bool:
-        return False
-
     @property
     def finished(self) -> bool:
         return self._finished
@@ -35,15 +32,27 @@ class MockRequest(LlumnixRequest):
 
     @property
     def request_len(self) -> int:
-        return self.length
+        pass
 
     @property
     def prompt_len(self) -> int:
-        return self.length
+        pass
 
     @property
     def output_len(self) -> int:
         return self.length
+
+    @property
+    def arrival_time(self) -> float:
+        pass
+
+    @property
+    def status(self) -> RequestStatus:
+        pass
+
+    @property
+    def prefill_num_blocks(self) -> int:
+        pass
 
 class MockeEngine():
     def __init__(self) -> None:

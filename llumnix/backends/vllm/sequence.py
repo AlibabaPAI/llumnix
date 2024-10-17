@@ -25,6 +25,9 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
     def prompt_len(self) -> int:
         return self.get_seqs()[0].get_prompt_len()
 
+    def is_finished(self) -> bool:
+        return self.get_seqs()[0].is_finished()
+
     @property
     def request_len(self) -> int:
         return self.get_seqs()[0].get_len()

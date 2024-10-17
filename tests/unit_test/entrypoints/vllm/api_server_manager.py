@@ -23,8 +23,8 @@ import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.utils import random_uuid
-from llumnix.queue.utils import get_output_queue_server, get_output_queue_client, QueueType
-
+from llumnix.queue.utils import init_output_queue_server, init_output_queue_client, QueueType
+from llumnix.entrypoints.utils import LlumnixEntrypointsContext
 
 app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
@@ -36,7 +36,7 @@ class MockLLMEngineManager:
     def __init__(self, output_queue_type: QueueType):
         self._num_generates = 0
         self._num_aborts = 0
-        self.request_output_queue = get_output_queue_client(output_queue_type)
+        self.request_output_queue = init_output_queue_client(output_queue_type)
 
     async def generate(self, request_id, server_info, *args, **kwargs):
         self._num_generates += 1
@@ -73,18 +73,17 @@ if __name__ == "__main__":
 
     output_queue_type = QueueType(args.output_queue_type)
     engine_manager = init_manager(output_queue_type)
-    llumnix.entrypoints.vllm.api_server.engine_manager = engine_manager
-
+    llumnix.entrypoints.vllm.api_server.llumnix_context = LlumnixEntrypointsContext()
+    llumnix.entrypoints.vllm.api_server.llumnix_context.engine_manager = engine_manager
     ip = '127.0.0.1'
     port = 1234
-    llumnix.entrypoints.vllm.api_server.request_output_queue = \
-        get_output_queue_server(ip, port, output_queue_type)
-
+    llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue = \
+        init_output_queue_server(ip, port, output_queue_type)
     ray_queue_server = None
     if output_queue_type == QueueType.RAYQUEUE:
-        ray_queue_server = llumnix.entrypoints.vllm.api_server.request_output_queue
+        ray_queue_server = llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue
     server_info = ServerInfo(random_uuid(), output_queue_type, ray_queue_server, ip, port)
-    llumnix.entrypoints.vllm.api_server.server_info = server_info
+    llumnix.entrypoints.vllm.api_server.llumnix_context.server_info = server_info
 
     uvicorn.run(
         app,

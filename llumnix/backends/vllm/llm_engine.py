@@ -39,7 +39,7 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_client_base import QueueClientBase
-from llumnix.queue.utils import get_output_queue_client, QueueType
+from llumnix.queue.utils import init_output_queue_client, QueueType
 
 logger = init_logger(__name__)
 
@@ -48,7 +48,7 @@ class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
         self.instance_id = instance_id
         self.output_queue_type = output_queue_type
-        self.request_output_queue_client: QueueClientBase = get_output_queue_client(output_queue_type)
+        self.request_output_queue_client: QueueClientBase = init_output_queue_client(output_queue_type)
         self.engine_actor_handle = None
 
     async def put_nowait_to_servers(self,
@@ -224,7 +224,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
         if request_outputs:
-            self.put_queue_args_queue.put((request_outputs, server_infos))
+            self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
         self.instance_info = instance_info
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):

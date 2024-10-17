@@ -1,6 +1,6 @@
 SERVER:
   HOST: '127.0.0.1'
-  PORT: 37000
+  PORT: 1234
   QUEUE_TYPE: "rayqueue"
 
 RAY:

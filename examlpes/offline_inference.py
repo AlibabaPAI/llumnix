@@ -27,7 +27,7 @@ os.environ['HEAD_NODE_IP'] = '127.0.0.1'
 ray_cluster_port=6379
 
 # Note: launch_ray_cluster will stop current ray cluster first, then init a new one.
-launch_ray_cluster(ray_cluster_port=ray_cluster_port)
+launch_ray_cluster(port=ray_cluster_port)
 connect_to_ray_cluster(port=ray_cluster_port)
 
 # Set manager args and engine args.

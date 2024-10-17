@@ -15,7 +15,7 @@ import subprocess
 import sys
 import os
 import time
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import asyncio
 import socket
 import ray
@@ -27,6 +27,8 @@ from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
+from llumnix.server_info import ServerInfo, RequestTimestamps
+from llumnix.queue.utils import init_output_queue_server
 
 logger = init_logger(__name__)
 
@@ -36,12 +38,26 @@ RESTART_INTERVALS = 1
 MAX_TASK_RETRIES = 300
 RETRIES_INTERVALS = 0.1
 
+
+class LlumnixEntrypointsContext:
+    def __init__(self):
+        self.engine_manager: LLMEngineManager = None
+        self.instances: Dict[str, Llumlet] = {}
+        self.request_output_queue: QueueServerBase = None
+        self.server_info: ServerInfo = None
+        self.request_streams: Dict[str, AsyncStream] = {}
+        self.manager_available = True
+        self.num_finished_requests = 0
+        self.instance_num_requests: Dict[str, int] = {}
+        self.log_requests: bool = None
+        self.log_request_timestamps: bool = None
+
 def get_ip_address():
     hostname = socket.gethostname()
     ip_address = socket.gethostbyname(hostname)
     return ip_address
 
-def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
+def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     head_node_ip = os.getenv('HEAD_NODE_IP')
     node_ip_address = get_ip_address()
     try:
@@ -56,18 +72,18 @@ def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
         sys.exit(1)
     ray_start_command = None
     if 'HEAD_NODE' in os.environ:
-        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={ray_cluster_port}"
+        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
         try:
-            result = subprocess.run(['ray', 'start', '--head', f'--port={ray_cluster_port}'], check=True, text=True, capture_output=True)
+            result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             logger.info("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
             sys.exit(1)
     else:
-        ray_start_command = f"ray start --address={head_node_ip}:{ray_cluster_port} --node-ip-address={node_ip_address}"
+        ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
         for attempt in range(MAX_RESTARTS):
             try:
                 # wait about 2 mins by default
-                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{ray_cluster_port}'], check=True, text=True, capture_output=True)
+                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'], check=True, text=True, capture_output=True)
                 break
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RESTARTS:
@@ -82,6 +98,11 @@ def launch_ray_cluster(ray_cluster_port: int) -> subprocess.CompletedProcess:
 def connect_to_ray_cluster(port: int, namespace="llumnix") -> None:
     head_node_ip = os.getenv('HEAD_NODE_IP')
     ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace)
+
+def setup_ray_cluster(cfg):
+    if cfg.SERVER.LAUNCH_RAY_CLUSTER:
+        launch_ray_cluster(cfg.SERVER.RAY_CLUSTER_PORT)
+    connect_to_ray_cluster(port=cfg.SERVER.RAY_CLUSTER_PORT)
 
 def is_gpu_available() -> bool:
     try:
@@ -129,7 +150,7 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
     return engine_manager
 
 def init_llumlets(engine_manager_args: EngineManagerArgs, engine_args, node_id: str,
-                  output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
+                  request_output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
     engine_config = engine_args.create_engine_config()
     parallel_config = engine_config.parallel_config
     instance_ids: List[str] = []
@@ -141,7 +162,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs, engine_args, node_id: 
         instance_id = instance_ids[idx]
         if not engine_manager_args.profiling_result_file_path:
             llumlet = Llumlet.from_args(
-                output_queue_type,
+                request_output_queue_type,
                 engine_manager_args.disable_fixed_node_init_instance,
                 False,
                 node_id,
@@ -153,7 +174,7 @@ def init_llumlets(engine_manager_args: EngineManagerArgs, engine_args, node_id: 
             )
         else:
             llumlet = Llumlet.from_args(
-                output_queue_type,
+                request_output_queue_type,
                 engine_manager_args.disable_fixed_node_init_instance,
                 False,
                 node_id,
@@ -170,20 +191,20 @@ def init_llumlets(engine_manager_args: EngineManagerArgs, engine_args, node_id: 
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,
                             engine_args,
                             node_id: str,
-                            output_queue_type: QueueType):
+                            request_output_queue_type: QueueType,
+                            ip: str,
+                            request_output_queue_port: str):
     engine_manager = init_manager(engine_manager_args)
     if engine_manager_args.disable_init_instance_by_manager:
-        instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id, output_queue_type)
+        instance_ids, llumlets = init_llumlets(engine_manager_args, engine_args, node_id, request_output_queue_type)
     else:
         instance_ids, llumlets = retry_manager_method_sync(
-            engine_manager.init_llumlets.remote, 'init_llumlets', engine_args, node_id, output_queue_type)
+            engine_manager.init_llumlets.remote, 'init_llumlets', engine_args, node_id, request_output_queue_type)
 
     available_instance_ids = []
     dead_instance_ids = []
     available_llumlets = []
-
     ready_tasks = [llumlet.is_ready.remote() for llumlet in llumlets]
-
     for idx, task in enumerate(ready_tasks):
         try:
             ray.get(task)
@@ -191,14 +212,89 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
             available_llumlets.append(llumlets[idx])
         except ray.exceptions.RayActorError:
             dead_instance_ids.append(instance_ids[idx])
-
     if len(dead_instance_ids) > 0:
         retry_manager_method_sync(engine_manager.scale_down.remote, 'scale_down', dead_instance_ids)
-
     if len(available_instance_ids) > 0:
         retry_manager_method_sync(engine_manager.scale_up.remote, 'scale_up',
                                   available_instance_ids, available_llumlets)
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
                     .format(len(available_instance_ids), available_instance_ids))
 
-    return engine_manager, available_instance_ids, available_llumlets
+    request_output_queue = init_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
+
+    return engine_manager, available_instance_ids, available_llumlets, request_output_queue
+
+def setup_llumnix(engine_manager_args, engine_args, cfg):
+    ip = get_ip_address()
+    node_id = ray.get_runtime_context().get_node_id()
+    engine_manager, instance_ids, llumlets, request_output_queue = \
+        init_llumnix_components(engine_manager_args,
+                                engine_args,
+                                node_id,
+                                cfg.SERVER.QUEUE_TYPE,
+                                ip,
+                                cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
+    server_id = random_uuid()
+    server_info = ServerInfo(server_id,
+                             cfg.SERVER.QUEUE_TYPE,
+                             request_output_queue,
+                             ip,
+                             cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
+    instances: Dict[str, Llumlet] = {}
+    instance_num_requests: Dict[str, int] = {}
+    for idx, ins_id in enumerate(instance_ids):
+        instances[ins_id] = llumlets[idx]
+        instance_num_requests[ins_id] = 0
+    log_requests = not cfg.SERVER.DISABLE_LOG_REQUESTS_SERVER
+    log_request_timestamps = cfg.SERVER.LOG_REQUEST_TIMESTAMPS
+    logger.info("log_requests: {}, log_request_timestamps: {}".format(log_requests, log_request_timestamps))
+
+    context = LlumnixEntrypointsContext()
+    context.engine_manager = engine_manager
+    context.instances = instances
+    context.request_output_queue = request_output_queue
+    context.server_info = server_info
+    context.instance_num_requests = instance_num_requests
+    context.log_requests = log_requests
+    context.log_request_timestamps = log_request_timestamps
+
+    return context
+
+async def _background_process_outputs(llumnix_context):
+    while True:
+        request_outputs = await llumnix_context.request_output_queue.get()
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
+        for request_output in request_outputs:
+            request_id = request_output.request_id
+            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+            if request_id not in llumnix_context.request_streams:
+                continue
+            llumnix_context.request_streams[request_id].put(request_output)
+            if request_output.finished:
+                llumnix_context.request_streams[request_id].finish()
+                del llumnix_context.request_streams[request_id]
+
+def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
+    per_token_latency_breakdown_dict = {
+        'step_latency_engine': [],
+        'process_model_outputs_latency': [],
+        'step_postprocess_latency': [],
+        'across_async_put_queue_thread_latency': [],
+        'across_async_put_queue_actor_latency': [],
+        'queue_rpc_latency': [],
+        'background_process_get_queue_latency': [],
+        'generate_benchmark_return_output_latency': []
+    }
+    return per_token_latency_breakdown_dict
+
+def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_timestamps: RequestTimestamps):
+    per_token_latency_breakdown_dict['step_latency_engine'].append(request_timestamps.step_latency_engine)
+    per_token_latency_breakdown_dict['process_model_outputs_latency'].append(request_timestamps.process_model_outputs_latency)
+    per_token_latency_breakdown_dict['step_postprocess_latency'].append(request_timestamps.step_postprocess_latency)
+    per_token_latency_breakdown_dict['across_async_put_queue_thread_latency'].append(request_timestamps.across_async_put_queue_thread_latency)
+    per_token_latency_breakdown_dict['across_async_put_queue_actor_latency'].append(request_timestamps.across_async_put_queue_actor_latency)
+    per_token_latency_breakdown_dict['queue_rpc_latency'].append(request_timestamps.queue_rpc_latency)
+    per_token_latency_breakdown_dict['background_process_get_queue_latency'].append(request_timestamps.background_process_get_queue_latency)
+    per_token_latency_breakdown_dict['generate_benchmark_return_output_latency'].append(request_timestamps.generate_benchmark_return_output_latency)

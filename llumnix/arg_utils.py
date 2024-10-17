@@ -22,6 +22,84 @@ from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
+
+class LlumnixArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        self.cur_namespace = "llumnix"
+        super().__init__(*args, **kwargs)
+
+    def set_namespace(self, namespace: str):
+        self.cur_namespace = namespace
+
+    def add_argument(self, *args, **kwargs):
+        if self.cur_namespace == 'llumnix' and "--help" not in args:
+            assert 'default' not in kwargs or kwargs['default'] is None, \
+                f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
+                f"The default value will be retrieved from config/default.py in get_llumnix_config."
+            if kwargs.get('action') == 'store_true':
+                kwargs['default'] = None
+        super().add_argument(*args, **kwargs)
+
+
+# All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None.
+
+@dataclass
+class LlumnixEntrypointsArgs:
+    launch_ray_cluster: bool = None
+    ray_cluster_port: int = None
+    queue_type: str = None
+    request_output_queue_port: int = None
+    disable_log_requests_server: bool = None
+    log_request_timestamps: bool = None
+    config_file: bool = None
+
+    def __post_init__(self):
+        for attr in dataclasses.fields(self):
+            if getattr(self, attr.name) is None:
+                setattr(self, attr.name, getattr(_C.SERVER, attr.name.upper()))
+
+    @classmethod
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'LlumnixEntrypointsArgs':
+        # Get the list of attributes of this dataclass.
+        attrs = [attr.name for attr in dataclasses.fields(cls)]
+        # Set the attributes from the parsed arguments.
+        # The defalut values of attributes are defined in default.py.
+        llumnix_entrypoints_args = cls(**{attr: getattr(cfg.SERVER, attr.upper()) for attr in attrs})
+        return llumnix_entrypoints_args
+
+    @classmethod
+    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: argparse.ArgumentParser):
+        # pylint: disable=protected-access
+        for action in parser._optionals._actions:
+            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
+                assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
+
+    @staticmethod
+    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        parser.add_argument('--launch-ray-cluster',
+                            action='store_true',
+                            help='if launch ray cluster in api server')
+        parser.add_argument("--ray-cluster-port",
+                            type=int,
+                            help='ray cluster port')
+        parser.add_argument("--queue-type",
+                            type=str,
+                            choices=['rayqueue', 'zmq'],
+                            help='queue type for request output queue')
+        parser.add_argument("--request-output-queue-port",
+                            type=int,
+                            help='port for zmq')
+        parser.add_argument('--disable-log-requests-server',
+                            action='store_true',
+                            help='disable logging requests in server')
+        parser.add_argument("--log-request-timestamps",
+                            action='store_true',
+                            help='if log request timestamps')
+        parser.add_argument("--config-file",
+                            type=str,
+                            help="path to config file")
+        return parser
+
 @dataclass
 class EngineManagerArgs:
     disable_init_instance_by_manager: bool = None
@@ -106,6 +184,7 @@ class EngineManagerArgs:
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
+        # The defalut values of attributes are defined in default.py.
         engine_manager_args = cls(**{attr: getattr(cfg.MANAGER, attr.upper()) for attr in attrs})
         return engine_manager_args
 

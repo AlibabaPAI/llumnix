@@ -21,7 +21,7 @@ import torch
 from vllm import LLM, SamplingParams
 
 def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool = True, HEAD_NODE_IP: str = "127.0.0.1",
-                            ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
+                            ip: str = "127.0.0.1", port: int = 1234, instances_num = 1, dispatch_policy: str = "load",
                             migration_backend = "rpc", model = "facebook/opt-125m", max_model_len: int = 2048):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "

@@ -78,7 +78,7 @@ class MigrationCoordinator:
                                       migrate_out_request: LlumnixRequest) -> "MigrationStatus":
         """Migrate out requests to a specified instance, return migrated request id.
         Args:
-            dst_instance_name: instance actor name, used to get ray actor handle
+            migrate_in_ray_actor: instance actor name, used to get ray actor handle
         """
         stage_count = 0
         while stage_count < self.max_stages:

@@ -28,7 +28,7 @@ from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
-from llumnix.llumlet.request import RequestStatus
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 
 logger = init_logger(__name__)
 
@@ -142,7 +142,7 @@ class Llumlet:
                 break
         return migrated_request_list
 
-    async def _migrate_out_one_request(self, migrate_out_request, dst_instance_name: str):
+    async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str):
         try:
             t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')

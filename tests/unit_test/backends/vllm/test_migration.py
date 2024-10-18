@@ -19,12 +19,13 @@ import ray
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
+from vllm.sequence import SequenceStatus
 
 from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 
 from tests.unit_test.queue.utils import request_output_queue_server
@@ -51,12 +52,13 @@ class MockLlumlet(Llumlet):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
 
+# TODO(s5u13b): Test migrate waiting request.
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_migration_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0":0, "1":1}
-    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
+    migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -93,7 +95,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
             llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests=math.inf))
+    res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res
 
     # running without migration
@@ -118,7 +120,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
             if len(running_queue) > 0 and running_queue[0].inference_type == RequestInferenceType.DECODE:
                 break
         # migrate request
-        res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests=math.inf))
+        res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
         assert len(res) == 1
 
         request_output_queue = que
@@ -146,7 +148,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
     id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
+    migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -181,7 +183,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
             llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests=math.inf))
+    res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res
 
     # running without migration
@@ -204,7 +206,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
         ray.get(llumlet_0.generate.remote(request_id1, server_info, request_expected_steps_id1, prompt, sampling_params))
         # migrate request for decoding
         while True:
-            res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests = math.inf))
+            res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
             if len(res) == 1:
                 break
         request_output_queue = que
@@ -228,13 +230,17 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
 
 def test_clear_migration_states():
     llumlet = MockLlumlet()
-    llumlet.backend_engine.pre_alloc("0", 1)
+    llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, 1)
     num_gpu_blocks = 8
     block_size = 4
 
     llumlet.clear_migration_states(is_migrate_in=True)
-    assert len(llumlet.backend_engine.pre_alloc("0", num_gpu_blocks)) == num_gpu_blocks
-    _, seq_group = create_dummy_prompt("0",7,block_size)
+    assert len(llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks)) == num_gpu_blocks
+    _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.RUNNING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
     llumlet.clear_migration_states(is_migrate_in=False)
-    assert len(llumlet.backend_engine.get_running_queue()) > 0
+    assert len(llumlet.backend_engine.get_running_queue()) == 1
+    _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.WAITING)
+    llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
+    llumlet.clear_migration_states(is_migrate_in=False)
+    assert len(llumlet.backend_engine.get_waiting_queue()) == 1

@@ -48,7 +48,11 @@ e2e_test:
 
 .PHONY: bench_test
 bench_test:
-	@pytest -v ./tests/e2e_test/test_bench.py
+	@pytest -v ./tests/e2e_test/test_bench.
+
+.PHONY: migration_test
+bench_test:
+	@pytest -v ./tests/e2e_test/test_migration.py
 
 .PHONY: migration_test
 migration_test:

@@ -14,7 +14,7 @@
 from typing import Deque, List
 import numpy as np
 
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
 from llumnix.backends.backend_interface import BackendInterface
 
 
@@ -55,14 +55,15 @@ class LocalMigrationScheduler:
     def _get_last_running_request(self, min_request_len, max_request_len):
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
         for request in reversed(running):
-            if request.inference_type == RequestInferenceType.DECODE \
+            if request.status == RequestStatus.RUNNING and request.inference_type == RequestInferenceType.DECODE \
                 and min_request_len < request.request_len < max_request_len:
                 return [request]
         return []
 
     def _get_longest_running_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
-        condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
+        condition = lambda request : request.status == RequestStatus.RUNNING \
+                                        and request.inference_type == RequestInferenceType.DECODE \
                                         and min_request_len < request.request_len < max_request_len
         longest_seq_group = max((request for request in running if condition(request)), \
                                  key=lambda request: request.request_len, default=None)
@@ -70,8 +71,9 @@ class LocalMigrationScheduler:
 
     def _get_shortest_running_request(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         running: Deque[LlumnixRequest] = self.backend_engine.get_running_queue()
-        condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
-                                         and min_request_len < request.request_len < max_request_len
+        condition = lambda request : request.status == RequestStatus.RUNNING \
+                                        and request.inference_type == RequestInferenceType.DECODE \
+                                        and min_request_len < request.request_len < max_request_len
         shortest_seq_group = min((request for request in running if condition(request)), \
                                   key=lambda request: request.request_len, default=None)
         return [shortest_seq_group] if shortest_seq_group is not None else []

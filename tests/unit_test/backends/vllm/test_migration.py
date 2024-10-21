@@ -129,12 +129,8 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
         while not finished:
             request_outputs = await request_output_queue.get()
             for request_output in request_outputs:
-                origin_output = request_output.outputs[0]
-                finished = request_output.finished
-                if request_output.request_id != request_id1:
-                    continue
-                output = request_output.outputs[0]
-                finished = request_output.finished
+                    output = request_output.outputs[0]
+                    finished = request_output.finished
 
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob
@@ -215,12 +211,8 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
         while not finished:
             request_outputs = await request_output_queue.get()
             for request_output in request_outputs:
-                origin_output = request_output.outputs[0]
+                output = request_output.outputs[0]
                 finished = request_output.finished
-                if request_output.request_id != request_id1:
-                    continue
-            output = request_output.outputs[0]
-            finished = request_output.finished
 
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob

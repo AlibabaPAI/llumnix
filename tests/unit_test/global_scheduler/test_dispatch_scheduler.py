@@ -46,7 +46,10 @@ def test_add_instance_and_remove_instance(dispatch_scheduler):
 
     dispatch_scheduler.remove_instance('instance_2')
     assert dispatch_scheduler.num_instances == 1
-    assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    if dispatch_scheduler.num_dispatch_instances >= 2:
+        assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    else:
+        assert len(dispatch_scheduler.available_dispatch_instance_set) == 0
     dispatch_scheduler.remove_instance('instance_3')
     assert dispatch_scheduler.num_instances == 0
 
@@ -99,7 +102,7 @@ def test_dispatch_queue():
             instance_info.instance_id = instance_id
             instance_info.num_waiting_requests = random.randint(1, 10)
             instance_info_dict[instance_id] = instance_info
-            if  len(dispatch_scheduler.available_dispatch_instance_set) < dispatch_scheduler.num_dispatch_instances:
+            if len(dispatch_scheduler.available_dispatch_instance_set) < dispatch_scheduler.num_dispatch_instances:
                 dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
                 instance_num_requests[instance_id] = 0
         dispatch_scheduler.instance_num_requests = instance_num_requests

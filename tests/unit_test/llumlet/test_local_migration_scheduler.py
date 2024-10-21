@@ -16,10 +16,11 @@ from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
 class MockRequest(LlumnixRequest):
-    def __init__(self, request_id, length, expected_steps) -> None:
+    def __init__(self, request_id, length, expected_steps, status=RequestStatus.RUNNING) -> None:
         super().__init__(request_id=request_id, server_info=None, expected_steps=expected_steps)
         self.length = length
-        self._status = RequestInferenceType.DECODE
+        self._status = status
+        self._inference_type = RequestInferenceType.DECODE
         self._finished = False
         self.try_schedule_times = 0
         self.eom = False
@@ -30,7 +31,7 @@ class MockRequest(LlumnixRequest):
 
     @property
     def inference_type(self) -> RequestInferenceType:
-        return self._status
+        return self._inference_type
 
     @property
     def request_len(self) -> int:
@@ -65,7 +66,7 @@ class MockeEngine():
         self.running.append(MockRequest(request_id, length, expected_steps))
 
     def add_request_waiting(self, request_id, length, expected_steps) -> None:
-        request = MockRequest(request_id, length, expected_steps)
+        request = MockRequest(request_id, length, expected_steps, status=RequestStatus.WAITING)
         request.try_schedule_times += 1
         self.waiting.append(request)
 

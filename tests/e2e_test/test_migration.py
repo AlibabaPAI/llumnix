@@ -42,18 +42,18 @@ def parse_instance_log_file(log_files):
                     speed = float(speed_match.group(1))
                     speed_dict[total_kv_cache_size].append(speed)
 
-    averger_speed = {}
+    average_speed = {}
     for transfer_size, speeds in speed_dict.items():
         if len(speeds) <= 2:
             continue
 
         speeds.sort()
         trimmed_speeds = speeds[1:-1]
-        averger_speed[transfer_size] = sum(trimmed_speeds) / len(trimmed_speeds)
+        average_speed[transfer_size] = sum(trimmed_speeds) / len(trimmed_speeds)
 
-    assert len(averger_speed) > 0, "Migration should have occurred, but it was not detected. "
+    assert len(average_speed) > 0, "Migration should have occurred, but it was not detected. "
 
-    return averger_speed
+    return average_speed
 
 def parse_manager_log_file(log_file):
     df = pd.read_csv(log_file)
@@ -99,13 +99,13 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
 
     parse_manager_log_file("manager_instance.csv")
 
-    averger_speed = parse_instance_log_file(instance_output_logs)
+    average_speed = parse_instance_log_file(instance_output_logs)
 
-    sorted_keys = sorted(averger_speed.keys(), key=lambda x: float(x.split()[0]))
+    sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0]))
 
     data = [
         ['migration_size'] + sorted_keys,
-        [f'{migration_backend}_speed(GB/s)'] + [f"{averger_speed[key]:.2f}" for key in sorted_keys]
+        [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]
     ]
 
     with open("performance.txt", "a", encoding="utf-8") as f:

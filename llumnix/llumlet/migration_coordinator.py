@@ -126,6 +126,7 @@ class MigrationCoordinator:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             return MigrationStatus.FINISHED_DST_ABORTED
+
         # do stage send/recv
         migrate_out_request.stage_timestamps.append(time.time())
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)

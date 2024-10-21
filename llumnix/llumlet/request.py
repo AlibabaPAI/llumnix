@@ -41,12 +41,19 @@ class LlumnixRequest:
         # end-of-migration
         self.eom = False
 
-    def reset_migration_args(self):
+    def reset_migration_args_dst(self):
+        # By default, there is no limit on the number of steps expected for the request.
+        self.expected_steps = math.inf
+
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
-        # By default, there is no limit on the number of steps expected for the request.
-        self.expected_steps = math.inf
+        self.try_schedule_times = 0
+    
+    def reset_migration_args_src(self):
+        self.last_preemption_time = None
+        self.stage_timestamps = []
+        self.stage_num_blocks_list = []
 
     @property
     def inference_type(self) -> RequestInferenceType:

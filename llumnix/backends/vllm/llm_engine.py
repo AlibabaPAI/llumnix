@@ -352,10 +352,10 @@ class BackendVLLM(BackendInterface):
         logger.info("add seq {} to block table".format(seq.seq_id))
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
-        backend_request.reset_migration_args()
+        backend_request.reset_migration_args_dst()
         if backend_request.status == RequestStatus.RUNNING:
             self.add_running_request(backend_request)
-        else: # backend_request.status == RequestStatus.WAITING
+        else: # RequestStatus.WAITING
             backend_request.waiting_migrating = True
             self.add_waiting_request(backend_request)
 

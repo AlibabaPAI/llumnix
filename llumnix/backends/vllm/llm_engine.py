@@ -199,7 +199,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
         return request_outputs, server_infos
 
-    async def step_async(self) -> None:
+    async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         step_begin_time = time.time()
         request_outputs, server_infos = await super().step_async()
         for request_output in request_outputs:

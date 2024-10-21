@@ -61,7 +61,7 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--max-model-len {max_model_len} "
         f"--dispatch-policy {dispatch_policy} "
         f"--trust-remote-code "
-        f"--request-migration-policy LCFS "
+        f"--request-migration-policy SR "
         f"--migration-backend {migration_backend} "
         f"--migration-cache-blocks 32 "
         f"--tensor-parallel-size 1 "

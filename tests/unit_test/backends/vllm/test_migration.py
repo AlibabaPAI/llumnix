@@ -11,11 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
 import asyncio
 import math
+from unittest.mock import MagicMock
 import pytest
 import ray
+from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -25,7 +26,7 @@ from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
+from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 
 from tests.unit_test.queue.utils import request_output_queue_server
@@ -52,23 +53,60 @@ class MockLlumlet(Llumlet):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
 
+@ray.remote(num_cpus=1, max_concurrency=4)
+class MockLlumletDoNotSchedule(Llumlet):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # stop the schedule in engine step loop
+        self.backend_engine.engine.scheduler.schedule = MagicMock()
+
+        # For some reason, if MockScheduelrOutputs is defined outside, the constructor would raise error.
+        class MockScheduelrOutputs:
+            def __init__(self):
+                self.scheduled_seq_groups = []
+                self.ignored_seq_groups = []
+                self.num_batched_tokens = 0
+
+            def is_empty(self) -> bool:
+                return not self.scheduled_seq_groups
+
+        scheduler_outputs = MockScheduelrOutputs()
+        self.backend_engine.engine.scheduler.schedule.return_value = ([], scheduler_outputs)
+
+        self.step_async = self.backend_engine.engine.step_async
+
+        async def step_async_try_schedule():
+            request_outputs, server_infos = await self.step_async()
+            for seq_group in self.backend_engine.engine.scheduler.waiting:
+                seq_group.try_schedule_times += 1
+            return request_outputs, server_infos
+
+        self.backend_engine.engine.step_async = step_async_try_schedule
+
 # TODO(s5u13b): Test migrate waiting request.
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
-async def test_migration_correctness(setup_ray_env, migration_backend):
+async def test_migration_correctness(setup_ray_env, migration_backend, migration_request_status):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    id_rank_map = {"0":0, "1":1}
-    migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
+    id_rank_map = {"0": 0, "1": 1, "2": 2}
+    if migration_request_status == 'running':
+        request_migration_policy = "SR"
+    elif migration_request_status == 'waiting':
+        request_migration_policy = "FCW"
+    migration_config = MigrationConfig(request_migration_policy, migration_backend, 16, 1, 4, 5, 20)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
     asyncio.create_task(que.run_server_loop())
+    node_id = ray.get_runtime_context().get_node_id()
+    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
 
     llumlet_0: Llumlet = Llumlet.from_args(
                             output_queue_type,
                             False,
-                            True,
-                            ray.get_runtime_context().get_node_id(),
+                            False,
+                            node_id,
                             "0",
                             BackendType.VLLM,
                             1,
@@ -78,24 +116,39 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
     llumlet_1: Llumlet = Llumlet.from_args(
                             output_queue_type,
                             False,
-                            True,
-                            ray.get_runtime_context().get_node_id(),
+                            False,
+                            node_id,
                             "1",
                             BackendType.VLLM,
                             1,
                             migration_config,
                             engine_args)
 
+    llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
+        name='instance_2',
+        namespace='llumnix',
+        scheduling_strategy=scheduling_strategy).remote(
+            instance_id="2",
+            output_queue_type=output_queue_type,
+            backend_type=BackendType.VLLM,
+            migration_config=migration_config,
+            engine_args=engine_args,
+            node_id=node_id
+        )
+
     while True:
-        res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])
+        res = ray.get([llumlet_0.is_ready.remote(), llumlet_1.is_ready.remote(), llumlet_2.is_ready.remote()])
         if all(res):
             break
 
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
-            llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
+             llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
+             llumlet_2.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
     # empty instance migrate out
     res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
+    assert not res
+    res = ray.get(llumlet_2.migrate_out.remote("instance_1"))
     assert not res
 
     # running without migration
@@ -112,16 +165,28 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
                 origin_output = request_output.outputs[0]
                 finished = request_output.finished
 
-        request_id1 = random_uuid()
-        ray.get(llumlet_0.generate.remote(request_id1, server_info, math.inf, prompt, sampling_params))
-        # wait prefill done
-        while True:
-            running_queue: List[LlumnixRequest] = ray.get(llumlet_0.execute_engine_method.remote("get_running_queue"))
-            if len(running_queue) > 0 and running_queue[0].inference_type == RequestInferenceType.DECODE:
-                break
-        # migrate request
-        res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
-        assert len(res) == 1
+        if migration_request_status == 'running':
+            request_id1 = random_uuid()
+            ray.get(llumlet_0.generate.remote(request_id1, server_info, math.inf, prompt, sampling_params))
+            # wait prefill done
+            while True:
+                running_queue = ray.get(llumlet_0.execute_engine_method.remote("get_running_queue"))
+                if len(running_queue) > 0 and running_queue[0].inference_type == RequestInferenceType.DECODE:
+                    break
+            # migrate request
+            res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
+            assert len(res) == 1
+        elif migration_request_status == 'waiting':
+            request_id1 = random_uuid()
+            ray.get(llumlet_2.generate.remote(request_id1, server_info, math.inf, prompt, sampling_params))
+            # wait try schedule done
+            while True:
+                waiting_queue = ray.get(llumlet_2.execute_engine_method.remote("get_waiting_queue"))
+                if len(waiting_queue) > 0 and waiting_queue[0].try_schedule_times >= 1:
+                    break
+            # migrate request
+            res = ray.get(llumlet_2.migrate_out.remote("instance_1"))
+            assert len(res) == 1
 
         request_output_queue = que
         output = None
@@ -129,8 +194,8 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
         while not finished:
             request_outputs = await request_output_queue.get()
             for request_output in request_outputs:
-                    output = request_output.outputs[0]
-                    finished = request_output.finished
+                output = request_output.outputs[0]
+                finished = request_output.finished
 
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob
@@ -177,7 +242,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
         if all(res):
             break
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
-            llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
+             llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
     # empty instance migrate out
     res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res

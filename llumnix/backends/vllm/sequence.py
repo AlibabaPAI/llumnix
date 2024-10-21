@@ -22,7 +22,6 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
     def __init__(self, request_id, server_info, expected_steps: int, *args, **kwargs) -> None:
         SequenceGroup.__init__(self, request_id, *args, **kwargs)
         LlumnixRequest.__init__(self, request_id, server_info, expected_steps)
-        self.try_schedule_times = 0
 
     @property
     def prompt_len(self) -> int:

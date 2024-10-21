@@ -36,6 +36,7 @@ class LlumnixRequest:
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
+        self.try_schedule_times = 0
         self.waiting_migrating = False
         # end-of-migration
         self.eom = False

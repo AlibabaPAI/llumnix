@@ -388,10 +388,10 @@ class BackendVLLM(BackendInterface):
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.get_request_incremental_blocks(*args, **kwargs)
 
-    def remove_running_request(self, *args, **kwargs) -> None:
+    def remove_running_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.remove_running_request(*args, **kwargs)
 
-    def remove_waiting_request(self, *args, **kwargs) -> None:
+    def remove_waiting_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.remove_waiting_request(*args, **kwargs)
 
     def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:

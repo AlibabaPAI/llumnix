@@ -113,7 +113,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def remove_running_request(self, request_id: str) -> None:
+    def remove_running_request(self, request_id: str) -> bool:
         """
         Removes a request from the backend's running queue.
 
@@ -124,11 +124,14 @@ class BackendInterface(ABC):
         Args:
             request_id: A string identifier for the request that is to be removed from the running
                         queue. This ID uniquely identifies the request within the backend system.
+
+        Returns:
+            True if the request was successfully removed from the running queue, False otherwise.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def remove_waiting_request(self, request_id: str) -> None:
+    def remove_waiting_request(self, request_id: str) -> bool:
         """
         Removes a request from the backend's waiting queue.
 
@@ -138,6 +141,9 @@ class BackendInterface(ABC):
         Args:
             request_id: A string identifier for the request that is to be removed from the waiting
                         queue. This ID uniquely identifies the request within the backend system.
+        
+        Returns:
+            True if the request was successfully removed from the waiting queue, False otherwise.
         """
         raise NotImplementedError
 

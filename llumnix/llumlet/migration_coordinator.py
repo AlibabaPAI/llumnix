@@ -58,14 +58,16 @@ class MigrationCoordinator:
                                           migrate_out_request: LlumnixRequest) -> "MigrationStatus":
         """one-stage migration for a waiting request
         """
-        self.backend_engine.remove_waiting_request(migrate_out_request.request_id)
+        found = self.backend_engine.remove_waiting_request(migrate_out_request.request_id)
+        if not found:
+            return MigrationStatus.FINISHED_SRC_ABORTED
         self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
         dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                 .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
                                                                 migrate_out_request.status,
                                                                 migrate_out_request.arrival_time,
                                                                 migrate_out_request.prefill_num_blocks)
-        if len(dst_blocks) != prefill_num_blocks:
+        if len(dst_blocks) != migrate_out_request.prefill_num_blocks:
             self.backend_engine.add_waiting_request(migrate_out_request)
             self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             return MigrationStatus.FINISHED_DST_ABORTED
@@ -109,7 +111,9 @@ class MigrationCoordinator:
         else:
             # last stage migration, stop inference, transfer all blocks
             migration_status = MigrationStatus.FINISHED_DONE
-            self.backend_engine.remove_running_request(migrate_out_request.request_id)
+            found = self.backend_engine.remove_running_request(migrate_out_request.request_id)
+            if not found:
+                return MigrationStatus.FINISHED_SRC_ABORTED
             self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
             stage_block_num = len(incremental_blocks)
             src_blocks = incremental_blocks[:]

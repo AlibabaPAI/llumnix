@@ -68,12 +68,12 @@ def parse_manager_log_file(log_file):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
-@pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
+@pytest.mark.parametrize("migrated_request_status", ['waiting', 'running'])
 async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rpc':
         pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
 
-    request_migration_policy = 'SR' if migrated_request_status == 'running' else 'FCWSR'
+    request_migration_policy = 'SR' if migrated_request_status == 'running' else 'FCW'
 
     base_port = 37037
     instance_output_logs = []
@@ -96,12 +96,14 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, m
         await process.wait()
         assert process.returncode == 0
 
+    tasks = []
     for i in range(device_count//2):
         bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=300,
                                                dataset_type="sharegpt",
                                                dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
                                                qps=10)
-        await asyncio.wait_for(run_bench_command(bench_command), timeout=60*30)
+        tasks.append(asyncio.create_task(run_bench_command(bench_command)))
+    await asyncio.gather(*tasks)
     await asyncio.sleep(20)
 
     parse_manager_log_file("manager_instance.csv")
@@ -120,4 +122,4 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, m
 
     shutdown_llumnix_service()
     clear_ray_state()
-    await asyncio.sleep(3)
+    await asyncio.sleep(10)

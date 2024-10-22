@@ -20,6 +20,7 @@ from vllm.core.block_manager_v1 import BlockSpaceManagerV1, BlockTable
 from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, SequenceGroupMetadata, SchedulerOutputs)
 from vllm.core.policy import PolicyFactory
 from vllm.sequence import SequenceGroup
+from vllm.core.interfaces import AllocStatus
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
@@ -131,7 +132,8 @@ class SchedulerLlumnix(Scheduler):
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING:
-            if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
+            if (self.waiting and request_arrival_time > self.waiting[0].arrival_time) \
+                or block_num * self.cache_config.block_size > self.prompt_limit:
                 return []
         blocks = self.block_manager.get_free_blocks(block_num)
         # Once dst instance cannot pre alloc, free the pre alloc cache proactively.
@@ -152,6 +154,11 @@ class SchedulerLlumnix(Scheduler):
         self.waiting.append(backend_request)
         fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
         self.waiting = fcfs_policy.sort_by_priority(time.time(), self.waiting)
+
+    def can_allocate(self, seq_group: SequenceGroup) -> AllocStatus:
+        if seq_group.waiting_migrating:
+            return AllocStatus.OK
+        return super().can_allocate(seq_group)
 
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         # Change seq status to running, but request status is still waiting_migrating.
@@ -229,8 +236,8 @@ class SchedulerLlumnix(Scheduler):
         if scheduled_seq_groups:
             instance_info.inference_type = scheduled_seq_groups[-1].inference_type
         # TODO(ZeldaHuang) adapt chunked-prefill
-        instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in scheduled_seq_groups])\
-                                            if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
+        instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in scheduled_seq_groups]) \
+                                                if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.finished]
         return instance_info
 
@@ -238,8 +245,7 @@ class SchedulerLlumnix(Scheduler):
         seq_group_metadata_list, scheduler_outputs = super().schedule()
         self.update_instance_info_callback(self._get_instance_info([scheduled_seq_group.seq_group \
                                             for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups]))
-        for seq_group in self.waiting:
-            seq_group.try_schedule_times += 1
+
         return seq_group_metadata_list, scheduler_outputs
 
     def _schedule_running(self, running_queue: deque, *args, **kwargs):

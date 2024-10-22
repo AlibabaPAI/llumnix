@@ -89,7 +89,7 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, m
                                                  enable_pd_disagg=enable_pd_disagg, num_dispatch_instances=num_dispatch_instances,
                                                  request_migration_policy=request_migration_policy)
         subprocess.run(launch_command, shell=True, check=True)
-    await asyncio.sleep(60)
+    await asyncio.sleep(30)
 
     async def run_bench_command(command):
         process = await asyncio.create_subprocess_shell(command)

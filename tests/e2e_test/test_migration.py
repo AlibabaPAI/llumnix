@@ -67,7 +67,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
-async def test_migration_benchmark(model, migration_backend):
+async def test_migration_benchmark(model, migration_backend, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rpc':
         pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
 

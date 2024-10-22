@@ -41,8 +41,9 @@ def parse_launch_mode(launch_mode: str):
 def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool = True, HEAD_NODE_IP: str = "127.0.0.1",
                             ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
                             migration_backend = "gloo", model = "facebook/opt-125m", max_model_len: int = 2048,
-                            launch_mode: str = 'eief', log_instance_info: bool = False, enable_pd_disagg: bool = False,
-                            num_dispatch_instances: int = math.inf):
+                            launch_mode: str = 'eief', log_instance_info: bool = False,
+                            enable_pd_disagg: bool = False, num_dispatch_instances: int = math.inf,
+                            request_migration_policy: str = 'SR'):
     disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -61,7 +62,7 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--max-model-len {max_model_len} "
         f"--dispatch-policy {dispatch_policy} "
         f"--trust-remote-code "
-        f"--request-migration-policy LCR "
+        f"--request-migration-policy {request_migration_policy} "
         f"--migration-backend {migration_backend} "
         f"--migration-cache-blocks 32 "
         f"--tensor-parallel-size 1 "

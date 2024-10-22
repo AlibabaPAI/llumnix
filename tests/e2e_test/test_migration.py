@@ -68,7 +68,13 @@ def parse_manager_log_file(log_file):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
+@pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
 async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
+    if migrated_request_status == 'waiting' and migration_backend != 'rpc':
+        pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
+
+    request_migration_policy = 'SR' if migrated_request_status == 'running' else 'FCWSR'
+
     base_port = 37037
     instance_output_logs = []
 
@@ -79,8 +85,9 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
         instance_output_logs.append("instance_"+output_log)
         launch_command = generate_launch_command(result_filename=output_log, launch_ray_cluster=False, port=base_port+i,
                                                  model=model, dispatch_policy="flood", migration_backend=migration_backend,
-                                                 log_instance_info=True, enable_pd_disagg=enable_pd_disagg,
-                                                 num_dispatch_instances=num_dispatch_instances)
+                                                 log_instance_info=True,
+                                                 enable_pd_disagg=enable_pd_disagg, num_dispatch_instances=num_dispatch_instances,
+                                                 request_migration_policy=request_migration_policy)
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(60)
 
@@ -95,7 +102,7 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
                                                dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
                                                qps=10)
         await asyncio.wait_for(run_bench_command(bench_command), timeout=60*30)
-    await asyncio.sleep(30)
+    await asyncio.sleep(20)
 
     parse_manager_log_file("manager_instance.csv")
 

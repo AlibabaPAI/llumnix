@@ -66,4 +66,4 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
     @property
     def prefill_num_blocks(self) -> int:
         # Get the prefill len of the waiting request.
-        return math.ceil(self.request_len / self.get_seqs()[0].block_size)
+        return len(self.get_seqs()[0].logical_token_blocks)

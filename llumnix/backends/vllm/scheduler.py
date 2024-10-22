@@ -98,17 +98,19 @@ class SchedulerLlumnix(Scheduler):
         blocks = self.block_manager.get_block_table(seq)
         return blocks[pre_stage_num_blocks:]
 
-    def remove_running_request(self, request_id: str) -> None:
+    def remove_running_request(self, request_id: str) -> bool:
         for seq_group in self.running:
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
-                break
+                return True
+        return False
 
-    def remove_waiting_request(self, request_id: str) -> None:
+    def remove_waiting_request(self, request_id: str) -> bool:
         for seq_group in self.waiting:
             if seq_group.request_id == request_id:
                 self.waiting.remove(seq_group)
-                break
+                return True
+        return False
 
     def add_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
         self.migrating_out_request_last_stage.append(backend_request)
@@ -143,11 +145,9 @@ class SchedulerLlumnix(Scheduler):
         return blocks
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
-        self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
         self.running.append(backend_request)
 
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
-        self._set_status(backend_request, status_to=SequenceStatus.WAITING)
         # pylint: disable=E0203
         self.waiting.append(backend_request)
         fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")

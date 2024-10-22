@@ -157,8 +157,8 @@ class Llumlet:
                 await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
                 if migrate_out_request.status == RequestStatus.RUNNING:
                     self.backend_engine.free_src_request(migrate_out_request)
-                migrated_request.append(migrate_out_request.request_id)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                migrated_request.append(migrate_out_request.request_id)
             else: # FINISHED_SRC_ABORTED or FINISHED_DST_ABORTED
                 migrate_out_request.reset_migration_args_src()
                 # If dst aborts itself, dst proactively frees the pre alloc cache during pre alloc.

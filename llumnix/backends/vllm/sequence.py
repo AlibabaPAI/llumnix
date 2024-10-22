@@ -59,7 +59,7 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
             "Only RUNNING, WAITING are expected status for LlumnixRequest"
         if status == SequenceStatus.RUNNING:
             request_status = RequestStatus.RUNNING
-        else: # status == SequenceStatus.WAITING
+        else:
             request_status = RequestStatus.WAITING
         return request_status
 

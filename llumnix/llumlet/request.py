@@ -38,7 +38,8 @@ class LlumnixRequest:
         self.stage_num_blocks_list = []
         self.try_schedule_times = 0
         self.waiting_migrating = False
-        # end-of-migration
+
+        # end-of-migration, for multiple requests migration
         self.eom = False
 
     def reset_migration_args_dst(self):

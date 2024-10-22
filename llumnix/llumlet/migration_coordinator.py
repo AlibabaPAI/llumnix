@@ -60,12 +60,11 @@ class MigrationCoordinator:
         """
         self.backend_engine.remove_waiting_request(migrate_out_request.request_id)
         self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
-        prefill_num_blocks = migrate_out_request.prefill_num_blocks
         dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                 .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
                                                                 migrate_out_request.status,
                                                                 migrate_out_request.arrival_time,
-                                                                prefill_num_blocks)
+                                                                migrate_out_request.prefill_num_blocks)
         if len(dst_blocks) != prefill_num_blocks:
             self.backend_engine.add_waiting_request(migrate_out_request)
             self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)

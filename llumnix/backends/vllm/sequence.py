@@ -11,8 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 from vllm.sequence import SequenceGroup, SequenceStatus
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus

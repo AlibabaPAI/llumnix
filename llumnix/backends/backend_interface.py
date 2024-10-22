@@ -141,7 +141,7 @@ class BackendInterface(ABC):
         Args:
             request_id: A string identifier for the request that is to be removed from the waiting
                         queue. This ID uniquely identifies the request within the backend system.
-        
+
         Returns:
             True if the request was successfully removed from the waiting queue, False otherwise.
         """

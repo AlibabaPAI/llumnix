@@ -26,12 +26,12 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.utils.counter import Counter
 from blade_llm.protocol import GenerateStreamResponse, LogitsProcessorParams
 
-
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.backends.bladellm.scheduler import SchedulerLlumnix
-from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix, ServerRequestLlumnix
+from llumnix.backends.bladellm.sequence import ServerRequestLlumnix
+from llumnix.backends.profiling import LatencyMemData
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
@@ -79,15 +79,35 @@ class AsyncPutQueueActor:
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
 class LLMEngineLlumnix(AsyncLLMEngine):
-    def __init__(self, instance_id: str, *arg, **kwargs) -> None:
+    def __init__(self,
+                 instance_id: str,
+                 output_queue_type: QueueType,
+                 placement_group: Optional[PlacementGroup],
+                 node_id: Optional[str],
+                 *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
+        # TODO[xinyi]: maybe inherit from Metirc Class in Bladellm or create a Metric Class for Llumnix
+        self.step_request_queue = asyncio.Queue()
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        # TODO(s5u13b): Reduce the overhead.
-        self.async_put_queue_thread = AsyncPutQueueThread(instance_id)
-        self.async_put_queue_thread.start()
-        self.request_server_info: Dict[str, ServerInfo] = {}
+        # TODO[xinyi]: repeated code in llm_engine for both bladellm and vllm. Simplify it.
+        # Place the async put queue actor together with the instance.
+        if placement_group:
+            scheduling_strategy = PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_capture_child_tasks=True,
+            )
+        elif node_id:
+            scheduling_strategy = NodeAffinitySchedulingStrategy(
+                node_id=node_id,
+                soft=False,
+            )
+        else: # When use simulator, placement_group and node_id are both None.
+            scheduling_strategy = NodeAffinitySchedulingStrategy(
+                node_id=ray.get_runtime_context().get_node_id(),
+                soft=False,
+            )
         self.put_queue_args_queue = queue.Queue()
         self.put_queue_loop_thread = threading.Thread(
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
@@ -97,46 +117,31 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
         self.put_queue_loop_thread.start()
+        # TODO[xinyi]: sopport scheduler_status_helper
 
-    
-    async def _init(self):
-        self._worker_processes.start()
-
-        self._stop_event = asyncio.Event()
-        self._req_buffer = asyncio.Queue()
-        client_args = (
-            (self._args, self._worker_processes.worker_addrs)
-            if self._args.enable_remote_worker
-            else (self._args, [], self._inst_id)
+    @classmethod
+    def from_engine_args(
+        cls,
+        args: ServingArgs,
+        output_queue_type: QueueType,
+        migration_config: MigrationConfig,
+        instance_id: str = None,
+        placement_group: Optional[PlacementGroup] = None,
+        node_id: Optional[str] = None,
+        latency_mem: Optional[LatencyMemData] = None
+    ) -> "LLMEngineLlumnix":
+        """Creates an LLM engine from the engine arguments."""
+        # TODO[xinyi]: add executor_class.
+        # TODO[xinyi]: add latency_mem.
+        # Create the LLM engine.
+        engine = cls(
+            instance_id=instance_id,
+            output_queue_type=output_queue_type,
+            placement_group=placement_group,
+            node_id=node_id,
+            **args,
         )
-        logger.info("client_args {}".format(client_args))
-        # pylint: disable=protected-access
-        self._workers = LlumnixAioWorkerClient(*client_args)
-        await self._workers.wait_backend_ready()
-        token_capacity, block_size, model_max_len, cpu_blocks = (
-            await self._workers.estimate_token_capacity()
-        )
-        logger.info(
-            "Workers estimate token capacity to: {}, cpu_blocks: {}, block_size: {}".format(
-                token_capacity,
-                cpu_blocks,
-                block_size,
-            )
-        )
-        self._scheduler = SchedulerLlumnix(
-            self._args,
-            SchedulerInitInfo(
-                token_capacity=token_capacity,
-                block_size=block_size,
-                model_max_len=model_max_len,
-                cpu_blocks=cpu_blocks,
-            ),
-        )
-
-        # profiling-related fields
-        self._sch_status_helper = scheduler_status_helper(self._scheduler)
-        # this will take control of exporters if step-wise tracing will trace from the beginning
-        self.engine_pre_step_metrics()
+        return engine
     
     async def _loop(self):
         previous_state = self.state
@@ -148,7 +153,8 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         except Exception as e:
             logger.error("Error in engine loop: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
-            self._run_workers("shutdown")
+            # TODO[xinyi, kuilong]: add function methods in worker for llumnix
+            self._workers.shutdown()
 
             previous_state = self.state
             self.state = EngineState.CRASHED
@@ -158,10 +164,46 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
+    async def update_callback(self, resp):
+        server_infos = []
+        request_outputs = []
+        # metrics
+        worker_timer, step_request = self.worker_timer_queue.get_nowait()
+        worker_timer.done()
+        engine_update_timestamp_begin = time.time()
+        update_output = self._scheduler.update(resp)
+        engine_update_timestamp_end = time.time()
+        # handle update ouput
+        if update_output.reset:
+            await self._handle_reset()
+        elif update_output.response is not None:
+            request_groups_map = self._scheduler.get_request_groups_map()
+            for req_id, l_resp in update_output.response.items():
+                if req_id in request_groups_map:
+                    request_groups_map[req_id].update_num_computed_tokens()
+                    if req_id in self.running and l_resp:
+                        
+                        server_info = request_groups_map[req_id].server_info
+                        if hasattr(server_info, 'request_timestamps'):
+                            server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = engine_update_timestamp_begin
+                            server_info.request_timestamps.engine_process_model_outputs_timestamp_end = engine_update_timestamp_end
+                            l_resp.request_timestamps = server_info.request_timestamps
+                        server_infos.append(server_info)
+                        request_outputs.append(l_resp)
+                        if l_resp.is_finished:
+                            del self._back_queue[req_id]
+        # TODO[xinyi]: check repeated response
+        self.worker_post_step_metrics(step_request, resp)
+        self.semaphore.release()
+        # self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
+        # TODO[xinyi]: one more step just for metric
+        self.step_request_queue.put_nowait((request_outputs, server_infos))
+
     async def step(self):
-        # TODO[xinyi]: add step time metrics
+        # TODO[xinyi]: async step may lead to put info not in order for both put_queue_args_queue and step_request_queue
         step_begin_time = time.time()
         await super().step()
+        step_end_time = time.time()
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -180,29 +222,14 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
         self.instance_info=instance_info
-
-    async def update_callback(self, resp):
-        server_infos = []
-        request_outputs = []
-
-        # metrics
-        worker_timer, step_request = self.worker_timer_queue.get_nowait()
-        worker_timer.done()
-
-        update_output = self._scheduler.update(resp)
-        # handle update ouput
-        if update_output.reset:
-            await self._handle_reset()
-        elif update_output.response is not None:
-            for req_id, l_resp in update_output.response.items():
-                if req_id in self._scheduler.request_groups_map and l_resp:
-                    request_outputs.append(l_resp)
-                    server_infos.append(self._scheduler.request_groups_map[req_id].server_info)
-                    if l_resp.is_finished:
-                        del self._back_queue[req_id]
-        self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
-        self.worker_post_step_metrics(step_request, resp)
-        self.semaphore.release()
+        request_outputs, server_infos = self.step_request_queue.get_nowait()
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
+                request_output.request_timestamps.engine_step_timestamp_end = step_end_time
+                request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
+        if request_outputs:
+            self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
 
     #TODO[xinyi]: the same to the function in vllm, maybe put into utils.py
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -245,25 +272,28 @@ class BackendBladeLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
+        output_queue_type: QueueType,
         migration_config: MigrationConfig,
         engine_args: ServingArgs,
         placement_group: PlacementGroup = None,
         node_id: str = None
     ) -> None:
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix(instance_id, engine_args)
-        self.engine.scheduler = SchedulerLlumnix()#self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
-        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
-
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
+                                                                          output_queue_type=output_queue_type,
+                                                                          migration_config=migration_config,
+                                                                          instance_id=instance_id,
+                                                                          placement_group=placement_group,
+                                                                          node_id=node_id)
         self.instance_id = instance_id
         loop = asyncio.get_event_loop()
+        # TODO[xinyi]: support bladellm warmup
         self.engine.start(loop)
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
-        
-        loop = asyncio.get_event_loop()
-        self.engine.start(loop)
+        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
+        # TODO[xinyi, kuilong]: add function methods in worker for llumnix
+        self.engine._workers.init_migration()
 
-    
     def add_request(self,
                     request_id: str,
                     server_info: ServerInfo,
@@ -274,25 +304,20 @@ class BackendBladeLLM(BackendInterface):
         self.engine.add_request(ServerRequestLlumnix(request_id, server_info, expected_steps, *args, **kwargs))
 
     def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
-        ray.get(dst_ray_actor.execute_engine_method.remote("_run_workers",
-                                                           "migrate_cache",
-                                                           dst_blocks=dst_blocks,
-                                                           src_blocks=src_blocks,
-                                                           src_worker_handle_list=self.worker_handle_list))
-
+        # TODO[xinyi, kuilong]: add function methods in worker for llumnix
+        self.engine._workers.migrate_cache(dst_blocks, src_blocks, dst_ray_actor)
+        
     def is_ready(self):
         return True
-    
-    
     
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids = set(request_id)
         for req_id in request_ids:
-            self.engine.drop_request(req_id) # TODO
+            self.engine.drop_request(req_id)
     
-    def get_running_queue(self ) -> List[SequenceGroupLlumnix]:
+    def get_running_queue(self ) -> List[ServerRequestLlumnix]:
         return self.engine.scheduler.get_running_queue()
 
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
@@ -313,9 +338,6 @@ class BackendBladeLLM(BackendInterface):
     def pre_alloc(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.pre_alloc(*args, **kwargs)
 
-    def should_abort_migration(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler.should_abort_migration(*args, **kwargs)
-
     def add_running_request(self, *args, **kwargs) -> None:
         return self.engine.scheduler.add_running_request(*args, **kwargs)
 
@@ -330,8 +352,3 @@ class BackendBladeLLM(BackendInterface):
 
     def get_all_request_ids(self) -> List[str]:
         return self.engine.scheduler.get_all_request_ids()
-    
-    def get_request_server_info(self, request_id: str) -> ServerInfo:
-        return self.engine.request_server_info[request_id]
-
-    

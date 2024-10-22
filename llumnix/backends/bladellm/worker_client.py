@@ -11,12 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 from typing import List
 import grpc
 
-from blade_llm.service.worker_client import AioWorkerClient
+from blade_llm.service.worker_client import PipelineWorkerClient
 from blade_llm.service.proto import bladellm_pb2_grpc
+from blade_llm.service.proto import bladellm_pb2
 from blade_llm.service.args import ServingArgs
+from google.protobuf.empty_pb2 import Empty
 
 # pylint: disable=unused-import
 from llumnix.logger import init_logger
@@ -31,80 +34,51 @@ logger = init_logger(__name__)
 
 class LlumnixWorkerStub:
     def __init__(self, channel) -> None:
-        self.llumnix_worker_stub = llumnix_bladellm_pb2_grpc.LlumnixWorkerStub(channel)
-        self.blade_worker_stub = bladellm_pb2_grpc.WorkerStub(channel)
+        llumnix_bladellm_pb2_grpc.LlumnixWorkerStub.__init__(self, channel)
+        bladellm_pb2_grpc.WorkerStub.__init__(self, channel)
 
-    def info(self, request):
-        return self.blade_worker_stub.info(request)
-
-    def step(self, request):
-        return self.blade_worker_stub.step(request)
-
-    def reset(self, request):
-        return self.blade_worker_stub.reset(request)
-
-    def drop(self, request):
-        return self.blade_worker_stub.drop(request)
-
-    def estimate(self, request):
-        return self.blade_worker_stub.estimate(request)
-
-    def migrate_gpu_cache_grpc(self, request):
-        return self.llumnix_worker_stub.migrate_gpu_cache_grpc(request)
-
-    def allocate_migration_cache(self, request):
-        return self.llumnix_worker_stub.allocate_migration_cache(request)
-
-    def send_cpu_cache(self, request):
-        return self.llumnix_worker_stub.send_cpu_cache(request)
-
-
-class LlumnixAioWorkerClient(AioWorkerClient):
+class LlumnixPipelineWorkerClient(PipelineWorkerClient):
     def __init__(self, args: ServingArgs, addrs=None, inst_id=None):
         super().__init__(args, addrs, inst_id)
 
-        self.stubs = [LlumnixWorkerStub(c) for c in self.channels]
+        self.stubs = make_grpc_stubs(self.channels)
+        self.stub_groups = [
+            tuple(self.stubs[i] for i in range(p * self.tp_size, (p + 1) * self.tp_size)) for p in range(self.pp_size)
+        ]
+        self.stub_group_requests = {group: asyncio.Queue() for group in self.stub_groups}
 
-        if addrs:
-            self.sync_channels = [
-                grpc.insecure_channel(addrs[i])
-                for i in range(self.tp_size * self.pp_size)
-            ]
-            logger.info("created {} grpc channels to backends: {}".format(len(addrs),addrs))
-        else:
-            # cluster mode, attention the socket address path
-            if self._inst_id is not None:
-                self.sync_channels = [
-                    grpc.insecure_channel(
-                        f"unix://{args.worker_socket_path}.{self._inst_id}.{i}"
-                    )
-                    for i in range(self.tp_size * self.pp_size)
-                ]
-            else:
-                self.sync_channels = [
-                    grpc.insecure_channel(f"unix://{args.worker_socket_path}.{i}")
-                    for i in range(self.tp_size * self.pp_size)
-                ]
-        self.sync_stubs = [LlumnixWorkerStub(c) for c in self.sync_channels]
-        logger.info("channels {}".format(self.sync_channels))
+    # TODO[xinyi]: function demo, need to adapt to the proto.
+    def migrate_cache(
+        self, request: llumnix_bladellm_pb2.MigrateCacheRequest
+    )-> None:
+        for stub in self.stubs:
+            stub.migrate_cache(request)
 
-    def allocate_migration_cache(
-        self,
-        request: llumnix_bladellm_pb2.AllocRequest,
-    ) -> None:
-        for stub in self.sync_stubs:
-            stub.allocate_migration_cache(request)
+def make_grpc_stubs(channels):
+    stubs = []
+    for c in channels:
+        stub = LlumnixWorkerStub(c)
+        stub.step = c.unary_unary(
+            '/Worker/step',
+            request_serializer=None,
+            response_deserializer=bladellm_pb2.WorkerStepResponse.FromString,
+        )
+        stub.drop = c.unary_unary(
+            '/Worker/drop',
+            request_serializer=None,
+            response_deserializer=Empty.FromString,
+        )
+        stubs.append(stub)
+    return stubs
 
-    def migrate_gpu_cache_grpc(
-        self,
-        request: llumnix_bladellm_pb2.MigrateRequest,
-    ) -> None:
-        for stub in self.sync_stubs:
-            stub.migrate_gpu_cache_grpc(request)
-
-    def send_cpu_cache(
-        self,
-        request: llumnix_bladellm_pb2.SendRequest,
-    ) -> List[llumnix_bladellm_pb2.SendNumpyResponse]:
-        tasks = [stub.send_cpu_cache(request) for stub in self.sync_stubs]
-        return [task.result() for task in tasks]
+# TODO[xinyi]: revise in bladellm repo
+# TODO[xinyi]: llumnix now only support designated server_ip
+# def worker_client_main(pp_enabled: bool, args: ServingArgs, client_args):
+#     if args.enable_remote_worker or args.server_ip:
+#         import sys
+#         if 'llumnix' in sys.modules:
+#             return LlumnixPipelineWorkerClient(*client_args)
+#         else:
+#             return PipelineWorkerClient(*client_args)
+#     else:
+#         return LocalWorkerClient(*client_args) if not pp_enabled else PipelineWorkerClient(*client_args)

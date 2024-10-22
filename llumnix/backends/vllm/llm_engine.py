@@ -226,6 +226,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         if request_outputs:
             self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
         self.instance_info = instance_info
+        # TODO[xinyi]: why? should first set time info then put_nowait
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
@@ -393,7 +394,8 @@ class BackendVLLM(BackendInterface):
 
     def pre_alloc(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.pre_alloc(*args, **kwargs)
-
+    
+    # TODO[xinyi]: need this function any more?
     def should_abort_migration(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.should_abort_migration(*args, **kwargs)
 

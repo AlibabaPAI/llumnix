@@ -15,61 +15,27 @@ class LlumnixWorkerStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.migrate_gpu_cache_grpc = channel.unary_unary(
-                '/LlumnixWorker/migrate_gpu_cache_grpc',
+        self.migrate_cache = channel.unary_unary(
+                '/LlumnixWorker/migrate_cache',
                 request_serializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.MigrateRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
-        self.allocate_migration_cache = channel.unary_unary(
-                '/LlumnixWorker/allocate_migration_cache',
-                request_serializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.AllocRequest.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                )
-        self.send_cpu_cache = channel.unary_unary(
-                '/LlumnixWorker/send_cpu_cache',
-                request_serializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.SendRequest.SerializeToString,
-                response_deserializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.SendNumpyResponse.FromString,
-                )
-
 
 class LlumnixWorkerServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def migrate_gpu_cache_grpc(self, request, context):
+    def migrate_cache(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def allocate_migration_cache(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def send_cpu_cache(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-
-def add_LlumnixWorkerServicer_to_server(servicer, server):
+def add_LlumnixRemoteWorkerServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'migrate_gpu_cache_grpc': grpc.unary_unary_rpc_method_handler(
-                    servicer.migrate_gpu_cache_grpc,
-                    request_deserializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.MigrateRequest.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'allocate_migration_cache': grpc.unary_unary_rpc_method_handler(
+            'migrate_cache': grpc.unary_unary_rpc_method_handler(
                     servicer.allocate_migration_cache,
                     request_deserializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.AllocRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'send_cpu_cache': grpc.unary_unary_rpc_method_handler(
-                    servicer.send_cpu_cache,
-                    request_deserializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.SendRequest.FromString,
-                    response_serializer=llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.SendNumpyResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -82,7 +48,7 @@ class LlumnixWorker(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def migrate_gpu_cache_grpc(request,
+    def migrate_cache(request,
             target,
             options=(),
             channel_credentials=None,
@@ -95,39 +61,5 @@ class LlumnixWorker(object):
         return grpc.experimental.unary_unary(request, target, '/LlumnixWorker/migrate_gpu_cache_grpc',
             llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.MigrateRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def allocate_migration_cache(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LlumnixWorker/allocate_migration_cache',
-            llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.AllocRequest.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def send_cpu_cache(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LlumnixWorker/send_cpu_cache',
-            llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.SendRequest.SerializeToString,
-            llumnix_dot_backends_dot_bladellm_dot_proto_dot_llumnix__bladellm__pb2.SendNumpyResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

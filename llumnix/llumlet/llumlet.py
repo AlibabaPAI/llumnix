@@ -76,7 +76,7 @@ class Llumlet:
         lifetime = "detached" if detached else None
         assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
         actor_name = f"instance_{instance_id}"
-        if backend_type == backend_type.VLLM:
+        if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
             if disable_fixed_node_init_instance:
                 # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
                 placement_group = initialize_placement_group(world_size, detached=detached)

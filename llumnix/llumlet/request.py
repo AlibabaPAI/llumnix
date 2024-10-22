@@ -49,7 +49,7 @@ class LlumnixRequest:
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
         self.try_schedule_times = 0
-    
+
     def reset_migration_args_src(self):
         self.last_preemption_time = None
         self.stage_timestamps = []

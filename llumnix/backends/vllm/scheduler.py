@@ -237,7 +237,8 @@ class SchedulerLlumnix(Scheduler):
             instance_info.inference_type = scheduled_seq_groups[-1].inference_type
         # TODO(ZeldaHuang) adapt chunked-prefill
         instance_info.num_batched_tokens = sum([seq_group.request_len for seq_group in scheduled_seq_groups]) \
-                                                if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
+                                                if instance_info.inference_type == RequestInferenceType.PREFILL \
+                                                else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.finished]
         return instance_info
 

@@ -69,7 +69,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
-async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
+async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rpc':
         pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
 

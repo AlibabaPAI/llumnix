@@ -68,7 +68,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
-@pytest.mark.parametrize("migrated_request_status", ['waiting', 'running'])
+@pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
 async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rpc':
         pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
@@ -109,16 +109,14 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, m
     parse_manager_log_file("manager_instance.csv")
 
     average_speed = parse_instance_log_file(instance_output_logs)
-
-    sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0]))
-
-    data = [
-        ['migration_size'] + sorted_keys,
-        [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]
-    ]
-
-    with open("performance.txt", "a", encoding="utf-8") as f:
-        f.write(to_markdown_table(data))
+    if migrated_request_status == 'running':
+        sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0]))
+        data = [
+            ['migration_size'] + sorted_keys,
+            [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]
+        ]
+        with open("performance.txt", "a", encoding="utf-8") as f:
+            f.write(to_markdown_table(data))
 
     shutdown_llumnix_service()
     clear_ray_state()

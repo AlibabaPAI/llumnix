@@ -246,7 +246,8 @@ class SchedulerLlumnix(Scheduler):
         seq_group_metadata_list, scheduler_outputs = super().schedule()
         self.update_instance_info_callback(self._get_instance_info([scheduled_seq_group.seq_group \
                                             for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups]))
-
+        for seq_group in self.waiting:
+            seq_group.try_schedule_times += 1
         return seq_group_metadata_list, scheduler_outputs
 
     def _schedule_running(self, running_queue: deque, *args, **kwargs):

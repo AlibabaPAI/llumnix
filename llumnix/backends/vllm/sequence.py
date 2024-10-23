@@ -52,13 +52,15 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
 
     @property
     def status(self) -> RequestStatus:
+        if self._status:
+            return self._status
         status = self.get_seqs()[0].status
-        assert status in [SequenceStatus.RUNNING, SequenceStatus.WAITING], \
-            "Only RUNNING, WAITING are expected status for LlumnixRequest"
         if status == SequenceStatus.RUNNING:
             request_status = RequestStatus.RUNNING
-        else:
+        elif status == SequenceStatus.WAITING:
             request_status = RequestStatus.WAITING
+        else:
+            request_status = RequestStatus.FINISHED
         return request_status
 
     @property

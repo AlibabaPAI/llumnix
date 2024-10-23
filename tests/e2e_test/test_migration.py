@@ -109,8 +109,8 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, m
 
     parse_manager_log_file("manager_instance.csv")
 
-    average_speed = parse_instance_log_file(instance_output_logs)
     if migrated_request_status == 'running':
+        average_speed = parse_instance_log_file(instance_output_logs)
         sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0]))
         data = [
             ['migration_size'] + sorted_keys,

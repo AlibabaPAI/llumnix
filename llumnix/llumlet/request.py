@@ -23,6 +23,9 @@ class RequestInferenceType(str, Enum):
 class RequestStatus(str, Enum):
     RUNNING = "running"
     WAITING = "waiting"
+    FINISHED = "finished"
+    RUNNING_MIGRATING = "running_migrating"
+    WAITING_MIGRATING = "waiting_migrating"
 
 class LlumnixRequest:
     def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
@@ -37,7 +40,7 @@ class LlumnixRequest:
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
         self.try_schedule_times = 0
-        self.waiting_migrating = False
+        self._status = None
 
         # end-of-migration, for multiple requests migration
         self.eom = False
@@ -55,6 +58,12 @@ class LlumnixRequest:
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
+
+    def reset_status(self):
+        self._status = None
+
+    def set_status(self, status: RequestStatus):
+        self._status = status
 
     @property
     def inference_type(self) -> RequestInferenceType:

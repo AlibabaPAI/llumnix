@@ -103,6 +103,7 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.running:
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
+                seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
                 return True
         return False
 
@@ -110,6 +111,7 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.waiting:
             if seq_group.request_id == request_id:
                 self.waiting.remove(seq_group)
+                seq_group.set_status(RequestStatus.WAITING_MIGRATING)
                 return True
         return False
 
@@ -131,7 +133,7 @@ class SchedulerLlumnix(Scheduler):
                   block_num: int) -> List[int]:
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
-        if request_status == RequestStatus.WAITING:
+        if request_status == RequestStatus.WAITING_MIGRATING:
             if (self.waiting and request_arrival_time > self.waiting[0].arrival_time) \
                 or block_num * self.cache_config.block_size > self.prompt_limit:
                 return []
@@ -152,23 +154,23 @@ class SchedulerLlumnix(Scheduler):
         self.waiting = fcfs_policy.sort_by_priority(time.time(), self.waiting)
 
     def can_allocate(self, seq_group: SequenceGroup) -> AllocStatus:
-        if seq_group.waiting_migrating:
+        if seq_group.status == RequestStatus.WAITING_MIGRATING:
             return AllocStatus.OK
         return super().can_allocate(seq_group)
 
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         # Change seq status to running, but request status is still waiting_migrating.
-        if seq_group.waiting_migrating:
+        if seq_group.status == RequestStatus.WAITING_MIGRATING:
             # For the waiting request migrated in, blocks have already been allocated when pre alloc.
-            self._set_status(seq_group, status_to=SequenceStatus.RUNNING)
-            seq_group.waiting_migrating = False
+            self.set_status(seq_group, status_to=SequenceStatus.RUNNING)
+            seq_group.reset_status()
         else:
             super()._allocate_and_set_running(seq_group)
 
-    def _set_status(self,
-                    seq_group: SequenceGroup,
-                    status_to: SequenceStatus,
-                    status_from: SequenceStatus = None):
+    def set_status(self,
+                   seq_group: SequenceGroup,
+                   status_to: SequenceStatus,
+                   status_from: SequenceStatus = None):
         for seq in seq_group.get_seqs(status=status_from):
             seq.status = status_to
 

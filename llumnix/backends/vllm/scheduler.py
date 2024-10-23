@@ -145,9 +145,11 @@ class SchedulerLlumnix(Scheduler):
         return blocks
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
+        self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
         self.running.append(backend_request)
 
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
+        self._set_status(backend_request, status_to=SequenceStatus.WAITING)
         # pylint: disable=E0203
         self.waiting.append(backend_request)
         fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
@@ -162,12 +164,12 @@ class SchedulerLlumnix(Scheduler):
         # Change seq status to running, but request status is still waiting_migrating.
         if seq_group.status == RequestStatus.WAITING_MIGRATING:
             # For the waiting request migrated in, blocks have already been allocated when pre alloc.
-            self.set_status(seq_group, status_to=SequenceStatus.RUNNING)
+            self._set_status(seq_group, status_to=SequenceStatus.RUNNING)
             seq_group.reset_status()
         else:
             super()._allocate_and_set_running(seq_group)
 
-    def set_status(self,
+    def _set_status(self,
                    seq_group: SequenceGroup,
                    status_to: SequenceStatus,
                    status_from: SequenceStatus = None):

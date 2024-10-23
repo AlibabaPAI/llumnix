@@ -66,7 +66,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
+@pytest.mark.parametrize("migrated_request_status", ['waiting', 'running'])
 async def test_migration_benchmark(model, migration_backend, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rpc':
         pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
@@ -104,8 +104,8 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
 
     parse_manager_log_file("manager_instance.csv")
 
-    average_speed = parse_instance_log_file(instance_output_logs)
     if migrated_request_status == 'running':
+        average_speed = parse_instance_log_file(instance_output_logs)
         sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0]))
         data = [
             ['migration_size'] + sorted_keys,

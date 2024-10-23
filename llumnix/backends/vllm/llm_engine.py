@@ -353,11 +353,16 @@ class BackendVLLM(BackendInterface):
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_args_dst()
-        if backend_request.status == RequestStatus.RUNNING:
-            self.add_running_request(backend_request)
-        else: # RequestStatus.WAITING
-            backend_request.waiting_migrating = True
+        assert backend_request.status in [RequestStatus.WAITING_MIGRATING, RequestStatus.RUNNING_MIGRATING], \
+            "The status of request migrated to dst instance should be  \
+             RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
+        if backend_request.status == RequestStatus.WAITING_MIGRATING:
+            self.engine.scheduler.set_status(backend_request, status_to=SequenceStatus.WAITING)
             self.add_waiting_request(backend_request)
+        elif backend_request.status == RequestStatus.RUNNING_MIGRATING:
+            backend_request.reset_status()
+            self.engine.scheduler.set_status(backend_request, status_to=SequenceStatus.RUNNING)
+            self.add_running_request(backend_request)
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         await dst_ray_actor.execute_engine_method.remote("_run_workers",

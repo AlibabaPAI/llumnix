@@ -115,8 +115,8 @@ class MigrationCoordinator:
             if not found:
                 return MigrationStatus.FINISHED_SRC_ABORTED
             self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
-            stage_block_num = len(incremental_blocks)
             src_blocks = incremental_blocks[:]
+            stage_block_num = len(incremental_blocks)
             dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                     .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
                                                                     migrate_out_request.status,

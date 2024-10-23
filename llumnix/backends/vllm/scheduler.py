@@ -136,10 +136,6 @@ class SchedulerLlumnix(Scheduler):
                 or block_num * self.cache_config.block_size > self.prompt_limit:
                 return []
         blocks = self.block_manager.get_free_blocks(block_num)
-        # Once dst instance cannot pre alloc, free the pre alloc cache proactively.
-        if len(blocks) < block_num:
-            self.free_dst_pre_alloc_cache(request_id)
-            return []
         pre_blocks = self.pre_alloc_cache_dict.get(request_id, [])
         pre_blocks.extend(blocks)
         self.pre_alloc_cache_dict[request_id] = pre_blocks

@@ -84,6 +84,7 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
                                                  model=model, dispatch_policy="flood", migration_backend=migration_backend,
                                                  log_instance_info=True, request_migration_policy=request_migration_policy)
         subprocess.run(launch_command, shell=True, check=True)
+        await asyncio.sleep(5)
     await asyncio.sleep(30)
 
     async def run_bench_command(command):

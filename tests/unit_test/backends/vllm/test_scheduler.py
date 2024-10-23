@@ -12,13 +12,14 @@
 # limitations under the License.
 
 import math
+import time
 
 from vllm.sequence import Sequence
 from vllm.sequence import Logprob
 from vllm.core.policy import PolicyFactory
 
 from llumnix.backends.vllm.scheduler import BlockManagerLlumnix
-from llumnix.llumlet.request import RequestInferenceType
+from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from .utils import create_dummy_prompt, initialize_scheduler, create_token_budget
 
 
@@ -129,6 +130,25 @@ def test_scheduler_running_request():
     scheduler.add_running_request(seq_group)
     assert scheduler.get_num_unfinished_seq_groups() == 4
 
+def test_scheduler_waiting_request():
+    scheduler = initialize_scheduler()
+    num_seq_group = 4
+    block_size = 4
+    _, seq_group_0 = create_dummy_prompt("0", prompt_length=0, block_size=block_size)
+    for idx in range(1, num_seq_group + 1):
+        _, seq_group = create_dummy_prompt(str(idx), prompt_length=idx, block_size=block_size)
+        scheduler.add_seq_group(seq_group)
+    assert scheduler.get_num_unfinished_seq_groups() == 4
+    scheduler.remove_waiting_request("1")
+    assert scheduler.get_num_unfinished_seq_groups() == 3
+    _, seq_group = create_dummy_prompt("6", prompt_length=idx, block_size=block_size)
+    scheduler.add_waiting_request(seq_group)
+    assert scheduler.get_num_unfinished_seq_groups() == 4
+    # Test if sort the waiting queue by arrival time in add_waiting_request.
+    scheduler.add_waiting_request(seq_group_0)
+    waiting_queue = scheduler.get_waiting_queue()
+    assert waiting_queue[0] == seq_group_0
+
 def test_scheduler_migrating_out_request_last_stage():
     scheduler = initialize_scheduler()
     block_size = 4
@@ -142,13 +162,13 @@ def test_scheduler_migrating_out_request_last_stage():
 def test_scheduler_pre_alloc():
     # total 8 blocks
     scheduler = initialize_scheduler()
-    blocks = scheduler.pre_alloc("1", 2)
+    blocks = scheduler.pre_alloc("1", RequestStatus.RUNNING, 0.0, 2)
     assert len(blocks) == 2
     assert len(scheduler.pre_alloc_cache_dict["1"]) == 2
-    blocks = scheduler.pre_alloc("1", 4)
+    blocks = scheduler.pre_alloc("1", RequestStatus.RUNNING, 0.0, 4)
     assert len(blocks) == 4
     assert len(scheduler.pre_alloc_cache_dict["1"]) == 6
-    blocks = scheduler.pre_alloc("2,", 4)
+    blocks = scheduler.pre_alloc("2", RequestStatus.RUNNING, 0.0, 4)
     assert len(blocks) == 0
 
 def test_schedule_running():
@@ -176,3 +196,37 @@ def test_schedule_running():
     assert len(running_scheduled.decode_seq_groups) == 1
     assert len(running_scheduled.prefill_seq_groups) == 0
     assert len(remainig_running) == 1
+
+    # test pre alloc waiting condition
+    # total 8 blocks
+    scheduler = initialize_scheduler()
+    before_arrival = time.time()
+    _, seq_group = create_dummy_prompt("1", prompt_length=1, block_size=2, expected_steps=math.inf)
+    after_arrival = time.time()
+    blocks = scheduler.pre_alloc("2", RequestStatus.WAITING_MIGRATING, after_arrival, 2)
+    assert len(blocks) == 2
+    scheduler.add_waiting_request(seq_group)
+    blocks = scheduler.pre_alloc("3", RequestStatus.WAITING_MIGRATING, after_arrival, 2)
+    assert len(blocks) == 0
+    blocks = scheduler.pre_alloc("4", RequestStatus.WAITING_MIGRATING, before_arrival, 2)
+    assert len(blocks) == 2
+
+def test_try_schedule_times():
+    # total 8 blocks
+    scheduler = initialize_scheduler()
+    _, seq_group_1 = create_dummy_prompt("1", prompt_length=8, block_size=1)
+    _, seq_group_2 = create_dummy_prompt("2", prompt_length=8, block_size=1)
+    scheduler.add_seq_group(seq_group_1)
+    scheduler.add_seq_group(seq_group_2)
+    waiting_queue = scheduler.get_waiting_queue()
+    assert len(waiting_queue) == 2
+    assert seq_group_1.try_schedule_times == 0
+    assert seq_group_2.try_schedule_times == 0
+    scheduler.schedule()
+    # seq_group_2 cannot be scheduled due to lack of blocks
+    assert seq_group_1.try_schedule_times == 0
+    assert seq_group_2.try_schedule_times == 1
+    scheduler.schedule()
+    # seq_group_1 is preempted to waiting queue
+    assert seq_group_1.try_schedule_times == 1
+    assert seq_group_2.try_schedule_times == 2

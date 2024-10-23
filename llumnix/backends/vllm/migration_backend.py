@@ -282,13 +282,13 @@ def get_migration_backend(migration_config: MigrationConfig, cache_engine: Cache
                        .format(migration_config.migration_cache_blocks, cache_engine.num_gpu_blocks))
         migration_config.migration_cache_blocks = cache_engine.num_gpu_blocks
 
-    target_col = None
+    target_migration_backend = None
     backend = migration_config.migration_backend
     if backend in ['nccl', 'gloo']:
-        target_col = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
+        target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
                                             is_driver_worker, gpu_cache)
     else:
-        target_col = RayRpcMigrationBackend(migration_config, cache_engine, worker_rank, worker_handle_list,
+        target_migration_backend = RayRpcMigrationBackend(migration_config, cache_engine, worker_rank, worker_handle_list,
                                             scheduling_strategy, is_driver_worker, gpu_cache)
 
-    return target_col
+    return target_migration_backend

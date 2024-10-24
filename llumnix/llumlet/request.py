@@ -32,6 +32,7 @@ class LlumnixRequest:
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
+        self.migrating = False
 
     def reset_migration_args(self):
         self.last_preemption_time = None
@@ -39,6 +40,7 @@ class LlumnixRequest:
         self.stage_num_blocks_list = []
         # By default, there is no limit on the number of steps expected for the request.
         self.expected_steps = math.inf
+        self.migrating = False
 
     def is_finished(self) -> bool:
         raise NotImplementedError

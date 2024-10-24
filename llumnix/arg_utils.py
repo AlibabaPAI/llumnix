@@ -22,7 +22,6 @@ from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
-
 class LlumnixArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
@@ -134,10 +133,11 @@ class EngineManagerArgs:
 
     migration_backend_init_timeout: float = None
     migration_backend: str = None
-    migration_cache_blocks: int = None
+    migration_buffer_blocks: int = None
     migration_num_layers: int = None
     last_stage_max_blocks: int = None
     max_stages: int = None
+    migration_internal_buffer_num: int = None
 
     enable_pd_disagg: bool = None
 
@@ -172,11 +172,12 @@ class EngineManagerArgs:
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
-                                           self.migration_cache_blocks,
+                                           self.migration_buffer_blocks,
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
-                                           self.migration_backend_init_timeout)
+                                           self.migration_backend_init_timeout,
+                                           self.migration_internal_buffer_num)
         return migration_config
 
     @classmethod
@@ -194,6 +195,9 @@ class EngineManagerArgs:
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
                 assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
+
+        assert args.migration_backend != 'nccl', 'NCCL has been temporarily deprecated due to its incompatibility with \
+            concurrent migrations in Llumnix.'
 
         assert args.migration_backend != 'gloo' or (args.migration_backend == 'gloo' \
             and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \
@@ -288,20 +292,23 @@ class EngineManagerArgs:
 
         parser.add_argument('--migration-backend',
                             type=str,
-                            choices=['gloo','nccl','rpc'],
+                            choices=['gloo', 'nccl', 'rpc'],
                             help='communication backend of migration')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
                             help='timeout(s) for initializing migration backend')
-        parser.add_argument('--migration-cache-blocks',
+        parser.add_argument('--migration-buffer-blocks',
                             type=int,
-                            help='number of cache blocks in migration')
+                            help='number of cache blocks in each migration buffer')
         parser.add_argument('--migration-num-layers',
                             type=int,
                             help='number of kv-cache layers to transfer in each round during migration')
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
                             help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
+        parser.add_argument('--migration-internal-buffer-num',
+                            type=int,
+                            help='number of the buffer in migration backend for sending and receiving')
         parser.add_argument('--max-stages',
                             type=int,
                             help='drop migration if the number of stages > max_stages')

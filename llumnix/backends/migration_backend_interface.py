@@ -13,7 +13,9 @@
 
 from abc import ABC, abstractmethod
 from typing import List
+import queue
 
+import torch
 
 class MigrationBackendBase(ABC):
     @abstractmethod
@@ -39,3 +41,24 @@ class MigrationBackendBase(ABC):
     @abstractmethod
     def do_recv(self, src_handle, blocks: List[int]):
         raise NotImplementedError
+
+class BufferMigrationBackend(MigrationBackendBase):
+    def __init__(self, num_buffer, buffer_shape, buffer_dtype, buffer_device, pin_memory, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.num_buffer = num_buffer
+
+        self.dummy_buffer = [
+            torch.empty(size=buffer_shape, dtype=buffer_dtype, device=buffer_device, pin_memory=pin_memory)
+            for _ in range(self.num_buffer)
+        ]
+
+        self.avaiable_buffer_queue = queue.Queue()
+        for i in range(self.num_buffer):
+            self.avaiable_buffer_queue.put_nowait(i)
+
+    def get_available_cache(self):
+        return self.avaiable_buffer_queue.get()
+
+    def put_back_cache(self, buffer_id):
+        self.avaiable_buffer_queue.put_nowait(buffer_id)

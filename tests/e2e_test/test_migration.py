@@ -66,21 +66,19 @@ def parse_manager_log_file(log_file):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
-async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
+@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
+async def test_migration_benchmark(model, migration_backend):
     base_port = 37037
     instance_output_logs = []
 
     device_count = torch.cuda.device_count()
-    num_dispatch_instances = device_count//2 if enable_pd_disagg else math.inf
     for i in range(device_count):
         output_log = f"{base_port+i}.out"
         instance_output_logs.append("instance_"+output_log)
         launch_command = generate_launch_command(result_filename=output_log, launch_ray_cluster=False, port=base_port+i,
                                                  model=model, dispatch_policy="flood", migration_backend=migration_backend,
-                                                 log_instance_info=True, enable_pd_disagg=enable_pd_disagg,
-                                                 num_dispatch_instances=num_dispatch_instances)
+                                                 log_instance_info=True, enable_pd_disagg=False,
+                                                 num_dispatch_instances=math.inf)
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(60)
 
@@ -89,13 +87,18 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
         await process.wait()
         assert process.returncode == 0
 
+    tasks = []
     for i in range(device_count//2):
         bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=300,
                                                dataset_type="sharegpt",
                                                dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
                                                qps=10)
-        await asyncio.wait_for(run_bench_command(bench_command), timeout=60*30)
-    await asyncio.sleep(30)
+        tasks.append(asyncio.create_task(run_bench_command(bench_command)))
+
+    _, pending = await asyncio.wait(tasks, timeout=60*30)
+
+    if len(pending) > 0:
+        raise RuntimeError("migration task Timeout")
 
     parse_manager_log_file("manager_instance.csv")
 

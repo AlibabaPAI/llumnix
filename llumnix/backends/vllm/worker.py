@@ -14,7 +14,6 @@
 import time
 from typing import Dict, List
 import math
-import ray
 import torch
 
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
@@ -50,10 +49,11 @@ class MigrationWorker(Worker):
 
     def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
                                      cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
-        migrate_cache_blocks_size = migration_config.migration_cache_blocks
+        migrate_cache_blocks_size = migration_config.migration_buffer_blocks
         migrate_num_layers = migration_config.migration_num_layers
-        dummy_cache_size = migrate_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
-            cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
+        dummy_cache_size = migration_config.migration_internal_buffer_num * migrate_num_layers * migrate_cache_blocks_size \
+                        * CacheEngine.get_cache_block_size(cache_config, model_config, parallel_config) \
+                        // model_config.get_num_layers(parallel_config)
 
         # For nccl migration backend, reserve gpu memory for dummy cache in migration backend. For other backends,
         # CPU memory is used for the dummy cache, which is almost unlimited, so no special action is needed.
@@ -111,14 +111,16 @@ class MigrationWorker(Worker):
         start_time = time.time()
         try:
             self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks)
-        except ray.exceptions.RayActorError:
-            logger.info("[migrate_cache] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.info("[migrate_cache] self.rank: {}, src_worker_handle {}, meet error : {}"
+                        .format(self.rank, src_worker_handle, e))
         end_time = time.time()
 
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
             self.cache_config, self.model_config, self.parallel_config)
         speed = total_kv_cache_size/_GB/(end_time - start_time)
-        logger.info("[migration_cache] blocks_num: {}, total_kv_cache_size: {}, time: {}s, speed: {}GB/s."
+        logger.info("[migrate_cache] blocks_num: {}, total_kv_cache_size: {}, time: {}s, speed: {}GB/s."
                     .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
 
     def do_recv(self, *args, **kwargs):
@@ -150,7 +152,3 @@ class MigrationWorker(Worker):
         del self.migration_backend
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
-
-    def restart(self) -> None:
-        self.init_model()
-        self.init_cache_engine(self.cache_config)

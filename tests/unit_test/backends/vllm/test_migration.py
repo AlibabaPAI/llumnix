@@ -56,7 +56,7 @@ class MockLlumlet(Llumlet):
 async def test_migration_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0":0, "1":1}
-    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
+    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20, 2)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -144,9 +144,9 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
-    engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
-    id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20)
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    id_rank_map = {"0":0, "1":1}
+    migration_config = MigrationConfig("LCFS", migration_backend, 16, 1, 4, 5, 20, 2)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -174,12 +174,15 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
                             migration_config,
                             engine_args,
                      )
+
     while True:
         res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])
         if all(res):
             break
-    ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
-            llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
+
+    ray.get([llumlet_0.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
+            llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
+
     # empty instance migrate out
     res = ray.get(llumlet_0.migrate_out.remote("instance_1", num_requests=math.inf))
     assert not res
@@ -222,8 +225,10 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
 
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob
+
     for prompt in TEST_PROMPTS:
         await test_correctness(prompt)
+
     que.cleanup()
 
 def test_clear_migration_states():

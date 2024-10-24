@@ -42,8 +42,6 @@ CLEARING_INTERVAL = 3600
 RETRIES_INTERVALS = 5.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
-
-
 class LLMEngineManager:
     def __init__(self,
                  engine_manager_args: EngineManagerArgs,
@@ -71,10 +69,7 @@ class LLMEngineManager:
         logger.info("num_instances: {}".format(self.num_instances))
         logger.info("max_instances: {}, min_instances: {}".format(self.max_instances, self.min_instances))
 
-        # TODO(s5u13b): refactor auto-scaling
-
         self.instances: Dict[str, Llumlet] = {}
-        self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
 
@@ -92,8 +87,9 @@ class LLMEngineManager:
 
         # migrate states
         self.num_instance_info_updates = 0
-        self.migrating = False
+        self.num_migrating = 0
 
+        # TODO(s5u13b): refactor auto-scaling
         # auto-scaling states
         self.scale_up_time = -1
         self.scale_down_time = -1
@@ -184,26 +180,31 @@ class LLMEngineManager:
                     self.global_scheduler.update_instance_infos([ret])
             else:
                 dead_instance_ids.append(instance_id)
+
         while True:
             try:
                 await asyncio.sleep(interval)
                 tasks = []
                 instance_infos = []
                 dead_instance_ids = []
+
                 for instance_id, instance in self.instances.items():
                     # Use asyncio.gather to wrap ray remote call to add done callback.
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
                     task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
                     tasks.append(task)
                 await asyncio.gather(*tasks, return_exceptions=True)
+
                 if len(dead_instance_ids) > 0:
                     logger.info("[_update_instance_info_loop] dead instances: {}.".format(dead_instance_ids))
                     self.scale_down(dead_instance_ids)
                 self.num_instance_info_updates += 1
+
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \
                     and self.num_instance_info_updates % self.pair_migration_frequency == 0:
                     asyncio.create_task(self._push_migrations())
+
                 if self.log_instance_info:
                     self._log_instance_infos_to_csv(instance_infos)
             # pylint: disable=W0703
@@ -217,6 +218,7 @@ class LLMEngineManager:
         while True:
             await asyncio.sleep(interval)
             self.request_instance = {}
+
     async def _push_migrations(self) -> None:
         # Push migrate when the instance_info have updated a certain number of times.
         if self.enable_pd_disagg:
@@ -227,10 +229,7 @@ class LLMEngineManager:
 
     async def _migrate(self, pair_migration_type: PairMigrationConstraints, migrate_in_num_requests: int) -> None:
         async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
-            if migrate_instance_pair[0] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[0]] = False
-            if migrate_instance_pair[1] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[1]] = False
+            self.num_migrating -= 1
             if isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):
@@ -252,19 +251,20 @@ class LLMEngineManager:
                     self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
                 logger.info("{}->{} migrate done, migrate request {}".format(
                     migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
+
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
             ret = fut.result()
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
-        migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
+
         try:
+            migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
+
             migration_tasks = []
             for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
+                self.num_migrating += 1
                 migrate_out_instance_id, migrate_in_instance_id = migrate_instance_pair
-                if self.instance_migrating[migrate_out_instance_id] or self.instance_migrating[migrate_in_instance_id]:
-                    continue
-                self.instance_migrating[migrate_out_instance_id] = True
-                self.instance_migrating[migrate_in_instance_id] = True
+
                 migrate_in_instance_name = "instance_{}".format(migrate_in_instance_id)
                 # Use asyncio.gather to wrap ray remote call to add done callback.
                 task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name, migrate_in_num_requests),
@@ -280,7 +280,7 @@ class LLMEngineManager:
 
     async def rebuild_migrate_backend(self) -> None:
         # Wait for all instances to finish migration
-        while any(self.instance_migrating.values()):
+        while self.num_migrating > 0:
             await asyncio.sleep(0.1)
 
         # During rebuilding migration backend, disable migrate
@@ -353,7 +353,6 @@ class LLMEngineManager:
             if ins_id not in self.instances:
                 indeed_update = True
                 self.instances[ins_id] = llumlet_actor_handles[idx]
-                self.instance_migrating[ins_id] = False
                 if self.log_instance_info:
                     self.instance_last_logged_empty[ins_id] = False
                 self.pending_rebuild_migration_instances += 1
@@ -381,7 +380,6 @@ class LLMEngineManager:
             if ins_id in self.instances:
                 indeed_update = True
                 del self.instances[ins_id]
-                del self.instance_migrating[ins_id]
                 if self.log_instance_info:
                     del self.instance_last_logged_empty[ins_id]
                 self.pending_rebuild_migration_instances += 1

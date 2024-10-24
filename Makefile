@@ -21,11 +21,11 @@ install:
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed
-	@pylint --rcfile=.pylintrc -s n  --jobs=32 ./llumnix
+	@pylint --rcfile=.pylintrc -s n  --jobs=128 ./llumnix
 	
 	@pylint --rcfile=.pylintrc \
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
-			-s n --jobs=32 ./tests
+			-s n --jobs=128 ./tests
 
 .PHONY: test
 test: check_pytest_installed

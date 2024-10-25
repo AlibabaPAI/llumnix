@@ -453,10 +453,8 @@ class LLMEngineManager:
 
     # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
     # TODO(s5u13b): Fix the logger when enabling init instance by manager.
-    def init_llumlets(self, engine_args, node_id: str, output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
+    def init_llumlets(self, node_id: str, output_queue_type: QueueType, backend_type: BackendType, world_size: int, *args) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
-        engine_config = engine_args.create_engine_config()
-        parallel_config = engine_config.parallel_config
         instance_ids: List[str] = []
         llumlets: List[Llumlet] = []
         for _ in range(engine_manager_args.initial_instances):
@@ -468,12 +466,13 @@ class LLMEngineManager:
                     True,
                     node_id,
                     instance_id,
-                    BackendType.VLLM,
-                    parallel_config.world_size,
+                    backend_type,
                     engine_manager_args.create_migration_config(),
-                    engine_args,
+                    world_size,
+                    *args,
                 )
             else:
+                assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
                 llumlet = Llumlet.from_args(
                     output_queue_type,
                     engine_manager_args.disable_fixed_node_init_instance,
@@ -481,10 +480,10 @@ class LLMEngineManager:
                     node_id,
                     instance_id,
                     BackendType.SIM_VLLM,
-                    parallel_config.world_size,
                     engine_manager_args.create_migration_config(),
+                    world_size,
                     engine_manager_args.profiling_result_file_path,
-                    engine_args,
+                    *args,
                 )
             instance_ids.append(instance_id)
             llumlets.append(llumlet)

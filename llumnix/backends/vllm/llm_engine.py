@@ -88,8 +88,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  output_queue_type: QueueType,
                  placement_group: Optional[PlacementGroup],
                  node_id: Optional[str],
-                 *arg, **kwargs) -> None:
-        super().__init__(*arg, **kwargs)
+                 *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None

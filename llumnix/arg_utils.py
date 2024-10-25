@@ -16,7 +16,8 @@
 import dataclasses
 from dataclasses import dataclass
 import argparse
-from typing import Tuple
+from simple_parsing import ArgumentParser
+from typing import Tuple, Optional
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
@@ -51,7 +52,7 @@ class LlumnixEntrypointsArgs:
     request_output_queue_port: int = None
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
-    config_file: bool = None
+    config_file: str = None
 
     def __post_init__(self):
         for attr in dataclasses.fields(self):

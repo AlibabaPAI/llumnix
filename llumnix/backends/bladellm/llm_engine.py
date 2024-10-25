@@ -87,6 +87,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                  *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
         # TODO[xinyi]: maybe inherit from Metirc Class in Bladellm or create a Metric Class for Llumnix
+        # TODO[xinyi]: support PipelineLLMMixin Class for Bladellm
         self.step_request_queue = asyncio.Queue()
         self.instance_id = instance_id
         self.step_counter = Counter()
@@ -182,7 +183,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                 if req_id in request_groups_map:
                     request_groups_map[req_id].update_num_computed_tokens()
                     if req_id in self.running and l_resp:
-                        
                         server_info = request_groups_map[req_id].server_info
                         if hasattr(server_info, 'request_timestamps'):
                             server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = engine_update_timestamp_begin
@@ -191,6 +191,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                         server_infos.append(server_info)
                         request_outputs.append(l_resp)
                         if l_resp.is_finished:
+                            # TODO[xinyi]: handle error info in back queue
                             del self._back_queue[req_id]
         # TODO[xinyi]: check repeated response
         self.worker_post_step_metrics(step_request, resp)

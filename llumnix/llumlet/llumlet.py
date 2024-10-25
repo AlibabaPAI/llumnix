@@ -69,12 +69,12 @@ class Llumlet:
                   node_id: str,
                   instance_id: str,
                   backend_type: BackendType,
-                  world_size: int,
                   migration_config: MigrationConfig,
+                  world_size: int,
                   *args,
                   **kwargs):
         lifetime = "detached" if detached else None
-        assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM], f'unimplemented backend {backend_type}'
+        assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], f'unimplemented backend {backend_type}'
         actor_name = f"instance_{instance_id}"
         if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
             if disable_fixed_node_init_instance:
@@ -211,3 +211,4 @@ class Llumlet:
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
+    

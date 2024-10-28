@@ -27,6 +27,9 @@ lint: check_pylint_installed check_pytest_installed
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
 			-s n --jobs=32 ./tests
 
+.PHONY: clean
+clean: proto-clean
+
 ###################################### proto begin ######################################
 
 .PHONY: proto
@@ -41,8 +44,8 @@ proto:
 
 .PHONY: proto-clean
 proto-clean:
-	@find . -name "*_pb2_grpc.py" | xargs rm 
-	@find . -name "*_pb2.py" | xargs rm
+	@find . -name "*_pb2_grpc.py" | xargs rm -f
+	@find . -name "*_pb2.py" | xargs rm -f
 
 ####################################### proto end #######################################
 

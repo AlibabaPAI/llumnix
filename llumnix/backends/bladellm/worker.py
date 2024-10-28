@@ -11,14 +11,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Dict
 import gc
 import asyncio
-import torch
-import grpc
-from typing import Dict
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from google.protobuf import empty_pb2
+import torch
+import grpc
 
+from blade_llm.generation.kvcache.kv_transfer import TransferType
 from blade_llm.service.workers.remote_worker import RemoteWorker, RemoteManager
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.proto import bladellm_pb2_grpc
@@ -32,31 +34,35 @@ from llumnix.logger import init_logger
 logger = init_logger(__name__)
 
 class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer, RemoteWorker):
-    def __init__(self, instance_id: str, worker_addr: str, migration_config: MigrationConfig,
-                 rank, args) -> None:
+    def __init__(self, instance_id: int, worker_addr: str, migration_config: MigrationConfig,
+                 naming_url: str,  tranfer_type: TransferType, rank: int, args: ServingArgs) -> None:
         super().__init__(rank, args)
         torch.cuda.set_device(args.device)
         self.instance_id = instance_id
-        self.migration_backend = get_migration_backend(worker_addr, migration_config, self._engine._state_manager)
+        self.migration_backend = get_migration_backend(instance_id, rank, rank, worker_addr, migration_config,
+                                                       self._engine._state_manager, naming_url, args, tranfer_type)
 
     def is_ready(self, request, context):
-        return migration_worker_pb2.ReadyResponse(is_ready=True)
-    
+        return migration_worker_pb2.ReadyResponse(ok=True)
+
     # pylint: disable=unused-argument
-    def migrate_cache(self, request: migration_worker_pb2.MigrateRequest, context: grpc.ServicerContext) -> None:
+    def migrate_cache(self, request: migration_worker_pb2.MigrateRequests, context: grpc.ServicerContext) -> None:
         src_worker_handle = request.src_handlers[self._rank]
         try:
             self.migration_backend.migrate_cache(src_worker_handle, request.src_blocks, request.dst_blocks)
+        # pylint: disable=broad-except
         except Exception as e:
             logger.info("[migrate_cache] rank: {}, {} is dead, err : {}.".format(self._rank, src_worker_handle, e))
-        
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
+
         return empty_pb2.Empty()
 
     def do_send(self, request: migration_worker_pb2.SendKvCacheRequest, context: grpc.ServicerContext):
         return self.migration_backend.do_send(request, context)
 
     def rebuild_migration_backend(self, instance_rank: Dict[str, int], group_name: str) -> bool:
-        pass
+        self.migration_backend.destory_backend()
+        return self.migration_backend.init_backend(None, None, None)
 
     def warmup(self, request, context) -> bool:
         return migration_worker_pb2.WarmupResponse(ok=self.migration_backend.warmup())
@@ -67,10 +73,12 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer, RemoteW
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
 
-def worker_main(rank: int, args: ServingArgs, instance_id: str, migration_config: MigrationConfig):
-    asyncio.run(worker_server(rank, args, instance_id, migration_config))
+def worker_main(rank: int, args: ServingArgs, instance_id: int, migration_config: MigrationConfig,
+                naming_url: str, tranfer_type: TransferType):
+    asyncio.run(worker_server(rank, args, instance_id, migration_config, naming_url, tranfer_type))
 
-async def worker_server(rank: int, args: ServingArgs, instance_id: str, migration_config: MigrationConfig):
+async def worker_server(rank: int, args: ServingArgs, instance_id: int, migration_config: MigrationConfig,
+                        naming_url: str, tranfer_type: TransferType):
     if args.server_ip:
         worker_port = int(get_free_port())
         await RemoteManager.start_watch_dog(args, worker_port)
@@ -81,8 +89,8 @@ async def worker_server(rank: int, args: ServingArgs, instance_id: str, migratio
         if args.server_ip
         else f"unix://{args.worker_socket_path}.{instance_id}.{rank}"
     )
-    worker = MigrationWorker(instance_id, listen_addr, migration_config, rank, args)
 
+    worker = MigrationWorker(instance_id, listen_addr, migration_config, naming_url, tranfer_type, rank, args)
     server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=1))
     bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
     migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)

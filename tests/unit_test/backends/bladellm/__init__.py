@@ -10,24 +10,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from abc import ABC, abstractmethod
-from typing import List
-
-
-class MigrationBackendBase(ABC):
-    @abstractmethod
-    def init_backend(self, group_name, world_size, rank) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    def destory_backend(self) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def warmup(self) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
-        raise NotImplementedError

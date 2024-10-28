@@ -97,14 +97,14 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
             offset = min(self.num_migration_cache_blocks, tot_blocks - start_idx)
             send_blocks = src_blocks[start_idx:start_idx+offset]
-            ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", None, send_blocks)
+            ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", send_blocks)
             if rpc_numpy_cache is not None:
                 self.do_recv(rpc_numpy_cache, recv_blocks)
             rpc_numpy_cache = ray.get(ray_obj)
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
         self.do_recv(rpc_numpy_cache, recv_blocks)
 
-    def do_send(self, dst_handle, blocks: List[int]):
+    def do_send(self, blocks: List[int]):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}

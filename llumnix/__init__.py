@@ -11,8 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import vllm
-from vllm import *
+# import vllm
+# from vllm import *
 
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.utils import (launch_ray_cluster,
@@ -39,4 +39,4 @@ __all__ = [
     "QueueType",
 ]
 
-__all__.extend(getattr(vllm, "__all__", []))
+# __all__.extend(getattr(vllm, "__all__", []))

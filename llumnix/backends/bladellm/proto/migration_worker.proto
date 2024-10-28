@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+message ReadyResponse {
+  bool is_ready = 1;
+}
+
+message WarmupResponse {
+  bool ok = 1;
+}
+
+message MigrateRequest {
+  repeated string src_handlers = 1;
+  repeated int32 src_blocks = 2;
+  repeated int32 dst_blocks = 3;
+}
+
+message SendKvCacheRequest {
+  repeated int32 blocks = 1;
+}
+
+message SendKvCacheResponse {
+  bytes key = 1;
+  bytes value = 2;
+}
+
+service MigrationWorker {
+  rpc is_ready (google.protobuf.Empty) returns (ReadyResponse) {}
+  rpc warmup (google.protobuf.Empty) returns (WarmupResponse) {}
+  rpc migrate_cache (MigrateRequest) returns (google.protobuf.Empty) {}
+  rpc do_send (SendKvCacheRequest) returns (SendKvCacheResponse) {}
+}

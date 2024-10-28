@@ -11,185 +11,89 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from concurrent.futures import ThreadPoolExecutor
-import asyncio
 import gc
-import sys
+import asyncio
 import torch
 import grpc
+from typing import Dict
+from concurrent.futures import ThreadPoolExecutor
 from google.protobuf import empty_pb2
-import loguru
 
+from blade_llm.service.workers.remote_worker import RemoteWorker, RemoteManager
 from blade_llm.service.args import ServingArgs
-from blade_llm.service.worker import RemoteManager
-from blade_llm.utils.network import get_free_port
 from blade_llm.service.proto import bladellm_pb2_grpc
-from blade_llm.service.worker import Worker
+from blade_llm.utils.network import get_free_port
 
-from llumnix.backends.bladellm.proto import (
-    llumnix_bladellm_pb2,
-    llumnix_bladellm_pb2_grpc,
-)
+from llumnix.backends.bladellm.migration_backend import get_migration_backend
+from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
+from llumnix.internal_config import MigrationConfig
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
-NUMPY_SUPPORT_DTYPES = [torch.float32, torch.float16]
 
+class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer, RemoteWorker):
+    def __init__(self, instance_id: str, worker_addr: str, migration_config: MigrationConfig,
+                 rank, args) -> None:
+        super().__init__(rank, args)
+        torch.cuda.set_device(args.device)
+        self.instance_id = instance_id
+        self.migration_backend = get_migration_backend(worker_addr, migration_config, self._engine._state_manager)
 
-def recv_cpu_cache(src_worker_handle, src_blocks):
-    """
-    Args:
-        src_worker_handle: src worker client handle
-        blocks: block to send
-    """
-    try:
-        k, v = src_worker_handle.send_cpu_cache(src_blocks)
-    # pylint: disable=try-except-raise
-    except:
-        raise
-    return k, v
-
-
-class LlumnixWorker(llumnix_bladellm_pb2_grpc.LlumnixWorkerServicer, Worker):
-    def __init__(self, *args, **kwargs) -> None:
-        # replace sampler
-        # pylint: disable=import-outside-toplevel
-        super().__init__(*args, **kwargs)
-
-        # too many logs in BladeLLM, redefine the log level
-        loguru.logger.remove()
-        loguru.logger.add(sys.stderr, level="INFO")
-
+    def is_ready(self, request, context):
+        return migration_worker_pb2.ReadyResponse(is_ready=True)
+    
     # pylint: disable=unused-argument
-    def allocate_migration_cache(
-        self, request: llumnix_bladellm_pb2.AllocRequest, context: grpc.ServicerContext
-    ):
-        self.migration_stream = torch.cuda.Stream()
-        self.default_stream = torch.cuda.current_stream()
-        # TODO(ziming) make num_migration_cache_blocks configurable
-        self.num_migration_cache_blocks = request.num_migration_cache_blocks
-        assert self.migration_stream != self.default_stream
-        # pylint: disable=protected-access
-        state_manager = self._engine._state_manager
-        num_kv_heads = (
-            state_manager.model_conf.num_attention_heads // state_manager.tp_size
-            if state_manager.model_conf.num_query_group is None
-            else max(
-                1, state_manager.model_conf.num_query_group // state_manager.tp_size
-            )
-        )
-        migration_cache_key_shape = (
-            self.num_migration_cache_blocks,
-            state_manager.num_layers,
-            num_kv_heads,
-            state_manager.model_conf.head_dim // state_manager.x,
-            state_manager.block_size,
-            state_manager.x,
-        )
-        migration_cache_value_shape = (
-            self.num_migration_cache_blocks,
-            state_manager.num_layers,
-            num_kv_heads,
-            state_manager.block_size,
-            state_manager.model_conf.head_dim,
-        )
-        if state_manager.dtype in NUMPY_SUPPORT_DTYPES:
-            migration_cache_dtype = state_manager.dtype
-        else:
-            migration_cache_dtype = torch.float32
-            logger.warning(
-                "Detecting numpy unsupported dtype: {}.".format(state_manager.dtype),
-                "Using torch.float32.",
-            )
-        self.migration_key_cache = torch.empty(
-            size=migration_cache_key_shape,
-            dtype=migration_cache_dtype,
-        )
-        self.migration_value_cache = torch.empty(
-            size=migration_cache_value_shape,
-            dtype=migration_cache_dtype,
-        )
+    def migrate_cache(self, request: migration_worker_pb2.MigrateRequest, context: grpc.ServicerContext) -> None:
+        src_worker_handle = request.src_handlers[self._rank]
+        try:
+            self.migration_backend.migrate_cache(src_worker_handle, request.src_blocks, request.dst_blocks)
+        except Exception as e:
+            logger.info("[migrate_cache] rank: {}, {} is dead, err : {}.".format(self._rank, src_worker_handle, e))
+        
         return empty_pb2.Empty()
 
-    # pylint: disable=unused-argument
-    def send_cpu_cache(self, request: llumnix_bladellm_pb2.SendRequest, context: grpc.ServicerContext):
-        num_blocks = len(request.blocks)
-        dummy_key_cpu = self.migration_key_cache[:num_blocks]
-        dummy_value_cpu = self.migration_value_cache[:num_blocks]
-        with torch.cuda.stream(self.migration_stream):
-            # pylint: disable=protected-access
-            for layer_idx in range(self._engine._state_manager.num_layers):
-                for idx, block_num in enumerate(request.blocks):
-                    dummy_key_cpu[idx][layer_idx].copy_(
-                        self._engine._state_manager._kv_cache[0][layer_idx][block_num]
-                    )
-                    dummy_value_cpu[idx][layer_idx].copy_(
-                        self._engine._state_manager._kv_cache[1][layer_idx][block_num]
-                        )
-        torch.cuda.Stream.synchronize(self.migration_stream)
-        return dummy_key_cpu.numpy(), dummy_value_cpu.numpy()
+    def do_send(self, request: migration_worker_pb2.SendKvCacheRequest, context: grpc.ServicerContext):
+        return self.migration_backend.do_send(request, context)
 
-    # pylint: disable=unused-argument
-    def migrate_gpu_cache_grpc(
-        self, request: llumnix_bladellm_pb2.MigrateRequest, context: grpc.ServicerContext
-    ):
-        with torch.cuda.stream(self.migration_stream):
-            src_worker_handle = request.src_worker_handle[self._rank]
-            tot_blocks = len(request.src_blocks)
-            for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
-                # send/recv num_migration_cache_blocks per iter
-                # TODO(ziming): overlap get_numpy_cache with prev idx H2D copy
-                offset = min(
-                    self.num_migration_cache_blocks, tot_blocks - start_idx
-                )
-                send_blocks = request.src_blocks[start_idx : start_idx + offset]
-                recv_blocks = request.dst_blocks[start_idx : start_idx + offset]
-                k, v = self.recv_cpu_cache(src_worker_handle, send_blocks)
-                dummy_key = self.migration_key_cache[:offset]
-                dummy_value = self.migration_value_cache[:offset]
-                dummy_key.copy_(torch.from_numpy(k))
-                dummy_value.copy_(torch.from_numpy(v))
-                # pylint: disable=protected-access
-                for layer_idx in range(self._engine._state_manager.num_layers):
-                    for idx, block_num in enumerate(recv_blocks):
-                        self._engine._state_manager._kv_cache[0][layer_idx][block_num].copy_(dummy_key[idx][layer_idx])
-                        self._engine._state_manager._kv_cache[1][layer_idx][block_num].copy_(dummy_value[idx][layer_idx])
-        torch.cuda.Stream.synchronize(self.migration_stream)
-        return empty_pb2.Empty()
+    def rebuild_migration_backend(self, instance_rank: Dict[str, int], group_name: str) -> bool:
+        pass
 
+    def warmup(self, request, context) -> bool:
+        return migration_worker_pb2.WarmupResponse(ok=self.migration_backend.warmup())
 
-def worker_main(rank: int, args: ServingArgs, inst_id=None):
-    asyncio.run(worker_server(rank, args, inst_id))
+    def shutdown(self) -> None:
+        torch.cuda.synchronize()
+        del self.migration_backend
+        torch.cuda.empty_cache()
+        torch.cuda.reset_max_memory_allocated()
 
+def worker_main(rank: int, args: ServingArgs, instance_id: str, migration_config: MigrationConfig):
+    asyncio.run(worker_server(rank, args, instance_id, migration_config))
 
-async def worker_server(rank: int, args: ServingArgs, inst_id=None):
+async def worker_server(rank: int, args: ServingArgs, instance_id: str, migration_config: MigrationConfig):
     if args.server_ip:
         worker_port = int(get_free_port())
         await RemoteManager.start_watch_dog(args, worker_port)
         await RemoteManager.wait_until_all_workers_ready()
-    worker = LlumnixWorker(rank, args, inst_id)
+
+    listen_addr = (
+        f"0.0.0.0:{worker_port}"
+        if args.server_ip
+        else f"unix://{args.worker_socket_path}.{instance_id}.{rank}"
+    )
+    worker = MigrationWorker(instance_id, listen_addr, migration_config, rank, args)
+
     server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=1))
     bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
-    llumnix_bladellm_pb2_grpc.add_LlumnixWorkerServicer_to_server(worker, server)
-    if inst_id is not None:
-        listen_addr = (
-            f"0.0.0.0:{worker_port}"
-            if args.server_ip
-            else f"unix://{args.worker_socket_path}.{inst_id}.{rank}"
-        )
-    else:
-        listen_addr = (
-            f"0.0.0.0:{worker_port}"
-            if args.server_ip
-            else f"unix://{args.worker_socket_path}.{rank}"
-        )
+    migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
     server.add_insecure_port(listen_addr)
     await server.start()
+
     if args.server_ip:
         await RemoteManager.wait_for_termination(server)
     else:
         await server.wait_for_termination()
-    # explicit cleanup
+
     del server
     del worker
     gc.collect()

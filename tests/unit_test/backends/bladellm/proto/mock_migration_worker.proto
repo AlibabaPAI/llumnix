@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+message KvCacheData {
+  bytes key = 1;
+  bytes value = 2;
+  string np_dtype = 3;
+  bytes key_shape = 4;
+  bytes value_shape = 5;
+  repeated int64 block_idxs = 6;
+}
+
+message KvCacheMeta {
+  bytes key_shape = 1;
+  bytes value_shape = 2;
+  string kv_cache_dtype = 3;
+  string migration_cache_dtype = 4;
+}
+
+message GetGpuCacheRequest {
+  repeated int64 block_idxs = 1;
+}
+
+service MockMigrationWorker {
+  rpc get_kv_cache_meta (google.protobuf.Empty) returns (KvCacheMeta) {}
+  rpc set_gpu_cache (KvCacheData) returns (google.protobuf.Empty) {}
+  rpc get_gpu_cache (GetGpuCacheRequest) returns (KvCacheData) {}
+}

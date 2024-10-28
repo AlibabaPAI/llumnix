@@ -27,6 +27,27 @@ lint: check_pylint_installed check_pytest_installed
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
 			-s n --jobs=32 ./tests
 
+###################################### proto begin ######################################
+
+.PHONY: proto
+proto:
+	@find . -type d -name "proto" | while read dir; do \
+	    dir_base=$$(dirname $$dir); \
+	    find $$dir -name "*.proto" | while read proto_file; do \
+	        echo "Compiling $$proto_file"; \
+	        PYTHONWARNINGS="ignore::DeprecationWarning" python -m grpc_tools.protoc --proto_path=. --python_out=. --grpc_python_out=. $$proto_file; \
+	    done; \
+	done;
+
+.PHONY: proto-clean
+proto-clean:
+	@find . -name "*_pb2_grpc.py" | xargs rm 
+	@find . -name "*_pb2.py" | xargs rm
+
+####################################### proto end #######################################
+
+###################################### test begin #######################################
+
 .PHONY: test
 test: check_pytest_installed
 	@pytest -x -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
@@ -48,6 +69,8 @@ e2e_test:
 .PHONY: bench_test
 bench_test:
 	@pytest -v ./tests/e2e_test/test_bench.py
+
+####################################### test end ########################################
 
 #################### pygloo install for gloo migration backend begin ####################
 

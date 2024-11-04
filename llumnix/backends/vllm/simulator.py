@@ -36,6 +36,7 @@ class BackendSimVLLM(BackendVLLM):
         migration_config: MigrationConfig,
         profiling_result_file_path: str,
         engine_args: EngineArgs,
+        node_id: str = None,
     ) -> None:
         # multi-instance args
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
@@ -43,7 +44,8 @@ class BackendSimVLLM(BackendVLLM):
                                                                           output_queue_type=output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
-                                                                          latency_mem=latency_mem)
+                                                                          latency_mem=latency_mem,
+                                                                          node_id=node_id)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler

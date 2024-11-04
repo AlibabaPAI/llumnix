@@ -181,7 +181,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             request_groups_map = self._scheduler.get_request_groups_map()
             for req_id, l_resp in update_output.response.items():
                 if req_id in request_groups_map:
-                    request_groups_map[req_id].update_num_computed_tokens()
+                    request_groups_map[req_id].update_num_computed_tokens(request_groups_map[req_id].token_chunk_size)
                     if req_id in self.running and l_resp:
                         server_info = request_groups_map[req_id].server_info
                         if hasattr(server_info, 'request_timestamps'):

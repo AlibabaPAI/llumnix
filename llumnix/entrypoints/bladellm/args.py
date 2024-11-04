@@ -5,7 +5,7 @@ class ServingArgs:
     # TODO[xinyi]: add lines in bladellm repo
     # llumnix scheduling mode
     enable_llumnix: bool = False
-    config_file: str = None
+    llumnix_config: str = None
 
 def add_args(parser: Optional[ArgumentParser] = None) -> ArgumentParser:
     parser.add_argument(
@@ -15,7 +15,7 @@ def add_args(parser: Optional[ArgumentParser] = None) -> ArgumentParser:
         help="enable llumnix to dispatch and migrate requests",
     )
 
-    parser.add_argument("--config-file",
+    parser.add_argument("--llumnix-config",
         type=str,
-        help="path to config file",
+        help="path to llumnix config file",
     )

@@ -98,7 +98,6 @@ async def manager_generate(request: ServerRequest,
                 del llumnix_context.instances[instance_id]
                 del llumnix_context.instance_num_requests[instance_id]
                 return await asyncio.create_task(manager_generate(request, request_id, llumnix_context))
-
     return LLMResponse(request.id, resp_queue=results_queue)
 
 # TODO[xinyi]: the same to the function in vllm.utils

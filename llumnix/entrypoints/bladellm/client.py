@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 from typing import Optional, Tuple
 
 from blade_llm.model.config_base import ConfigBase
@@ -26,15 +27,15 @@ from blade_llm.protocol import ServerRequest
 
 from utils import manager_generate, manager_abort
 from api_server import llumnix_context
+from llumnix.entrypoints.bladellm.api_server import MeasureEntrypoint
+
+
 
 class DummyAsyncLLMEngineClient():
     async def add_request(self, request: ServerRequest) -> LLMResponse:
+        measure = MeasureEntrpoint(request.id, time.time(), request.stopping_criterial.max_new_tokens)
         resp_stream = await manager_generate(request, request.id, llumnix_context)
-        return resp_stream
-    
-    async def add_request(self, request: ServerRequest) -> LLMResponse:
-        resp_stream = await manager_generate(request, request.id, llumnix_context)
-        return resp_stream
+        return resp_stream, measure
     
     async def drop_request(self, request_id: int):
         await manager_abort(request_id, llumnix_context)

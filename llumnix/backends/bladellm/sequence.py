@@ -17,9 +17,9 @@ from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
 
 class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
-    def __init__(self, gen_group: GenerationGroupState, llumnix_request: LlumnixRequest, *args, **kwargs) -> None:
+    def __init__(self, gen_group: GenerationGroupState, llumnix_request_args) -> None:
         GenerationGroupState.__init__(self, **gen_group.__dict__)
-        LlumnixRequest.__init__(self, **llumnix_request.__dict__)
+        LlumnixRequest.__init__(self, *llumnix_request_args)
         #TODO[xinyi]: pagedreqstate prefill
         self.is_prefill = True
         self.is_finished = False
@@ -65,9 +65,9 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
             return 1
         return self.get_num_uncomputed_tokens()
     
-    def update_num_computed_tokens(self):
+    def update_num_computed_tokens(self, num_new_computed_tokens):
         """Update number of tokens computed so far."""
-        self._num_computed_tokens += self._num_computed_tokens
+        self._num_computed_tokens += num_new_computed_tokens
         # If all tokens are computed, it means it is in decoding phase.
         if self.get_num_uncomputed_tokens() == 0:
             self.is_prefill = False
@@ -79,7 +79,7 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         # prefill for both prompt and output.
         return self.request_len - self.get_num_computed_tokens()
 
-class ServerRequestLlumnix(ServerRequest):
-    def __init__(self, request_id, server_info, expected_steps: int, request: ServerRequest) -> None:
-        self.server_request = ServerRequest.__init__(self, **request.__dict__)
-        self.llumnix_request = LlumnixRequest.__init__(self, request_id, server_info, expected_steps)
+class ServerRequestLlumnix:
+    def __init__(self, *args, server_request: ServerRequest) -> None:
+        self.server_request = server_request
+        self.llumnix_request_args = args

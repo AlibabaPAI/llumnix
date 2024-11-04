@@ -15,13 +15,16 @@ from asyncio.log import logger
 import time
 from typing import Dict, List, Set
 
-from blade_llm.service.paged_utils import BlockSpaceManager, PreemptionMode
+from blade_llm.service.paged_utils import PreemptionMode
+from blade_llm.service.block_space_manager import BlockSpaceManager
 from blade_llm.service.proto.bladellm_pb2 import BlockTable
-from blade_llm.service.scheduler import PagedScheduler
+from blade_llm.service.schedulers import PagedScheduler
 from blade_llm.service.scheduler_types import SchedulerStepOutput, GenerationGroupState, SchedulerAsyncUpdateOutput
 from blade_llm.protocol import ServerRequest
 from blade_llm.service.paged_utils import PagedRequestState, PreemptionMode
 from blade_llm.service.request_utils import server_request_to_worker_request
+from blade_llm.service.args import ServingArgs, ServingLoraOptions
+
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
@@ -43,22 +46,22 @@ class BlockManagerLlumnix(BlockSpaceManager):
             blocks.append(block)
         return blocks
     
-    def add_block_table(self, block_table: BlockTable, seq_id: int) -> None:
-        self.block_tables[seq_id] = block_table.copy()
+    def add_block_table(self, block_table: BlockTable, block_table_id: int) -> None:
+        self.block_tables[block_table_id] = block_table.copy()
 
 class PagedSchedulerLlumnix(PagedScheduler):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, serving_args: ServingArgs, *args, **kwargs) -> None:
+        super().__init__(serving_args, *args, **kwargs)
         self.block_manager = BlockManagerLlumnix(
             block_size=self.block_size,
             num_gpu_blocks=self._max_processing_units,
             num_cpu_blocks=self.cpu_blocks,
             block_reserved_percent=self.block_reserved_percent,
             gamma=self.gamma_blank, # gamma step for speculative decoding, lookahead etc
-            disable_prompt_cache=args.disable_prompt_cache,
-            prompt_cache_enable_swap=args.prompt_cache_enable_swap,
+            disable_prompt_cache=serving_args.disable_prompt_cache,
+            prompt_cache_enable_swap=serving_args.prompt_cache_enable_swap,
         )
-        self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
+        self.pre_alloc_cache_dict: Dict[int, BlockTable] = {}
         self.migrating_out_request_last_stage: List[GenerationGroupStateLlumnix] = []
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
@@ -85,7 +88,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     def get_all_request_ids(self) -> List[str]:
         request_ids : List[str] = []
-        for state_queue in [self.waiting, self.running, self.swapped, self.prefill]:
+        for state_queue in [self.waiting, self.running, self.swapped, self.hanging]:
             for seq_group in state_queue:
                 request_ids.append(seq_group.request_group_id)
         return request_ids
@@ -95,10 +98,12 @@ class PagedSchedulerLlumnix(PagedScheduler):
         blocks = self.block_manager.get_block_table(seq)
         return blocks[pre_stage_num_blocks:]
 
-    def remove_running_request(self, request_id: str) -> None:
+    def remove_running_request(self, request_id: int) -> None:
         for seq_group in self.running:
+            print(seq_group.request_group_id,request_id)
             if seq_group.request_group_id == request_id:
                 self.running.remove(seq_group)
+                print("remove")
                 break
 
     def add_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
@@ -112,7 +117,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self.migrating_out_request_last_stage.clear()
         return migrating_out_request_last_stage
 
-    def pre_alloc(self, request_id: str, block_num: int) -> List[int]:
+    def pre_alloc(self, request_id: int, block_num: int) -> List[int]:
         blocks = self.block_manager.get_free_blocks(block_num)
         pre_blocks = self.pre_alloc_cache_dict.get(request_id, [])
         pre_blocks.extend(blocks)
@@ -155,7 +160,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
             waiting_time_waiting_requests = []
             for seq_group in self.waiting:
                 num_prompt_tokens = len(seq_group.paged_reqs[0].token_ids)
-                num_blocks = num_prompt_tokens / self.cache_config.block_size
+                num_blocks = num_prompt_tokens / self.block_size
                 waiting_time = time.monotonic() - seq_group.receive_time
                 num_blocks_waiting_requests.append(num_blocks)
                 waiting_time_waiting_requests.append(waiting_time)
@@ -187,7 +192,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         # TODO(ZeldaHuang) adapt chunked-prefill
         instance_info.num_batched_tokens = sum([gen_group.request_len for gen_group in scheduled_gen_groups])\
                                             if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
-        instance_info.finished_request_ids = [gen_group.request_id for gen_group in self.running if gen_group.is_finished()]
+        instance_info.finished_request_ids = [gen_group.request_id for gen_group in self.running if gen_group.is_finished]
         return instance_info
     
     def safe_remove_requests(self, request_ids: Set[int]):
@@ -203,15 +208,13 @@ class PagedSchedulerLlumnix(PagedScheduler):
         step_ids = list(step_out.step.decode) + [r.id for r in step_out.step.prefill]
         scheduled_gen_groups= [request_groups_map[step_id] for step_id in step_ids]
         for r_id in step_ids:
-            num_new_tokens = sum(req_state.get_num_new_tokens() 
-                                 for req_state in request_groups_map[r_id].paged_reqs)
+            num_new_tokens = request_groups_map[r_id].get_num_new_tokens() 
             request_groups_map[r_id].token_chunk_size = num_new_tokens
         self.update_instance_info_callback(self._get_instance_info(scheduled_gen_groups))
         return step_out
-    
 
-    def add_request(self, *args, **kwargs):
-        super()._add_request(*args, **kwargs)
+    # def add_request(self, *args, **kwargs):
+        super().add_request(*args, **kwargs)
         # TODO[xinyi]: we need to modify the code in BladeLLM:
         # import sys
         # if 'llumnix' in sys.modules:
@@ -219,16 +222,50 @@ class PagedSchedulerLlumnix(PagedScheduler):
         #     if hasattr(gen_group_llumnix.server_info, 'request_timestamps'):
         #         gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
 
+    def add_request(self, server_req: ServerRequestLlumnix):
+        worker_req = server_request_to_worker_request(server_req.server_request)
+        gen_group: GenerationGroupState = GenerationGroupState.from_request(
+            request=worker_req,
+            total_length=len(worker_req.prompt_tokens),
+            prompt_len_priority_scale=self.prompt_len_priority_scale,
+        )
+        gen_group.add_paged_req_state(PagedRequestState(worker_req, self.block_size, self.gamma_blank))
+        import heapq
+        import sys
+        if 'llumnix' in sys.modules:
+            # print(server_req.llumnix_request_args)
+            gen_group_llumnix = GenerationGroupStateLlumnix(gen_group, server_req.llumnix_request_args)
+            if hasattr(gen_group_llumnix.server_info, 'request_timestamps'):
+                gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
+            heapq.heappush(self.waiting, gen_group_llumnix)
+        else:
+            heapq.heappush(self.waiting, gen_group)
+        self._detokenizer.add_new_request(worker_req)
+        return gen_group
+    
+    def _allocate(self, req_state: PagedRequestState) -> None:
+        if req_state.block_table_id not in self.block_manager.block_tables:
+            req_state.allocate_for_next_step()
+            block_table = req_state.block_table
+            for _ in range(req_state.required_blocks - len(req_state.block_table)):
+                block = self.block_manager.gpu_allocator.allocate()
+                # Set the reference counts of the token blocks.
+                # NOTE(yanghuan.zzp) vllm use seq_groups count, but we will fork later, so we set ref_count to 1.
+                block.ref_count = 1
+                block_table.append(block)
+            req_state.block_table_id = next(self.block_manager.block_table_counter)
+            self.block_manager.block_tables[req_state.block_table_id] = block_table
+
 
     def get_request_groups_map(self) -> Dict[str, GenerationGroupStateLlumnix]:
         request_groups_map = {}
-        for state_queue in [self.waiting, self.running, self.swapped, self.prefill]:
+        for state_queue in [self.waiting, self.running, self.swapped, self.hanging]:
             for gen_group in state_queue:
                 request_groups_map[gen_group.request_group_id] = gen_group 
         return request_groups_map
     
     def _preempt_by_recompute(self, gen_group: GenerationGroupStateLlumnix, *args, **kwargs):
-        super()._preempt_by_recompute(*args, **kwargs)
+        super()._preempt_by_recompute(gen_group, *args, **kwargs)
         gen_group._num_computed_tokens = 0
         gen_group.is_prefill = True
 

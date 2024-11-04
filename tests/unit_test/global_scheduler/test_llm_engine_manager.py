@@ -147,7 +147,8 @@ def test_init_llumlets(setup_ray_env, engine_manager):
     assert num_instances == engine_manager_args.initial_instances
 
 def test_init_llumlets_sim(setup_ray_env, engine_manager):
-    engine_manager.profiling_result_file_pagth="//"
+    engine_manager.profiling_result_file_path="//"
+    # pylint: disable=import-outside-toplevel
     import llumnix.backends.vllm.simulator
     llumnix.backends.vllm.simulator.BackendSimVLLM = MockBackendSim
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)

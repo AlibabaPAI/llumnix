@@ -77,6 +77,12 @@ def worker_main(rank: int, args: ServingArgs, instance_id: int, migration_config
                 naming_url: str, tranfer_type: TransferType):
     asyncio.run(worker_server(rank, args, instance_id, migration_config, naming_url, tranfer_type))
 
+# instance_id: == llumnix_instance_id
+# migration_config: == llumnix migration config
+# naming_url：customed config?
+# tranfer_type: is it one of migration config?
+# rank == worker_id ?
+
 # TODO[xinyi]: revise in bladellm repo
 # TODO[xinyi]: any idea to simplify the revision?
 async def worker_server(rank: int, args: ServingArgs, instance_id: int, migration_config: MigrationConfig,
@@ -85,6 +91,7 @@ async def worker_server(rank: int, args: ServingArgs, instance_id: int, migratio
         worker_port = int(get_free_port())
         await RemoteManager.start_watch_dog(args, worker_port)
         await RemoteManager.wait_until_all_workers_ready()
+    listen_addr = f"0.0.0.0:{worker_port}" if args.server_ip else f"unix://{args.worker_socket_path}.{rank}"
     import sys
     if 'llumnix' in sys.modules:
         worker = MigrationWorker(instance_id, listen_addr, migration_config, naming_url, tranfer_type, rank, args)
@@ -96,7 +103,6 @@ async def worker_server(rank: int, args: ServingArgs, instance_id: int, migratio
     import sys
     if 'llumnix' in sys.modules:
         migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
-    listen_addr = f"0.0.0.0:{worker_port}" if args.server_ip else f"unix://{args.worker_socket_path}.{rank}"
     server.add_insecure_port(listen_addr)
     await server.start()
 

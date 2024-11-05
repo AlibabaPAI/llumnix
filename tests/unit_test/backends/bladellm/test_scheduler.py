@@ -29,14 +29,50 @@ DUMMY_PROMPT = "This is a dummy prompt"
 def get_num_unfinished_seq_groups(scheduler):
     return len(scheduler.waiting) + len(scheduler.running) + len(scheduler.swapped)
 
-def schedule_and_update_computed_tokens(scheduler):
-    step_out = scheduler.step()
+def update_computed_tokens(scheduler, step_output):
     request_groups_map = scheduler.get_request_groups_map()
-    step_ids = list(step_out.step.decode) + [r.id for r in step_out.step.prefill]
+    step_ids = list(step_output.step.decode) + [r.id for r in step_output.step.prefill]
     for r_id in step_ids:
         request_groups_map[r_id].update_num_computed_tokens(request_groups_map[r_id].token_chunk_size)
-    return step_out
 
+def step_and_update(request_ids, scheduler, is_finished=False, tokens_num=1, update_only=False):
+    if not isinstance(request_ids, list):
+        request_ids = [request_ids]
+    if not update_only:
+        step_out = scheduler.step()
+        update_computed_tokens(scheduler, step_out)
+    if hasattr(scheduler, "_decode_batch"):
+        running_ids = scheduler._decode_batch
+    elif hasattr(scheduler, "running"):
+        running_ids = [request_group.request_group_id for request_group in scheduler.running]
+    else:
+        raise ValueError("scheduler has no running or decode_batch")
+    if is_finished:
+        generation_groups = [
+            pb.GenerationGroup(
+                request_group_id=request_id,
+                generations=[pb.RequestMeta(request_id=request_id)],
+            )
+            for request_id in request_ids
+            if request_id in running_ids
+        ]
+    else:
+        generation_groups = [
+            pb.GenerationGroup(
+                request_group_id=request_id,
+                generations=[pb.RequestMeta(request_id=request_id)],
+                next_ids=pb.NextIds(ids=[(x + 1) for x in range(tokens_num)]),
+            )
+            for request_id in request_ids
+            if request_id in running_ids
+        ]
+    resp = pb.WorkerStepResponse(
+        is_ok=True,
+        batch_id=-1,
+        generation_groups=pb.GenerationGroupList(generation_group=generation_groups),
+    )
+    _ = scheduler.update(resp)
+    
 def test_manager_get_free_blocks():
     block_size = 4
     num_cpu_blocks = 4
@@ -76,11 +112,11 @@ def test_manager_add_block_table():
     after_free = block_manager.get_num_free_gpu_blocks()
     assert after_free == num_gpu_blocks
 
-
 def test_sequence_group_inference_type():
     scheduler = initialize_scheduler()
     num_gen_group = 4
-    for idx in range(1, num_gen_group + 1):
+    request_ids = [idx for idx in range(1, num_gen_group + 1)]
+    for idx in request_ids:
         server_request = create_dummy_request(idx, prompt=str(idx))
         scheduler.add_request(server_request)
 
@@ -88,10 +124,11 @@ def test_sequence_group_inference_type():
     for req in scheduler.waiting:
         assert req.inference_type == RequestInferenceType.PREFILL
     # all seq_group in prefilling stage
-    _ = scheduler.step()
+    step_out = scheduler.step()
     for req in scheduler.running:
         assert req.inference_type == RequestInferenceType.PREFILL
-    _ = schedule_and_update_computed_tokens(scheduler)
+    update_computed_tokens(scheduler, step_out)
+    step_and_update(request_ids, scheduler)
     # all in running queue
     for req in scheduler.running:
         assert req.inference_type == RequestInferenceType.DECODE
@@ -100,24 +137,26 @@ def test_scheduler_num_killed_request():
     scheduler = initialize_scheduler()
     # tot 8 blocks
     num_gen_group = 4
-    for idx in range(1, num_gen_group + 1):
+    request_ids = [idx for idx in range(1, num_gen_group + 1)]
+    for idx in request_ids:
         # BladeLLM allocate blocks for next step in advance.
         server_request = create_dummy_request(idx, prompt=str(idx) * 7)
         scheduler.add_request(server_request)
     # remain 0 blocks
-    _ = schedule_and_update_computed_tokens(scheduler)
+    step_and_update(request_ids, scheduler)
     assert scheduler._get_num_killed_requests() == 0
     # preempt 2 requests
-    _ = schedule_and_update_computed_tokens(scheduler)
+    step_and_update(request_ids, scheduler)
     assert scheduler._get_num_killed_requests() == 2
 
 def test_scheduler_running_request():
     scheduler = initialize_scheduler()
     num_gen_group = 4
-    for idx in range(1, num_gen_group + 1):
+    request_ids = [idx for idx in range(1, num_gen_group + 1)]
+    for idx in request_ids:
         server_request = create_dummy_request(idx, prompt=str(idx))
         scheduler.add_request(server_request)
-    schedule_and_update_computed_tokens(scheduler)
+    step_and_update(request_ids, scheduler)
     assert get_num_unfinished_seq_groups(scheduler) == 4
     scheduler.remove_running_request(1)
     assert get_num_unfinished_seq_groups(scheduler) == 3

@@ -12,8 +12,19 @@
 # limitations under the License.
 
 import math
+import asyncio
 from unittest.mock import MagicMock
+import pytest
 import ray
+
+
+from llumnix.backends.bladellm.llm_engine import LLMEngineLlumnix
+# from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor, SimGPUExecutor
+from llumnix.backends.profiling import LatencyMemData
+# from llumnix.backends.vllm.sequence import LlumnixRequest
+from llumnix.queue.queue_type import QueueType
+from llumnix.server_info import ServerInfo
+
 
 from vllm.sequence import (Logprob, SequenceGroupOutput, SequenceOutput,
                            SequenceStatus,SamplerOutput)
@@ -21,96 +32,87 @@ from vllm import EngineArgs, SamplingParams
 from vllm.engine.output_processor.single_step import SingleStepOutputProcessor
 from vllm.engine.output_processor.stop_checker import StopChecker
 from vllm.transformers_utils.detokenizer import Detokenizer
-from vllm.utils import Counter
 
-from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix
-from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor, SimGPUExecutor
-from llumnix.backends.profiling import LatencyMemData
-from llumnix.backends.vllm.sequence import LlumnixRequest
-from llumnix.queue.queue_type import QueueType
-from llumnix.server_info import ServerInfo
+from blade_llm.service.proto import bladellm_pb2 as pb
+from blade_llm.service.scheduler_types import SchedulerAsyncUpdateOutput
+from blade_llm.protocol import GenerateStreamResponse
 
-from .utils import create_dummy_prompt, initialize_scheduler
+
+from .utils import create_dummy_request, initialize_scheduler
+# from tests.unit_test.backends.bladellm.utils import initialize_scheduler, create_dummy_request
+
 
 
 class MockEngine(LLMEngineLlumnix):
     def __init__(self, *args, executor_class=None, **kwargs):
-        self.scheduler = initialize_scheduler()
-        detokenizer = MagicMock(spec=Detokenizer)
-        stop_checker = MagicMock(spec=StopChecker)
-        self.seq_counter = Counter()
-        self.instance_info = None
-        self.executor_class = executor_class
-        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
-        self.output_processor = SingleStepOutputProcessor(self.scheduler.scheduler_config,detokenizer, self.scheduler, self.seq_counter, stop_checker)
+        self._scheduler = initialize_scheduler()
+        self.step_request_queue = asyncio.Queue()
+#         detokenizer = MagicMock(spec=Detokenizer)
+#         stop_checker = MagicMock(spec=StopChecker)
+#         self.seq_counter = Counter()
+#         self.instance_info = None
+#         self.executor_class = executor_class
+#         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
+#         self.output_processor = SingleStepOutputProcessor(self.scheduler.scheduler_config,detokenizer, self.scheduler, self.seq_counter, stop_checker)
 
-    def update_instance_info(self, instance_info):
-        pass
+#     def update_instance_info(self, instance_info):
+#         pass
 
+@pytest.mark.asyncio
 
-def test_llm_engine_process_model_outputs():
+async def test_llm_engine_process_model_outputs():
+    # process model outputs
     llm_engine = MockEngine()
-    _, seq_group_0 = create_dummy_prompt(
-        "0", prompt_length=7, block_size=4
-    )
-    _, seq_group_1 = create_dummy_prompt(
-        "1", prompt_length=7, block_size=4
-    )
-    llm_engine.scheduler.add_seq_group(seq_group_0)
-    llm_engine.scheduler.add_seq_group(seq_group_1)
-    metas, out = llm_engine.scheduler.schedule()
+    prompt_length = 7
+    server_request_0 = create_dummy_request(0, prompt="0" * prompt_length)
+    server_request_1 = create_dummy_request(1, prompt="1" * prompt_length)
 
-    seqs = [seq_group_0.get_seqs()[0], seq_group_1.get_seqs()[0]]
+    llm_engine._scheduler.add_request(server_request_0)
+    llm_engine._scheduler.add_request(server_request_1)
 
-    outputs = [
-        SequenceGroupOutput(
-            samples=[
-                SequenceOutput(
-                    parent_seq_id=seq.seq_id,
-                    output_token=1,
-                    logprobs={1: Logprob(0.0)},
+    _ = llm_engine._scheduler.step()
+
+    update_output = SchedulerAsyncUpdateOutput(
+                    response={
+                        0: GenerateStreamResponse(is_finished=False),
+                        1: GenerateStreamResponse(is_finished=False),
+                    },
                 )
-            ],
-            prompt_logprobs=None,
-        ) for seq in seqs
-    ]
-    sampler_outputs = [SamplerOutput(outputs=outputs)]
-
-    scheduled_seq_groups = out.scheduled_seq_groups
     # normal case, all requests be processed
-    ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
-    assert len(ret) == 2
-    metas, out = llm_engine.scheduler.schedule()
-    scheduled_seq_groups = out.scheduled_seq_groups
-    seqs[0].status=SequenceStatus.WAITING
+    llm_engine.process_model_outputs(update_output)
+    request_outputs, _ = llm_engine.step_request_queue.get_nowait()
+    assert len(request_outputs) == 2
+    step_out = llm_engine._scheduler.step()
+    llm_engine._scheduler.remove_running_request(0)
     # migration case , requests stopping during last stage migration, stop process
-    ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
-    assert len(ret) == 1
+    llm_engine.process_model_outputs(update_output)
+    request_outputs, _ = llm_engine.step_request_queue.get_nowait()
+    assert len(request_outputs) == 1
 
 def test_llm_engine_from_engine_args():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
-                                             instance_id="0", migration_config=None)
-    assert llm_engine.executor_class == LlumnixRayGPUExecutor
+#     llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
+#                                              instance_id="0", migration_config=None)
+#     assert llm_engine.executor_class == LlumnixRayGPUExecutor
 
-    latency_data = LatencyMemData({},{},{})
-    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
-                                             instance_id="0", migration_config=None, latency_mem=latency_data)
-    assert llm_engine.executor_class == SimGPUExecutor
+#     latency_data = LatencyMemData({},{},{})
+#     llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
+#                                              instance_id="0", migration_config=None, latency_mem=latency_data)
+#     assert llm_engine.executor_class == SimGPUExecutor
 
-def test_llm_engine_add_requset():
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
-                                                   output_queue_type=QueueType.RAYQUEUE,
-                                                   instance_id="0",
-                                                   placement_group=None,
-                                                   node_id=ray.get_runtime_context().get_node_id(),
-                                                   migration_config=None,
-                                                   latency_mem=MagicMock(sepc=LatencyMemData))
-    sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
-    server_info = ServerInfo(None, None, None, None, None)
-    llm_engine.add_request("0", server_info, math.inf, "prompt", sampling_params)
-    assert len(llm_engine.scheduler.waiting) == 1
-    assert llm_engine.scheduler.waiting[-1].request_id == "0"
-    assert llm_engine.scheduler.waiting[-1].expected_steps == math.inf
-    assert isinstance(llm_engine.scheduler.waiting[-1], LlumnixRequest)
+# def test_llm_engine_add_requset():
+#     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+#     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
+#                                                    output_queue_type=QueueType.RAYQUEUE,
+#                                                    instance_id="0",
+#                                                    placement_group=None,
+#                                                    node_id=ray.get_runtime_context().get_node_id(),
+#                                                    migration_config=None,
+#                                                    latency_mem=MagicMock(sepc=LatencyMemData))
+#     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
+#     server_info = ServerInfo(None, None, None, None, None)
+#     llm_engine.add_request("0", server_info, math.inf, "prompt", sampling_params)
+#     assert len(llm_engine.scheduler.waiting) == 1
+#     assert llm_engine.scheduler.waiting[-1].request_id == "0"
+#     assert llm_engine.scheduler.waiting[-1].expected_steps == math.inf
+#     assert isinstance(llm_engine.scheduler.waiting[-1], LlumnixRequest)

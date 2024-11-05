@@ -270,11 +270,20 @@ class PagedSchedulerLlumnix(PagedScheduler):
         gen_group.is_prefill = True
 
 # TODO[xinyi]: revise in bladellm repo
-# import sys
-# _SCHEDULER_MAP = {
-#     "outofplace": DynamicBatchingScheduler,
-#     "ragged": ContinuousBatchingScheduler,
-#     "paged": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
-#     "ragged_flash": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
-#     "look_ahead": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
-# }
+import sys
+_SCHEDULER_MAP = {
+    # "outofplace": DynamicBatchingScheduler,
+    # "ragged": ContinuousBatchingScheduler,
+    "paged": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
+    "ragged_flash": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
+    "look_ahead": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
+}
+
+# TODO[xinyi]: delete 
+from transformers import PreTrainedTokenizerBase
+
+def get_scheduler(serving_args: ServingArgs, tokenizer: PreTrainedTokenizerBase, *args, **kwargs):
+    scheduler_name = (
+        serving_args.decode_algo if serving_args.use_lookahead else serving_args.load_model_options.attn_cls
+    )
+    return _SCHEDULER_MAP[scheduler_name](serving_args, tokenizer, *args, **kwargs)

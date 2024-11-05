@@ -22,8 +22,10 @@ from blade_llm.service.schedulers import PagedScheduler
 from blade_llm.service.args import ServingArgs, ServingLoraOptions
 from blade_llm.service.scheduler_types import SchedulerInitInfo
 from blade_llm.model.config_base import ConfigBase, ModelType
+from blade_llm.model.config_utils import load_config
 from blade_llm.utils.load_model_options import LoadModelOptions
 from blade_llm.protocol import SamplingParams, ServerRequest, StoppingCriteria
+from blade_llm.model.tokenizer_utils import load_tokenizer
 
 
 
@@ -33,30 +35,14 @@ from llumnix.server_info import ServerInfo
 
 def initialize_scheduler() -> PagedSchedulerLlumnix:
     block_size = 4
-    # cache_config = CacheConfig(block_size, 1.0, 1, "auto")
-    # cache_config.num_cpu_blocks = 8
-    # cache_config.num_gpu_blocks = 8
-    serving_args = ServingArgs(
-        load_model_options = LoadModelOptions(model='x'),
-
-        
-        # continuous_batching_scheduler need tokenizer
-        # load_model_options=LoadModelOptions(model=as_local('oss://llm-cache/gpt2'), attn_cls=attn_cls),
-        # load_draft_model_options=LoadModelOptions(model=as_local('oss://llm-cache/gpt2'), attn_cls=attn_cls),
-        # prompt_len_priority_scale=prompt_len_priority_scale,
-        # preempt_strategy=preempt_strategy,
-        # decode_algo=decode_algo,
-        # gamma=gamma,
-        # pipeline_parallel_size=pipeline_parallel_size,
-        # pipeline_micro_batch=pipeline_micro_batch,
-        # ragged_flash_max_batch_tokens=ragged_flash_max_batch_tokens,
+    max_processing_units = 8
+    serving_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'))
+    tokenizer = load_tokenizer(serving_args.load_model_options.tokenizer_dir, serving_args.load_model_options.special_token_dict)
+    sched_init_info = SchedulerInitInfo(
+        token_capacity=max_processing_units, block_size=block_size, model_max_len=2048, cpu_blocks=max_processing_units
     )
-    tokenizer = PreTrainedTokenizerBase()
-    init_info = SchedulerInitInfo(
-        token_capacity=8, block_size=block_size, model_max_len=2048, cpu_blocks=8
-    )
-    dummy_model_conf = ConfigBase("", 1, 1, 1, 1, 1)
-    scheduler = PagedSchedulerLlumnix(serving_args, tokenizer, init_info, dummy_model_conf)
+    model_conf=load_config(serving_args.load_model_options.model)
+    scheduler = PagedSchedulerLlumnix(serving_args, tokenizer, sched_init_info, model_conf)
     scheduler.block_manager.reserved_blocks = 0
     scheduler.update_instance_info_callback = MagicMock()
     return scheduler

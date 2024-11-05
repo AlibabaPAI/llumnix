@@ -308,4 +308,7 @@ class EngineManagerArgs:
         parser.add_argument('--enable-pd-disagg',
                             type=bool,
                             help='enable prefill decoding disaggregation')
+        parser.add_argument('--num-dispatch-instances',
+                            type=int,
+                            help='number of available instances for dispatch')
         return parser

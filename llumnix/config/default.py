@@ -80,7 +80,7 @@ _C.MANAGER.POLLING_INTERVAL = 0.05
 _C.MANAGER.LOAD_METRIC = 'remaining_steps'
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
-# Number of available dispatch instances. -1 indicates that all instances can be used for dispatching
+# Number of available dispatch instances. math.inf indicates that all instances can be used for dispatching
 _C.MANAGER.NUM_DISPATCH_INSTANCES = math.inf
 
 # -----------------------------------------------------------------------------

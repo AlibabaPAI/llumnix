@@ -38,6 +38,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
+            [--enable-pd-disagg ENABLE_PD_DISAGG]
+            [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
             [--log-request-timestamps]
 
 ```

@@ -54,32 +54,3 @@ class LlumnixRemoteWorker(llumnix_bladellm_pb2_grpc.LlumnixWorkerServicer, Remot
         # TODO[kuilong, xinyi]: adapt to kvTransfer 
         return empty_pb2.Empty()
 
-# TODO[xinyi]: revise in bladellm repo
-# TODO[xinyi]: any idea to simplify the revision?
-# async def start_remote_worker_server(rank: int, args: ServingArgs):
-#     if args.server_ip:
-#         worker_port = int(get_free_port())
-#         await RemoteManager.start_watch_dog(args, worker_port)
-#         await RemoteManager.wait_until_all_workers_ready()
-#     import sys
-#     if 'llumnix' in sys.modules:
-#         worker = LlumnixRemoteWorker(rank, args)
-#     else:
-#         worker = RemoteWorker(rank, args)
-#     server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=1))
-#     bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
-#     import sys
-#     if 'llumnix' in sys.modules:
-#         llumnix_bladellm_pb2_grpc.add_LlumnixRemoteWorkerServicer_to_server(worker, server)
-#     listen_addr = f"0.0.0.0:{worker_port}" if args.server_ip else f"unix://{args.worker_socket_path}.{rank}"
-#     server.add_insecure_port(listen_addr)
-#     await server.start()
-#     if args.server_ip:
-#         logger.info(f"Backend {rank} ready on port {worker_port}")
-#         await RemoteManager.wait_for_termination(server)
-#     else:
-#         await server.wait_for_termination()
-#     # explicit cleanup
-#     del server
-#     del worker
-#     gc.collect()

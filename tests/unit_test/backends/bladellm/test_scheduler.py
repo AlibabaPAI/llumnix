@@ -101,6 +101,7 @@ def test_scheduler_num_killed_request():
     # tot 8 blocks
     num_gen_group = 4
     for idx in range(1, num_gen_group + 1):
+        # BladeLLM allocate blocks for next step in advance.
         server_request = create_dummy_request(idx, prompt=str(idx) * 7)
         scheduler.add_request(server_request)
     # remain 0 blocks

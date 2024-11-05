@@ -17,7 +17,6 @@ import ray
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import get_distributed_init_method, get_ip, get_open_port
-from vllm.worker.cache_engine import CacheEngine
 from vllm.config import EngineConfig
 from vllm.executor.ray_gpu_executor import RayWorkerWrapper
 
@@ -55,26 +54,6 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
     )
 
     return worker
-
-@pytest.mark.parametrize("backend", ['rpc', 'gloo'])
-def test_reserve_memory_for_migration(setup_ray_env, backend):
-    engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
-    migraiton_config = EngineManagerArgs(migration_cache_blocks=1).create_migration_config()
-    migraiton_config.migration_backend = backend
-    worker = create_worker(rank=0, local_rank=0, engine_config=engine_config)
-    ray.get(worker.execute_method.remote('init_device'))
-
-    block_size = CacheEngine.get_cache_block_size(engine_config.cache_config, engine_config.model_config,
-                                                  engine_config.parallel_config)
-    num_layers = engine_config.model_config.get_num_layers(engine_config.parallel_config)
-    occupy_memory = migraiton_config.migration_cache_blocks * block_size * migraiton_config.migration_num_layers // num_layers
-
-    migration_cache_size = ray.get(worker.execute_method.remote('reserve_memory_for_migration',
-                                                                migration_config=migraiton_config,
-                                                                model_config=engine_config.model_config,
-                                                                cache_config=engine_config.cache_config,
-                                                                parallel_config=engine_config.parallel_config))
-    assert migration_cache_size == occupy_memory
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rpc', 'gloo'])

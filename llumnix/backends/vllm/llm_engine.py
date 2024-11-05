@@ -125,7 +125,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         cls,
         engine_args: EngineArgs,
         output_queue_type: QueueType,
-        migration_config: MigrationConfig,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
         placement_group: Optional[PlacementGroup] = None,
@@ -145,7 +144,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         elif engine_config.parallel_config.worker_use_ray:
             from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor
             executor_class = LlumnixRayGPUExecutor
-            executor_class.migration_config = migration_config
         else:
             raise ValueError('Unsupported executor backend')
         # Hack to pass node_id to _init_workers_ray function.
@@ -284,7 +282,6 @@ class BackendVLLM(BackendInterface):
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           output_queue_type=output_queue_type,
-                                                                          migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           node_id=node_id)

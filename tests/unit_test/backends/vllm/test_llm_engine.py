@@ -89,13 +89,12 @@ def test_llm_engine_process_model_outputs():
 
 def test_llm_engine_from_engine_args():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
-                                             instance_id="0", migration_config=None)
+    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE, instance_id="0")
     assert llm_engine.executor_class == LlumnixRayGPUExecutor
 
     latency_data = LatencyMemData({},{},{})
     llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
-                                             instance_id="0", migration_config=None, latency_mem=latency_data)
+                                             instance_id="0", latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
 
 def test_llm_engine_add_requset():
@@ -105,7 +104,6 @@ def test_llm_engine_add_requset():
                                                    instance_id="0",
                                                    placement_group=None,
                                                    node_id=ray.get_runtime_context().get_node_id(),
-                                                   migration_config=None,
                                                    latency_mem=MagicMock(sepc=LatencyMemData))
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     server_info = ServerInfo(None, None, None, None, None)

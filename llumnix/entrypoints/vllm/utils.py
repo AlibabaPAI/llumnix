@@ -33,7 +33,7 @@ def get_args(cfg, parser, cli_args):
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
     EngineManagerArgs.check_args(engine_manager_args, parser)
     engine_args = AsyncEngineArgs.from_cli_args(cli_args)
-    check_engine_args(engine_args, engine_manager_args)
+    check_engine_args(engine_args)
 
     logger.info("llumnix_entrypoints_args: {}".format(llumnix_entrypoints_args))
     logger.info("engine_manager_args: {}".format(engine_manager_args))

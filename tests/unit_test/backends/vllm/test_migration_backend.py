@@ -37,7 +37,7 @@ class MockMigrationWorker(MigrationWorker):
         return self.gpu_cache
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
-@pytest.mark.parametrize("backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("backend", ['rpc', 'gloo'])
 def test_migrate_cache(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = EngineManagerArgs(migration_cache_blocks=3, migration_num_layers=5).create_migration_config()

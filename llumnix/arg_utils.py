@@ -288,7 +288,7 @@ class EngineManagerArgs:
 
         parser.add_argument('--migration-backend',
                             type=str,
-                            choices=['gloo','nccl','rpc'],
+                            choices=['gloo','rpc'],
                             help='communication backend of migration')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,

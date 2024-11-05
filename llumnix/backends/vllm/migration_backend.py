@@ -139,13 +139,11 @@ def try_import_gloo():
     except ImportError as e:
         raise ImportError("Gloo is not installed. Please install it first.") from e
 
-class RayColMigrationBackend(MigrationBackendBase):
+class RayGlooMigrationBackend(MigrationBackendBase):
     def __init__(self, migration_config: MigrationConfig, cache_engine: CacheEngine, local_rank,
                  scheduling_strategy, is_driver_worker, gpu_cache) -> None:
+        try_import_gloo()
         super().__init__()
-
-        # pylint: disable=C0415
-        import cupy
 
         self.migration_config = migration_config
         self.cache_engine = cache_engine
@@ -164,22 +162,16 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.gpu_cache = gpu_cache
 
         self.migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
+        self.cache_device = "cpu"
 
-        if self.backend == 'gloo':
-            try_import_gloo()
-            self.cache_device = "cpu"
-        else:
-            self.cache_device = torch.device(f"cuda:{self.local_rank}")
-
-        pin_memory = (self.backend == 'gloo')
         self.dummy_cache = torch.empty(
             size=(self.num_migration_cache_blocks, self.migration_num_layers, 2, self.migration_cache_size),
             dtype=self.cache_engine.dtype,
             device=self.cache_device,
-            pin_memory=pin_memory
+            pin_memory=True
         )
 
-        self.migration_stream = cupy.cuda.Stream()
+        self.migration_stream = torch.cuda.Stream()
 
     def init_backend(self, group_name, world_size, rank) -> bool:
         @func_set_timeout(self.migration_config.migration_backend_init_timeout)
@@ -235,7 +227,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend))
         return True
 
-    # Ray.collective is used to construct the gloo and nccl backends. The do_send/do_recv functions will transmit
+    # Ray.collective is used to construct the gloo backends. The do_send/do_recv functions will transmit
     # data layer by layer. Take into consideration that col.send/recv are blocking operations.
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         tot_blocks = len(src_blocks)
@@ -253,27 +245,27 @@ class RayColMigrationBackend(MigrationBackendBase):
         send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
 
-        with self.migration_stream:
+        with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.cache_engine.num_layers):
                 cache_idx = layer_idx % self.migration_num_layers
                 self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], send_cache[cache_idx], src_to_dst)
                 if cache_idx + 1 == self.migration_num_layers or layer_idx + 1 == self.cache_engine.num_layers:
                     # TODO(KuilongCui): check the error code if peer is dead
                     col.send(send_cache, dst_handle, self.group_name)
-        self.migration_stream.synchronize()
+        torch.cuda.Stream.synchronize(self.migration_stream)
 
     def do_recv(self, src_handle, blocks: List[int]):
         num_blocks = len(blocks)
         src_to_dst = dict(enumerate(blocks))
         recv_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
 
-        with self.migration_stream:
+        with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.cache_engine.num_layers):
                 cache_idx = layer_idx % self.migration_num_layers
                 if cache_idx == 0:
                     col.recv(recv_cache, src_handle, self.group_name)
                 self.cache_engine.attn_backend.swap_blocks(recv_cache[cache_idx], self.gpu_cache[layer_idx], src_to_dst)
-        self.migration_stream.synchronize()
+        torch.cuda.Stream.synchronize(self.migration_stream)
 
 def get_migration_backend(migration_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy,
                         is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
@@ -284,8 +276,9 @@ def get_migration_backend(migration_config: MigrationConfig, cache_engine: Cache
 
     target_col = None
     backend = migration_config.migration_backend
-    if backend in ['nccl', 'gloo']:
-        target_col = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
+
+    if backend == 'gloo':
+        target_col = RayGlooMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
                                             is_driver_worker, gpu_cache)
     else:
         target_col = RayRpcMigrationBackend(migration_config, cache_engine, worker_rank, worker_handle_list,

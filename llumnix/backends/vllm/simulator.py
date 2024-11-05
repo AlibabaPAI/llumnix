@@ -19,7 +19,6 @@ import ray.actor
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.logger import init_logger
-from llumnix.internal_config import MigrationConfig
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM, EngineState
 from llumnix.backends.profiling import ProfilingDatabase, LatencyMemData, ProfilingResult, SimParallelConfig
@@ -33,7 +32,6 @@ class BackendSimVLLM(BackendVLLM):
         self,
         instance_id: str,
         output_queue_type: QueueType,
-        migration_config: MigrationConfig,
         profiling_result_file_path: str,
         engine_args: EngineArgs,
         node_id: str = None,
@@ -42,7 +40,6 @@ class BackendSimVLLM(BackendVLLM):
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           output_queue_type=output_queue_type,
-                                                                          migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           latency_mem=latency_mem,
                                                                           node_id=node_id)

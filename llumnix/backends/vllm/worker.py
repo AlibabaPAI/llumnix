@@ -13,14 +13,12 @@
 
 import time
 from typing import Dict, List
-import math
 import ray
 import torch
 
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
-from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
 from vllm.worker.cache_engine import CacheEngine
 from vllm.config import _GB
 
@@ -47,31 +45,6 @@ class MigrationWorker(Worker):
 
     def get_global_rank(self):
         return self.global_rank
-
-    def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
-                                     cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
-        migrate_cache_blocks_size = migration_config.migration_cache_blocks
-        migrate_num_layers = migration_config.migration_num_layers
-        dummy_cache_size = migrate_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
-            cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
-
-        # For nccl migration backend, reserve gpu memory for dummy cache in migration backend. For other backends,
-        # CPU memory is used for the dummy cache, which is almost unlimited, so no special action is needed.
-        if migration_config.migration_backend == "nccl" and parallel_config.world_size == 1:
-            device = torch.device(f"cuda:{self.local_rank}")
-            _, total_memory = torch.cuda.mem_get_info(device)
-            migrate_ratio = math.ceil(dummy_cache_size / total_memory * 10000) / 10000
-            cache_config.gpu_memory_utilization -= migrate_ratio
-
-            if cache_config.gpu_memory_utilization <= 0:
-                raise ValueError("Nccl migration backend take {:.4f} gpu memory, which is greater than gpu_memory_utilization {:.4f}. "
-                                 "try to increase gpu-memory-utilization or reduce migration-cache-blocks."
-                                 .format(migrate_ratio, cache_config.gpu_memory_utilization))
-
-            logger.info("nccl migration backend take {:.4f} gpu memory, left gpu_memory_utilization {:.4f} for kv cache."
-                        .format(migrate_ratio, cache_config.gpu_memory_utilization))
-
-        return dummy_cache_size
 
     def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list,
                        placement_group=None, node_id=None) -> None:
@@ -150,7 +123,3 @@ class MigrationWorker(Worker):
         del self.migration_backend
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
-
-    def restart(self) -> None:
-        self.init_model()
-        self.init_cache_engine(self.cache_config)

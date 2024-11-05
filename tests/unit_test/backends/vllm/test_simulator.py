@@ -10,7 +10,6 @@ from vllm.sequence import ExecuteModelRequest
 from llumnix.backends.vllm.executor import SimGPUExecutor
 from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
-from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 
 # pylint: disable=unused-import
@@ -71,7 +70,6 @@ async def test_backend(setup_ray_env):
     # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    migration_config = MigrationConfig("LCFS", "gloo", 16, 1, 4, 5, 20)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -86,7 +84,6 @@ async def test_backend(setup_ray_env):
     dummy_actor = dummy_actor.remote()
     sim_backend = MockBackendSim(instance_id="0",
                                  output_queue_type=output_queue_type,
-                                 migration_config=migration_config,
                                  profiling_result_file_path="",
                                  engine_args=engine_args)
 

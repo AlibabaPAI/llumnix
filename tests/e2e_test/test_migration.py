@@ -65,7 +65,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 async def test_migration_benchmark(model, migration_backend):
     base_port = 37037
     instance_output_logs = []

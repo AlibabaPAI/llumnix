@@ -51,7 +51,7 @@ class MockLlumlet(Llumlet):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
 
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.asyncio
 async def test_migration_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
@@ -141,7 +141,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend):
         await test_correctness(prompt)
     que.cleanup()
 
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)

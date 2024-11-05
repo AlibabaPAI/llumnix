@@ -14,7 +14,6 @@
 from typing import Dict, List, Tuple, Set
 from abc import ABC, abstractmethod
 from enum import Enum
-import math
 import numpy as np
 
 from llumnix.logger import init_logger
@@ -36,6 +35,7 @@ class ScalingScheduler:
                  scale_down_threshold: float,
                  scaling_policy: str,
                  instance_load_calculator: InstanceLoadCalculator,
+                 enable_pd_disagg: bool,
                  maximum_prefill_instance_num: int) -> None:
         self.scale_up_threshold = scale_up_threshold
         self.scale_down_threshold = scale_down_threshold
@@ -46,6 +46,7 @@ class ScalingScheduler:
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
         self.maximum_prefill_instance_num = maximum_prefill_instance_num
+        self.enable_pd_disagg = enable_pd_disagg
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
         self.sorted_instance_infos: List[InstanceInfo] = None
@@ -78,7 +79,7 @@ class ScalingScheduler:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
         instance_type = None
-        if self.maximum_prefill_instance_num == math.inf:
+        if not self.enable_pd_disagg:
             instance_type = InstanceType.NO_CONSTRAINTS
         else:
             if len(self.instance_type_id_set[InstanceType.PREFILL]) < self.maximum_prefill_instance_num:

@@ -66,17 +66,17 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--migration-cache-blocks 32 "
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
-        f"--enable-pd-disagg {enable_pd_disagg} "
-        f"--num-dispatch-instances {num_dispatch_instances} "
+        f"{'--enable-pd-disagg ' if enable_pd_disagg else ''} "
+        f"{'--num-dispatch-instances ' if num_dispatch_instances!=math.inf else ''} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command
 
-def launch_llumnix_service(model: str, max_model_len: int, port: int, migration_backend: str, launch_mode: str, enable_pd_disagg: bool):
+def launch_llumnix_service(model: str, max_model_len: int, port: int, migration_backend: str, launch_mode: str):
     command = generate_launch_command(model=model, max_model_len=max_model_len,
                                       port=port, migration_backend=migration_backend,
-                                      launch_mode=launch_mode, enable_pd_disagg=enable_pd_disagg)
+                                      launch_mode=launch_mode)
     subprocess.run(command, shell=True, check=True)
 
 def shutdown_llumnix_service():
@@ -139,7 +139,6 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
-# @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
 async def test_e2e(model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':
         pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")

@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import asyncio
 from collections import defaultdict
 import re
@@ -62,80 +63,32 @@ def parse_manager_log_file(log_file):
         num_available_gpu_blocks_list = df_instance["num_available_gpu_blocks"].to_numpy().tolist()
         assert num_available_gpu_blocks_list[0] == num_available_gpu_blocks_list[-1]
 
-# @pytest.mark.asyncio
-# @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
-# @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-# @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
-# async def test_migration_benchmark(model, migration_backend):
-#     base_port = 37037
-#     instance_output_logs = []
-
-#     device_count = torch.cuda.device_count()
-#     for i in range(device_count):
-#         output_log = f"{base_port+i}.out"
-#         instance_output_logs.append("instance_"+output_log)
-#         launch_command = generate_launch_command(result_filename=output_log, launch_ray_cluster=False, port=base_port+i,
-#                                                  model=model, dispatch_policy="flood", migration_backend=migration_backend,
-#                                                  log_instance_info=True)
-#         subprocess.run(launch_command, shell=True, check=True)
-#     await asyncio.sleep(60)
-
-#     async def run_bench_command(command):
-#         process = await asyncio.create_subprocess_shell(command)
-#         await process.wait()
-#         assert process.returncode == 0
-
-#     for i in range(device_count//2):
-#         bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=300,
-#                                                dataset_type="sharegpt",
-#                                                dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
-#                                                qps=10)
-#         await asyncio.wait_for(run_bench_command(bench_command), timeout=60*30)
-#     await asyncio.sleep(30)
-
-#     parse_manager_log_file("manager_instance.csv")
-
-#     averger_speed = parse_instance_log_file(instance_output_logs)
-
-#     sorted_keys = sorted(averger_speed.keys(), key=lambda x: float(x.split()[0]))
-
-#     data = [
-#         ['migration_size'] + sorted_keys,
-#         [f'{migration_backend}_speed(GB/s)'] + [f"{averger_speed[key]:.2f}" for key in sorted_keys]
-#     ]
-
-#     with open("performance.txt", "a", encoding="utf-8") as f:
-#         f.write(to_markdown_table(data))
-
-#     shutdown_llumnix_service()
-#     clear_ray_state()
-#     await asyncio.sleep(3)
-
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['nccl'])#, 'gloo', 'nccl'])
-async def test_prefill_decoding_migration_benchmark(model, migration_backend):
+@pytest.mark.parametrize("migration_backend", ['rpc'])# 'gloo', 'nccl'])
+@pytest.mark.parametrize("enable_pd_disagg", [False, True])
+async def test_migration_benchmark(model, migration_backend, enable_pd_disagg):
     base_port = 37037
     instance_output_logs = []
 
     device_count = torch.cuda.device_count()
+    num_dispatch_instances = device_count//2 if enable_pd_disagg else math.inf
     for i in range(device_count):
         output_log = f"{base_port+i}.out"
         instance_output_logs.append("instance_"+output_log)
         launch_command = generate_launch_command(result_filename=output_log, launch_ray_cluster=False, port=base_port+i,
                                                  model=model, dispatch_policy="flood", migration_backend=migration_backend,
-                                                 log_instance_info=True, enable_pd_disagg=True, num_dispatch_instances=device_count//2)
+                                                 log_instance_info=True, enable_pd_disagg=enable_pd_disagg,
+                                                 num_dispatch_instances=num_dispatch_instances)
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(60)
-    print(launch_command)
 
     async def run_bench_command(command):
-        print(command)
-
         process = await asyncio.create_subprocess_shell(command)
         await process.wait()
         assert process.returncode == 0
+
     for i in range(device_count//2):
         bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=300,
                                                dataset_type="sharegpt",
@@ -161,4 +114,3 @@ async def test_prefill_decoding_migration_benchmark(model, migration_backend):
     shutdown_llumnix_service()
     clear_ray_state()
     await asyncio.sleep(3)
-

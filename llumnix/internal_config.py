@@ -51,6 +51,8 @@ class GlobalSchedulerConfig:
         self.dispatch_policy = dispatch_policy
 
         self.pair_migration_policy = pair_migration_policy
+        # TODO(KuilongCui): Use a better way to set the threshold, as having both positive and negative
+        # values can cause confusion.
         self.migrate_out_load_threshold = migrate_out_threshold*(-1)
         self.enable_defrag = enable_defrag
 

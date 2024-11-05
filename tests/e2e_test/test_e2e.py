@@ -67,7 +67,7 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''} "
-        f"{'--num-dispatch-instances ' if num_dispatch_instances!=math.inf else ''} "
+        f"{'--num-dispatch-instances {num_dispatch_instances} ' if num_dispatch_instances!=math.inf else ''} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )

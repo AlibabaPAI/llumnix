@@ -38,6 +38,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
+            [--enable-pd-disagg]
+            [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
             [--log-request-timestamps]
 
 ```
@@ -167,6 +169,12 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--log-request-timestamps`
 - Enable logging request timestamps.
+
+`--enable-pd-disagg`
+- Enable prefill decoding disaggregation.
+
+`--num-dispatch-instances`
+- Number of available instances for dispatch.
 
 # Unsupported vLLM feature options
 

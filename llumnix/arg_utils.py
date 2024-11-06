@@ -306,6 +306,9 @@ class EngineManagerArgs:
                             type=int,
                             help='drop migration if the number of stages > max_stages')
         parser.add_argument('--enable-pd-disagg',
-                            type=bool,
+                            action='store_true',
                             help='enable prefill decoding disaggregation')
+        parser.add_argument('--num-dispatch-instances',
+                            type=int,
+                            help='number of available instances for dispatch')
         return parser

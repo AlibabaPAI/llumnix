@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import subprocess
 import asyncio
 import pytest
@@ -40,7 +41,8 @@ def parse_launch_mode(launch_mode: str):
 def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool = True, HEAD_NODE_IP: str = "127.0.0.1",
                             ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
                             migration_backend = "gloo", model = "facebook/opt-125m", max_model_len: int = 2048,
-                            launch_mode: str = 'eief', log_instance_info: bool = False):
+                            launch_mode: str = 'eief', log_instance_info: bool = False, enable_pd_disagg: bool = False,
+                            num_dispatch_instances: int = math.inf):
     disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -64,6 +66,8 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--migration-cache-blocks 32 "
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
+        f"{'--enable-pd-disagg ' if enable_pd_disagg else ''} "
+        f"{f'--num-dispatch-instances {num_dispatch_instances} ' if num_dispatch_instances != math.inf else ''} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -98,7 +102,7 @@ def clear_ray_state():
             continue
     ray.shutdown()
 
-async def get_llumnix_responce(prompt, sampling_params, ip_ports):
+async def get_llumnix_response(prompt, sampling_params, ip_ports):
     timeout = aiohttp.ClientTimeout(total=60)
 
     request = {
@@ -155,7 +159,7 @@ async def test_e2e(model, migration_backend, launch_mode):
 
     llumnix_output = {}
     for prompt in prompts:
-        response = await asyncio.wait_for(get_llumnix_responce(prompt, sampling_params, f"127.0.0.1:{base_port}"),
+        response = await asyncio.wait_for(get_llumnix_response(prompt, sampling_params, f"127.0.0.1:{base_port}"),
                                           timeout=60*5)
         llumnix_output[prompt] = response['text'][0]
 

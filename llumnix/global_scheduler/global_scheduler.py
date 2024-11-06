@@ -48,6 +48,7 @@ class GlobalScheduler:
                                                   global_scheduler_config.scale_down_threshold,
                                                   global_scheduler_config.scaling_policy,
                                                   self.instance_load_calculator,
+                                                  self.enable_pd_disagg,
                                                   global_scheduler_config.num_dispatch_instances)
 
         self.num_instances = 0

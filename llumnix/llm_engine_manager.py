@@ -230,14 +230,15 @@ class LLMEngineManager:
                 self.instance_migrating[migrate_instance_pair[0]] = False
             if migrate_instance_pair[1] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[1]] = False
-            if isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
+            # TODO(s5u13b): Add more exception types for failover.
+            if isinstance(ret, (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError)):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):
                     # Instance without error should clear migration states.
                     if not has_error:
                         try:
                             await self.instances[migrate_instance_pair[i]].clear_migration_states.remote(is_migrate_in=bool(i))
-                        except (ray.exceptions.RayActorError, KeyError):
+                        except (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError):
                             has_error = True
                 for i, has_error in enumerate(has_error_pair):
                     if has_error:

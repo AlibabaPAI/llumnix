@@ -97,5 +97,6 @@ class LocalMigrationScheduler:
     def _get_first_waiting_and_shortest_running_requests(self, min_request_len, max_request_len) -> List[LlumnixRequest]:
         waiting_requests = self._get_first_waiting_request(min_request_len, max_request_len)
         running_requests = self._get_shortest_running_request(min_request_len, max_request_len)
-        waiting_requests[0].eom = True
+        if waiting_requests:
+            waiting_requests[0].eom = True
         return waiting_requests + running_requests

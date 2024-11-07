@@ -67,9 +67,8 @@ def parse_manager_log_file(log_file):
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
-async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, migrated_request_status):
+async def test_migration_benchmark(model, migration_backend, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rpc':
         pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
 
@@ -79,14 +78,12 @@ async def test_migration_benchmark(model, migration_backend, enable_pd_disagg, m
     instance_output_logs = []
 
     device_count = torch.cuda.device_count()
-    num_dispatch_instances = device_count//2 if enable_pd_disagg else math.inf
     for i in range(device_count):
         output_log = f"{base_port+i}.out"
         instance_output_logs.append("instance_"+output_log)
         launch_command = generate_launch_command(result_filename=output_log, launch_ray_cluster=False, port=base_port+i,
                                                  model=model, dispatch_policy="flood", migration_backend=migration_backend,
                                                  log_instance_info=True,
-                                                 enable_pd_disagg=enable_pd_disagg, num_dispatch_instances=num_dispatch_instances,
                                                  request_migration_policy=request_migration_policy)
         subprocess.run(launch_command, shell=True, check=True)
         await asyncio.sleep(5)

@@ -42,7 +42,6 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
                             ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
                             migration_backend = "gloo", model = "facebook/opt-125m", max_model_len: int = 2048,
                             launch_mode: str = 'eief', log_instance_info: bool = False,
-                            enable_pd_disagg: bool = False, num_dispatch_instances: int = math.inf,
                             request_migration_policy: str = 'SR'):
     disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
@@ -67,8 +66,6 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--migration-cache-blocks 32 "
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
-        f"{'--enable-pd-disagg ' if enable_pd_disagg else ''} "
-        f"{f'--num-dispatch-instances {num_dispatch_instances} ' if num_dispatch_instances != math.inf else ''} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )

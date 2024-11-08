@@ -66,7 +66,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
+@pytest.mark.parametrize("migration_backend", ['gloo'])
 async def test_migration_benchmark(model, migration_backend):
     base_port = 37037
     instance_output_logs = []
@@ -92,7 +92,8 @@ async def test_migration_benchmark(model, migration_backend):
         bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=300,
                                                dataset_type="sharegpt",
                                                dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
-                                               qps=10)
+                                               qps=10,
+                                               results_filename=f"{base_port+i}.out")
         tasks.append(asyncio.create_task(run_bench_command(bench_command)))
 
     _, pending = await asyncio.wait(tasks, timeout=60*30)

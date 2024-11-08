@@ -20,7 +20,8 @@ import ray
 import torch
 
 from vllm import LLM, SamplingParams
-
+# pylint: disable=unused-import
+from .utils import clean_ray
 
 def parse_launch_mode(launch_mode: str):
     # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
@@ -142,7 +143,7 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
-async def test_e2e(model, migration_backend, launch_mode):
+async def test_e2e(clean_ray, model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':
         pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")
     max_model_len = 370
@@ -155,6 +156,7 @@ async def test_e2e(model, migration_backend, launch_mode):
         "ignore_eos": False,
     }
 
+    launch_ray()
     # generate llumnix outputs
     base_port = 37037
     launch_llumnix_service(model, max_model_len, base_port, migration_backend, launch_mode)
@@ -174,7 +176,6 @@ async def test_e2e(model, migration_backend, launch_mode):
         vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
 
     clear_ray_state()
-
     # compare
     for prompt in prompts:
         assert llumnix_output[prompt] == vllm_output[prompt]

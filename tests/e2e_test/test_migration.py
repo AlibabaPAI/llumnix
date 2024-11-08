@@ -22,7 +22,8 @@ import pandas as pd
 
 from .test_e2e import generate_launch_command
 from .test_bench import generate_bench_command, clear_ray_state, shutdown_llumnix_service
-from .utils import to_markdown_table
+# pylint: disable=unused-import
+from .utils import to_markdown_table, clean_ray
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
@@ -67,7 +68,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['gloo'])
-async def test_migration_benchmark(model, migration_backend):
+async def test_migration_benchmark(clean_ray, model, migration_backend):
     base_port = 37037
     instance_output_logs = []
 

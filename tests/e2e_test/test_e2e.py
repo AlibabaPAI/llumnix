@@ -156,7 +156,6 @@ async def test_e2e(clean_ray, model, migration_backend, launch_mode):
         "ignore_eos": False,
     }
 
-    launch_ray()
     # generate llumnix outputs
     base_port = 37037
     launch_llumnix_service(model, max_model_len, base_port, migration_backend, launch_mode)

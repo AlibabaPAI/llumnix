@@ -228,12 +228,13 @@ class EngineManagerArgs:
 
         parser.add_argument('--dispatch-policy',
                             type=str,
-                            choices=['balanced', 'load', 'queue', 'flood'],
+                            choices=['balanced', 'load', 'queue', 'flood', 'rr'],
                             help='The request dispatch policy.\n\n'
                             '* "balanced" dispatch request to the instance with minimum requests dispatched.\n'
                             '* "load" dispatch request to the instance with lowest instance load.\n'
                             '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
-                            '* "flood" dispatch request to the instance with maximum requests dispatched.\n')
+                            '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
+                            '* "rr" dispatch requests with roundrobin policy.\n')
         parser.add_argument('--num-available-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatching')

@@ -137,12 +137,26 @@ class Queue(DispatchPolicy):
         logger.info("dispatch to {}, queue size: {}".format(instance_id, sorted_instance_infos[0].num_waiting_requests))
         return instance_id
 
+class RoundRobin(DispatchPolicy):
+    prev_instance_idx: int = -1
+
+    def dispatch(self,
+                 instance_num_requests: Dict[str, int],
+                 sorted_instance_infos: List[InstanceInfo]) -> str:
+        all_instance_ids = sorted(instance_num_requests.keys())
+        cur_instance_idx = (self.prev_instance_idx + 1) % len(all_instance_ids)
+
+        target_instance_id = all_instance_ids[cur_instance_idx]
+        self.prev_instance_idx = cur_instance_idx
+        return target_instance_id
+
 class DispatchPolicyFactory:
     _POLICY_REGISTRY = {
         'flood': Flood,
         'balanced': Balanced,
         'load': Load,
         'queue': Queue,
+        'rr': RoundRobin,
     }
 
     @classmethod

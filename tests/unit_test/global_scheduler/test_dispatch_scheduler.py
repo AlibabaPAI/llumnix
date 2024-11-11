@@ -48,10 +48,7 @@ def test_add_instance_and_remove_instance(dispatch_scheduler, num_dispatch_insta
 
     dispatch_scheduler.remove_instance('instance_2')
     assert dispatch_scheduler.num_instances == 1
-    if dispatch_scheduler.num_dispatch_instances >= 2:
-        assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
-    else:
-        assert len(dispatch_scheduler.available_dispatch_instance_set) == 0
+    assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
     dispatch_scheduler.remove_instance('instance_3')
     assert dispatch_scheduler.num_instances == 0
 

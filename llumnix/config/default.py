@@ -108,9 +108,11 @@ _C.MANAGER.MIGRATION_BACKEND = "gloo"
 # Timeout(s) for initializing migration backend
 _C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 # Number of cache blocks in migration
-_C.MANAGER.MIGRATION_CACHE_BLOCKS = 512
+_C.MANAGER.MIGRATION_BUFFER_BLOCKS = 512
 # Number of kv-cache layers to transfer in each round during migration
 _C.MANAGER.MIGRATION_NUM_LAYERS = 1
+# Number of internal cache size in migration backend for sending and receiving
+_C.MANAGER.MIGRATION_INTERNAL_BUFFER_NUM = 2
 
 # -----------------------------------------------------------------------------
 # SCALING CONFIGURATION

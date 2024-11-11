@@ -66,14 +66,18 @@ def test_scheduler_policy():
     assert scheduler.get_migrate_out_request().request_id == "0"
 
     engine.add_request(request_id="3", length=2, expected_steps=1)
-    request = scheduler.get_migrate_out_request()
-    assert request.request_id == "3"
-    assert request.output_len >= request.expected_steps and request.inference_type == RequestInferenceType.DECODE
     engine.add_request(request_id="4", length=3, expected_steps=math.inf)
+    engine.add_request(request_id="5", length=4, expected_steps=math.inf)
     scheduler.request_migration_policy = "LCFS"
     request = scheduler.get_migrate_out_request()
+    request.migrating = True
     assert request.request_id == "3"
     assert request.output_len >= request.expected_steps and request.inference_type == RequestInferenceType.DECODE
+    request = scheduler.get_migrate_out_request()
+    request.migrating = True
+    assert request.request_id == "5"
+    request = scheduler.get_migrate_out_request()
+    assert request.request_id == "4"
 
 def test_scheduler_should_abort_migration():
     req_0 = MockRequest(request_id="0", length=1, expected_steps=math.inf)

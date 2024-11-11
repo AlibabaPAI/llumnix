@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import time
 import ray
 import torch
@@ -30,28 +29,17 @@ from tests.conftest import setup_ray_env
 
 @ray.remote(num_cpus=1, max_concurrency=4)
 class MockLlumlet(Llumlet):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.origin_step = self.backend_engine.engine.step_async
-
-    def set_error_step(self, broken: bool):
-        self.backend_engine._stop_event.set()
-
+    def set_error_step(self):
         async def raise_error_step():
             await self.origin_step()
             raise ValueError("Mock engine step error")
 
-        if broken:
-            self.backend_engine.engine.step_async = raise_error_step
-        else:
-            self.backend_engine.engine.step_async = self.origin_step
-
-        asyncio.create_task(self.backend_engine._start_engine_step_loop())
+        self.backend_engine.engine.step_async = raise_error_step
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(setup_ray_env):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    migration_config = MigrationConfig("LCFS", "rpc", 16, 1, 4, 5, 20)
+    engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
+    migration_config = MigrationConfig("LCFS", "rpc", 16, 1, 4, 5, 20, 2)
     node_id = ray.get_runtime_context().get_node_id()
     scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
 
@@ -76,7 +64,7 @@ def test_engine_step_exception(setup_ray_env):
     cur_free_memory, _ = torch.cuda.mem_get_info()
     assert cur_free_memory < origin_free_memory
 
-    ray.get(llumlet.set_error_step.remote(True))
+    ray.get(llumlet.set_error_step.remote())
     time.sleep(3)
 
     all_actors = ray.util.list_named_actors(True)

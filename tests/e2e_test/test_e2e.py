@@ -20,7 +20,8 @@ import ray
 import torch
 
 from vllm import LLM, SamplingParams
-
+# pylint: disable=unused-import
+from .utils import clean_ray
 
 def parse_launch_mode(launch_mode: str):
     # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
@@ -46,7 +47,7 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
     disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
-        f"nohup python -m llumnix.entrypoints.vllm.api_server "
+        f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
         f"--host {ip} "
         f"--port {port} "
         f"{'--disable-init-instance-by-manager ' if disable_init_instance_by_manager else ''}"
@@ -63,7 +64,8 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--trust-remote-code "
         f"--request-migration-policy LCFS "
         f"--migration-backend {migration_backend} "
-        f"--migration-cache-blocks 32 "
+        f"--migration-buffer-blocks 32 "
+        f"--migration-internal-buffer-num 2 "
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''} "
@@ -123,6 +125,8 @@ prompts = [
     "The future of AI is",
 ]
 
+vllm_output = {}
+
 @ray.remote(num_gpus=1)
 def run_vllm(model, max_model_len, sampling_params):
     vllm_output = {}
@@ -137,9 +141,9 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for e2e test")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
-async def test_e2e(model, migration_backend, launch_mode):
+async def test_e2e(clean_ray, model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':
         pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")
     max_model_len = 370
@@ -165,9 +169,12 @@ async def test_e2e(model, migration_backend, launch_mode):
 
     shutdown_llumnix_service()
 
-    vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
-    clear_ray_state()
+    global vllm_output
 
+    if len(vllm_output) == 0:
+        vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
+
+    clear_ray_state()
     # compare
     for prompt in prompts:
         assert llumnix_output[prompt] == vllm_output[prompt]

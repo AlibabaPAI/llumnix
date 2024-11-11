@@ -39,35 +39,52 @@ class LocalMigrationScheduler:
     # and only selects request that migrates from the prefill instance to the decoding instance.
     def get_ready_migration_request(self, min_request_len, max_request_len):
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
+        target_request: LlumnixRequest = None
         for request in reversed(running):
+            if request.migrating:
+                continue
+
             if request.output_len >= request.expected_steps \
                 and request.inference_type == RequestInferenceType.DECODE \
                 and min_request_len <= request.request_len <= max_request_len:
-                return request
-        return None
+                target_request = request
+                break
+
+        return target_request
 
     def get_last_running_request(self, min_request_len, max_request_len):
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
+        target_request: LlumnixRequest = None
+
         for request in reversed(running):
+            if request.migrating:
+                continue
+
             if request.inference_type == RequestInferenceType.DECODE \
                 and min_request_len <= request.request_len <= max_request_len:
-                return request
-        return None
+                target_request=request
+                break
+
+        return target_request
 
     def get_longest_running_request(self, min_request_len, max_request_len):
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
-                                        and min_request_len <= request.request_len <= max_request_len
+                                        and min_request_len <= request.request_len <= max_request_len \
+                                        and (not request.migrating)
 
         longest_seq_group = max((request for request in running if condition(request)), \
                                 key=lambda request: request.request_len, default=None)
+
         return longest_seq_group
 
     def get_shortest_running_request(self, min_request_len, max_request_len):
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
         condition = lambda request : request.inference_type == RequestInferenceType.DECODE \
-                                         and min_request_len <= request.request_len <= max_request_len
+                                         and min_request_len <= request.request_len <= max_request_len \
+                                         and (not request.migrating)
 
         shortest_seq_group = min((request for request in running if condition(request)), \
                                 key=lambda request: request.request_len, default=None)
+
         return shortest_seq_group

@@ -130,6 +130,7 @@ class Llumlet:
 
     async def migrate_out(self, dst_instance_name: str, num_requests: int) -> List[str]:
         try:
+            migrate_out_request = None
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
             dst_instance_id = dst_instance_name[len("instance_"):]
             migrated_request_list = []
@@ -137,12 +138,13 @@ class Llumlet:
             while continue_migrate and len(migrated_request_list) < num_requests:
                 t0 = time.time()
                 migrate_out_request = self.migration_scheduler.get_migrate_out_request()
-                if migrate_out_request is not None:
-                    logger.info("migrate_out {}".format(migrate_out_request.request_id))
                 if migrate_out_request is None:
-                    return migrated_request_list
+                    break
+
+                migrate_out_request.migrating = True
                 logger.info("{}->{} begin migrate out {}".format(self.instance_id, dst_instance_id, migrate_out_request.request_id))
                 status = await self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
+
                 if status == MigrationStatus.FINISHED_DONE:
                     await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
                     self.backend_engine.free_src_request(migrate_out_request)
@@ -157,8 +159,13 @@ class Llumlet:
                 logger.info("{}->{} migrate done, migrate request {}, status:{}, len:{} blocks, cost:{} ms" \
                     .format(self.instance_id, dst_instance_id, migrated_request_list, status, \
                     sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
-        except ray.exceptions.RayActorError:
-            logger.info("[migrate_out] instance {} is dead".format(dst_instance_name[len("instance_"):]))
+        # pylint: disable=broad-except
+        except Exception as e:
+            if migrate_out_request:
+                migrate_out_request.reset_migration_args()
+
+            logger.info("[migrate_out] src instance {}, dst instance {}, meet error: {}"
+                         .format(self.instance_id, dst_instance_name[len("instance_"):], e))
             raise
         return migrated_request_list
 

@@ -16,18 +16,20 @@ class MigrationConfig:
             self,
             request_migration_policy: str,
             migration_backend: str,
-            migration_cache_blocks: int,
+            migration_buffer_blocks: int,
             migration_num_layers: int,
             last_stage_max_blocks: int,
             max_stages: int,
-            migration_backend_init_timeout: float) -> None:
+            migration_backend_init_timeout: float,
+            migration_internal_buffer_num: int) -> None:
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
         self.migration_num_layers = migration_num_layers
-        self.migration_cache_blocks = migration_cache_blocks
+        self.migration_buffer_blocks = migration_buffer_blocks
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.migration_backend_init_timeout = migration_backend_init_timeout
+        self.migration_internal_buffer_num = migration_internal_buffer_num
 
 class GlobalSchedulerConfig:
     def __init__(

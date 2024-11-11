@@ -84,14 +84,12 @@ async def query_model_vllm(prompt, verbose, ip_ports):
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         best_of = 1
-        use_beam_search = False
         output_len = expected_response_len
         request_dict = {
             "prompt": prompt,
             "n": 1,
             "best_of": best_of,
-            "use_beam_search": use_beam_search,
-            "temperature": 0.0 if use_beam_search else 1.0,
+            "temperature": 1.0,
             "top_k": 1,
             "max_tokens": max(output_len, 1),
             "ignore_eos": True,
@@ -815,18 +813,18 @@ def main():
     except FileNotFoundError:
         os.mknod(file_name)
     with open(file_name, 'w') as f:
-        results.append({"qps": args.qps, 
+        results.append({"qps": args.qps,
                         "cv": args.coefficient_variation,
-                        "request_ids": request_ids, 
+                        "request_ids": request_ids,
                         "request_lens": request_lens,
-                        "request_latencies": request_latencies, 
-                        "prefill_token_latencies": prefill_token_latencies, 
+                        "request_latencies": request_latencies,
+                        "prefill_token_latencies": prefill_token_latencies,
                         "decode_token_latencies": decode_token_latencies,
-                        "decode_sum_latencies": decode_sum_latencies, 
+                        "decode_sum_latencies": decode_sum_latencies,
                         "all_decode_token_latencies": all_decode_token_latencies,
                         "inference_latencies": inference_latencies,
                         "per_token_latencies_breakdown_dict": per_token_latencies_breakdown_dict,
-                        "throughput": throughput, 
+                        "throughput": throughput,
                         "instance_num": avg_instance_num})
         json.dump(results, f)
 

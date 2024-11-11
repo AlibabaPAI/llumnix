@@ -22,7 +22,7 @@ from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
 from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
 from vllm.worker.cache_engine import CacheEngine
-from vllm.config import _GB
+from vllm.utils import GiB_bytes
 
 from llumnix.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
@@ -117,7 +117,7 @@ class MigrationWorker(Worker):
 
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
             self.cache_config, self.model_config, self.parallel_config)
-        speed = total_kv_cache_size/_GB/(end_time - start_time)
+        speed = total_kv_cache_size/GiB_bytes/(end_time - start_time)
         logger.info("[migration_cache] blocks_num: {}, total_kv_cache_size: {}, time: {}s, speed: {}GB/s."
                     .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
 

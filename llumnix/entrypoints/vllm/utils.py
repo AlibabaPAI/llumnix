@@ -45,10 +45,10 @@ async def manager_generate(prompt: str,
                            sampling_params: SamplingParams,
                            request_id: str,
                            llumnix_context: LlumnixEntrypointsContext) -> AsyncStream:
-    results_generator = AsyncStream(request_id)
+    results_generator = AsyncStream(request_id, cancel=None)
     llumnix_context.request_streams[request_id] = results_generator
 
-    if sampling_params.n > 1 or sampling_params.use_beam_search:
+    if sampling_params.n > 1:
         raise ValueError("Unsupported feature: multiple sequence decoding")
     # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
     # If manager is unavailable, request will be directly added to the llumlet held by api server.

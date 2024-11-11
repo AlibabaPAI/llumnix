@@ -13,7 +13,7 @@
 
 import time
 import traceback
-from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
+from typing import Any, List, Optional, Dict, Union, Iterable
 from collections import defaultdict
 import threading
 import asyncio
@@ -23,9 +23,8 @@ from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
-from vllm.core.scheduler import ScheduledSequenceGroup
-from vllm.outputs import RequestOutput
-from vllm.sequence import SequenceGroup, SequenceStatus, SamplerOutput, SequenceGroupMetadata
+from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
+from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
 from vllm.usage.usage_lib import UsageContext
@@ -43,6 +42,16 @@ from llumnix.queue.utils import init_output_queue_client, QueueType
 
 logger = init_logger(__name__)
 
+
+class LlumnixOutput(RequestOutputFactory):
+    @staticmethod
+    def create(seq_group: SequenceGroupLlumnix, use_cache: bool = False):
+        # Determine the type based on a condition, for example:
+        if hasattr(seq_group,
+                   'embeddings') and seq_group.embeddings is not None:
+            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
+        else:
+            return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
@@ -89,6 +98,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  placement_group: Optional[PlacementGroup],
                  node_id: Optional[str],
                  *arg, **kwargs) -> None:
+        import vllm.outputs
+        vllm.outputs.RequestOutputFactory.create = LlumnixOutput.create
         super().__init__(*arg, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
@@ -163,45 +174,15 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         )
         return engine
 
-    def _process_model_outputs(
-        self,
-        output: List[SamplerOutput],
-        scheduled_seq_groups: List[ScheduledSequenceGroup],
-        ignored_seq_groups: List[SequenceGroup],
-        seq_group_metadata_list: List[SequenceGroupMetadata],
-    ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
-        # ensure scheduled_seq_groups matching output
-        server_infos = []
-        if output:
-            new_output = []
-            new_scheduled_seq_groups = []
-            new_seq_group_metadata_list = []
-            for scheduled_seq_group, seq_group_meta, seq_group_output in zip(scheduled_seq_groups, seq_group_metadata_list, output[0].outputs):
-                seq_group = scheduled_seq_group.seq_group
-                if seq_group.get_seqs(SequenceStatus.RUNNING):
-                    new_scheduled_seq_groups.append(scheduled_seq_group)
-                    new_seq_group_metadata_list.append(seq_group_meta)
-                    new_output.append(seq_group_output)
-                    server_infos.append(seq_group.server_info)
-            scheduled_seq_groups = new_scheduled_seq_groups
-            output[0].outputs = new_output
-            seq_group_metadata_list = new_seq_group_metadata_list
-        for ignored_seq_group in ignored_seq_groups:
-            server_infos.append(ignored_seq_group.server_info)
-        for server_info in server_infos:
-            if hasattr(server_info, 'request_timestamps'):
-                server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
-        request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
-        for request_output, server_info in zip(request_outputs, server_infos):
-            if hasattr(server_info, 'request_timestamps'):
-                request_output.request_timestamps = server_info.request_timestamps
-                request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
-        # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
-        return request_outputs, server_infos
-
     async def step_async(self) -> None:
         step_begin_time = time.time()
-        request_outputs, server_infos = await super().step_async()
+        request_outputs = []
+        server_infos = []
+        outputs = await super().step_async(0)
+        if outputs:
+            request_outputs, server_infos = zip(*outputs)
+            request_outputs = list(request_outputs)
+            server_infos = list(server_infos)
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
@@ -215,11 +196,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                                       instance_info.num_seqs,
                                       sum(instance_info.running_seq_lens),
                                       self.model_executor.last_inference_latency)
-        seq_groups = self.scheduler.running
+        seq_groups = self.scheduler[0].running
         if seq_groups:
             tot_blocks = []
             for seq in seq_groups[-1].get_seqs(SequenceStatus.RUNNING):
-                blocks = self.scheduler.block_manager.get_block_table(seq)
+                blocks = self.scheduler[0].block_manager.get_block_table(seq)
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
@@ -244,12 +225,13 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
     def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
-        seq_group = self.scheduler.waiting[-1]
+        seq_group = self.scheduler[0].waiting[-1]
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.engine_add_request_timestamp = time.time()
-        self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
-                                                          seq_group.sampling_params, seq_group.metrics.arrival_time, seq_group.lora_request,
-                                                          seq_group.multi_modal_data)
+        self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
+                                                          seq_group.metrics.arrival_time, seq_group.sampling_params, seq_group.lora_request,
+                                                          seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
+                                                          seq_group.priority)
 
     def _start_put_queue_loop(self):
         while True:
@@ -288,7 +270,7 @@ class BackendVLLM(BackendInterface):
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           node_id=node_id)
-        self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
+        self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)]
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id

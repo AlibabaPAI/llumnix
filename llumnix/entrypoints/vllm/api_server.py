@@ -84,7 +84,7 @@ async def generate(request: Request) -> Response:
 
     # Streaming case
     async def stream_results() -> AsyncGenerator[bytes, None]:
-        async for request_output in results_generator:
+        async for request_output in results_generator.generator():
             prompt = request_output.prompt
             text_outputs = [
                 prompt + output.text for output in request_output.outputs
@@ -97,7 +97,7 @@ async def generate(request: Request) -> Response:
 
     # Non-streaming case
     final_output = None
-    async for request_output in results_generator:
+    async for request_output in results_generator.generator():
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
             await manager_abort(request_id, llumnix_context)
@@ -134,7 +134,7 @@ async def generate_benchmark(request: Request) -> Response:
     final_output = None
     per_token_latency = []
     per_token_latency_breakdown_dict = init_per_token_latency_breakdown_dict()
-    async for request_output in results_generator:
+    async for request_output in results_generator.generator():
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
             await manager_abort(request_id, llumnix_context)

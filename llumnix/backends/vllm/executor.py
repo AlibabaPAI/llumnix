@@ -22,12 +22,13 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, Nod
 from ray.util.placement_group import PlacementGroup
 
 from vllm.executor.executor_base import ExecutorBase
+from vllm.model_executor.layers.sampler import SamplerOutput, CompletionSequenceGroupOutput
 from vllm.executor.ray_gpu_executor import RayGPUExecutor, RayGPUExecutorAsync, RayWorkerWrapper,\
                                            get_distributed_init_method, get_ip, get_vllm_instance_id, get_open_port
 
 from vllm import envs
-from vllm.sequence import Logprob, SequenceOutput, SequenceGroupOutput, SamplerOutput, ExecuteModelRequest
-from vllm.config import _GB
+from vllm.sequence import Logprob, SequenceOutput, SequenceGroupOutput, ExecuteModelRequest
+from vllm.utils import GiB_bytes
 
 from llumnix.internal_config import MigrationConfig
 from llumnix.logger import init_logger
@@ -176,7 +177,7 @@ class SimGPUExecutor(RayGPUExecutor):
 
         self.cache_block_size = get_cache_block_size(
             self.cache_config.block_size, self.model_config, self.parallel_config)
-        self.cache_block_size /= _GB
+        self.cache_block_size /= GiB_bytes
         self.sim_cache_config = SimCacheConfig(self.cache_config.gpu_memory_utilization,
                                                self.cache_config.block_size,
                                                self.scheduler_config.max_num_batched_tokens)
@@ -223,7 +224,7 @@ class SimGPUExecutor(RayGPUExecutor):
                 dummy_sample_output = SequenceOutput(seq_id, 20, {20: Logprob(1.0)})
                 samples.append(dummy_sample_output)
             if samples:
-                output = SequenceGroupOutput(samples, None)
+                output = CompletionSequenceGroupOutput(samples, None)
                 sampler_outputs.append(output)
         return [SamplerOutput(outputs=sampler_outputs)]
 

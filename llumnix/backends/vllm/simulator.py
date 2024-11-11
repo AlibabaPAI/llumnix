@@ -46,8 +46,8 @@ class BackendSimVLLM(BackendVLLM):
                                                                           instance_id=instance_id,
                                                                           latency_mem=latency_mem,
                                                                           node_id=node_id)
-        self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
-        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
+        self.engine.scheduler =  [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)]
+        self.engine.scheduler[0].add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
 

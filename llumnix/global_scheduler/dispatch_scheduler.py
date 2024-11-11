@@ -72,6 +72,10 @@ class DispatchScheduler:
         if instance_id in self.available_dispatch_instance_set:
             self.available_dispatch_instance_set.remove(instance_id)
 
+            if self.num_instances >= self.num_dispatch_instances:
+                free_instance_id = next(iter(self.instance_id_set - self.available_dispatch_instance_set))
+                self.available_dispatch_instance_set.add(free_instance_id)
+
     def _sort_instance_infos(self,
                             descending: bool = True) -> None:
         instance_infos: List[InstanceInfo] = list(self.instance_info.values())

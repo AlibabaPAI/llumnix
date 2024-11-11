@@ -94,7 +94,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
         request_migration_policy = "SR"
     elif migration_request_status == 'waiting':
         request_migration_policy = "FCW"
-    migration_config = MigrationConfig(request_migration_policy, migration_backend, 16, 1, 4, 5, 20)
+    migration_config = MigrationConfig(request_migration_policy, migration_backend, 16, 1, 4, 5, 20, 2)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -208,8 +208,8 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m",worker_use_ray=True)
-    id_rank_map = {"0":0,"1":1}
-    migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
+    id_rank_map = {"0":0, "1":1}
+    migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20, 2)
 
     output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(output_queue_type)
@@ -237,6 +237,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
                             migration_config,
                             engine_args,
                      )
+
     while True:
         res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])
         if all(res):
@@ -281,8 +282,10 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
 
         assert output.text == origin_output.text
         assert output.cumulative_logprob == origin_output.cumulative_logprob
+
     for prompt in TEST_PROMPTS:
         await test_correctness(prompt)
+
     que.cleanup()
 
 def test_clear_migration_states():

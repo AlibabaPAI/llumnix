@@ -21,7 +21,7 @@ INSTANCE_NUM = 4
 
 def init_dispatch_scheduler(policy='load'):
     instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
-    dispatch_scheduler = DispatchScheduler(policy, instance_load_calculator, random.randint(1,4))
+    dispatch_scheduler = DispatchScheduler(policy, instance_load_calculator, 1)
     return dispatch_scheduler
 
 @pytest.fixture
@@ -29,7 +29,9 @@ def dispatch_scheduler():
     dispatch_scheduler = init_dispatch_scheduler()
     yield dispatch_scheduler
 
-def test_add_instance_and_remove_instance(dispatch_scheduler):
+@pytest.mark.parametrize("num_dispatch_instances", [1, 2, 3])
+def test_add_instance_and_remove_instance(dispatch_scheduler, num_dispatch_instances):
+    dispatch_scheduler.num_dispatch_instances = num_dispatch_instances
     dispatch_scheduler.add_instance('instance_1')
     assert dispatch_scheduler.num_instances == 1
     assert len(dispatch_scheduler.available_dispatch_instance_set) == 1

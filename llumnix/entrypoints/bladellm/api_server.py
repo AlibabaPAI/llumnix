@@ -34,8 +34,8 @@ from llumnix.entrypoints.utils import (setup_ray_cluster,
                                        init_per_token_latency_breakdown_dict,
                                        record_per_token_latency_breakdown)
 from llumnix.entrypoints.bladellm.utils import (add_cli_args,
-                                            get_args,
-                                            get_model_conf)
+                                            get_args)
+from llumnix.backends.bladellm.utils import get_model_conf
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config, LlumnixConfig

@@ -15,7 +15,7 @@ import asyncio
 from typing import List
 import grpc
 
-from blade_llm.service.worker_client import PipelineWorkerClient
+from blade_llm.service.workers.worker_client import PipelineWorkerClient, LocalWorkerClient
 from blade_llm.service.proto import bladellm_pb2_grpc
 from blade_llm.service.proto import bladellm_pb2
 from blade_llm.service.args import ServingArgs
@@ -25,51 +25,72 @@ from google.protobuf.empty_pb2 import Empty
 from llumnix.logger import init_logger
 
 from llumnix.backends.bladellm.proto import (
-    llumnix_bladellm_pb2,
-    llumnix_bladellm_pb2_grpc,
+    migration_worker_pb2,
+    migration_worker_pb2_grpc,
 )
 
 logger = init_logger(__name__)
 
 
-class LlumnixWorkerStub:
+class MigrationWorkerStub:
     def __init__(self, channel) -> None:
-        llumnix_bladellm_pb2_grpc.LlumnixWorkerStub.__init__(self, channel)
+        migration_worker_pb2_grpc.MigrationWorkerStub.__init__(self, channel)
         bladellm_pb2_grpc.WorkerStub.__init__(self, channel)
 
+# not ready
 class LlumnixPipelineWorkerClient(PipelineWorkerClient):
-    def __init__(self, args: ServingArgs, addrs=None, inst_id=None):
-        super().__init__(args, addrs, inst_id)
+    async def migrate_cache(self, request: migration_worker_pb2.MigrateRequests)-> None:
+        req_str = request.SerializeToString()
+        tasks = [stub.migrate_cache(req_str) for stub in self.stubs]
+        await asyncio.gather(*tasks)
 
-        self.stubs = make_grpc_stubs(self.channels)
-        self.stub_groups = [
-            tuple(self.stubs[i] for i in range(p * self.tp_size, (p + 1) * self.tp_size)) for p in range(self.pp_size)
-        ]
-        self.stub_group_requests = {group: asyncio.Queue() for group in self.stub_groups}
+    async def do_send(self, request: migration_worker_pb2.SendKvCacheRequest)-> List[migration_worker_pb2.SendKvCacheResponse]:
+        req_str = request.SerializeToString()
+        tasks = [stub.migrate_cache(req_str) for stub in self.stubs]
+        resps = await asyncio.gather(*tasks)
+        return resps
+    
+    async def warmup(self)-> List[migration_worker_pb2.WarmupResponse]:
+        request = Empty()
+        tasks = [stub.warmup(request) for stub in self.stubs]
+        resps = await asyncio.gather(*tasks)
+        return resps
 
-    # TODO[xinyi]: function demo, need to adapt to the proto.
-    def migrate_cache(
-        self, request: llumnix_bladellm_pb2.MigrateCacheRequest
-    )-> None:
-        for stub in self.stubs:
-            stub.migrate_cache(request)
+class LlumnixLocalWorkerClient(LocalWorkerClient):
+    async def migrate_cache(self, request: migration_worker_pb2.MigrateRequests)-> None:
+        request = bladellm_pb2.WorkerMetaRequest(method="migrate_cache", drop=request).SerializeToString()
+        [self.rpc_call(request, i) for i in range(len(self.reader))]
+        tasks = [self.rpc_response(i) for i in range(len(self.reader))]
+        self.futures.put_nowait((tasks, None))
 
-def make_grpc_stubs(channels):
-    stubs = []
-    for c in channels:
-        stub = LlumnixWorkerStub(c)
-        stub.step = c.unary_unary(
-            '/Worker/step',
-            request_serializer=None,
-            response_deserializer=bladellm_pb2.WorkerStepResponse.FromString,
-        )
-        stub.drop = c.unary_unary(
-            '/Worker/drop',
-            request_serializer=None,
-            response_deserializer=Empty.FromString,
-        )
-        stubs.append(stub)
-    return stubs
+    async def do_send(self, request: migration_worker_pb2.SendKvCacheRequest)-> List[migration_worker_pb2.SendKvCacheResponse]:
+        req_str = request.SerializeToString()
+        tasks = [stub.migrate_cache(req_str) for stub in self.stubs]
+        resps = await asyncio.gather(*tasks)
+        return resps
+
+    async def warmup(self)-> List[migration_worker_pb2.WarmupResponse]:
+        request = Empty()
+        tasks = [stub.warmup(request) for stub in self.stubs]
+        resps = await asyncio.gather(*tasks)
+        return resps
+
+# def make_grpc_stubs(channels):
+#     stubs = []
+#     for c in channels:
+#         stub = LlumnixWorkerStub(c)
+#         stub.step = c.unary_unary(
+#             '/Worker/step',
+#             request_serializer=None,
+#             response_deserializer=bladellm_pb2.WorkerStepResponse.FromString,
+#         )
+#         stub.drop = c.unary_unary(
+#             '/Worker/drop',
+#             request_serializer=None,
+#             response_deserializer=Empty.FromString,
+#         )
+#         stubs.append(stub)
+#     return stubs
 
 # TODO[xinyi]: revise in bladellm repo
 # TODO[xinyi]: llumnix now only support designated server_ip

@@ -135,6 +135,7 @@ class EngineManagerArgs:
 
     migration_backend_init_timeout: float = None
     migration_backend: str = None
+    migration_backend_transfer_type: str = None
     migration_cache_blocks: int = None
     migration_num_layers: int = None
     last_stage_max_blocks: int = None
@@ -173,6 +174,7 @@ class EngineManagerArgs:
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
+                                           self.migration_backend_transfer_type,
                                            self.migration_cache_blocks,
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
@@ -200,6 +202,11 @@ class EngineManagerArgs:
             and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \
             ("When using gloo as migration backend, "
              "do not set --disable-init-instance-by-manager and --disable-fixed-node-init-instance.")
+        # TODO[xinyi, kuilong]: grpc and kvtransfer can be used for vllm.
+        assert args.migration_backend not in ['grpc','kvtransfer'] or (args.migration_backend in ['grpc','kvtransfer'] \
+            and args.migration_backend_transfer_type), \
+            ("When using grpc or kvTransfer as migration backend, "
+             "do not set --migration-backend-transfer-type as empty.")
 
     @staticmethod
     def add_cli_args(
@@ -286,11 +293,14 @@ class EngineManagerArgs:
         parser.add_argument('--profiling-result-file-path',
                             type=str,
                             help='profiling result file path')
-
         parser.add_argument('--migration-backend',
                             type=str,
-                            choices=['gloo','nccl','rpc'],
+                            choices=['gloo','nccl','rpc','gprc','kvtransfer'],
                             help='communication backend of migration')
+        parser.add_argument('--migration-backend',
+                            type=str,
+                            choices=['cuda_ipc','rdma', ''],
+                            help='transfer type for migration backend grpc and kvTransfer')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
                             help='timeout(s) for initializing migration backend')

@@ -105,6 +105,8 @@ _C.MANAGER.LAST_STAGE_MAX_BLOCKS = 16
 
 # Communication backend of migration
 _C.MANAGER.MIGRATION_BACKEND = "gloo"
+# Transfer type for migration backend grpc and kvTransfer
+_C.MANAGER.MIGRATION_BACKEND_TRANSFER_TYPE = ""
 # Timeout(s) for initializing migration backend
 _C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 # Number of cache blocks in migration

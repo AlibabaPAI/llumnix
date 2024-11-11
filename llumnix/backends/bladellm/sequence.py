@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any, Tuple
+
 from blade_llm.service.scheduler_types import GenerationGroupState
 from blade_llm.protocol import ServerRequest
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
@@ -79,7 +81,9 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         # prefill for both prompt and output.
         return self.request_len - self.get_num_computed_tokens()
 
-class ServerRequestLlumnix:
-    def __init__(self, *args, server_request: ServerRequest) -> None:
-        self.server_request = server_request
-        self.llumnix_request_args = args
+class ServerRequestLlumnix(ServerRequest):
+        llumnix_request_args: Tuple[Any, ...]
+
+        @classmethod
+        def from_server_request(cls, server_request: ServerRequest, *args):
+            return cls.construct(**server_request.dict(), llumnix_request_args=args)

@@ -223,7 +223,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         #         gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
 
     def add_request(self, server_req: ServerRequestLlumnix):
-        worker_req = server_request_to_worker_request(server_req.server_request)
+        worker_req = server_request_to_worker_request(server_req)
         gen_group: GenerationGroupState = GenerationGroupState.from_request(
             request=worker_req,
             total_length=len(worker_req.prompt_tokens),

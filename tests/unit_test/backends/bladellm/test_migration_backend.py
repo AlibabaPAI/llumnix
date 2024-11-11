@@ -33,7 +33,7 @@ from blade_llm.generation.kvcache.kv_transfer import TransferType
 from blade_llm.generation.statemanagers.ragged_flash_state_manager import RaggedFlashStateManager
 from blade_llm.generation.statemanagers.paged_state_manager import PagedStateManager
 
-from llumnix.backends.bladellm.worker import MigrationWorker
+from llumnix.backends.bladellm.remote_worker import MigrationWorker
 from llumnix.backends.bladellm.migration_backend import NUMPY_SUPPORTED_DTYPES
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 from llumnix.internal_config import MigrationConfig

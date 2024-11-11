@@ -95,3 +95,5 @@ def initialize_placement_group(
         ray.get(current_placement_group.ready(), timeout=1800)
 
     return current_placement_group
+
+

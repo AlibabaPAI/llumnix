@@ -79,32 +79,6 @@ def create_dummy_request(
     return ServerRequestLlumnix(id, server_info, -1, server_request=server_req)
 
 
-# def create_dummy_prompt(
-#     request_id: str,
-#     prompt_length: int,
-#     block_size: Optional[int] = None,
-#     lora_request: Optional[LoRARequest] = None,
-#     use_beam_search: bool = False,
-#     best_of: int = 1,
-#     expected_steps: int = math.inf,
-# ) -> Tuple[Sequence, SequenceGroupLlumnix]:
-#     if not block_size:
-#         block_size = prompt_length
-
-#     # Create dummy prompt sequence with tokens 0...block_size-1
-#     # and prompt "0 ... block_size".
-#     prompt_tokens = list(range(prompt_length))
-#     prompt_str = " ".join([str(t) for t in prompt_tokens])
-#     prompt = Sequence(int(request_id), prompt_str, prompt_tokens, block_size)
-#     server_info = ServerInfo(None, None, None, None, None)
-#     seq_group = SequenceGroupLlumnix(
-#         request_id, server_info, expected_steps, [prompt],
-#         SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
-#         time.time(), lora_request)
-
-#     return prompt, seq_group
-
-
 # def create_seq_group(
 #         seq_prompt_len: int = 1024,
 #         seq_output_lens: Iterable[int] = (128, ),

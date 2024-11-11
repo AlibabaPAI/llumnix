@@ -32,7 +32,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
             [--polling-interval POLLING_INTERVAL]
-            [--migration-backend {gloo,nccl,rpc}]
+            [--migration-backend {gloo,nccl,rpc,grpc,kvtransfer}]
+            [--migration-backend-transfer-type {cuda_ipc,rdma,}]
             [--migration-cache-blocks MIGRATION_CACHE_BLOCKS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
@@ -142,8 +143,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--migration-backend`
 - Communication backend of migration.
-- Possible choices: gloo, rpc
+- Possible choices: gloo, rpc, grpc, kvtransfer
 - Default: "rpc"
+
+`--migration-backend`
+- Transfer type for migration backend grpc and kvTransfer.
+- Possible choices: cuda_ipc, rdma, ""
+- Default: ""
 
 `--migration-cache-blocks`
 - Number of cache blocks in migration.

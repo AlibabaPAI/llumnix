@@ -15,7 +15,6 @@ import time
 import asyncio
 import ray
 
-from blade_llm.model.config_utils import load_config
 from blade_llm.protocol import ServerRequest
 from blade_llm.service.clients import LLMResponse
 
@@ -47,16 +46,6 @@ def get_args(llumnixCfg, llumnixParser, engine_args):
 
     return llumnix_entrypoints_args, engine_manager_args, engine_args
 
-def get_model_conf(args):
-    model_conf = None
-    try:
-        model_conf = load_config(args.load_model_options.model)
-        model_conf.verify_with_parallel_config(
-            args.tensor_parallel_size, args.pipeline_parallel_size, args.enable_hybrid_dp
-        )
-    except Exception as e:
-        raise type(e)("Failed to load model config when init AsyncLLMEngine: {}", str(e)) from e
-    return model_conf
 
 async def manager_generate(request: ServerRequest,
                            request_id: str,

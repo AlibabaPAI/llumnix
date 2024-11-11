@@ -11,46 +11,94 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from concurrent.futures import ThreadPoolExecutor
-import asyncio
+from typing import Dict
 import gc
-import sys
+import asyncio
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+from google.protobuf import empty_pb2
 import torch
 import grpc
-from google.protobuf import empty_pb2
-import loguru
 
+from blade_llm.generation.kvcache.kv_transfer import TransferType
+from blade_llm.service.workers.remote_worker import RemoteWorker, RemoteManager
 from blade_llm.service.args import ServingArgs
-from blade_llm.service.worker import RemoteManager, _RemoteWorkerProcesses, _WorkerProcesses
-from blade_llm.service.workers.remote_worker import RemoteWorker
-from blade_llm.utils.network import get_free_port
 from blade_llm.service.proto import bladellm_pb2_grpc
-from blade_llm.service.worker import Worker
+from blade_llm.utils.network import get_free_port
 
-from llumnix.backends.bladellm.proto import (
-    llumnix_bladellm_pb2,
-    llumnix_bladellm_pb2_grpc,
-)
+from llumnix.backends.bladellm.migration_backend import get_migration_backend
+from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
+from llumnix.internal_config import MigrationConfig
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
 
-# TODO[xinyi]: now llumnix only support remoteWorker
-class LlumnixRemoteWorker(llumnix_bladellm_pb2_grpc.LlumnixWorkerServicer, RemoteWorker):
-    def __init__(self, *args, **kwargs) -> None:
-        # replace sampler
-        # pylint: disable=import-outside-toplevel
-        super().__init__(*args, **kwargs)
+class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer, RemoteWorker):
+    def __init__(self, instance_id: int, worker_addr: str, migration_config: MigrationConfig,
+                 naming_url: str,  tranfer_type: TransferType, rank: int, args: ServingArgs) -> None:
+        super().__init__(rank, args)
+        torch.cuda.set_device(args.device)
+        self.instance_id = instance_id
+        self.migration_backend = get_migration_backend(instance_id, rank, rank, worker_addr, migration_config,
+                                                       self._engine._state_manager, naming_url, args, tranfer_type)
 
-        # too many logs in BladeLLM, redefine the log level
-        # TODO[xinyi]: check
-        # loguru.logger.remove()
-        # loguru.logger.add(sys.stderr, level="INFO")
+    def is_ready(self, request, context):
+        return migration_worker_pb2.ReadyResponse(ok=True)
 
     # pylint: disable=unused-argument
-    def migrate_cache(
-        self, request: llumnix_bladellm_pb2.MigrateCacheRequest, context: grpc.ServicerContext
-    ):
-        # TODO[kuilong, xinyi]: adapt to kvTransfer 
+    def migrate_cache(self, request: migration_worker_pb2.MigrateRequests, context: grpc.ServicerContext) -> None:
+        src_worker_handle = request.src_handlers[self._rank]
+        try:
+            self.migration_backend.migrate_cache(src_worker_handle, request.src_blocks, request.dst_blocks)
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.info("[migrate_cache] rank: {}, {} is dead, err : {}.".format(self._rank, src_worker_handle, e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
+
         return empty_pb2.Empty()
 
+    def do_send(self, request: migration_worker_pb2.SendKvCacheRequest, context: grpc.ServicerContext):
+        return self.migration_backend.do_send(request, context)
+
+    def rebuild_migration_backend(self, instance_rank: Dict[str, int], group_name: str) -> bool:
+        self.migration_backend.destory_backend()
+        return self.migration_backend.init_backend(None, None, None)
+
+    def warmup(self, request, context) -> bool:
+        return migration_worker_pb2.WarmupResponse(ok=self.migration_backend.warmup())
+
+    def shutdown(self) -> None:
+        torch.cuda.synchronize()
+        del self.migration_backend
+        torch.cuda.empty_cache()
+        torch.cuda.reset_max_memory_allocated()
+
+# TODO(xinyi): revise in bladellm repo
+# def worker_main(rank: int, serving_args: ServingArgs, *args):
+#     asyncio.run(worker_server(rank, serving_args, *args))
+
+# TODO(xinyi): revise `start_local_worker_server` in bladellm repo 
+async def worker_server(rank: int, args: ServingArgs, instance_id: int, migration_config: MigrationConfig,
+                        naming_url: str, tranfer_type: TransferType):
+    if args.server_ip:
+        worker_port = int(get_free_port())
+        await RemoteManager.start_watch_dog(args, worker_port)
+        await RemoteManager.wait_until_all_workers_ready()
+    listen_addr = f"0.0.0.0:{worker_port}" if args.server_ip else f"unix://{args.worker_socket_path}.{rank}"
+    worker = MigrationWorker(instance_id, listen_addr, migration_config, naming_url, tranfer_type, rank, args)
+    server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=1))
+    bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
+    import sys
+    if 'llumnix' in sys.modules:
+        migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
+    server.add_insecure_port(listen_addr)
+    await server.start()
+
+    if args.server_ip:
+        await RemoteManager.wait_for_termination(server)
+    else:
+        await server.wait_for_termination()
+
+    del server
+    del worker
+    gc.collect()

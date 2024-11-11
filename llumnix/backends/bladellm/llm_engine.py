@@ -21,6 +21,7 @@ import gc
 import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateRequests
 
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
@@ -28,13 +29,14 @@ from blade_llm.utils.counter import Counter
 from blade_llm.protocol import GenerateStreamResponse, LogitsProcessorParams
 from blade_llm.service.schedulers.base_scheduler import BaseScheduler
 from llumnix.backends.bladellm.scheduler import get_scheduler
-from blade_llm.service.worker import launch_worker
 from blade_llm.service.workers.worker_client import worker_client_main
 from blade_llm.model.tokenizer_utils import load_tokenizer
 from blade_llm.service.scheduler_types import SchedulerInitInfo, SchedulerStepOutput
 from blade_llm.service.metric import MetricMixin, scheduler_status_helper
 from blade_llm.service.clients import GeneralLLMClient
 from blade_llm.service.engine import AsyncLLMEngineClient
+from blade_llm.protocol import ServerRequest
+
 
 
 
@@ -49,6 +51,9 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_output_queue_client, QueueType
+from llumnix.backends.bladellm.utils import string_to_int, get_model_conf
+from llumnix.backends.bladellm.worker import launch_worker
+
 
 logger = init_logger(__name__)
 
@@ -95,10 +100,13 @@ class LLMEngineLlumnix(AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
                  output_queue_type: QueueType,
+                 migration_config: MigrationConfig,
                  placement_group: Optional[PlacementGroup],
                  node_id: Optional[str],
                  *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
+        engine_instance_id = string_to_int(instance_id)
+        self._worker_processes = launch_worker(self._args, engine_instance_id, migration_config)
         # TODO[xinyi]: maybe inherit from Metirc Class in Bladellm or create a Metric Class for Llumnix
         # TODO[xinyi]: support PipelineLLMMixin Class for Bladellm
         self.step_request_queue = asyncio.Queue()
@@ -131,9 +139,13 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
         self.put_queue_loop_thread.start()
-        # TODO[xinyi]: sopport scheduler_status_helper
-    # TODO[xinyi]: delete this function
+        # TODO[xinyi]: support scheduler_status_helper
+
+    # TODO[xinyi]: delete this function, now just for test
     async def _init(self):
+        # NOTE(zycao): Keep Hybrid DP mode as not implemented status before all parts are ready.
+        if self._args.enable_hybrid_dp:
+            raise NotImplementedError("We will enable Hybrid DP for MoE models later.")
         # NOTE(junqi): Disable gc in the begin of process might affect ut
         gc.disable()
         self._worker_processes.start()
@@ -155,12 +167,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         await self._workers.wait_backend_ready()
 
         token_capacity, block_size, model_max_len, cpu_blocks = await self._workers.estimate_token_blocks_capacity()
-        logger.info(
-            "Workers estimate token capacity to: {}, cpu_blocks: {}, block_size: {}",
-            token_capacity,
-            cpu_blocks,
-            block_size,
-        )
         self._tokenizer = load_tokenizer(
             self._args.load_model_options.tokenizer_dir,
             self._args.load_model_options.special_token_dict,
@@ -190,31 +196,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         )
         self._client = GeneralLLMClient(self._args, client, self._model_conf)
 
-
-    @classmethod
-    def from_engine_args(
-        cls,
-        args: ServingArgs,
-        output_queue_type: QueueType,
-        migration_config: MigrationConfig,
-        instance_id: str = None,
-        placement_group: Optional[PlacementGroup] = None,
-        node_id: Optional[str] = None,
-        latency_mem: Optional[LatencyMemData] = None
-    ) -> "LLMEngineLlumnix":
-        """Creates an LLM engine from the engine arguments."""
-        # TODO[xinyi]: add executor_class.
-        # TODO[xinyi]: add latency_mem.
-        # Create the LLM engine.
-        engine = cls(
-            instance_id=instance_id,
-            output_queue_type=output_queue_type,
-            placement_group=placement_group,
-            node_id=node_id,
-            **args,
-        )
-        return engine
-    
     async def _loop(self):
         previous_state = self.state
         self.state = EngineState.RUNNING
@@ -344,13 +325,11 @@ class BackendBladeLLM(BackendInterface):
         placement_group: PlacementGroup = None,
         node_id: str = None
     ) -> None:
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          output_queue_type=output_queue_type,
-                                                                          migration_config=migration_config,
-                                                                          instance_id=instance_id,
-                                                                          placement_group=placement_group,
-                                                                          node_id=node_id)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix(instance_id, output_queue_type, migration_config, placement_group,
+                                                        node_id,
+                                                        engine_args)
         self.instance_id = instance_id
+        self.worker_addrs_list = [f"unix://{engine_args.worker_socket_path}.{i}" for i in range(self.tensor_parallel_size * self.pipeline_parallel_size)]
         loop = asyncio.get_event_loop()
         # TODO[xinyi]: support bladellm warmup
         self.engine.start(loop)
@@ -364,15 +343,25 @@ class BackendBladeLLM(BackendInterface):
                     request_id: str,
                     server_info: ServerInfo,
                     expected_steps: int,
-                    *args,
-                    **kwargs) -> None:
+                    server_request: ServerRequest) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        self.engine.add_request(ServerRequestLlumnix(request_id, server_info, expected_steps, *args, **kwargs))
-
-    def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
-        # TODO[xinyi, kuilong]: add function methods in worker for llumnix
-        self.engine._workers.migrate_cache(dst_blocks, src_blocks, dst_ray_actor)
+        server_request = ServerRequestLlumnix.from_server_request(server_request, request_id, server_info, expected_steps)
+        self.engine.add_request(server_request)
+    
+    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+        await dst_ray_actor.execute_engine_method.remote("_run_workers",
+                                                           "migrate_cache",
+                                                            MigrateRequests(
+                                                                dst_blocks=dst_blocks,
+                                                                src_blocks=src_blocks,
+                                                                src_handlers=self.worker_addrs_list),
+                                                           )
         
+    def _run_workers(self, worker_method, *args, **kwargs):
+        # pylint: disable=protected-access
+        executor = getattr(self.engine._workers, worker_method)
+        return executor(*args, **kwargs)
+
     def is_ready(self):
         return True
     

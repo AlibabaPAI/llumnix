@@ -13,9 +13,11 @@
 
 from functools import wraps
 from typing import Dict, List, Optional, Tuple
-import torch
+import hashlib
 
 from blade_llm.service.args import ServingArgs
+from blade_llm.model.config_utils import load_config
+
 
 from llumnix.logger import init_logger
 from llumnix.arg_utils import EngineManagerArgs
@@ -40,3 +42,27 @@ def check_engine_args(engine_args: ServingArgs, engine_manager_args: EngineManag
         print("Llumnix does not support TP or PP enabled model when the migration backend is nccl, change migration backend to gloo.")
         engine_manager_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
+
+# instance_id is string format in Llumnix while Bladellm only accepts int format.
+def string_to_int(string: str) -> int:
+    """
+    Convert a string to an integer.
+    """
+    hash_object = hashlib.sha256(string.encode())
+    hex_dig = hash_object.hexdigest()
+    print(hex_dig)  # 输出十六进制表示的哈希值
+
+    # 如果需要整数表示，可以将其转换为整数
+    int_value = int(hex_dig, 16)
+    return int_value
+
+def get_model_conf(args: ServingArgs):
+    model_conf = None
+    try:
+        model_conf = load_config(args.load_model_options.model)
+        model_conf.verify_with_parallel_config(
+            args.tensor_parallel_size, args.pipeline_parallel_size, args.enable_hybrid_dp
+        )
+    except Exception as e:
+        raise type(e)("Failed to load model config when init AsyncLLMEngine: {}", str(e)) from e
+    return model_conf

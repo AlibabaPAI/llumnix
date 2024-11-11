@@ -38,6 +38,7 @@ from llumnix.entrypoints.vllm.utils import (add_cli_args,
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config, LlumnixConfig
+from llumnix.backends.backend_interface import BackendType
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm.api_server")
@@ -192,7 +193,9 @@ if __name__ == "__main__":
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():
-        llumnix_context = setup_llumnix(engine_manager_args, engine_args, cfg)
+        engine_config = engine_args.create_engine_config()
+        parallel_config = engine_config.parallel_config
+        llumnix_context = setup_llumnix(cfg, engine_manager_args, BackendType.VLLM, parallel_config.world_size, engine_args)
         # Start the api server after all the components of llumnix are ready.
         logger.info("Start Api Server on '{}:{}'".format(cfg.SERVER.HOST, cfg.SERVER.PORT))
         uvicorn.run(app,

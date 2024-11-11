@@ -11,23 +11,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-from typing import List
+from enum import Enum
+from aiohttp import web
+
+from llumnix.server_info import ServerInfo
 
 
-class MigrationBackendBase(ABC):
-    @abstractmethod
-    def init_backend(self, group_name, world_size, rank) -> bool:
-        raise NotImplementedError
 
-    @abstractmethod
-    def destory_backend(self) -> None:
-        raise NotImplementedError
+class WebRequestLlumnix(web.Request):
+    def __init__(self, request: web.Request, *args, **kwargs) -> None:
+        web.Request.__init__(self, **request.__dict__)
 
-    @abstractmethod
-    def warmup(self) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
-        raise NotImplementedError

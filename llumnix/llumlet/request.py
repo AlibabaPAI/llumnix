@@ -13,6 +13,7 @@
 
 from enum import Enum
 import math
+import time
 
 from llumnix.server_info import ServerInfo
 

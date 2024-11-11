@@ -16,6 +16,7 @@ class MigrationConfig:
             self,
             request_migration_policy: str,
             migration_backend: str,
+            migration_backend_transfer_type: str,
             migration_cache_blocks: int,
             migration_num_layers: int,
             last_stage_max_blocks: int,
@@ -23,6 +24,7 @@ class MigrationConfig:
             migration_backend_init_timeout: float) -> None:
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
+        self.migration_backend_transfer_type = migration_backend_transfer_type
         self.migration_num_layers = migration_num_layers
         self.migration_cache_blocks = migration_cache_blocks
         self.last_stage_max_blocks = last_stage_max_blocks

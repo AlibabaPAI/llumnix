@@ -21,7 +21,7 @@ import numpy as np
 
 from .test_e2e import generate_launch_command, clear_ray_state
 # pylint: disable=unused-import
-from .utils import to_markdown_table, clean_ray
+from .utils import to_markdown_table, setup_ray_env
 
 def launch_llumnix_service(command):
     subprocess.run(command, shell=True, check=True)
@@ -91,7 +91,7 @@ def parse_log_file():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-async def test_simple_benchmark(clean_ray, model):
+async def test_simple_benchmark(setup_ray_env, model):
     device_count = torch.cuda.device_count()
     base_port = 37037
     for i in range(device_count):

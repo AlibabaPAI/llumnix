@@ -71,7 +71,7 @@ class DispatchScheduler:
             del self.instance_num_requests[instance_id]
         if instance_id in self.available_dispatch_instance_set:
             self.available_dispatch_instance_set.remove(instance_id)
-
+            # TODO(KuilongCui): Check it when there is no decode instance.
             if self.num_instances >= self.num_dispatch_instances:
                 free_instance_id = next(iter(self.instance_id_set - self.available_dispatch_instance_set))
                 self.available_dispatch_instance_set.add(free_instance_id)

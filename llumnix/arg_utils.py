@@ -22,6 +22,7 @@ from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
+
 class LlumnixArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"

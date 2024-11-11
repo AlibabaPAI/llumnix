@@ -33,7 +33,7 @@ def to_markdown_table(data):
     return table
 
 @pytest.fixture
-def clean_ray():
+def setup_ray_env():
     subprocess.run(["ray", "stop"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

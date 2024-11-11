@@ -20,7 +20,7 @@ import torch
 
 from vllm import LLM, SamplingParams
 # pylint: disable=unused-import
-from .utils import clean_ray
+from .utils import setup_ray_env
 
 def parse_launch_mode(launch_mode: str):
     # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
@@ -140,7 +140,7 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
-async def test_e2e(clean_ray, model, migration_backend, launch_mode):
+async def test_e2e(setup_ray_env, model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':
         pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")
     max_model_len = 370

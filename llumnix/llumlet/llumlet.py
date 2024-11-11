@@ -224,7 +224,7 @@ class Llumlet:
                      RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
                 if backend_request.status == RequestStatus.RUNNING_MIGRATING:
                     self.backend_engine.add_running_request(backend_request)
-                else # WAITING_MIGRATING:
+                else: # WAITING_MIGRATING
                     self.backend_engine.add_waiting_request(backend_request)
 
     def execute_migration_method(self, method, *args, **kwargs):

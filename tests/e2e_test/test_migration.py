@@ -22,7 +22,7 @@ import pandas as pd
 from .test_e2e import generate_launch_command
 from .test_bench import generate_bench_command, clear_ray_state, shutdown_llumnix_service
 # pylint: disable=unused-import
-from .utils import to_markdown_table, clean_ray
+from .utils import to_markdown_table, setup_ray_env
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')

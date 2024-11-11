@@ -288,7 +288,7 @@ def get_migration_backend(migration_config: MigrationConfig, cache_engine: Cache
 
     target_migration_backend = None
     backend = migration_config.migration_backend
-    assert backend in ['nccl', 'gloo', 'rpc'], "Unsupported backend: {} for VLLM".format(backend)
+    assert backend in ['nccl', 'gloo', 'rpc'], "Unsupported migration backend: {} for llumnix".format(backend)
 
     if backend in ['nccl', 'gloo']:
         target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,

@@ -60,7 +60,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = await coordinator._migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
-    assert status == MigrationStatus.FINISHED_DONE
+    assert status == MigrationStatus.FINISHED
 
     migrate_out_request = MagicMock()
     # Test migration dst aborted scenario
@@ -71,7 +71,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = await coordinator._migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
-    assert status == MigrationStatus.FINISHED_DST_ABORTED
+    assert status == MigrationStatus.ABORTED_DST
 
     # Test migration src aborted scenario
     migrate_out_request = MagicMock()
@@ -82,7 +82,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = await coordinator._migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
-    assert status == MigrationStatus.FINISHED_SRC_ABORTED
+    assert status == MigrationStatus.ABORTED_SRC
 
 # setup_ray_env should be passed after _migrate_out_onestage
 @patch.object(MigrationCoordinator, '_migrate_out_onestage')
@@ -101,10 +101,10 @@ async def test_migrate_out_running_request(_, setup_ray_env):
     migrate_in_ray_actor.execute_engine_method.remote = MagicMock()
     migrate_in_ray_actor.execute_engine_method.remote.return_value = ray_remote_call.remote([1])
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote([1])
-    coordinator._migrate_out_onestage.side_effect = [MigrationStatus.FINISHED_DONE]
+    coordinator._migrate_out_onestage.side_effect = [MigrationStatus.FINISHED]
     status = await coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
     assert coordinator._migrate_out_onestage.call_count == 1
-    assert status == MigrationStatus.FINISHED_DONE
+    assert status == MigrationStatus.FINISHED
 
     max_stages = 3
     coordinator._migrate_out_onestage.side_effect = [MigrationStatus.RUNNING,
@@ -113,7 +113,7 @@ async def test_migrate_out_running_request(_, setup_ray_env):
                                                      MigrationStatus.RUNNING]
     status = await coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
     assert coordinator._migrate_out_onestage.call_count == max_stages + 1
-    assert status == MigrationStatus.FINISHED_SRC_ABORTED
+    assert status == MigrationStatus.ABORTED_SRC
 
 @pytest.mark.asyncio
 async def test_migrate_out_waiting_request():
@@ -125,7 +125,7 @@ async def test_migrate_out_waiting_request():
     # Create an instance of MigrationCoordinator
     coordinator = MigrationCoordinator(backend_engine, last_stage_max_blocks=1, max_stages=3)
 
-    # Test FINISHED_DONE
+    # Test FINISHED
     migrate_out_request.prefill_num_blocks = 3
     dst_blocks = [1, 2, 3]
     migrate_in_ray_actor.execute_engine_method = MagicMock()
@@ -133,9 +133,9 @@ async def test_migrate_out_waiting_request():
     migrate_in_ray_actor.execute_engine_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     status = await coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
-    assert status == MigrationStatus.FINISHED_DONE
+    assert status == MigrationStatus.FINISHED
 
     # Test FINISHED_ABORTED
     migrate_out_request.prefill_num_blocks = 2
     status = await coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
-    assert status == MigrationStatus.FINISHED_DST_ABORTED
+    assert status == MigrationStatus.ABORTED_DST

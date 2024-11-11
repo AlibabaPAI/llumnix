@@ -154,16 +154,16 @@ class Llumlet:
                 status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
             else:
                 return migrated_request
-            if status == MigrationStatus.FINISHED_DONE:
+            if status == MigrationStatus.FINISHED:
                 await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
                 self.backend_engine.free_src_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
-            else: # FINISHED_SRC_ABORTED or FINISHED_DST_ABORTED
+            else: # ABORTED_SRC or ABORTED_DST
                 migrate_out_request.reset_migration_args_src()
                 migrate_out_request.reset_status()
                 # If dst aborts itself, dst proactively frees the pre allocated cache in migrate_in_pre_alloc.
-                if status == MigrationStatus.FINISHED_SRC_ABORTED:
+                if status == MigrationStatus.ABORTED_SRC:
                     await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
             t1 = time.time()
             logger.info("{}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
@@ -224,7 +224,7 @@ class Llumlet:
                      RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
                 if backend_request.status == RequestStatus.RUNNING_MIGRATING:
                     self.backend_engine.add_running_request(backend_request)
-                elif backend_request.status == RequestStatus.WAITING_MIGRATING:
+                else # WAITING_MIGRATING:
                     self.backend_engine.add_waiting_request(backend_request)
 
     def execute_migration_method(self, method, *args, **kwargs):

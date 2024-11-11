@@ -358,7 +358,7 @@ class BackendVLLM(BackendInterface):
              RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
         if backend_request.status == RequestStatus.WAITING_MIGRATING:
             self.add_waiting_request(backend_request)
-        elif backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        else: # RUNNING_MIGRATING:
             backend_request.reset_status()
             self.add_running_request(backend_request)
 

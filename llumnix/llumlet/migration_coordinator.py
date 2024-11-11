@@ -27,16 +27,16 @@ logger = init_logger(__name__)
 class MigrationStatus(enum.Enum):
     """Status of Migration."""
     RUNNING = enum.auto()
-    FINISHED_DST_ABORTED = enum.auto()
-    FINISHED_SRC_ABORTED = enum.auto()
-    FINISHED_DONE = enum.auto()
+    ABORTED_DST = enum.auto()
+    ABORTED_SRC = enum.auto()
+    FINISHED = enum.auto()
 
     @staticmethod
     def is_finished(status: "MigrationStatus") -> bool:
         return status in [
-            MigrationStatus.FINISHED_DST_ABORTED,
-            MigrationStatus.FINISHED_SRC_ABORTED,
-            MigrationStatus.FINISHED_DONE
+            MigrationStatus.ABORTED_DST,
+            MigrationStatus.ABORTED_SRC,
+            MigrationStatus.FINISHED
         ]
 
 class MigrationCoordinator:
@@ -60,7 +60,7 @@ class MigrationCoordinator:
         """
         found = self.backend_engine.remove_waiting_request(migrate_out_request.request_id)
         if not found:
-            return MigrationStatus.FINISHED_SRC_ABORTED
+            return MigrationStatus.ABORTED_SRC
         self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
         dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                 .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
@@ -70,9 +70,9 @@ class MigrationCoordinator:
         if len(dst_blocks) != migrate_out_request.prefill_num_blocks:
             self.backend_engine.add_waiting_request(migrate_out_request)
             self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-            return MigrationStatus.FINISHED_DST_ABORTED
+            return MigrationStatus.ABORTED_DST
 
-        return MigrationStatus.FINISHED_DONE
+        return MigrationStatus.FINISHED
 
     async def _migrate_out_multistage(self,
                                       migrate_in_ray_actor: "ray.actor.ActorHandle",
@@ -88,7 +88,7 @@ class MigrationCoordinator:
             if MigrationStatus.is_finished(status):
                 return status
         # exceed max stages
-        return MigrationStatus.FINISHED_SRC_ABORTED
+        return MigrationStatus.ABORTED_SRC
 
     async def _migrate_out_onestage(self,
                                     migrate_in_ray_actor: "ray.actor.ActorHandle",
@@ -110,10 +110,10 @@ class MigrationCoordinator:
                                                                     stage_block_num)
         else:
             # last stage migration, stop inference, transfer all blocks
-            migration_status = MigrationStatus.FINISHED_DONE
+            migration_status = MigrationStatus.FINISHED
             found = self.backend_engine.remove_running_request(migrate_out_request.request_id)
             if not found:
-                return MigrationStatus.FINISHED_SRC_ABORTED
+                return MigrationStatus.ABORTED_SRC
             self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
             src_blocks = incremental_blocks[:]
             stage_block_num = len(incremental_blocks)
@@ -128,7 +128,7 @@ class MigrationCoordinator:
             if is_last_stage:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-            return MigrationStatus.FINISHED_DST_ABORTED
+            return MigrationStatus.ABORTED_DST
 
         # do stage send/recv
         migrate_out_request.stage_timestamps.append(time.time())
@@ -137,7 +137,7 @@ class MigrationCoordinator:
         await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
         if not is_last_stage and migrate_out_request.should_abort_migration():
             # migrate-out request abort by scheduler during send/recv
-            return MigrationStatus.FINISHED_SRC_ABORTED
+            return MigrationStatus.ABORTED_SRC
 
         return migration_status
 

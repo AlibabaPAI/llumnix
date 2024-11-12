@@ -39,7 +39,7 @@ class MockLlumlet(Llumlet):
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(setup_ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
-    migration_config = MigrationConfig("LCFS", "rpc", 16, 1, 4, 5, 20, 2)
+    migration_config = MigrationConfig("SR", "rpc", 16, 1, 4, 5, 20, 2)
     node_id = ray.get_runtime_context().get_node_id()
     scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
 

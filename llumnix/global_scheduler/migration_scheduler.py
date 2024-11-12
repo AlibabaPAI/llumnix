@@ -170,10 +170,8 @@ class Balanced(PairMigrationPolicy):
         migrate_instance_pairs = []
         for i in range(min(len(sorted_src_instance_infos), len(sorted_dst_instance_infos))):
             load_diff_before_mig = sorted_src_instance_infos[i].instance_load_migrate - sorted_dst_instance_infos[i].instance_load_migrate
-
             left_load_after_mig = self._compute_instance_load_after_migrate(sorted_src_instance_infos[i], is_migrate_in=False)
             right_load_after_mig = self._compute_instance_load_after_migrate(sorted_dst_instance_infos[i], is_migrate_in=True)
-
             # Add some constrains to reduce unnecessary migrations
             if right_load_after_mig > self.migrate_out_load_threshold:
                 continue
@@ -186,14 +184,12 @@ class Balanced(PairMigrationPolicy):
     def _compute_instance_load_after_migrate(self, instance_info: InstanceInfo, is_migrate_in: bool) -> float:
         instance_info_after_migrate = copy.deepcopy(instance_info)
         num_blocks_last_running_request = instance_info_after_migrate.num_blocks_last_running_request
-
         if is_migrate_in:
             instance_info_after_migrate.num_running_requests += 1
             instance_info_after_migrate.num_free_gpu_blocks -= num_blocks_last_running_request
         else:
             instance_info_after_migrate.num_running_requests -= 1
             instance_info_after_migrate.num_free_gpu_blocks += num_blocks_last_running_request
-
         return self.instance_load_calculator.compute_instance_load(instance_info_after_migrate, action='migrate')
 
 class DefragConstrained(PairMigrationPolicy):

@@ -111,10 +111,8 @@ class MigrationWorker(Worker):
         start_time = time.time()
         try:
             self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks)
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.info("[migrate_cache] self.rank: {}, src_worker_handle {}, meet error : {}"
-                        .format(self.rank, src_worker_handle, e))
+        except ray.exceptions.RayActorError:
+            logger.info("[migrate_cache] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
         end_time = time.time()
 
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(

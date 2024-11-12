@@ -13,7 +13,7 @@
 
 import time
 import traceback
-from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
+from typing import Any, List, Optional, Dict, Union, Iterable, Tuple, Deque
 from collections import defaultdict
 import threading
 import asyncio
@@ -34,7 +34,7 @@ from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
-from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
@@ -199,7 +199,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
         return request_outputs, server_infos
 
-    async def step_async(self) -> None:
+    async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         step_begin_time = time.time()
         request_outputs, server_infos = await super().step_async()
         for request_output in request_outputs:
@@ -295,9 +295,11 @@ class BackendVLLM(BackendInterface):
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
             self.worker_handle_list.insert(0, ray.get_actor(f"instance_{self.instance_id}", namespace="llumnix"))
-        self._run_workers("init_migration", instance_id=instance_id, migration_config=migration_config,\
-                                                      src_worker_handle_list=self.worker_handle_list,
-                                                      placement_group=placement_group, node_id=node_id)
+        self._run_workers("init_migration", instance_id=instance_id,
+                                            migration_config=migration_config,
+                                            src_worker_handle_list=self.worker_handle_list,
+                                            placement_group=placement_group,
+                                            node_id=node_id)
 
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
@@ -350,15 +352,22 @@ class BackendVLLM(BackendInterface):
         logger.info("add seq {} to block table".format(seq.seq_id))
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
-        backend_request.reset_migration_args()
-        self.add_running_request(backend_request)
+        backend_request.reset_migration_args_dst()
+        assert backend_request.status in [RequestStatus.WAITING_MIGRATING, RequestStatus.RUNNING_MIGRATING], \
+            "The status of request migrated to dst instance should be  \
+             RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
+        if backend_request.status == RequestStatus.WAITING_MIGRATING:
+            self.add_waiting_request(backend_request)
+        else: # RUNNING_MIGRATING:
+            backend_request.reset_status()
+            self.add_running_request(backend_request)
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         await dst_ray_actor.execute_engine_method.remote("_run_workers",
-                                                        "migrate_cache",
-                                                        dst_blocks=dst_blocks,
-                                                        src_blocks=src_blocks,
-                                                        src_worker_handle_list=self.worker_handle_list)
+                                                         "migrate_cache",
+                                                         dst_blocks=dst_blocks,
+                                                         src_blocks=src_blocks,
+                                                         src_worker_handle_list=self.worker_handle_list)
 
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access
@@ -373,14 +382,20 @@ class BackendVLLM(BackendInterface):
         request_ids = set(request_id)
         return self.engine.abort_request(request_ids)
 
-    def get_running_queue(self) -> List[SequenceGroupLlumnix]:
+    def get_running_queue(self) -> Deque[SequenceGroupLlumnix]:
         return self.engine.scheduler.get_running_queue()
+
+    def get_waiting_queue(self) -> Deque[SequenceGroupLlumnix]:
+        return self.engine.scheduler.get_waiting_queue()
 
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.get_request_incremental_blocks(*args, **kwargs)
 
-    def remove_running_request(self, *args, **kwargs) -> None:
+    def remove_running_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.remove_running_request(*args, **kwargs)
+
+    def remove_waiting_request(self, *args, **kwargs) -> bool:
+        return self.engine.scheduler.remove_waiting_request(*args, **kwargs)
 
     def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
         return self.engine.scheduler.add_migrating_out_request_last_stage(*args, **kwargs)
@@ -400,8 +415,8 @@ class BackendVLLM(BackendInterface):
     def add_running_request(self, *args, **kwargs) -> None:
         return self.engine.scheduler.add_running_request(*args, **kwargs)
 
-    def is_request_running(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler.is_request_running(*args, **kwargs)
+    def add_waiting_request(self, *args, **kwargs) -> None:
+        return self.engine.scheduler.add_waiting_request(*args, **kwargs)
 
     def free_dst_pre_alloc_cache(self, *args, **kwargs) -> None:
         return self.engine.scheduler.free_dst_pre_alloc_cache(*args, **kwargs)

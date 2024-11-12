@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import subprocess
 import asyncio
 import pytest
@@ -21,7 +20,7 @@ import torch
 
 from vllm import LLM, SamplingParams
 # pylint: disable=unused-import
-from .utils import clean_ray
+from .utils import setup_ray_env
 
 def parse_launch_mode(launch_mode: str):
     # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
@@ -42,8 +41,8 @@ def parse_launch_mode(launch_mode: str):
 def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool = True, HEAD_NODE_IP: str = "127.0.0.1",
                             ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
                             migration_backend = "gloo", model = "facebook/opt-125m", max_model_len: int = 2048,
-                            launch_mode: str = 'eief', log_instance_info: bool = False, enable_pd_disagg: bool = False,
-                            num_dispatch_instances: int = math.inf):
+                            launch_mode: str = 'eief', log_instance_info: bool = False,
+                            request_migration_policy: str = 'SR'):
     disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -62,14 +61,12 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--max-model-len {max_model_len} "
         f"--dispatch-policy {dispatch_policy} "
         f"--trust-remote-code "
-        f"--request-migration-policy LCFS "
+        f"--request-migration-policy {request_migration_policy} "
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
         f"--migration-internal-buffer-num 2 "
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
-        f"{'--enable-pd-disagg ' if enable_pd_disagg else ''} "
-        f"{f'--num-dispatch-instances {num_dispatch_instances} ' if num_dispatch_instances != math.inf else ''} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -143,7 +140,7 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
-async def test_e2e(clean_ray, model, migration_backend, launch_mode):
+async def test_e2e(setup_ray_env, model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':
         pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")
     max_model_len = 370

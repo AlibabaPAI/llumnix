@@ -22,6 +22,7 @@ from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
+
 class LlumnixArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
@@ -228,7 +229,11 @@ class EngineManagerArgs:
         parser.add_argument('--dispatch-policy',
                             type=str,
                             choices=['balanced', 'load', 'queue', 'flood'],
-                            help='request dispatch policy')
+                            help='The request dispatch policy.\n\n'
+                            '* "balanced" dispatch request to the instance with minimum requests dispatched.\n'
+                            '* "load" dispatch request to the instance with lowest instance load.\n'
+                            '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
+                            '* "flood" dispatch request to the instance with maximum requests dispatched.\n')
         parser.add_argument('--num-available-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatching')
@@ -242,14 +247,25 @@ class EngineManagerArgs:
         parser.add_argument('--pair-migration-policy',
                             type=str,
                             choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
-                            help='pair migration policy')
+                            help='The pair migration policy.\n\n'
+                            '* "balanced" pair migration to make the instance load of instance more balanced.\n'
+                            '* "defrag_constrained" pair migration without balanced constraint to '
+                            'achieve defragmentation thoroughly (with instance constraints).\n'
+                            '* "defrag_relaxed" pair migration to without balanced constraint '
+                            'to achieve defragmentation thoroughly (without instance constraints).\n')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
                             help='migrate out instance load threshold')
         parser.add_argument('--request-migration-policy',
                             type=str,
-                            choices=['LCFS', 'SJF', 'LJF'],
-                            help='request migration policy')
+                            default=None,
+                            choices=['LCR', 'SR', 'LR', 'FCW', 'FCWSR'],
+                            help='The request migration policy.\n\n'
+                            '* "LCR" migrate the running request last come.\n'
+                            '* "SR" migrate the running request shortest.\n'
+                            '* "LR" migrate the running request longest.\n'
+                            '* "FCW" migrate the waiting request first come.\n'
+                            '* "FCWSR" migrate the waiting request first come and running request shortest.\n')
         parser.add_argument('--enable-defrag',
                             type=bool,
                             help='enable defragmentation through migration based on virtual usage')

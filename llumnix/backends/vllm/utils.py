@@ -48,8 +48,7 @@ def check_engine_args(engine_args: AsyncEngineArgs, engine_manager_args: EngineM
     engine_config = engine_args.create_engine_config()
     parallel_config = engine_config.parallel_config
     if parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl':
-        # TODO(s5u13b): fix logger
-        print("Llumnix does not support TP or PP enabled model when the migration backend is nccl, change migration backend to gloo.")
+        logger.info("Llumnix does not support TP or PP enabled model when the migration backend is nccl, change migration backend to gloo.")
         engine_manager_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
 

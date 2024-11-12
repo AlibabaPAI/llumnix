@@ -112,3 +112,36 @@ def test_dispatch_queue():
                                                             key=lambda item: item[1].num_waiting_requests))
         instance_id = dispatch_scheduler.dispatch()
         assert instance_info_dict[min_instance_id].num_waiting_requests == instance_info_dict[instance_id].num_waiting_requests
+
+def test_dispatch_rr():
+    instance_num = 7
+    instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
+    dispatch_scheduler = DispatchScheduler('rr', instance_load_calculator, 3)
+    instance_num_requests = {}
+    instance_info_dict = {}
+
+    for instance_id in [f'instance_{i}' for i in range(instance_num)]:
+        instance_info = InstanceInfo()
+        instance_info.instance_id = instance_id
+        instance_info.num_waiting_requests = random.randint(1, 10)
+        instance_info_dict[instance_id] = instance_info
+        if  len(dispatch_scheduler.available_dispatch_instance_set) < dispatch_scheduler.num_dispatch_instances:
+            dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
+            instance_num_requests[instance_id] = 0
+    dispatch_scheduler.instance_num_requests = instance_num_requests
+    dispatch_scheduler.instance_info = instance_info_dict
+
+    num_request = 2 * instance_num + 2
+    for idx in range(0, num_request):
+        instance_id = dispatch_scheduler.dispatch()
+        target_instance_id = idx%dispatch_scheduler.num_dispatch_instances
+        assert instance_id == f'instance_{target_instance_id}'
+
+    for idx in range(instance_num):
+        if idx < dispatch_scheduler.num_dispatch_instances:
+            dispatch_scheduler.instance_num_requests[f'instance_{idx}'] = \
+                num_request // dispatch_scheduler.num_dispatch_instances + (1 \
+                    if num_request % dispatch_scheduler.num_dispatch_instances > \
+                        idx % dispatch_scheduler.num_dispatch_instances else 0)
+        else:
+            dispatch_scheduler.instance_num_requests[f'instance_{idx}'] = 0

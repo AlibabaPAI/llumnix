@@ -12,7 +12,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--initial-instances INITIAL_INSTANCES]
             [--load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
-            [--dispatch-policy {balanced,load,queue}]
+            [--dispatch-policy {balanced,load,queue,rr}]
             [--enable-migration]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag_constrained,defrag_relaxed}]
@@ -69,7 +69,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--dispatch-policy`
 - Request dispatch policy.
-- Possible choices: balanced, load, queue
+- Possible choices: balanced, load, queue, rr
 - Default: "load"
 
 `--enable-migration`

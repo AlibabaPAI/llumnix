@@ -234,7 +234,7 @@ class EngineManagerArgs:
                             '* "load" dispatch request to the instance with lowest instance load.\n'
                             '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
                             '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
-                            '* "rr" dispatch requests with roundrobin policy.\n')
+                            '* "rr" dispatch requests with round-robin policy.\n')
         parser.add_argument('--num-available-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatching')

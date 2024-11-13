@@ -241,9 +241,14 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                         # TODO[xinyi]: handle error info in back queue
                         del self._back_queue[req_id]
         # self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
-        # TODO[xinyi]: one more step just for metric
-        print(request_outputs)
-        self.step_request_queue.put_nowait((request_outputs, server_infos))
+        # TODO[xinyi]: design metric
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+        #         request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
+        #         request_output.request_timestamps.engine_step_timestamp_end = step_end_time
+                request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
+        if request_outputs:
+            self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
 
 
     async def step(self):
@@ -258,8 +263,9 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         instance_info.timestamp = time.time()
         instance_info.profiling_data=(instance_info.inference_type.value,
                                       instance_info.num_seqs,
-                                      sum(instance_info.running_seq_lens),
-                                      self.model_executor.last_inference_latency)
+                                      sum(instance_info.running_seq_lens))
+        # TODO(xinyi): need this metric?
+                                    #   self.model_executor.last_inference_latency) todo?
         gen_groups = self._scheduler.running
         if gen_groups:
             tot_blocks = []
@@ -269,14 +275,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
         self.instance_info=instance_info
-        request_outputs, server_infos = self.step_request_queue.get_nowait()
-        for request_output in request_outputs:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
-                request_output.request_timestamps.engine_step_timestamp_end = step_end_time
-                request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
-        if request_outputs:
-            self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
 
     #TODO[xinyi]: the same to the function in vllm, maybe put into utils.py
     def update_instance_info(self, instance_info: InstanceInfo) -> None:

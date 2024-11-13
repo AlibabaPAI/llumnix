@@ -297,7 +297,7 @@ class EngineManagerArgs:
                             type=str,
                             choices=['gloo','nccl','rpc','gprc','kvtransfer'],
                             help='communication backend of migration')
-        parser.add_argument('--migration-backend',
+        parser.add_argument('--migration-backend-transfer-type',
                             type=str,
                             choices=['cuda_ipc','rdma', ''],
                             help='transfer type for migration backend grpc and kvTransfer')

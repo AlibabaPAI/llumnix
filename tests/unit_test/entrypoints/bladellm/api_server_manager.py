@@ -12,25 +12,41 @@
 # limitations under the License.
 
 import argparse
-import uvicorn
+import llumnix.entrypoints.bladellm
+import asyncio
 import ray
+from aiohttp import web
 from fastapi.responses import JSONResponse, Response
 
-from vllm.outputs import CompletionOutput, RequestOutput
+from blade_llm.protocol import GenerateStreamResponse, ErrorInfo
+from blade_llm.service.server import Entrypoint
 
-import llumnix.entrypoints.vllm.api_server
+import llumnix.entrypoints.bladellm.api_server
 import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.utils import random_uuid
 from llumnix.queue.utils import init_output_queue_server, init_output_queue_client, QueueType
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
-
-app = llumnix.entrypoints.vllm.api_server.app
+from llumnix.entrypoints.bladellm.api_server import EntrypointLlumnix, DummyAsyncLLMEngineClient
 engine_manager = None
 MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
+from llumnix.logger import init_logger
 
+logger = init_logger(__name__)
 
+class MockEntrypoint(EntrypointLlumnix):
+    def stats() -> Response:
+        """Get the statistics of the engine."""
+        return web.json_response(text=ray.get(engine_manager.testing_stats.remote()))
+    
+    async def _create_request(self, req_text: str, *args, **kwargs):
+        return req_text
+
+class MockLLMClient(DummyAsyncLLMEngineClient):
+    def get_tokenizer(self):
+        return None
+    
 @ray.remote(num_cpus=0)
 class MockLLMEngineManager:
     def __init__(self, output_queue_type: QueueType):
@@ -40,10 +56,9 @@ class MockLLMEngineManager:
 
     async def generate(self, request_id, server_info, *args, **kwargs):
         self._num_generates += 1
-        completion_output = CompletionOutput(0, "", [], 0.0, None)
-        request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=True)
-        request_output.request_timestamps = RequestTimestamps()
-        await self.request_output_queue.put_nowait([request_output], server_info)
+        # request_output = GenerateStreamResponse(is_finished=True, is_ok=True, texts=["done"])
+        # request_output.request_timestamps = RequestTimestamps()
+        await self.request_output_queue.put_nowait([1], server_info)
 
     async def abort(self, request_id):
         self._num_aborts += 1
@@ -57,12 +72,6 @@ def init_manager(output_queue_type: QueueType):
                                                   namespace='llumnix').remote(output_queue_type)
     return engine_manager
 
-@app.get("/stats")
-def stats() -> Response:
-    """Get the statistics of the engine."""
-    return JSONResponse(ray.get(engine_manager.testing_stats.remote()))
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
@@ -73,21 +82,20 @@ if __name__ == "__main__":
 
     output_queue_type = QueueType(args.output_queue_type)
     engine_manager = init_manager(output_queue_type)
-    llumnix.entrypoints.vllm.api_server.llumnix_context = LlumnixEntrypointsContext()
-    llumnix.entrypoints.vllm.api_server.llumnix_context.engine_manager = engine_manager
+    llumnix.entrypoints.bladellm.api_server.llumnix_context = LlumnixEntrypointsContext()
+    llumnix.entrypoints.bladellm.api_server.llumnix_context.engine_manager = engine_manager
     ip = '127.0.0.1'
     port = 1234
-    llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue = \
+    llumnix.entrypoints.bladellm.api_server.llumnix_context.request_output_queue = \
         init_output_queue_server(ip, port, output_queue_type)
     ray_queue_server = None
     if output_queue_type == QueueType.RAYQUEUE:
-        ray_queue_server = llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue
+        ray_queue_server = llumnix.entrypoints.bladellm.api_server.llumnix_context.request_output_queue
     server_info = ServerInfo(random_uuid(), output_queue_type, ray_queue_server, ip, port)
-    llumnix.entrypoints.vllm.api_server.llumnix_context.server_info = server_info
-
-    uvicorn.run(
-        app,
-        host=args.host,
-        port=args.port,
-        log_level="debug",
-        timeout_keep_alive=llumnix.entrypoints.vllm.api_server.TIMEOUT_KEEP_ALIVE)
+    llumnix.entrypoints.bladellm.api_server.llumnix_context.server_info = server_info
+    
+    
+    loop = asyncio.get_event_loop()
+    web_app = EntrypointLlumnix(client=MockLLMClient()).create_web_app()
+    print("done")
+    web.run_app(web_app, host=args.host, port=args.port, loop=loop)

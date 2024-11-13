@@ -20,11 +20,26 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from aiohttp import web
 
-from client import GeneralLLMClientLlumnix, DummyAsyncLLMEngineClient
 from blade_llm.model.config_utils import GenerationConfigProcessor
 from blade_llm.service.server import Entrypoint
+from blade_llm.protocol import GenerateStreamResponse
 
+import time
+from typing import Optional, Tuple
 
+from blade_llm.model.config_base import ConfigBase
+from blade_llm.service.args import ServingArgs
+from blade_llm.service.clients import GeneralLLMClient
+from blade_llm.service.schedulers import (
+    ContinuousBatchingScheduler,
+    DynamicBatchingScheduler,
+)
+from blade_llm.service.schedulers.scheduler_factory import _SCHEDULER_MAP
+
+from blade_llm.service.clients import BaseLLMClient, LLMResponse
+from blade_llm.protocol import ServerRequest
+
+from llumnix.entrypoints.bladellm.utils import manager_generate, manager_abort
 from llumnix.arg_utils import LlumnixArgumentParser
 from llumnix.entrypoints.utils import (setup_ray_cluster,
                                        setup_llumnix,
@@ -48,7 +63,6 @@ TIMEOUT_KEEP_ALIVE = 5  # seconds.
 
 llumnix_context: LlumnixEntrypointsContext = None
 
-
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
@@ -58,6 +72,38 @@ async def lifespan(fastapi_app: FastAPI):
     llumnix_context.request_output_queue.cleanup()
 
 app = FastAPI(lifespan=lifespan)
+
+
+
+class DummyAsyncLLMEngineClient():
+    async def add_request(self, request: ServerRequest) -> LLMResponse:
+        measure = MeasureEntrypoint(request.id, time.time(), request.stopping_criterial.max_new_tokens)
+        resp_stream = await manager_generate(request, request.id, llumnix_context)
+        return resp_stream, measure
+    
+    async def drop_request(self, request_id: int):
+        await manager_abort(request_id, llumnix_context)
+
+class GeneralLLMClientLlumnix(GeneralLLMClient):
+    def __init__(self, args: ServingArgs, client: BaseLLMClient, model_conf: Optional[ConfigBase] = None):
+        super().__init__(args, client, model_conf)
+        self.scheduler = _SCHEDULER_MAP[args.decode_algo if args.use_lookahead else args.load_model_options.attn_cls]
+
+    def support_beam_search(self):
+        if self.args.pipeline_parallel_size > 1 or not self.scheduler == ContinuousBatchingScheduler:
+            return (
+                False,
+                "beam_search can only used with continuous_batching scheduler and pipeline disabled.",
+            )
+        else:
+            return True, ""
+    
+    def support_chat_stream(self) -> Tuple[bool, str]:
+        if self.scheduler == DynamicBatchingScheduler:
+            return False, "DynamicBatchingScheduler not support chat_stream"
+        else:
+            return True, ""
+
 
 class MeasureEntrypoint:
     def __init__(self, request_id, start_time, expected_resp_len):

@@ -24,7 +24,7 @@ sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 # Launch ray cluster
 os.environ['HEAD_NODE'] = '1'
 os.environ['HEAD_NODE_IP'] = '127.0.0.1'
-ray_cluster_port=6379
+ray_cluster_port=6380
 
 # Note: launch_ray_cluster will stop current ray cluster first, then init a new one.
 launch_ray_cluster(port=ray_cluster_port)

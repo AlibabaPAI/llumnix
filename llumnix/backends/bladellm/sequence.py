@@ -81,9 +81,10 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         # prefill for both prompt and output.
         return self.request_len - self.get_num_computed_tokens()
 
-class ServerRequestLlumnix(ServerRequest):
-        llumnix_request_args: Tuple[Any, ...]
+class ServerRequestLlumnix():
+        def __init__(self, server_request: ServerRequest, *args) -> None:
+            self.server_request = server_request
+            self.llumnix_request_args = args
 
-        @classmethod
-        def from_server_request(cls, server_request: ServerRequest, *args):
-            return cls.construct(**server_request.dict(), llumnix_request_args=args)
+        def __getattr__(self, item):
+            return getattr(self.server_request, item)

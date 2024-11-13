@@ -233,7 +233,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
         import heapq
         import sys
         if 'llumnix' in sys.modules:
-            # print(server_req.llumnix_request_args)
             gen_group_llumnix = GenerationGroupStateLlumnix(gen_group, server_req.llumnix_request_args)
             if hasattr(gen_group_llumnix.server_info, 'request_timestamps'):
                 gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()

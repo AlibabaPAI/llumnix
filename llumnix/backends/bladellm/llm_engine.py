@@ -195,6 +195,10 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             self._scheduler,
         )
         self._client = GeneralLLMClient(self._args, client, self._model_conf)
+    
+    async def _warmup(self):
+        super()._warmup()
+        logger.info("Finish Bladellm server warmup in Llumnix. ")
 
     async def _loop(self):
         previous_state = self.state
@@ -343,7 +347,7 @@ class BackendBladeLLM(BackendInterface):
                     expected_steps: int,
                     server_request: ServerRequest) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        server_request = ServerRequestLlumnix.from_server_request(server_request, request_id, server_info, expected_steps)
+        server_request = ServerRequestLlumnix(server_request, request_id, server_info, expected_steps)
         self.engine.add_request(server_request)
     
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:

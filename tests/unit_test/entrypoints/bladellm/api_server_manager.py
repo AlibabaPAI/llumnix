@@ -56,8 +56,8 @@ class MockLLMEngineManager:
 
     async def generate(self, request_id, server_info, *args, **kwargs):
         self._num_generates += 1
-        # request_output = GenerateStreamResponse(is_finished=True, is_ok=True, texts=["done"])
-        # request_output.request_timestamps = RequestTimestamps()
+        request_output = GenerateStreamResponse(is_finished=True, is_ok=True, texts=["done"])
+        request_output.request_timestamps = RequestTimestamps()
         await self.request_output_queue.put_nowait([1], server_info)
 
     async def abort(self, request_id):
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--output-queue-type", type=str, choices=["zmq", "rayqueue"])
+    parser.add_argument("--output-queue-type", type=str, default="zmq", choices=["zmq", "rayqueue"])
     parser = EngineManagerArgs.add_cli_args(parser)
     args = parser.parse_args()
 

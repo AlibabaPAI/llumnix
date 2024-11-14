@@ -10,7 +10,8 @@ Efficient and easy <i>multi-instance</i> LLM serving
 
 ## 🔥 Latest News
 
-- [2024.7] We officially released the first version of Llumnix!
+- [2024.11] Llumnix v0.1.0 launched!
+- [2024.7] We officially released the first version of Llumnix.
 - [2024.6] We released our OSDI '24 [research paper](https://arxiv.org/abs/2406.03243) on arxiv.
 
 ## 🚀 Why Llumnix
@@ -22,14 +23,16 @@ Llumnix provides optimized multi-instance serving performance in terms of:
 - *Low latency*
   - **Reduced time-to-first-token** (TTFT) and queuing delays with less memory fragmentation
   - **Reduced time-between-tokens** (TBT) and preemption stalls with better load balancing
-- *High throughput* with integration with state-of-the-art inference engines
+- *High throughput*
+  - Integration with state-of-the-art inference engines
+  - Support for techniques like prefill-decoding disaggregation
 
 Llumnix achieves this with:
 
 - Dynamic, fine-grained, KV-cache-aware scheduling
 - Continuous **rescheduling** across instances
   - Enabled by a KV cache migration mechanism with near-zero overhead
-  - Exploited for continuous load balancing and de-fragmentation
+  - Exploited for continuous load balancing, de-fragmentation, and prefill-decoding disaggregation
 
 Llumnix is easy to use with:
 

@@ -35,7 +35,7 @@ class MigrationFilterPolicy(ABC):
     def filter_dst_condition(self, filter_config, pair_migration_type) -> Callable[[InstanceInfo], bool]:
         raise NotImplementedError
 
-class MigrationFilter(ABC):
+class MigrationInstanceFilter(ABC):
     def __init__(self, filter_config: MigrationFilterConfig) -> None:
         self.filter_config = filter_config
         self.registered_filters: Dict[str, MigrationFilterPolicy] = {}
@@ -57,9 +57,9 @@ class MigrationFilter(ABC):
         dst_filter_conditions = [filter.filter_dst_condition() for filter in self.registered_filters.values()]
 
         if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
-            policy_filter = MigrationFilterPolicyFactory.get_policy("loadconstraint")
+            policy_filter = MigrationFilterPolicyFactory.get_policy("load")
         elif pair_migration_type in [PairMigrationConstraints.PREFILL_2_DECODING, PairMigrationConstraints.DECODING_2_DECODING]:
-            policy_filter = MigrationFilterPolicyFactory.get_policy('pdd')
+            policy_filter = MigrationFilterPolicyFactory.get_policy('prefill_decode')
         else:
             raise ValueError(f"Unsupported pair migration type: {pair_migration_type}")
         src_filter_conditions.append(policy_filter.filter_src_condition(self.filter_config, pair_migration_type))
@@ -93,7 +93,7 @@ class PddFilter(MigrationFilterPolicy):
         instance_type_filter = lambda instance_info: instance_info.instance_type == src_type
 
         if pair_migration_type == PairMigrationConstraints.DECODING_2_DECODING:
-            inner_policy = MigrationFilterPolicyFactory.get_policy('loadconstraint')
+            inner_policy = MigrationFilterPolicyFactory.get_policy('load')
             policy_filter = inner_policy.filter_src_condition(filter_config, pair_migration_type)
         else:
             policy_filter = lambda instance_info: True
@@ -106,7 +106,7 @@ class PddFilter(MigrationFilterPolicy):
         instance_type_filter = lambda instance_info: instance_info.instance_type == dst_type
 
         if pair_migration_type == PairMigrationConstraints.DECODING_2_DECODING:
-            inner_policy = MigrationFilterPolicyFactory.get_policy('loadconstraint')
+            inner_policy = MigrationFilterPolicyFactory.get_policy('load')
             policy_filter = inner_policy.filter_dst_condition(filter_config, pair_migration_type)
         else:
             policy_filter = lambda instance_info: instance_info.num_killed_requests == 0
@@ -136,8 +136,8 @@ class CustomFilter(MigrationFilterPolicy):
 
 class MigrationFilterPolicyFactory:
     _POLICY_REGISTRY = {
-        'loadconstraint': LoadConstrainedFilter,
-        'pdd': PddFilter,
+        'load': LoadConstrainedFilter,
+        'prefill_decode': PddFilter,
         'custom': CustomFilter,
     }
 

@@ -19,7 +19,7 @@ import numpy as np
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
-from llumnix.global_scheduler.migration_filter import MigrationFilter, MigrationFilterConfig
+from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 
 MIGRATE_OUT_LOAD_THRESHOLD = 3.0
@@ -48,7 +48,7 @@ def test_add_instance_and_remove_instance(migration_scheduler):
 @pytest.mark.parametrize("pair_migration_type", ['NO_CONSTRAINTS', 'DECODING_2_DECODING', 'PREFILL_2_DECODING'])
 def test_migration_filter(pair_migration_type):
     num_tests = 1000
-    migration_filter = MigrationFilter(MigrationFilterConfig(MIGRATE_OUT_LOAD_THRESHOLD))
+    migration_filter = MigrationInstanceFilter(MigrationFilterConfig(MIGRATE_OUT_LOAD_THRESHOLD))
 
     for _ in range(num_tests):
         instance_infos = []

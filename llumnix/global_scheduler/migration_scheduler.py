@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Set
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
-from llumnix.global_scheduler.migration_filter import MigrationFilter, MigrationFilterConfig
+from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
 
 logger = init_logger(__name__)
@@ -26,7 +26,7 @@ class MigrationScheduler:
                  migrate_out_load_threshold: float,
                  instance_load_calculator: InstanceLoadCalculator) -> None:
         self.filter_config = MigrationFilterConfig(migrate_out_load_threshold=migrate_out_load_threshold)
-        self.migration_filter = MigrationFilter(self.filter_config)
+        self.migration_filter = MigrationInstanceFilter(self.filter_config)
 
         self.instance_load_calculator = instance_load_calculator
         self.enable_defrag = instance_load_calculator.enable_defrag

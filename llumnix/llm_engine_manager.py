@@ -363,7 +363,8 @@ class LLMEngineManager:
         # a coroutine is already handling the changes in the number of instances in the cluster and it will account for the changes
         # caused by this scale-up (see rebuild_migrate_backend for details). Therefore, we simply return in this case. Specifically,
         # for RPC, the Ray actor handle is used for the migration cache, so there is no need to rebuild the group.
-        if self.engine_manager_args.migration_backend != 'rpc' and indeed_update and no_pending_instance:
+        if self.enable_migration and self.engine_manager_args.migration_backend != 'rpc' \
+            and indeed_update and no_pending_instance:
             asyncio.create_task(self.rebuild_migrate_backend())
 
         return self.num_instances
@@ -386,7 +387,7 @@ class LLMEngineManager:
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
 
-        if self.engine_manager_args.migration_backend != 'rpc':
+        if self.enable_migration and self.engine_manager_args.migration_backend != 'rpc':
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
 

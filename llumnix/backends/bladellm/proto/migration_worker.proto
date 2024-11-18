@@ -18,7 +18,8 @@ syntax = "proto3";
 import "google/protobuf/empty.proto";
 
 message WarmupResponse {
-  bool ok = 1;
+  bool is_ok = 1;
+  string error_msg = 2;
 }
 
 message WorkerInfo {

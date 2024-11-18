@@ -24,9 +24,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Run offline inference example
-      run: |
-        nvidia-docker run --rm -t --net host --ipc host \
-          -v ${PWD}:/workspace \
-          -w /workspace \
-          registry.cn-beijing.aliyuncs.com/llumnix/llumnix-dev:20240909_action_678a439 \
-          bash -c "pip install -e . > /dev/null && make offline_test"
+      run: ./tools/offline_test.sh

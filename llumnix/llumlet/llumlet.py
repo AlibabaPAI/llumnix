@@ -133,6 +133,10 @@ class Llumlet:
         migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
         if len(migrate_out_requests) == 0:
             return []
+
+        for migrate_out_request in migrate_out_requests:
+            migrate_out_request.is_migrating = True
+
         migrated_request_list = []
         for migrate_out_request in migrate_out_requests:
             migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
@@ -148,12 +152,16 @@ class Llumlet:
             dst_instance_id = dst_instance_name[len("instance_"):]
             logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
             migrated_request = []
+
             if migrate_out_request.status == RequestStatus.RUNNING:
+                migrate_out_request.migration_start_time = time.time()
                 status = await self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
             elif migrate_out_request.status == RequestStatus.WAITING:
+                migrate_out_request.migration_start_time = time.time()
                 status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
             else:
                 return migrated_request
+
             if status == MigrationStatus.FINISHED:
                 await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
                 self.backend_engine.free_src_request(migrate_out_request)

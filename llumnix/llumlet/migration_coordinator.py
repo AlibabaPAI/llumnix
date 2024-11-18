@@ -95,6 +95,9 @@ class MigrationCoordinator:
                                     migrate_out_request: LlumnixRequest) -> "MigrationStatus":
         """one-stage live migration until last stage for a running request
         """
+        if migrate_out_request.should_abort_migration():
+            return MigrationStatus.ABORTED_SRC
+
         pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
         incremental_blocks = self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
         # live migration, transfer all blocks except last one(currently updating)
@@ -129,12 +132,15 @@ class MigrationCoordinator:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             return MigrationStatus.ABORTED_DST
+        if migrate_out_request.should_abort_migration():
+            return MigrationStatus.ABORTED_SRC
 
         # do stage send/recv
         migrate_out_request.stage_timestamps.append(time.time())
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)
         # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
         await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
+
         if not is_last_stage and migrate_out_request.should_abort_migration():
             # migrate-out request abort by scheduler during send/recv
             return MigrationStatus.ABORTED_SRC

@@ -11,10 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import subprocess
-import pytest
-
 def to_markdown_table(data):
     headers = data[0]
     rows = data[1:]
@@ -31,11 +27,3 @@ def to_markdown_table(data):
 
     table = f"{header_row}\n{separator_row}\n" + "\n".join(data_rows) + "\n\n"
     return table
-
-@pytest.fixture
-def setup_ray_env():
-    subprocess.run(["ray", "stop"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    yield
-    subprocess.run(["ray", "stop"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

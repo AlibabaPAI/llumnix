@@ -72,7 +72,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         sys.exit(1)
     ray_start_command = None
     if 'HEAD_NODE' in os.environ:
-        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
+        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port} --log-dir=/mnt/xinyi/custom_logs"
         try:
             result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
         except subprocess.CalledProcessError as e:
@@ -149,12 +149,11 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
         logger.info("Get existing LLMEngineManager")
     return engine_manager
 
-def init_llumlets(node_id: str, request_output_queue_type: QueueType, backend_type: BackendType,
-                  engine_manager_args: EngineManagerArgs, world_size: int, *args
+def init_llumlets(node_id: str, request_output_queue_type: QueueType, engine_manager_args: EngineManagerArgs,
+                  backend_type: BackendType, world_size: int, *args
                   ) -> Tuple[List[str], List[Llumlet]]:
     instance_ids: List[str] = []
     llumlets: List[Llumlet] = []
-
     instance_ids = [random_uuid() for _ in range(engine_manager_args.initial_instances)]
     migration_configs = engine_manager_args.create_migration_config()
     for idx in range(engine_manager_args.initial_instances):
@@ -196,11 +195,18 @@ def init_llumnix_components(node_id: str,
                             *args,
                             ):
     engine_manager = init_manager(engine_manager_args)
-    if engine_manager_args.disable_init_instance_by_manager:
-        instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
-    else:
-        instance_ids, llumlets = retry_manager_method_sync(
-            engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args)
+    print("init_manager")
+    try:
+        if True:#engine_manager_args.disable_init_instance_by_manager:
+            instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
+        else:
+            instance_ids, llumlets = retry_manager_method_sync(
+                engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args)
+    except Exception as e:
+        import traceback
+        logger.error("Error in engine loop: {}".format(e))
+        logger.error("exception traceback: {}".format(traceback.format_exc()))
+        return engine_manager, [], [], None
 
     available_instance_ids = []
     dead_instance_ids = []

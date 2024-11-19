@@ -71,103 +71,103 @@ class MockEngine(LLMEngineLlumnix):
         self._model_conf = load_config(self._args.load_model_options.model)
         self._client = GeneralLLMClient(self._args, client, self._model_conf)
 
-# @pytest.mark.asyncio
-# async def test_llm_engine_process_model_outputs():
-#     # process model outputs
-#     llm_engine = MockEngine()
-#     prompt_length = 7
-#     server_request_0 = create_dummy_request(0, prompt="0" * prompt_length)
-#     server_request_1 = create_dummy_request(1, prompt="1" * prompt_length)
+@pytest.mark.asyncio
+async def test_llm_engine_process_model_outputs():
+    # process model outputs
+    llm_engine = MockEngine()
+    prompt_length = 7
+    server_request_0 = create_dummy_request(0, prompt="0" * prompt_length)
+    server_request_1 = create_dummy_request(1, prompt="1" * prompt_length)
 
-#     llm_engine._scheduler.add_request(server_request_0)
-#     llm_engine._scheduler.add_request(server_request_1)
+    llm_engine._scheduler.add_request(server_request_0)
+    llm_engine._scheduler.add_request(server_request_1)
 
-#     _ = llm_engine._scheduler.step()
+    _ = llm_engine._scheduler.step()
 
-#     update_output = SchedulerAsyncUpdateOutput(
-#                     response={
-#                         0: GenerateStreamResponse(is_finished=False),
-#                         1: GenerateStreamResponse(is_finished=False),
-#                     },
-#                 )
-#     # normal case, all requests be processed
-#     llm_engine.process_model_outputs(update_output)
-#     request_outputs, _ = llm_engine.put_queue_args_queue.get_nowait()
-#     assert len(request_outputs) == 2
-#     _ = llm_engine._scheduler.step()
-#     llm_engine._scheduler.remove_running_request(0)
-#     # migration case , requests stopping during last stage migration, stop process
-#     llm_engine.process_model_outputs(update_output)
-#     request_outputs, _ = llm_engine.put_queue_args_queue.get_nowait()
-#     assert len(request_outputs) == 1
+    update_output = SchedulerAsyncUpdateOutput(
+                    response={
+                        0: GenerateStreamResponse(is_finished=False),
+                        1: GenerateStreamResponse(is_finished=False),
+                    },
+                )
+    # normal case, all requests be processed
+    llm_engine.process_model_outputs(update_output)
+    request_outputs, _ = llm_engine.put_queue_args_queue.get_nowait()
+    assert len(request_outputs) == 2
+    _ = llm_engine._scheduler.step()
+    llm_engine._scheduler.remove_running_request(0)
+    # migration case , requests stopping during last stage migration, stop process
+    llm_engine.process_model_outputs(update_output)
+    request_outputs, _ = llm_engine.put_queue_args_queue.get_nowait()
+    assert len(request_outputs) == 1
 
-# def test_llm_engine_init():
-#     engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'))
-#     migration_config = EngineManagerArgs().create_migration_config()
-#     llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
-#                                     engine_args)
-#     assert isinstance(llm_engine._worker_processes, _WorkerProcessesLlumnix)
-#     loop = asyncio.new_event_loop()
-#     llm_engine.start(loop)
-#     assert isinstance(llm_engine._workers, LlumnixLocalWorkerClient)
-#     assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
-#     llm_engine.stop()
-#     loop.close()
+def test_llm_engine_init():
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'))
+    migration_config = EngineManagerArgs().create_migration_config()
+    llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
+                                    engine_args)
+    assert isinstance(llm_engine._worker_processes, _WorkerProcessesLlumnix)
+    loop = asyncio.new_event_loop()
+    llm_engine.start(loop)
+    assert isinstance(llm_engine._workers, LlumnixLocalWorkerClient)
+    assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
+    llm_engine.stop()
+    loop.close()
 
-    # engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'), enable_remote_worker=True, device=0, server_ip="127.0.0.1",
-    #         rank=0)
-    # migration_config = EngineManagerArgs().create_migration_config()
-    # llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
-    #                                 engine_args)
-    # assert isinstance(llm_engine._worker_processes, _RemoteWorkerProcessesLlumnix)
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'), enable_remote_worker=True, device=0, server_ip="127.0.0.1",
+            rank=0)
+    migration_config = EngineManagerArgs().create_migration_config()
+    llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
+                                    engine_args)
+    assert isinstance(llm_engine._worker_processes, _RemoteWorkerProcessesLlumnix)
     # need to start worker
-    # llm_engine.start(asyncio.new_event_loop())
-    # assert isinstance(llm_engine._workers, LlumnixPipelineWorkerClient)
-    # assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
+    llm_engine.start(asyncio.new_event_loop())
+    assert isinstance(llm_engine._workers, LlumnixPipelineWorkerClient)
+    assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
+    llm_engine.stop()
+
+@pytest.mark.asyncio
+async def test_llm_engine_add_requset():
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'))
+    llm_engine = MockEngine(engine_args)
+    llm_engine.set_client()
+    llm_engine._scheduler.add_update_instance_info_callback(llm_engine.update_instance_info)
+    server_info = ServerInfo(None, None, None, None, None)
+    engine_request = ServerRequest(
+                        id=11,
+                        prompt="hello",
+                        sampling_params=SamplingParams(top_p=0.9),
+                        stopping_criterial=StoppingCriteria(max_new_tokens=10),
+                    )
+    server_request = ServerRequestLlumnix(engine_request, "0", server_info, math.inf)
+    await llm_engine.add_request(server_request)
+    llm_engine._handle_new_requests()
+    assert len(llm_engine._scheduler.waiting) == 1
+    assert llm_engine._scheduler.waiting[-1].request_id == "0"
+    assert llm_engine._scheduler.waiting[-1].expected_steps == math.inf
+    assert isinstance(llm_engine._scheduler.waiting[-1], GenerationGroupStateLlumnix)
     # llm_engine.stop()
 
-# @pytest.mark.asyncio
-# async def test_llm_engine_add_requset():
-#     engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'))
-#     llm_engine = MockEngine(engine_args)
-#     llm_engine.set_client()
-#     llm_engine._scheduler.add_update_instance_info_callback(llm_engine.update_instance_info)
-#     server_info = ServerInfo(None, None, None, None, None)
-#     engine_request = ServerRequest(
-#                         id=11,
-#                         prompt="hello",
-#                         sampling_params=SamplingParams(top_p=0.9),
-#                         stopping_criterial=StoppingCriteria(max_new_tokens=10),
-#                     )
-#     server_request = ServerRequestLlumnix(engine_request, "0", server_info, math.inf)
-#     await llm_engine.add_request(server_request)
-#     llm_engine._handle_new_requests()
-#     assert len(llm_engine._scheduler.waiting) == 1
-#     assert llm_engine._scheduler.waiting[-1].request_id == "0"
-#     assert llm_engine._scheduler.waiting[-1].expected_steps == math.inf
-#     assert isinstance(llm_engine._scheduler.waiting[-1], GenerationGroupStateLlumnix)
-#     # llm_engine.stop()
-
-# @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for unit test")
-# @pytest.mark.asyncio
-# async def test_llm_engine_step():
-#     engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/Qwen--Qwen1.5-7B-Chat'), tensor_parallel_size=4)
-#     llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, None, None, ray.get_runtime_context().get_node_id(),
-#                                     engine_args)
-#     await llm_engine._init()
-#     llm_engine._scheduler.add_update_instance_info_callback(llm_engine.update_instance_info)
-#     server_info = ServerInfo(None, None, None, None, None)
-#     engine_request = ServerRequest(
-#                         id=11,
-#                         prompt="hello",
-#                         prompt_tokens=[1] * 5,
-#                         sampling_params=SamplingParams(top_p=0.9),
-#                         stopping_criterial=StoppingCriteria(max_new_tokens=10),
-#                     )
-#     server_request = ServerRequestLlumnix(engine_request, "0", server_info, math.inf)
-#     llm_engine._back_queue[server_request.id] = asyncio.Queue()
-#     llm_engine._req_buffer.put_nowait(server_request)
-#     await llm_engine.step()
-#     assert list(llm_engine._back_queue.keys()) == [11]
-#     assert [request_group.request_group_id for request_group in llm_engine._scheduler.running] == [11]
-#     llm_engine.stop()
+@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpu required for unit test")
+@pytest.mark.asyncio
+async def test_llm_engine_step():
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/Qwen--Qwen1.5-7B-tiny-random'), tensor_parallel_size=1)
+    llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, None, None, ray.get_runtime_context().get_node_id(),
+                                    engine_args)
+    await llm_engine._init()
+    llm_engine._scheduler.add_update_instance_info_callback(llm_engine.update_instance_info)
+    server_info = ServerInfo(None, None, None, None, None)
+    engine_request = ServerRequest(
+                        id=11,
+                        prompt="hello",
+                        prompt_tokens=[1] * 5,
+                        sampling_params=SamplingParams(top_p=0.9),
+                        stopping_criterial=StoppingCriteria(max_new_tokens=10),
+                    )
+    server_request = ServerRequestLlumnix(engine_request, "0", server_info, math.inf)
+    llm_engine._back_queue[server_request.id] = asyncio.Queue()
+    llm_engine._req_buffer.put_nowait(server_request)
+    await llm_engine.step()
+    assert list(llm_engine._back_queue.keys()) == [11]
+    assert [request_group.request_group_id for request_group in llm_engine._scheduler.running] == [11]
+    llm_engine.stop()

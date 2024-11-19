@@ -73,49 +73,57 @@ class Llumlet:
                   world_size: int,
                   *args,
                   **kwargs):
-        lifetime = "detached" if detached else None
-        assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], f'unimplemented backend {backend_type}'
-        actor_name = f"instance_{instance_id}"
-        if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
-            if disable_fixed_node_init_instance:
-                # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
-                placement_group = initialize_placement_group(world_size, detached=detached)
-                kwargs["placement_group"] = placement_group
-                engine_class = ray.remote(num_cpus=1,
-                                          name=actor_name,
-                                          namespace='llumnix',
-                                          max_concurrency=4,
-                                          lifetime=lifetime)(cls).options(
-                                                scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                                    placement_group=placement_group,
-                                                    placement_group_bundle_index=0,
+        try:
+            lifetime = "detached" if detached else None
+            assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], f'unimplemented backend {backend_type}'
+            actor_name = f"instance_{instance_id}"
+            if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
+                if disable_fixed_node_init_instance:
+                    # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
+                    placement_group = initialize_placement_group(world_size, detached=detached)
+                    print("placement_group",placement_group)
+                    kwargs["placement_group"] = placement_group
+                    engine_class = ray.remote(num_cpus=1,num_gpus=1,
+                                            name=actor_name,
+                                            namespace='llumnix',
+                                            max_concurrency=4,
+                                            lifetime=lifetime)(cls).options(
+                                                    scheduling_strategy=PlacementGroupSchedulingStrategy(
+                                                        placement_group=placement_group,
+                                                        placement_group_bundle_index=0,
+                                                    )
                                                 )
-                                            )
-            else:
+                else:
+                    kwargs["node_id"] = node_id
+                    engine_class = ray.remote(num_cpus=1,
+                                            num_gpus=1, # todo(xinyi) bladellm need this
+                                            name=actor_name,
+                                            namespace='llumnix',
+                                            max_concurrency=4,
+                                            lifetime=lifetime)(cls).options(
+                                                    scheduling_strategy=NodeAffinitySchedulingStrategy(
+                                                        node_id=ray.get_runtime_context().get_node_id(),
+                                                        soft=False,
+                                                    )
+                                                )
+            else: # backend_type == backend_type.SIM_VLLM:
                 kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
-                                          name=actor_name,
-                                          namespace='llumnix',
-                                          max_concurrency=4,
-                                          lifetime=lifetime)(cls).options(
+                                        name=actor_name,
+                                        namespace='llumnix',
+                                        max_concurrency=4,
+                                        lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                     node_id=node_id,
                                                     soft=False,
                                                 )
                                             )
-        else: # backend_type == backend_type.SIM_VLLM:
-            kwargs["node_id"] = node_id
-            engine_class = ray.remote(num_cpus=1,
-                                      name=actor_name,
-                                      namespace='llumnix',
-                                      max_concurrency=4,
-                                      lifetime=lifetime)(cls).options(
-                                            scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                                node_id=node_id,
-                                                soft=False,
-                                            )
-                                        )
-        llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
+            print("dont know not ok")
+            llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
+        except Exception as e:
+            logger.error("Failed to initialize llumlet: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
+
         return llumlet
 
     async def check_state(self):
@@ -163,13 +171,25 @@ class Llumlet:
         return migrated_request_list
 
     def get_instance_info(self) -> InstanceInfo:
-        return self.backend_engine.engine.instance_info
+        try:
+            print("wju mpt gey",self.backend_engine.engine.instance_info)
+            return self.backend_engine.engine.instance_info
+        except Exception as e:
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc())) 
+            return None
 
     def is_ready(self) -> bool:
         return True
 
     def get_all_request_ids(self) -> List[str]:
-        return self.backend_engine.get_all_request_ids()
+        try:
+            return self.backend_engine.get_all_request_ids()
+        except Exception as e:
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc())) 
+            return None
+    
 
     def generate(
         self,

@@ -87,10 +87,17 @@ class PagedSchedulerLlumnix(PagedScheduler):
         return self.running
 
     def get_all_request_ids(self) -> List[str]:
+        
         request_ids : List[str] = []
-        for state_queue in [self.waiting, self.running, self.swapped, self.hanging]:
-            for seq_group in state_queue:
-                request_ids.append(seq_group.request_group_id)
+        try:
+            print("get_all_request_ids",self.waiting, self.running, self.swapped, self.hanging)
+            for state_queue in [self.waiting, self.running, self.swapped, self.hanging]:
+                for seq_group in state_queue:
+                    request_ids.append(seq_group.request_group_id)
+        except Exception as e:
+            import traceback
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
         return request_ids
     
     def get_request_incremental_blocks(self, backend_request: GenerationGroupStateLlumnix, pre_stage_num_blocks: int) -> List[int]:
@@ -100,10 +107,8 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     def remove_running_request(self, request_id: int) -> None:
         for seq_group in self.running:
-            print(seq_group.request_group_id,request_id)
             if seq_group.request_group_id == request_id:
                 self.running.remove(seq_group)
-                print("remove")
                 break
 
     def add_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
@@ -204,13 +209,14 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     def step(self) -> SchedulerStepOutput:
         step_out = super().step()
-        request_groups_map = self.get_request_groups_map()
-        step_ids = list(step_out.step.decode) + [r.id for r in step_out.step.prefill]
-        scheduled_gen_groups= [request_groups_map[step_id] for step_id in step_ids]
-        for r_id in step_ids:
-            num_new_tokens = request_groups_map[r_id].get_num_new_tokens() 
-            request_groups_map[r_id].token_chunk_size = num_new_tokens
-        self.update_instance_info_callback(self._get_instance_info(scheduled_gen_groups))
+        if step_out.step:
+            request_groups_map = self.get_request_groups_map()
+            step_ids = list(step_out.step.decode) + [r.id for r in step_out.step.prefill]
+            scheduled_gen_groups= [request_groups_map[step_id] for step_id in step_ids]
+            for r_id in step_ids:
+                num_new_tokens = request_groups_map[r_id].get_num_new_tokens() 
+                request_groups_map[r_id].token_chunk_size = num_new_tokens
+            self.update_instance_info_callback(self._get_instance_info(scheduled_gen_groups))
         return step_out
 
     # def add_request(self, *args, **kwargs):

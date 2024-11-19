@@ -18,7 +18,6 @@ import ray
 from aiohttp import web
 from fastapi.responses import JSONResponse, Response
 
-from blade_llm.protocol import GenerateStreamResponse, ErrorInfo
 from blade_llm.service.server import Entrypoint
 
 import llumnix.entrypoints.bladellm.api_server
@@ -29,6 +28,8 @@ from llumnix.utils import random_uuid
 from llumnix.queue.utils import init_output_queue_server, init_output_queue_client, QueueType
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
 from llumnix.entrypoints.bladellm.api_server import EntrypointLlumnix, DummyAsyncLLMEngineClient
+from blade_llm.protocol import GenerateStreamResponse, ErrorInfo
+
 engine_manager = None
 MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 from llumnix.logger import init_logger
@@ -47,7 +48,7 @@ class MockLLMClient(DummyAsyncLLMEngineClient):
     def get_tokenizer(self):
         return None
     
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=1, num_gpus=4)
 class MockLLMEngineManager:
     def __init__(self, output_queue_type: QueueType):
         self._num_generates = 0
@@ -58,7 +59,7 @@ class MockLLMEngineManager:
         self._num_generates += 1
         request_output = GenerateStreamResponse(is_finished=True, is_ok=True, texts=["done"])
         request_output.request_timestamps = RequestTimestamps()
-        await self.request_output_queue.put_nowait([1], server_info)
+        await self.request_output_queue.put_nowait([request_output], server_info)
 
     async def abort(self, request_id):
         self._num_aborts += 1

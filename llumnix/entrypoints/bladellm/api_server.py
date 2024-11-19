@@ -165,14 +165,15 @@ def setup_llumnix_api_server(bladellm_args):
     llumnixParser.add_argument("--ssl-certfile", type=str)
 
     add_cli_args(llumnixParser)
-    # TODO[xinyi]: now only support use config_file to define llumnix arguments
-    llumnixCfg: LlumnixConfig = get_llumnix_config(bladellm_args.config_file, bladellm_args)
+    # TODO[xinyi]: now only support use config_file to define llumnix arguments, `llumnix_config` in BladeLLM is the same as the usage in LlumnixEntrypointsArgs
+    # TODO[xinyi]: support read from bladellm_args.llumnix_config
+    llumnixCfg: LlumnixConfig = get_llumnix_config(bladellm_args.llumnix_config)
     _, engine_manager_args, engine_args = get_args(llumnixCfg, llumnixParser, bladellm_args)
     setup_ray_cluster(llumnixCfg)
 
     # if gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():
-        world_size = engine_args.tensor_parallel_size * engine_args.tensor_parallel_size 
+        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size 
         llumnix_context = setup_llumnix(llumnixCfg, engine_manager_args, BackendType.BLADELLM, world_size, engine_args)
         engine_model_conf = get_model_conf(bladellm_args)
         llm_client = GeneralLLMClientLlumnix(bladellm_args, DummyAsyncLLMEngineClient(), engine_model_conf)

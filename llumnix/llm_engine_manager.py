@@ -184,6 +184,9 @@ class LLMEngineManager:
                     self.global_scheduler.update_instance_infos([ret])
             else:
                 dead_instance_ids.append(instance_id)
+                logger.info("[_update_instance_info_loop] dead instances: {}.".format(ret))
+                logger.info("[_update_instance_info_loop] dead instances: {}.".format(self.instances))
+                
         while True:
             try:
                 await asyncio.sleep(interval)
@@ -192,6 +195,7 @@ class LLMEngineManager:
                 dead_instance_ids = []
                 for instance_id, instance in self.instances.items():
                     # Use asyncio.gather to wrap ray remote call to add done callback.
+                    print("try get_instance_info")
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
                     task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
                     tasks.append(task)
@@ -217,6 +221,7 @@ class LLMEngineManager:
         while True:
             await asyncio.sleep(interval)
             self.request_instance = {}
+
     async def _push_migrations(self) -> None:
         # Push migrate when the instance_info have updated a certain number of times.
         if self.enable_pd_disagg:
@@ -459,32 +464,38 @@ class LLMEngineManager:
         llumlets: List[Llumlet] = []
         for _ in range(engine_manager_args.initial_instances):
             instance_id = random_uuid()
-            if not engine_manager_args.profiling_result_file_path:
-                llumlet = Llumlet.from_args(
-                    output_queue_type,
-                    engine_manager_args.disable_fixed_node_init_instance,
-                    True,
-                    node_id,
-                    instance_id,
-                    backend_type,
-                    engine_manager_args.create_migration_config(),
-                    world_size,
-                    *args,
-                )
-            else:
-                assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
-                llumlet = Llumlet.from_args(
-                    output_queue_type,
-                    engine_manager_args.disable_fixed_node_init_instance,
-                    True,
-                    node_id,
-                    instance_id,
-                    BackendType.SIM_VLLM,
-                    engine_manager_args.create_migration_config(),
-                    world_size,
-                    engine_manager_args.profiling_result_file_path,
-                    *args,
-                )
+            try:
+                if not engine_manager_args.profiling_result_file_path:
+                    llumlet = Llumlet.from_args(
+                        output_queue_type,
+                        engine_manager_args.disable_fixed_node_init_instance,
+                        True,
+                        node_id,
+                        instance_id,
+                        backend_type,
+                        engine_manager_args.create_migration_config(),
+                        world_size,
+                        *args,
+                    )
+                else:
+                    assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
+                    llumlet = Llumlet.from_args(
+                        output_queue_type,
+                        engine_manager_args.disable_fixed_node_init_instance,
+                        True,
+                        node_id,
+                        instance_id,
+                        BackendType.SIM_VLLM,
+                        engine_manager_args.create_migration_config(),
+                        world_size,
+                        engine_manager_args.profiling_result_file_path,
+                        *args,
+                    )
+            except Exception as e:
+                import traceback
+                logger.error("Error in engine loop: {}".format(e))
+                logger.error("exception traceback: {}".format(traceback.format_exc()))
+
             instance_ids.append(instance_id)
             llumlets.append(llumlet)
 

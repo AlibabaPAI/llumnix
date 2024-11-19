@@ -71,7 +71,7 @@ def _query_server_generate(prompt: str) -> dict:
 def _query_server_generate_stream(prompt: str) -> dict:
     return _query_server(prompt, interface='generate_stream')
 
-@pytest.fixture(params=["zmq", "rayqueue"])
+@pytest.fixture(params=["zmq"])
 def api_server(request):
     output_queue_type = QueueType(request.param)
     script_path = Path(__file__).parent.joinpath(

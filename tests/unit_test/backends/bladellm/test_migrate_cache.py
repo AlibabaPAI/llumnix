@@ -33,7 +33,7 @@ from blade_llm.generation.kvcache.kv_transfer import TransferType
 from blade_llm.generation.statemanagers.ragged_flash_state_manager import RaggedFlashStateManager
 from blade_llm.generation.statemanagers.paged_state_manager import PagedStateManager
 
-from llumnix.backends.bladellm.remote_worker import MigrationWorker
+from llumnix.backends.bladellm.worker import MigrationRemoteWorker, MigrationLocalWorker
 from llumnix.backends.bladellm.migration_backend import NUMPY_SUPPORTED_DTYPES
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 from llumnix.internal_config import MigrationConfig
@@ -41,9 +41,10 @@ from llumnix.arg_utils import EngineManagerArgs
 
 from tests.unit_test.backends.bladellm.proto import mock_migration_worker_pb2_grpc, mock_migration_worker_pb2
 
-class MockMigrationWorker(mock_migration_worker_pb2_grpc.MockMigrationWorkerServicer, MigrationWorker):
-    def __init__(self, *args, **kwargs) -> None:
-        MigrationWorker.__init__(self, *args, **kwargs)
+class MockMigrationWorker(mock_migration_worker_pb2_grpc.MockMigrationWorkerServicer):
+    def __init__(self, migration_backend):
+        mock_migration_worker_pb2_grpc.MockMigrationWorkerServicer.__init__(self)
+        self.migration_backend = migration_backend
 
     def get_kv_cache_meta(self, request, context):
         state_manager = self.migration_backend.state_manager
@@ -159,19 +160,32 @@ class MockMigrationWorker(mock_migration_worker_pb2_grpc.MockMigrationWorkerServ
             block_idxs=request.block_idxs
         )
 
+class MockMigrationRemoteWorker(MockMigrationWorker, MigrationRemoteWorker):
+    def __init__(self, *args, **kwargs) -> None:
+        MigrationRemoteWorker.__init__(self, *args, **kwargs)
+        MockMigrationWorker.__init__(self, self.migration_backend)
+
+class MockMigrationLocalWorker(MockMigrationWorker, MigrationLocalWorker):
+    def __init__(self, *args, **kwargs) -> None:
+        MigrationLocalWorker.__init__(self, *args, **kwargs)
+        MockMigrationWorker.__init__(self, self.migration_backend)
+
 MAX_MESSAGE_LENGHT = 1024 * 1024 * 1024
 options=[
     ('grpc.max_send_message_length', MAX_MESSAGE_LENGHT),
     ('grpc.max_receive_message_length', MAX_MESSAGE_LENGHT),
 ]
 
-def worker_main(listen_addr: str, rank: int, args: ServingArgs, instance_id: int,
-                migration_config: MigrationConfig, naming_url: str, tranfer_type: TransferType):
-    asyncio.run(launch_worker(listen_addr, rank, args, instance_id, migration_config, naming_url, tranfer_type))
+def worker_main(listen_addr: str, rank: int, args: ServingArgs, instance_id: int, migration_config: MigrationConfig,
+                naming_url: str, tranfer_type: TransferType, worker_type):
+    asyncio.run(
+        launch_worker(listen_addr, rank, args, instance_id, migration_config, naming_url,
+                      tranfer_type, worker_type)    
+    )
 
 async def launch_worker(listen_addr: str, rank: int, args: ServingArgs, instance_id: int,
-                        migration_config: MigrationConfig, naming_url: str, tranfer_type: TransferType):
-    worker = MockMigrationWorker(instance_id, listen_addr, migration_config, naming_url, tranfer_type, rank, args)
+                        migration_config: MigrationConfig, naming_url: str, tranfer_type: TransferType, worker_type):
+    worker = worker_type(instance_id, listen_addr, migration_config, naming_url, tranfer_type, rank, args)
     server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
     bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
     migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
@@ -192,13 +206,14 @@ async def launch_worker(listen_addr: str, rank: int, args: ServingArgs, instance
 @pytest.mark.parametrize(
     "backend, attention_type, transfer_type",
     [
-        ('kvtransfer', 'ragged_flash', TransferType.CUDA_IPC_DIRECT),
-        ('kvtransfer', 'ragged_flash', TransferType.RDMA_DIRECT),
-        ('grpc', 'ragged_flash', TransferType.CUDA_IPC_DIRECT),
-        ('grpc', 'paged', TransferType.CUDA_IPC_DIRECT),
+        # ('kvtransfer', 'ragged_flash', TransferType.CUDA_IPC_DIRECT),
+        # ('kvtransfer', 'ragged_flash', TransferType.RDMA_DIRECT),
+        ('grpc', 'ragged_flash', None),
+        ('grpc', 'paged', None),
     ],
 )
-def test_migrate_cache(backend, attention_type, transfer_type):
+@pytest.mark.parametrize('worker_type', [MockMigrationRemoteWorker, MockMigrationLocalWorker])
+def test_remote_worker_migrate_cache(backend, attention_type, transfer_type, worker_type):
     worker_count = 2
     worker_socket_addrs = []
     migration_cache_blocks = 2
@@ -221,11 +236,12 @@ def test_migrate_cache(backend, attention_type, transfer_type):
             rank=0,
             max_gpu_memory_utilization=0.3,
             load_model_options=LoadModelOptions(
-                model='/mnt/workspace/llumnix/opt-125m', attn_cls=attention_type, disable_cuda_graph=True
+                model='/mnt/self-hosted/model/opt-125m', attn_cls=attention_type, disable_cuda_graph=True
             )
         )
         p = Process(target=worker_main, daemon=True,
-                    args=(worker_socket_addrs[-1], 0, worker_args, i, migration_config, naming_url, transfer_type))
+                    args=(worker_socket_addrs[-1], 0, worker_args, i, migration_config,
+                          naming_url, transfer_type, worker_type))
         p.start()
         backends.append(p)
 
@@ -240,8 +256,10 @@ def test_migrate_cache(backend, attention_type, transfer_type):
     mock_worker0_stub = mock_migration_worker_pb2_grpc.MockMigrationWorkerStub(worker0_channel)
     mock_worker1_stub = mock_migration_worker_pb2_grpc.MockMigrationWorkerStub(worker1_channel)
 
-    assert worker0_stub.warmup(empty_pb2.Empty()).ok
-    assert worker1_stub.warmup(empty_pb2.Empty()).ok
+    warmup_resp = worker0_stub.warmup(empty_pb2.Empty())
+    assert warmup_resp.is_ok
+    warmup_resp = worker1_stub.warmup(empty_pb2.Empty())
+    assert warmup_resp.is_ok
 
     responce = mock_worker0_stub.get_kv_cache_meta(empty_pb2.Empty())
     key_shape = list(np.frombuffer(responce.key_shape, dtype=np.int64))

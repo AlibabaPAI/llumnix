@@ -23,10 +23,14 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.service.worker import _RemoteWorkerProcesses, _WorkerProcesses
 from blade_llm.utils.network import get_free_port
 from blade_llm.service.worker import worker_main
+from blade_llm.service.workers.local_worker import LocalWorker
+from blade_llm.service.workers.remote_worker import RemoteWorker
 
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 from llumnix.internal_config import MigrationConfig
+from llumnix.backends.bladellm.migration_worker import MigrationWorker
 from llumnix.logger import init_logger
+
 logger = init_logger(__name__)
 
 class _WorkerProcessesLlumnix(_WorkerProcesses):
@@ -58,3 +62,21 @@ def launch_worker(args: ServingArgs, instance_id: int, migration_config: Migrati
         return _RemoteWorkerProcessesLlumnix(args, instance_id, migration_config)
     else:
         return _WorkerProcessesLlumnix(args, instance_id, migration_config)
+
+class MigrationLocalWorker(LocalWorker, MigrationWorker):
+    def __init__(self, instance_id: int, worker_addr: str, migration_config: MigrationConfig,
+                naming_url: str,  tranfer_type: TransferType, rank: int, args: ServingArgs) -> None:
+        LocalWorker.__init__(self, rank, args)
+
+        state_manager = self._engine._state_manager
+        MigrationWorker.__init__(self, state_manager, instance_id, worker_addr, migration_config,
+                                 naming_url, tranfer_type, rank, args)
+        
+class MigrationRemoteWorker(RemoteWorker, MigrationWorker):
+    def __init__(self, instance_id: int, worker_addr: str, migration_config: MigrationConfig,
+                naming_url: str,  tranfer_type: TransferType, rank: int, args: ServingArgs) -> None:
+        RemoteWorker.__init__(self, rank, args)
+
+        state_manager = self._engine._state_manager
+        MigrationWorker.__init__(self, state_manager, instance_id, worker_addr, migration_config,
+                                 naming_url, tranfer_type, rank, args)

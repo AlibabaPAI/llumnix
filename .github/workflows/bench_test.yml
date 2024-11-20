@@ -11,7 +11,7 @@ on:
 jobs:
   cancel_previous_workflows:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 1
     steps:
     - uses: styfle/cancel-workflow-action@0.12.1
       with:
@@ -20,7 +20,7 @@ jobs:
   bench_tests:
     needs: cancel_previous_workflows
     runs-on: [self-hosted]
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
     - name: Checkout
       uses: actions/checkout@v4

@@ -64,7 +64,7 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
         f"--request-migration-policy {request_migration_policy} "
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
-        f"--migration-internal-buffer-num 2 "
+        f"--migration-internal-buffer-num 1 "
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"

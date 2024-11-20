@@ -32,7 +32,6 @@ from llumnix.queue.utils import init_output_queue_server
 
 logger = init_logger(__name__)
 
-# TODO(s5u13b): Set the values through tests.
 MAX_RESTARTS = 30
 RESTART_INTERVALS = 1
 MAX_TASK_RETRIES = 300
@@ -260,6 +259,7 @@ def setup_llumnix(engine_manager_args, engine_args, cfg):
 
     return context
 
+# TODO(s5u13b): Fix the potential output token out-of-order issue caused by the migration.
 async def _background_process_outputs(llumnix_context):
     while True:
         request_outputs = await llumnix_context.request_output_queue.get()

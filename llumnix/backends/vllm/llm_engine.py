@@ -352,6 +352,7 @@ class BackendVLLM(BackendInterface):
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
         logger.info("add seq {} to block table".format(seq.seq_id))
+        logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_args_dst()

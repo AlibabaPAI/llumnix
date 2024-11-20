@@ -131,7 +131,7 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
     await asyncio.sleep(5)
 
     # TODO(s5u13b): use a more definitive way to determine that there is no memory leak.
-    # parse_manager_log_file("manager_instance.csv")
+    parse_manager_log_file("manager_instance.csv")
 
     if migrated_request_status == 'running':
         average_speed = parse_instance_log_file(instance_output_logs)

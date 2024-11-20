@@ -15,9 +15,8 @@ import time
 import asyncio
 import ray
 
-from blade_llm.protocol import ServerRequest
+from blade_llm.service.args import ServingArgs
 from blade_llm.service.clients import LLMResponse
-from blade_llm.service.args import ServingArgs, add_args
 
 from llumnix.backends.bladellm.utils import check_engine_args
 from llumnix.arg_utils import LlumnixEntrypointsArgs, EngineManagerArgs
@@ -35,12 +34,8 @@ def add_cli_args(parser):
     parser = EngineManagerArgs.add_cli_args(parser)
 
 def add_cli_args_llumnix(parser):
-    parser = add_args()
-    # parser.set_namespace("llumnix")
     parser = LlumnixEntrypointsArgs.add_cli_args(parser)
     parser = EngineManagerArgs.add_cli_args(parser)
-    # parser.set_namespace("bladellm")
-    # parser = ServingArgs.add_cli_args(parser)
     cli_args = parser.parse_args()
     return cli_args
 
@@ -63,7 +58,6 @@ def get_args_llumnix(cfg, parser, cli_args):
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
     EngineManagerArgs.check_args(engine_manager_args, parser)
     engine_args = ServingArgs.from_cli_args(cli_args)
-    print("engine_args", engine_args)
     check_engine_args(engine_args, engine_manager_args)
 
     logger.info("llumnix_entrypoints_args: {}".format(llumnix_entrypoints_args))
@@ -73,7 +67,7 @@ def get_args_llumnix(cfg, parser, cli_args):
     return llumnix_entrypoints_args, engine_manager_args, engine_args
 
 
-async def manager_generate(request: ServerRequest,
+async def manager_generate(request,
                            request_id: str,
                            llumnix_context: LlumnixEntrypointsContext) -> LLMResponse:
     results_queue = asyncio.Queue()

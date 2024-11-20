@@ -38,13 +38,18 @@ from blade_llm.service.clients import GeneralLLMClient
 from blade_llm.service.engine import AsyncLLMEngineClient
 from blade_llm.protocol import ServerRequest
 
-
+from blade_llm.protocol import (
+    GenerateStreamResponse,
+    SamplingParams,
+    ServerRequest,
+    StoppingCriteria,
+)
 from llumnix.backends.bladellm.queue import AsyncPutQueueActor
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.backends.bladellm.scheduler import PagedSchedulerLlumnix
-from llumnix.backends.bladellm.sequence import ServerRequestLlumnix, GenerationGroupStateLlumnix
+from llumnix.backends.bladellm.sequence import ServerRequestLlumnix, GenerationGroupStateLlumnix, GenerateStreamResponseLlumnix
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.internal_config import MigrationConfig
@@ -101,6 +106,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         try:
             self.async_put_queue_actor = ray.remote(
                 num_cpus=1,
+                num_gpus=1,
                 scheduling_strategy=scheduling_strategy
             )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
         except Exception as e:
@@ -152,7 +158,9 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             self._model_conf,
         )
 
-        # profiling-related fields
+        # profiling-related
+        # 
+        #  fields
         self._sch_status_helper = scheduler_status_helper(self._scheduler)
         # this will take control of exporters if step-wise tracing will trace from the beginning
         self.engine_pre_step_metrics()
@@ -198,7 +206,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
 
     def process_model_outputs(self, update_output):
         try:
-            print("process_model_outputs")
             server_infos = []
             request_outputs = []
             request_groups_map = self._scheduler.get_request_groups_map()
@@ -209,7 +216,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                     if req_id in running_requests and l_resp:
                         server_info = request_groups_map[req_id].server_info
                         server_infos.append(server_info)
-                        request_outputs.append(l_resp)
+                        request_outputs.append(GenerateStreamResponseLlumnix(l_resp, req_id))
                         if l_resp.is_finished:
                             # TODO[xinyi]: handle error info in back queue
                             del self._back_queue[req_id]
@@ -219,7 +226,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             #         request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
             #         request_output.request_timestamps.engine_step_timestamp_end = step_end_time
                     request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
-            print("??ewdw",request_outputs)
             if request_outputs:
                 self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
         except Exception as e:
@@ -257,8 +263,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             logger.error("Error in engine loop: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
-
-
     #TODO[xinyi]: the same to the function in vllm, maybe put into utils.py
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
@@ -283,7 +287,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                 if hasattr(request_output, 'request_timestamps'):
                     request_output.request_timestamps.engine_thread_put_queue_timestamp = time.time()
             self._put_request_outputs_to_server(request_outputs, server_infos)
-            print("dered",request_outputs)
     
     def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse], server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
@@ -313,8 +316,6 @@ class BackendBladeLLM(BackendInterface):
                                                             engine_args)
             self.instance_id = instance_id
             self.worker_addrs_list = [f"unix://{engine_args.worker_socket_path}.{i}" for i in range(engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size)]
-            # loop = asyncio.get_event_loop() # TODO(xinyi): we should check this
-            # loop = asyncio.new_event_loop()
             self._loop = asyncio.new_event_loop()#asyncio.new_event_loop()##
             self._engine_ready = threading.Event()
 
@@ -331,8 +332,6 @@ class BackendBladeLLM(BackendInterface):
             self._thread.start()
             self._engine_ready.wait()  # wait till wrapped async engine is ready.
             self.engine.is_warmup = False
-            # self.engine.start(self._loop)
-            print("?why")
         except Exception as e:
             logger.error("Error in engine loop: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
@@ -346,10 +345,9 @@ class BackendBladeLLM(BackendInterface):
                     server_request: ServerRequest) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
         server_request = ServerRequestLlumnix(server_request, request_id, server_info, expected_steps)
-        self.engine.add_request(server_request)
-    
+        asyncio.run_coroutine_threadsafe(self.engine.add_request(server_request), self._loop)
+
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
-        return
         await dst_ray_actor.execute_engine_method.remote("_run_workers",
                                                            "migrate_cache",
                                                             MigrateRequests(

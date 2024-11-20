@@ -12,11 +12,17 @@
 # limitations under the License.
 
 from typing import Any, Tuple
-
+from pydantic import BaseModel, Field
 from blade_llm.service.scheduler_types import GenerationGroupState
-from blade_llm.protocol import ServerRequest
+from blade_llm.protocol import ServerRequest, GenerateStreamResponse
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 
+
+class GenerateStreamResponseLlumnix(GenerateStreamResponse):
+    request_id: int = Field(default=None, description="Request ID associated with the response")
+
+    def __init__(self, resp: GenerateStreamResponse, request_id: int, **kwargs: Any) -> None:
+        super().__init__(**resp.dict(), request_id=request_id, **kwargs)
 
 class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
     def __init__(self, gen_group: GenerationGroupState, llumnix_request_args) -> None:
@@ -82,9 +88,22 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         return self.request_len - self.get_num_computed_tokens()
 
 class ServerRequestLlumnix():
-        def __init__(self, server_request: ServerRequest, *args) -> None:
-            self.server_request = server_request
-            self.llumnix_request_args = args
+    def __init__(self, server_request: ServerRequest, *args) -> None:
+        self.server_request = server_request
+        self.llumnix_request_args = args
 
-        def __getattr__(self, item):
+    def __getattr__(self, item):
+        try:
             return getattr(self.server_request, item)
+        except AttributeError:
+            try:
+                return self.__getattribute__(item)
+            except AttributeError:
+                raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
+    
+    def __setattr__(self, name, value):
+        if 'server_request' in self.__dict__ and hasattr(self.server_request, name):
+            setattr(self.server_request, name, value)
+        else:
+            super().__setattr__(name, value)
+            

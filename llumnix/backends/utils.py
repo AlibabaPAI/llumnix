@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 
 import ray
 from ray.util.placement_group import PlacementGroup
+import random
 
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
@@ -97,3 +98,6 @@ def initialize_placement_group(
     return current_placement_group
 
 
+# Generate a random request_id specifically for BladeLLM requests.
+def random_positive_id() -> str:
+    return random.randint(1, 10**6)

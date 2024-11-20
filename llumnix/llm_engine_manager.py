@@ -52,6 +52,7 @@ class LLMEngineManager:
                  log_requests: bool = True,
                  profiling_database: ProfilingDatabase = None) -> None:
         os.chdir(work_dir)
+        os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
         self.actor_name = MANAGER_ACTOR_NAME
         self.engine_manager_args = engine_manager_args
         self.profiling_database = profiling_database
@@ -115,22 +116,29 @@ class LLMEngineManager:
             server_info: ServerInfo,
             *args,
             **kwargs,) -> None:
-        while self.num_instances == 0:
-            logger.info("No instance available temporarily, sleep {}s, "
-                        "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
-            await asyncio.sleep(RETRIES_INTERVALS)
-        instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:
-            if hasattr(server_info, 'request_timestamps'):
-                server_info.request_timestamps.manager_generate_timestamp = time.time()
-            await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
-            if self.log_requests:
-                logger.info("received request {}.".format(request_id))
-                logger.info("dispath to instance {}".format(instance_id))
-                self.request_instance[request_id] = instance_id
-        except (ray.exceptions.RayActorError, KeyError):
-            logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
-            self.scale_down(instance_id)
+            while self.num_instances == 0:
+                logger.info("No instance available temporarily, sleep {}s, "
+                            "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
+                await asyncio.sleep(RETRIES_INTERVALS)
+            instance_id, request_expected_steps = self.global_scheduler.dispatch()
+            try:
+                if hasattr(server_info, 'request_timestamps'):
+                    server_info.request_timestamps.manager_generate_timestamp = time.time()
+                logger.info("llmManager is ")
+                await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
+                if self.log_requests:
+                    logger.info("received request {}.".format(request_id))
+                    logger.info("dispath to instance {}".format(instance_id))
+                    self.request_instance[request_id] = instance_id
+            except (ray.exceptions.RayActorError, KeyError):
+                logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
+                self.scale_down(instance_id)
+        except Exception as e:
+            import traceback
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            return None 
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -195,7 +203,6 @@ class LLMEngineManager:
                 dead_instance_ids = []
                 for instance_id, instance in self.instances.items():
                     # Use asyncio.gather to wrap ray remote call to add done callback.
-                    print("try get_instance_info")
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
                     task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
                     tasks.append(task)
@@ -444,6 +451,7 @@ class LLMEngineManager:
         global_scheduler_config = engine_manager_args.create_global_scheduler_configs()
         # Init manager actor in 'llumnix' namespace to ensure that only one manager can be created.
         manager_class = ray.remote(num_cpus=0,
+                                   num_gpus=1, # TODO[xinyi]: not add this
                                    max_restarts=-1,
                                    name=MANAGER_ACTOR_NAME,
                                    namespace='llumnix',

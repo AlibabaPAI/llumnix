@@ -18,6 +18,7 @@ import threading
 import asyncio
 import queue
 import gc
+import os
 import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
@@ -32,12 +33,12 @@ logger = init_logger(__name__)
 class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
         try:
-            print("okfe3ref")
+            os.environ["CUDA_VISIBLE_DEVICES"] = "2" 
+            print("ok AsyncPutQueueActor")
             self.instance_id = instance_id
             self.output_queue_type = output_queue_type
             self.request_output_queue_client: QueueClientBase = init_output_queue_client(output_queue_type)
             self.engine_actor_handle = None
-            print("okfref")
         except Exception as e:
             logger.error("Error in engine loop: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
@@ -46,6 +47,7 @@ class AsyncPutQueueActor:
                                     server_request_outputs,
                                     server_info_dict) -> None:
         try:
+            print("now put_nowait_to_servers")
             if self.engine_actor_handle is None:
                 self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
             tasks = []

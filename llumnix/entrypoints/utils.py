@@ -198,6 +198,7 @@ def init_llumnix_components(node_id: str,
     print("init_manager")
     try:
         if True:#engine_manager_args.disable_init_instance_by_manager:
+            print("?why init")
             instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
         else:
             instance_ids, llumlets = retry_manager_method_sync(
@@ -277,8 +278,9 @@ async def _background_process_outputs(llumnix_context):
             # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
             if request_id not in llumnix_context.request_streams:
                 continue
-            llumnix_context.request_streams[request_id].put(request_output)
-            if request_output.finished:
+            await llumnix_context.request_streams[request_id].put(request_output)
+            # if request_output.finished: # todo(xinyi):vllm
+            if request_output.is_finished: # todo:bladellm
                 llumnix_context.request_streams[request_id].finish()
                 del llumnix_context.request_streams[request_id]
 

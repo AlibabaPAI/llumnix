@@ -229,16 +229,20 @@ class PagedSchedulerLlumnix(PagedScheduler):
         #         gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
 
     def add_request(self, server_req: ServerRequestLlumnix):
+        print("server_req.prompt_tokens",server_req.prompt_tokens)
+
         worker_req = server_request_to_worker_request(server_req)
         gen_group: GenerationGroupState = GenerationGroupState.from_request(
             request=worker_req,
             total_length=len(worker_req.prompt_tokens),
             prompt_len_priority_scale=self.prompt_len_priority_scale,
         )
+
+        print("worker_req.prompt_tokens",worker_req.prompt_tokens)
         gen_group.add_paged_req_state(PagedRequestState(worker_req, self.block_size, self.gamma_blank))
         import heapq
         import sys
-        if 'llumnix' in sys.modules:
+        if True:#'llumnix' in sys.modules:
             gen_group_llumnix = GenerationGroupStateLlumnix(gen_group, server_req.llumnix_request_args)
             if hasattr(gen_group_llumnix.server_info, 'request_timestamps'):
                 gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
@@ -279,9 +283,10 @@ import sys
 _SCHEDULER_MAP = {
     # "outofplace": DynamicBatchingScheduler,
     # "ragged": ContinuousBatchingScheduler,
-    "paged": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
-    "ragged_flash": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
-    "look_ahead": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
+    # "paged": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
+    "ragged_flash": PagedSchedulerLlumnix,
+    # "ragged_flash": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
+    # "look_ahead": PagedScheduler if 'llumnix' not in sys.modules else PagedSchedulerLlumnix,
 }
 
 # TODO[xinyi]: delete 

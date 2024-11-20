@@ -16,6 +16,7 @@ import traceback
 from typing import List, Union, Iterable
 import time
 import ray
+import os
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
 from llumnix.logger import init_logger
@@ -42,6 +43,7 @@ class Llumlet:
         try:
             self.instance_id = instance_id
             self.actor_name = f"instance_{instance_id}"
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
             self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
                                                                         output_queue_type,
                                                                         backend_type,
@@ -83,7 +85,7 @@ class Llumlet:
                     placement_group = initialize_placement_group(world_size, detached=detached)
                     print("placement_group",placement_group)
                     kwargs["placement_group"] = placement_group
-                    engine_class = ray.remote(num_cpus=1,num_gpus=1,
+                    engine_class = ray.remote(num_cpus=1,
                                             name=actor_name,
                                             namespace='llumnix',
                                             max_concurrency=4,
@@ -172,7 +174,6 @@ class Llumlet:
 
     def get_instance_info(self) -> InstanceInfo:
         try:
-            print("wju mpt gey",self.backend_engine.engine.instance_info)
             return self.backend_engine.engine.instance_info
         except Exception as e:
             logger.error("Error in engine loop: {}".format(e))
@@ -202,6 +203,7 @@ class Llumlet:
         # This should not be used for logging, as it is monotonic time.
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.llumlet_generate_timestamp = time.time()
+        logger.info("backend_engine add_request")
         self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:

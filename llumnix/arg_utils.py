@@ -15,7 +15,6 @@
 
 import dataclasses
 from dataclasses import dataclass
-import argparse
 from simple_parsing import ArgumentParser
 from typing import Tuple, Optional
 
@@ -24,7 +23,7 @@ from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
 
-class LlumnixArgumentParser(argparse.ArgumentParser):
+class LlumnixArgumentParser(ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -69,14 +68,14 @@ class LlumnixEntrypointsArgs:
         return llumnix_entrypoints_args
 
     @classmethod
-    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
                 assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
     @staticmethod
-    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def add_cli_args(parser: ArgumentParser) -> ArgumentParser:
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
                             help='if launch ray cluster in api server')
@@ -192,7 +191,7 @@ class EngineManagerArgs:
         return engine_manager_args
 
     @classmethod
-    def check_args(cls, args: 'EngineManagerArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'EngineManagerArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -210,7 +209,7 @@ class EngineManagerArgs:
 
     @staticmethod
     def add_cli_args(
-            parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+            parser: ArgumentParser) -> ArgumentParser:
         parser.add_argument('--disable-fixed-node-init-instance',
                             action='store_true',
                             help='disable fixing the placement of instance to current node')

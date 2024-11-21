@@ -119,6 +119,7 @@ async def test_simple_benchmark(model):
         )
         tasks.append(bench_command)
 
+    dump_error_log = False
     with ThreadPoolExecutor() as executor:
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
 
@@ -128,13 +129,13 @@ async def test_simple_benchmark(model):
                 process.wait(timeout=60*30)
 
                 if process.returncode != 0:
-                    backup_instance_log()
+                    dump_error_log = True
 
                 assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
-                backup_instance_log()
+                dump_error_log = True
                 print("bench_test timed out after 30 minutes.")
 
     with open("performance.txt", "w", encoding="utf-8") as f:
@@ -143,4 +144,8 @@ async def test_simple_benchmark(model):
     # TODO(KuilongCui): change clear_state function to fixture
     shutdown_llumnix_service()
     clear_ray_state()
+
+    if dump_error_log:
+        backup_instance_log()
+        
     await asyncio.sleep(3)

@@ -44,3 +44,8 @@ def backup_instance_log():
             src_file_path = os.path.join(src_directory, filename)
             shutil.copy(src_file_path, dest_directory)
             print(f"Copied instance log: {src_file_path} to {dest_directory}")
+
+        if filename.startswith("bench_"):
+            src_file_path = os.path.join(src_directory, filename)
+            shutil.copy(src_file_path, dest_directory)
+            print(f"Copied bench log: {src_file_path} to {dest_directory}")

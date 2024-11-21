@@ -108,6 +108,7 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
         )
         tasks.append(bench_command)
 
+    dump_error_log = False
     # Execute the commands concurrently using ThreadPoolExecutor
     with ThreadPoolExecutor() as executor:
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
@@ -118,13 +119,13 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
                 process.wait(timeout=60*30)
 
                 if process.returncode != 0:
-                    backup_instance_log()
+                    dump_error_log = True
 
                 assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
-                backup_instance_log()
+                dump_error_log = True
                 print("bench_test timed out after 30 minutes.")
 
     await asyncio.sleep(5)
@@ -144,4 +145,8 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
 
     shutdown_llumnix_service()
     clear_ray_state()
+
+    if dump_error_log:
+        backup_instance_log()
+
     await asyncio.sleep(3)

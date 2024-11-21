@@ -14,6 +14,7 @@ import copy
 import time
 import asyncio
 import ray
+import json
 
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.clients import LLMResponse
@@ -23,10 +24,34 @@ from llumnix.arg_utils import LlumnixEntrypointsArgs, EngineManagerArgs
 from llumnix.logger import init_logger
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
 from llumnix.server_info import RequestTimestamps
+from llumnix.backends.bladellm.sequence import GenerateStreamResponseLlumnix
 
 logger = init_logger(__name__)
 
 WAIT_MANAGER_INTERVAL = 5
+
+async def _background_process_outputs(llumnix_context):
+    try:
+        while True:
+            request_outputs = await llumnix_context.request_output_queue.get()
+            if request_outputs is None:
+                continue
+            for request_output in request_outputs:
+                if hasattr(request_output, 'request_timestamps'):
+                    request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
+            for request_output in request_outputs:
+                request_output = GenerateStreamResponseLlumnix(**json.loads(request_output))
+                request_id = request_output.request_id
+                # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+                if request_id not in llumnix_context.request_streams:
+                    continue
+                await llumnix_context.request_streams[request_id].put(request_output)
+                if request_output.is_finished:
+                    del llumnix_context.request_streams[request_id]
+    except Exception as e:
+        import traceback
+        logger.error("Error in engine loop: {}".format(e))
+        logger.error("exception traceback: {}".format(traceback.format_exc()))
 
 def add_cli_args(parser):
     parser.set_namespace("llumnix")
@@ -88,7 +113,7 @@ async def manager_generate(request,
         # Do not re-generate the request to avoid duplicate requests.
         if llumnix_context.manager_available:
             llumnix_context.manager_available = False
-            return LLMResponse(request.id, resp_queue=results_queue)
+            return LLMResponse(request_id, resp_queue=results_queue)
         try:
             if llumnix_context.instance_num_requests:
                 instance_id = min(llumnix_context.instance_num_requests, key=llumnix_context.instance_num_requests.get)
@@ -107,7 +132,7 @@ async def manager_generate(request,
                 del llumnix_context.instances[instance_id]
                 del llumnix_context.instance_num_requests[instance_id]
                 return await asyncio.create_task(manager_generate(request, request_id, llumnix_context))
-    return LLMResponse(request.id, resp_queue=results_queue)
+    return LLMResponse(request_id, resp_queue=results_queue)
 
 # TODO[xinyi]: the same to the function in vllm.utils
 async def manager_abort(request_id: str, llumnix_context: LlumnixEntrypointsContext) -> None:

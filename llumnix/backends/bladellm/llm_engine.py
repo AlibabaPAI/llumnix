@@ -19,6 +19,7 @@ import asyncio
 import queue
 import gc
 import ray
+import json
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateRequests
@@ -106,7 +107,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         try:
             self.async_put_queue_actor = ray.remote(
                 num_cpus=1,
-                num_gpus=1,
                 scheduling_strategy=scheduling_strategy
             )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
         except Exception as e:
@@ -211,15 +211,17 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             request_groups_map = self._scheduler.get_request_groups_map()
             running_requests = [gen_group.request_group_id for gen_group in self._scheduler.running]
             for req_id, l_resp in update_output.response.items():
-                if req_id in request_groups_map:
-                    request_groups_map[req_id].update_num_computed_tokens(request_groups_map[req_id].token_chunk_size)
-                    if req_id in running_requests and l_resp:
-                        server_info = request_groups_map[req_id].server_info
-                        server_infos.append(server_info)
-                        request_outputs.append(GenerateStreamResponseLlumnix(l_resp, req_id))
-                        if l_resp.is_finished:
-                            # TODO[xinyi]: handle error info in back queue
-                            del self._back_queue[req_id]
+                if l_resp and l_resp.is_finished:
+                    server_info = request_groups_map[req_id].server_info
+                    server_infos.append(server_info)
+                    request_outputs.append(GenerateStreamResponseLlumnix(req_id, l_resp))
+                    # TODO[xinyi]: handle error info in back queue
+                    del self._back_queue[req_id]
+                    self._scheduler.free_request(req_id)
+                elif l_resp and req_id in request_groups_map:
+                    server_info = request_groups_map[req_id].server_info
+                    server_infos.append(server_info)
+                    request_outputs.append(GenerateStreamResponseLlumnix(req_id, l_resp,))
             # TODO[xinyi]: design metric
             for request_output in request_outputs:
                 if hasattr(request_output, 'request_timestamps'):
@@ -262,6 +264,15 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         except Exception as e:
             logger.error("Error in engine loop: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
+    
+    async def update_callback(self, resp):
+        request_groups = resp.generation_groups.generation_group
+        request_groups_map = self._scheduler.get_request_groups_map()
+        for req_state in request_groups:
+            req_id = req_state.request_group_id
+            if req_id in request_groups_map:
+                request_groups_map[req_id].update_num_computed_tokens(request_groups_map[req_id].token_chunk_size)
+        await super().update_callback(resp)
 
     #TODO[xinyi]: the same to the function in vllm, maybe put into utils.py
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -273,6 +284,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             instance_info.profiling_data = self.instance_info.profiling_data
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
+        logger.info("update_instance_info {} {} {}".format(self.instance_info.num_used_gpu_blocks, self.instance_info.inference_type, self.instance_info.num_running_requests))
     
     async def add_request(self, *args, **kwargs):
         # TODO[xinyi]: next step split webserver
@@ -294,7 +306,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         # Reorganize data in orther to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            server_request_outputs[server_id].append(request_output)
+            server_request_outputs[server_id].append(request_output.model_dump_json())
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
@@ -344,7 +356,7 @@ class BackendBladeLLM(BackendInterface):
                     expected_steps: int,
                     server_request: ServerRequest) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        server_request = ServerRequestLlumnix(server_request, request_id, server_info, expected_steps)
+        server_request = ServerRequestLlumnix(ServerRequest(**json.loads(server_request)), request_id, server_info, expected_steps)
         asyncio.run_coroutine_threadsafe(self.engine.add_request(server_request), self._loop)
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:

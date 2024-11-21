@@ -63,6 +63,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         )
         self.pre_alloc_cache_dict: Dict[int, BlockTable] = {}
         self.migrating_out_request_last_stage: List[GenerationGroupStateLlumnix] = []
+        self.pre_finished: List[GenerationGroupStateLlumnix] = []
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
@@ -87,10 +88,8 @@ class PagedSchedulerLlumnix(PagedScheduler):
         return self.running
 
     def get_all_request_ids(self) -> List[str]:
-        
         request_ids : List[str] = []
         try:
-            print("get_all_request_ids",self.waiting, self.running, self.swapped, self.hanging)
             for state_queue in [self.waiting, self.running, self.swapped, self.hanging]:
                 for seq_group in state_queue:
                     request_ids.append(seq_group.request_group_id)
@@ -204,8 +203,9 @@ class PagedSchedulerLlumnix(PagedScheduler):
         request_groups_map = self.get_request_groups_map()
         for request_id in request_ids:
             request_groups_map[request_id].is_finished = True
-        return super().safe_remove_requests(request_ids)
-
+    
+    def free_request(self, request_id: int):
+        return super().safe_remove_requests({request_id})
 
     def step(self) -> SchedulerStepOutput:
         step_out = super().step()

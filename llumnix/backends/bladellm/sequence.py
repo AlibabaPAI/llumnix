@@ -21,8 +21,11 @@ from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 class GenerateStreamResponseLlumnix(GenerateStreamResponse):
     request_id: int = Field(default=None, description="Request ID associated with the response")
 
-    def __init__(self, resp: GenerateStreamResponse, request_id: int, **kwargs: Any) -> None:
-        super().__init__(**resp.dict(), request_id=request_id, **kwargs)
+    def __init__(self, request_id: int, resp: GenerateStreamResponse = None, **kwargs: Any) -> None:
+        if resp is not None:
+            super().__init__(**resp.dict(), request_id=request_id, **kwargs)
+        else:
+            super().__init__(request_id = request_id, **kwargs)
 
 class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
     def __init__(self, gen_group: GenerationGroupState, llumnix_request_args) -> None:
@@ -82,9 +85,6 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
     
     def get_num_uncomputed_tokens(self) -> int:
         """Return the number of prefill tokens that are not computed."""
-        # we use `get_len()` which includes prompt_len + output_len instead
-        # of prompt_len here. This is because during recompute we need to
-        # prefill for both prompt and output.
         return self.request_len - self.get_num_computed_tokens()
 
 class ServerRequestLlumnix():

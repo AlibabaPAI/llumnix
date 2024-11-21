@@ -33,7 +33,7 @@ _C.SERVER.SSL_KEYFILE = None
 # Path to SSL certificate file for secure connections
 _C.SERVER.SSL_CERTFILE = None
 # Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "rayqueue"
+_C.SERVER.QUEUE_TYPE = "zmq"
 # Port number for the request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Disable logging requests in server

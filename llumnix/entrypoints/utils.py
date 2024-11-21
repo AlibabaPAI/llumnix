@@ -267,23 +267,6 @@ def setup_llumnix(cfg, *args):
 
     return context
 
-async def _background_process_outputs(llumnix_context):
-    while True:
-        request_outputs = await llumnix_context.request_output_queue.get()
-        for request_output in request_outputs:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
-        for request_output in request_outputs:
-            request_id = request_output.request_id
-            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-            if request_id not in llumnix_context.request_streams:
-                continue
-            await llumnix_context.request_streams[request_id].put(request_output)
-            # if request_output.finished: # todo(xinyi):vllm
-            if request_output.is_finished: # todo:bladellm
-                llumnix_context.request_streams[request_id].finish()
-                del llumnix_context.request_streams[request_id]
-
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {
         'step_latency_engine': [],

@@ -27,11 +27,11 @@ from llumnix.entrypoints.utils import (setup_ray_cluster,
                                        setup_llumnix,
                                        is_gpu_available,
                                        LlumnixEntrypointsContext,
-                                       _background_process_outputs,
+                                       
                                        init_per_token_latency_breakdown_dict,
                                        record_per_token_latency_breakdown)
 from llumnix.entrypoints.vllm.utils import (add_cli_args,
-                                            get_args,
+                                            get_args,_background_process_outputs,
                                             manager_generate,
                                             manager_abort,
                                             manager_is_ready)

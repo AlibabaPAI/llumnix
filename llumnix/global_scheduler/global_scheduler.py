@@ -62,6 +62,7 @@ class GlobalScheduler:
                 instance_info.instance_load_migrate = self.instance_load_calculator.compute_instance_load(instance_info, action='migrate')
                 instance_info.instance_type = self.scaling_scheduler.get_instance_type_info(instance_info.instance_id)
                 self.instance_info[instance_info.instance_id] = instance_info
+                logger.info("global_scheduler update_instance_info {} {} {}".format(instance_info.num_used_gpu_blocks, instance_info.inference_type, instance_info.num_running_requests))
 
     def dispatch(self) -> str:
         self.dispatch_scheduler.update_instance_infos(self.instance_info)

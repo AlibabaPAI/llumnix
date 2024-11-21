@@ -33,8 +33,6 @@ logger = init_logger(__name__)
 class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
         try:
-            os.environ["CUDA_VISIBLE_DEVICES"] = "2" 
-            print("ok AsyncPutQueueActor")
             self.instance_id = instance_id
             self.output_queue_type = output_queue_type
             self.request_output_queue_client: QueueClientBase = init_output_queue_client(output_queue_type)
@@ -47,7 +45,6 @@ class AsyncPutQueueActor:
                                     server_request_outputs,
                                     server_info_dict) -> None:
         try:
-            print("now put_nowait_to_servers")
             if self.engine_actor_handle is None:
                 self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
             tasks = []
@@ -68,7 +65,7 @@ class AsyncPutQueueActor:
                                                                                 server_info.request_output_queue_port))
                     req_outputs = list(server_request_outputs.values())[idx]
                     request_ids = [req_output.request_id for req_output in req_outputs]
-                    self.engine_actor_handle.abort_request.remote(request_ids)
+                    self.engine_actor_handle.abort.remote(request_ids)
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Error in engine loop: {}".format(e))

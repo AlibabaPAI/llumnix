@@ -19,6 +19,7 @@ import json
 from multiprocessing import Pool
 from pathlib import Path
 import pytest
+import aiohttp
 import requests
 from websockets.sync.client import connect
 
@@ -35,32 +36,37 @@ from blade_llm.protocol import (
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
-async def _query_server(prompt: str, max_tokens: int = 5, interface: str = 'generate') -> dict:
-    url = "ws://0.0.0.0:8081/{}".format(interface)
+async def _query_server(prompt: str, max_tokens: int = 5, interface: str = '') -> dict:
+    url = "ws://127.0.0.1:8000/{}".format(interface)
     headers = {
         # "Authorization": "<You may need this header for EAS."
     }
-    req = GenerateRequest(
+    with connect(url, additional_headers=headers) as websocket:
+        req = GenerateRequest(
             prompt=prompt,
             sampling_params=SamplingParams(
                 temperature=0,
             ),
             stopping_criterial=StoppingCriteria(max_new_tokens=max_tokens, ignore_eos=True),)
-    print("???")
-    with connect(url, additional_headers=headers) as websocket:
         websocket.send(req.model_dump_json())
-        print("pkkkkk")
-
         texts = []
+        idx = 0
         while True:
             await asyncio.sleep(0)
             msg = websocket.recv()
-            # resp = GenerateStreamResponse(**json.loads(msg))
-            # texts.extend([t.text for t in resp.tokens])
-            # if resp.is_finished:
-            break
+            resp = GenerateStreamResponse(**json.loads(msg))
+            print(resp)
+            texts.extend([t.text for t in resp.tokens])
+            idx += 1
+            if resp.is_finished:
+                break
+    return texts
 
-    return ''.join(texts)
+def _query_http_server(prompt: str = None, timeout: int = 30):
+    response = requests.get("http://localhost:8000/")
+    response.raise_for_status()
+    if response.status_code == 200:
+        return True
 
 def _query_server_long(prompt: str) -> dict:
     return _query_server(prompt, max_tokens=500)
@@ -83,15 +89,16 @@ def api_server(request):
         "--host", "127.0.0.1",
         "--output-queue-type", output_queue_type,
     ]
+    print("commands",commands)
     server_proc = subprocess.Popen(commands)
     yield
     server_proc.terminate()
     # Waiting for api server subprocess to terminate.
     time.sleep(1.0)
 
-# TODO(xinyi): chat_stream
-@pytest.mark.parametrize("interface", ['generate'])#, 'generate_stream'])
-def test_api_server(setup_ray_env, api_server, interface: str):
+@pytest.mark.parametrize("interface", ['generate_stream'])
+@pytest.mark.asyncio
+async def test_api_server(setup_ray_env, api_server, interface: str):
     """
     Run the API server and test it.
 
@@ -101,56 +108,33 @@ def test_api_server(setup_ray_env, api_server, interface: str):
     multiple requests at the same time, and that it can handle requests
     being cancelled without crashing.
     """
+    # Wait until the server is ready
+    timeout = 30
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            if _query_http_server(timeout=timeout):
+                break
+        except requests.exceptions.ConnectionError:
+            time.sleep(1)
+    else:
+        raise RuntimeError("API server didn't start within the timeout period")
+
     if interface == 'generate':
         _query_server = _query_server_generate
     elif interface == 'generate_stream':
         _query_server = _query_server_generate_stream
+    
 
-    with Pool(32) as pool:
-        # Wait until the server is ready
-        prompts = ["warm up"] * 1
-        result = None
-        while not result:
-            try:
-                for r in pool.map(_query_server, prompts):
-                    result = r
-                    break
-            except requests.exceptions.ConnectionError:
-                time.sleep(1)
-
-        # Actual tests start here
-        # Try with 1 prompt
-    #     for result in pool.map(_query_server, prompts):
-    #         assert result
-
-    #     num_aborted_requests = requests.get(
-    #         "http://localhost:8000/stats").json()["num_aborted_requests"]
-    #     assert num_aborted_requests == 0
-
-    #     # Try with 100 prompts
-    #     prompts = ["test prompt"] * 100
-    #     for result in pool.map(_query_server, prompts):
-    #         assert result
-
-    # with Pool(32) as pool:
-    #     # Cancel requests
-    #     prompts = ["canceled requests"] * 100
-    #     pool.map_async(_query_server_long, prompts)
-    #     time.sleep(0.01)
-    #     pool.terminate()
-    #     pool.join()
-
-    #     # check cancellation stats
-    #     # give it some times to update the stats
-    #     time.sleep(1)
-
-    #     num_aborted_requests = requests.get(
-    #         "http://localhost:8000/stats").json()["num_aborted_requests"]
-    #     assert num_aborted_requests > 0
-
-    # # check that server still runs after cancellations
-    # with Pool(32) as pool:
-    #     # Try with 100 prompts
-    #     prompts = ["test prompt after canceled"] * 100
-    #     for result in pool.map(_query_server, prompts):
-    #         assert result
+    # Actual tests start here
+    prompts = ["warm up"] * 1
+    # Try with 1 prompt
+    for prompt in prompts:
+        result = await _query_server(prompt)
+        assert result
+    
+    # Try with 100 prompts
+    prompts = ["test prompt"] * 100
+    results = await asyncio.gather(*[_query_server(prompt) for prompt in prompts])
+    for result in results:
+        assert result

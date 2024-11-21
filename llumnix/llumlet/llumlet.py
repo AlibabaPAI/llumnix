@@ -120,7 +120,6 @@ class Llumlet:
                                                     soft=False,
                                                 )
                                             )
-            print("dont know not ok")
             llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))

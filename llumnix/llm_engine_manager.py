@@ -52,7 +52,6 @@ class LLMEngineManager:
                  log_requests: bool = True,
                  profiling_database: ProfilingDatabase = None) -> None:
         os.chdir(work_dir)
-        os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
         self.actor_name = MANAGER_ACTOR_NAME
         self.engine_manager_args = engine_manager_args
         self.profiling_database = profiling_database
@@ -451,7 +450,6 @@ class LLMEngineManager:
         global_scheduler_config = engine_manager_args.create_global_scheduler_configs()
         # Init manager actor in 'llumnix' namespace to ensure that only one manager can be created.
         manager_class = ray.remote(num_cpus=0,
-                                   num_gpus=1, # TODO[xinyi]: not add this
                                    max_restarts=-1,
                                    name=MANAGER_ACTOR_NAME,
                                    namespace='llumnix',

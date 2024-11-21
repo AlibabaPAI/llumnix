@@ -49,7 +49,7 @@ _C.SERVER.CONFIG_FILE = None
 # If True, launch Ray cluster in API server
 _C.SERVER.LAUNCH_RAY_CLUSTER = True
 # Port number for the Ray cluster
-_C.SERVER.RAY_CLUSTER_PORT = 6380
+_C.SERVER.RAY_CLUSTER_PORT = 6382
 
 # -----------------------------------------------------------------------------
 # MANAGER CONFIGURATION

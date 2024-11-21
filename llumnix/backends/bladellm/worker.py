@@ -16,16 +16,22 @@ from concurrent.futures import ThreadPoolExecutor
 from google.protobuf import empty_pb2
 from multiprocessing import Process, set_start_method
 from typing import List
+import asyncio
+import sys
 
 from blade_llm.generation.kvcache.kv_transfer import TransferType
 from blade_llm.service.workers.remote_worker import RemoteWorker, RemoteManager
 from blade_llm.service.args import ServingArgs
-from blade_llm.service.worker import _RemoteWorkerProcesses, _WorkerProcesses
+from blade_llm.service.worker import _RemoteWorkerProcesses, _WorkerProcesses, setup_dist
 from blade_llm.utils.network import get_free_port
-from blade_llm.service.worker import worker_main
+# from blade_llm.service.worker import worker_main
 from blade_llm.service.workers.local_worker import LocalWorker
 from blade_llm.service.workers.remote_worker import RemoteWorker
-
+from blade_llm.service.workers.local_worker import start_local_worker_server
+from blade_llm.service.workers.remote_worker import (
+    RemoteManager,
+    start_remote_worker_server,
+)
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.bladellm.migration_worker import MigrationWorker
@@ -48,6 +54,28 @@ class _WorkerProcessesLlumnix(_WorkerProcesses):
             p.start()
             backends.append(p)
         return backends
+
+# TODO(xinyi): may be only need for test
+def worker_main(rank: int, serving_args: ServingArgs, *args):
+    asyncio.run(worker_server(rank, serving_args, *args))
+
+# TODO(xinyi): may be only need for test
+async def worker_server(rank: int, serving_args: ServingArgs, *args):
+    # logger.remove()
+    # logger.add(sys.stderr, level=serving_args.log_level)
+    # logger.info("================= Worker {} =================", rank)
+    for k, v in serving_args.__dict__.items():
+        logger.info(f"{k:>20}: {v}")
+    if serving_args.tensor_parallel_size * serving_args.pipeline_parallel_size > 1:
+        setup_dist(rank, serving_args)
+    if serving_args.server_ip or serving_args.pipeline_parallel_size > 1:
+        await start_remote_worker_server(rank, serving_args)
+    if 'llumnix' in sys.modules:
+        # TODO(xinyi)
+        await start_local_worker_server(rank, serving_args)
+    else:
+        await start_local_worker_server(rank, serving_args)
+
 
 # not ready
 class _RemoteWorkerProcessesLlumnix(_RemoteWorkerProcesses):

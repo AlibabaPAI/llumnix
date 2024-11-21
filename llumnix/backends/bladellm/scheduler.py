@@ -22,8 +22,9 @@ from blade_llm.service.schedulers import PagedScheduler
 from blade_llm.service.scheduler_types import SchedulerStepOutput, GenerationGroupState, SchedulerAsyncUpdateOutput
 from blade_llm.protocol import ServerRequest
 from blade_llm.service.paged_utils import PagedRequestState, PreemptionMode
-from blade_llm.service.request_utils import server_request_to_worker_request
+from blade_llm.service.request_utils import _process_List_prompt
 from blade_llm.service.args import ServingArgs, ServingLoraOptions
+from blade_llm.service.proto.bladellm_pb2 import VitPrompt, WorkerRequest
 
 
 from llumnix.instance_info import InstanceInfo
@@ -197,6 +198,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         instance_info.num_batched_tokens = sum([gen_group.request_len for gen_group in scheduled_gen_groups])\
                                             if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
         instance_info.finished_request_ids = [gen_group.request_id for gen_group in self.running if gen_group.is_finished]
+        logger.info("update {}".format(instance_info.num_running_requests))
         return instance_info
     
     def safe_remove_requests(self, request_ids: Set[int]):
@@ -229,8 +231,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
         #         gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
 
     def add_request(self, server_req: ServerRequestLlumnix):
-        print("server_req.prompt_tokens",server_req.prompt_tokens)
-
         worker_req = server_request_to_worker_request(server_req)
         gen_group: GenerationGroupState = GenerationGroupState.from_request(
             request=worker_req,
@@ -238,7 +238,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
             prompt_len_priority_scale=self.prompt_len_priority_scale,
         )
 
-        print("worker_req.prompt_tokens",worker_req.prompt_tokens)
         gen_group.add_paged_req_state(PagedRequestState(worker_req, self.block_size, self.gamma_blank))
         import heapq
         import sys
@@ -297,3 +296,35 @@ def get_scheduler(serving_args: ServingArgs, tokenizer: PreTrainedTokenizerBase,
         serving_args.decode_algo if serving_args.use_lookahead else serving_args.load_model_options.attn_cls
     )
     return _SCHEDULER_MAP[scheduler_name](serving_args, tokenizer, *args, **kwargs)
+
+# TODO(xinyi): just for test, need delete
+def server_request_to_worker_request(server_request: ServerRequest) -> WorkerRequest:
+    exclude_dict = {
+        'stopping_criterial': {
+            'stop_tokens',
+        },
+        "image_length_lists": True,
+        "lora_name": True,
+        "block_table_id": True,
+    }
+    # TODO(xinyi)
+    import sys
+    if True:#'llumnix' in sys.modules:
+        exclude_dict["llumnix_request_args"] = True
+        server_request = server_request.server_request
+    if isinstance(server_request.prompt, List):
+        exclude_dict["prompt"] = True
+    req_dict = server_request.model_dump(exclude=exclude_dict)
+    worker_request = WorkerRequest(**req_dict)
+    # print(server_request.stopping_criterial)
+    if server_request.stopping_criterial.stop_tokens:
+        for seq in server_request.stopping_criterial.stop_tokens:
+            token_seq = worker_request.stopping_criterial.stop_tokens.add()
+            token_seq.value.extend(seq)
+    if server_request.image_length_lists:
+        for length in server_request.image_length_lists:
+            imaged_length = worker_request.image_length_lists.add()
+            imaged_length.value.extend(length)
+
+    _process_List_prompt(server_request, worker_request)
+    return worker_request

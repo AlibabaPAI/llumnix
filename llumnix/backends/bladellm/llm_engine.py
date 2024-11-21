@@ -272,7 +272,34 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             req_id = req_state.request_group_id
             if req_id in request_groups_map:
                 request_groups_map[req_id].update_num_computed_tokens(request_groups_map[req_id].token_chunk_size)
-        await super().update_callback(resp)
+        # await super().update_callback(resp)
+        # TODO(xinyi): for test, need delete
+        # metrics
+        worker_timer, step_request = self.worker_timer_queue.get_nowait()
+        worker_timer.done()
+        logger.debug("scheduler update:{}",resp)
+        update_output = self._scheduler.update(resp)
+        # handle update ouput
+        if update_output.reset:
+            await self._handle_reset(update_output)
+        elif update_output.response is not None:
+            # TODO[xinyi]
+            logger.debug("update_callback:{}",update_output)
+            import sys
+            if True and not self.is_warmup:#'llumnix' in sys.modules:
+                logger.debug("process_model_outputs")
+                self.process_model_outputs(update_output)
+            else:
+                logger.debug("update_output")
+                for req_id, l_resp in update_output.response.items():
+                    if req_id in self._back_queue:
+                        self._back_queue[req_id].put_nowait(l_resp)
+                        if l_resp.is_finished:
+                            del self._back_queue[req_id]
+        # TODO[xinyi]: check repeated response
+        self.worker_post_step_metrics(step_request, resp)
+        self.semaphore.release()
+    
 
     #TODO[xinyi]: the same to the function in vllm, maybe put into utils.py
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -311,6 +338,94 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+    
+    # TODO(xinyi): for test, need delete
+    async def _handle_hunger(self, hunger_timeout_ms: int):
+        logger.debug("hunger_timeout_ms: {}", hunger_timeout_ms)
+        if hunger_timeout_ms <= 0:
+            completed, pending = await asyncio.wait(
+                [self._req_buffer.get(), self._stop_event.wait()],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for coro in completed:
+                res = coro.result()
+                import sys
+                # TODO
+                if True:#isinstance(res, ServerRequest):
+                    self._scheduler.add_request(res)
+                elif isinstance(res, bool):
+                    break
+
+            for coru in pending:
+                coru.cancel()
+
+        else:
+            try:
+                req = await asyncio.wait_for(self._req_buffer.get(), timeout=hunger_timeout_ms / 1000)
+                self._scheduler.add_request(req)
+            except asyncio.TimeoutError:
+                pass
+
+    # TODO(xinyi): for test, need delete
+    async def _warmup(self):
+        from blade_llm.model.config_base import ModelType
+        from blade_llm.module.para_hybrid_qlinear import get_hybrid_gemm_threshold
+
+        # NOTE: In the new runtime architecture, max_new_tokens is internally invalid. In other words,
+        # if max_new_tokens is set to 1, the model will still infer to the decode stage. If the input
+        # prompt token given to the model has the maximum length the model supports and it does not use
+        # Rope, error will occur.
+        if self._model_conf.model_type in [ModelType.opt, ModelType.gpt2]:
+            return
+        # Quantization related kernels need to be warmed up twice
+        # One is for the prefill process and the other is for the decode process (A8W4)
+        # Note:
+        logger.info("Start warmup the server ...")
+        max_new_tokens = 1
+        hybrid_gemm_threshold = get_hybrid_gemm_threshold()
+        stopping_criteria = StoppingCriteria(max_new_tokens=max_new_tokens)
+        ragged_flash_max_batch_tokens = self._args.ragged_flash_max_batch_tokens
+        # I am not sure whether 0 is always a valid token value, maybe use a value from tokenizer
+        warmup_tokens = []
+        ntokens = 32
+        while ntokens < ragged_flash_max_batch_tokens:
+            warmup_tokens.append(
+                [
+                    0,
+                ]
+                * ntokens
+            )
+            ntokens = ntokens * 2
+        warmup_tokens.append(
+            [
+                0,
+            ]
+            * ragged_flash_max_batch_tokens
+        )
+        if 0 < hybrid_gemm_threshold < ragged_flash_max_batch_tokens:
+            warmup_tokens.append(
+                [
+                    0,
+                ]
+                * hybrid_gemm_threshold
+            )
+        for req_id, tokens in enumerate(warmup_tokens):
+            prefill_request = ServerRequest(
+                id=-(req_id + 1),
+                prompt="Hello",  # used for qwen-vl processing logic which need prompt, will not affect prompt length
+                prompt_tokens=tokens,
+                stopping_criterial=stopping_criteria,
+                sampling_params=SamplingParams(temperature=0),  # to avoid numerical issue in sampling
+            )
+            # TODO
+            import sys
+            if True:#'llumnix' in sys.modules:
+                prefill_request = self._warmup_llumnix_request(prefill_request)
+            resp = await self._client.add_request(prefill_request)
+            streamer = resp.async_stream()
+            async for _ in streamer:
+                ...
+        logger.info("Finish server warmup. ")
 
 class BackendBladeLLM(BackendInterface):
     def __init__(

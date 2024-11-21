@@ -21,7 +21,7 @@ import torch
 import numpy as np
 
 from .test_e2e import generate_launch_command, clear_ray_state
-from .utils import to_markdown_table
+from .utils import to_markdown_table, backup_instance_log
 
 def launch_llumnix_service(command):
     subprocess.run(command, shell=True, check=True)
@@ -126,10 +126,15 @@ async def test_simple_benchmark(model):
             try:
                 process = future.result()
                 process.wait(timeout=60*30)
+
+                if process.returncode != 0:
+                    backup_instance_log()
+
                 assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
+                backup_instance_log()
                 print("bench_test timed out after 30 minutes.")
 
     with open("performance.txt", "w", encoding="utf-8") as f:

@@ -832,4 +832,5 @@ def main():
 
 
 if __name__ == '__main__':
+    assert 1==0
     main()

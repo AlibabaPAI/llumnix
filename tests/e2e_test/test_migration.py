@@ -22,7 +22,7 @@ import pandas as pd
 
 from .test_e2e import generate_launch_command
 from .test_bench import generate_bench_command, clear_ray_state, shutdown_llumnix_service
-from .utils import to_markdown_table
+from .utils import to_markdown_table, backup_instance_log
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
@@ -116,10 +116,15 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
             try:
                 process = future.result()
                 process.wait(timeout=60*30)
+
+                if process.returncode != 0:
+                    backup_instance_log()
+
                 assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
+                backup_instance_log()
                 print("bench_test timed out after 30 minutes.")
 
     await asyncio.sleep(5)

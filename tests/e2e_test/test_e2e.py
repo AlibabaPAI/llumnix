@@ -20,84 +20,8 @@ import torch
 
 from vllm import LLM, SamplingParams
 
-def parse_launch_mode(launch_mode: str):
-    # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
-    if launch_mode == 'eief':
-        disable_init_instance_by_manager = False
-        disable_fixed_node_init_instance = False
-    elif launch_mode == 'eidf':
-        disable_init_instance_by_manager = False
-        disable_fixed_node_init_instance = True
-    elif launch_mode == 'dief':
-        disable_init_instance_by_manager = True
-        disable_fixed_node_init_instance = False
-    else:
-        disable_init_instance_by_manager = True
-        disable_fixed_node_init_instance = True
-    return disable_init_instance_by_manager, disable_fixed_node_init_instance
+from .utils import generate_launch_command, shutdown_llumnix_service, clear_ray_state
 
-def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool = True, HEAD_NODE_IP: str = "127.0.0.1",
-                            ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
-                            migration_backend = "gloo", model = "facebook/opt-125m", max_model_len: int = 2048,
-                            launch_mode: str = 'eief', log_instance_info: bool = False,
-                            request_migration_policy: str = 'SR'):
-    disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
-    command = (
-        f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
-        f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
-        f"--host {ip} "
-        f"--port {port} "
-        f"{'--disable-init-instance-by-manager ' if disable_init_instance_by_manager else ''}"
-        f"{'--disable-fixed-node-init-instance ' if disable_fixed_node_init_instance else ''}"
-        f"--initial-instances {instances_num} "
-        f"{'--log-filename manager ' if log_instance_info else ''}"
-        f"{'--log-instance-info ' if log_instance_info else ''}"
-        f"--enable-migration "
-        f"--model {model} "
-        f"--engine-use-ray "
-        f"--worker-use-ray "
-        f"--max-model-len {max_model_len} "
-        f"--dispatch-policy {dispatch_policy} "
-        f"--trust-remote-code "
-        f"--request-migration-policy {request_migration_policy} "
-        f"--migration-backend {migration_backend} "
-        f"--migration-buffer-blocks 32 "
-        f"--migration-internal-buffer-num 2 "
-        f"--tensor-parallel-size 1 "
-        f"--request-output-queue-port {1234+port} "
-        f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
-        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
-    )
-    return command
-
-def launch_llumnix_service(model: str, max_model_len: int, port: int, migration_backend: str, launch_mode: str):
-    command = generate_launch_command(model=model, max_model_len=max_model_len,
-                                      port=port, migration_backend=migration_backend,
-                                      launch_mode=launch_mode)
-    subprocess.run(command, shell=True, check=True)
-
-def shutdown_llumnix_service():
-    try:
-        subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
-    # pylint: disable=broad-except
-    except Exception:
-        pass
-
-def clear_ray_state():
-    named_actors = ray.util.list_named_actors(True)
-    for actor in named_actors:
-        try:
-            actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-        # pylint: disable=bare-except
-        except:
-            continue
-
-        try:
-            ray.kill(actor_handle)
-        # pylint: disable=bare-except
-        except:
-            continue
-    ray.shutdown()
 
 async def get_llumnix_response(prompt, sampling_params, ip_ports):
     timeout = aiohttp.ClientTimeout(total=60)
@@ -153,7 +77,10 @@ async def test_e2e(model, migration_backend, launch_mode):
 
     # generate llumnix outputs
     base_port = 37037
-    launch_llumnix_service(model, max_model_len, base_port, migration_backend, launch_mode)
+    command = generate_launch_command(model=model, max_model_len=max_model_len,
+                                      port=base_port, migration_backend=migration_backend,
+                                      launch_mode=launch_mode)
+    subprocess.run(command, shell=True, check=True)
     await asyncio.sleep(60)
 
     llumnix_output = {}

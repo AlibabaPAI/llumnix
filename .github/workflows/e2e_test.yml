@@ -28,4 +28,4 @@ jobs:
       run: |
         [[ -n $(docker ps -q) ]] && docker kill $(docker ps -q) || echo "No running containers to kill."
     - name: Build And Test
-      run: ./tools/e2e_test.sh
+      run: ./tools/run_test.sh e2e_test

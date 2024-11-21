@@ -20,9 +20,8 @@ import pytest
 import torch
 import pandas as pd
 
-from .test_e2e import generate_launch_command
-from .test_bench import generate_bench_command, clear_ray_state, shutdown_llumnix_service
-from .utils import to_markdown_table, backup_instance_log
+from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
+                    clear_ray_state, shutdown_llumnix_service)
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')

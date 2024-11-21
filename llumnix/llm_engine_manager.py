@@ -37,8 +37,9 @@ from llumnix.queue.queue_type import QueueType
 logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
-CLEARING_INTERVAL = 3600
+CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
 RETRIES_INTERVALS = 5.0
+WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
 class LLMEngineManager:
@@ -81,8 +82,8 @@ class LLMEngineManager:
 
         # request states
         self.request_instance: Dict[str, str] = {}
-        self.clearing_interval = CLEARING_INTERVAL
-        asyncio.create_task(self._clear_request_instance_loop(self.clearing_interval))
+        self.clear_request_intance_interval = CLEAR_REQUEST_INSTANCE_INTERVAL
+        asyncio.create_task(self._clear_request_instance_loop(self.clear_request_intance_interval))
 
         # migrate states
         self.num_instance_info_updates = 0
@@ -282,7 +283,7 @@ class LLMEngineManager:
     async def rebuild_migrate_backend(self) -> None:
         # Wait for all instances to finish migration
         while self.num_migrating > 0:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
 
         # During rebuilding migration backend, disable migrate
         origin_config = self.enable_migration

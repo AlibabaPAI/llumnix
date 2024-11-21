@@ -43,6 +43,8 @@ from llumnix.queue.utils import init_output_queue_client, QueueType
 
 logger = init_logger(__name__)
 
+NO_OUTPUTS_STEP_INTERVAL = 0.01
+
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
@@ -318,7 +320,7 @@ class BackendVLLM(BackendInterface):
             try:
                 request_outputs, _ = await self.engine.step_async()
                 if len(request_outputs) == 0:
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
                 logger.error("Error in engine loop: {}".format(e))

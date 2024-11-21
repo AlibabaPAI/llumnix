@@ -31,6 +31,8 @@ from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 
 logger = init_logger(__name__)
 
+CHECK_ENGINE_STATE_INTERVAL = 1.0
+
 
 class Llumlet:
     def __init__(self,
@@ -56,7 +58,7 @@ class Llumlet:
                                                             self.backend_engine)
             self.log_requests = True
 
-            asyncio.create_task(self._check_state_loop())
+            asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))
@@ -119,9 +121,9 @@ class Llumlet:
         llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 
-    async def _check_state_loop(self):
+    async def _check_engine_state_loop(self):
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(CHECK_ENGINE_STATE_INTERVAL)
             if self.backend_engine.state == EngineState.CRASHED:
                 logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
                 # pylint: disable=protected-access

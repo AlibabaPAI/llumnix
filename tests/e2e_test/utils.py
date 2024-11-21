@@ -11,6 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
+import subprocess
+import ray
+
+
 def parse_launch_mode(launch_mode: str):
     # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
     if launch_mode == 'eief':
@@ -84,6 +89,7 @@ def generate_bench_command(ip_ports: str, model: str, num_prompts: int, dataset_
     )
     return command
 
+@pytest.fixture
 def shutdown_llumnix_service():
     try:
         subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
@@ -92,7 +98,9 @@ def shutdown_llumnix_service():
     except Exception:
         pass
 
-def clear_ray_state():
+@pytest.fixture
+def cleanup_ray_env():
+    yield
     named_actors = ray.util.list_named_actors(True)
     for actor in named_actors:
         try:

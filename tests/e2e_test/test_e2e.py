@@ -20,7 +20,7 @@ import torch
 
 from vllm import LLM, SamplingParams
 
-from .utils import generate_launch_command, shutdown_llumnix_service, clear_ray_state
+from .utils import generate_launch_command, shutdown_llumnix_service, cleanup_ray_env
 
 
 async def get_llumnix_response(prompt, sampling_params, ip_ports):
@@ -62,7 +62,7 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
-async def test_e2e(model, migration_backend, launch_mode):
+async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':
         pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")
     max_model_len = 370
@@ -75,13 +75,18 @@ async def test_e2e(model, migration_backend, launch_mode):
         "ignore_eos": False,
     }
 
+    global vllm_output
+
+    if len(vllm_output) == 0:
+        vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
+
     # generate llumnix outputs
     base_port = 37037
     command = generate_launch_command(model=model, max_model_len=max_model_len,
                                       port=base_port, migration_backend=migration_backend,
                                       launch_mode=launch_mode)
     subprocess.run(command, shell=True, check=True)
-    await asyncio.sleep(60)
+    await asyncio.sleep(30)
 
     llumnix_output = {}
     for prompt in prompts:
@@ -89,14 +94,6 @@ async def test_e2e(model, migration_backend, launch_mode):
                                           timeout=60*5)
         llumnix_output[prompt] = response['text'][0]
 
-    shutdown_llumnix_service()
-
-    global vllm_output
-
-    if len(vllm_output) == 0:
-        vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
-
-    clear_ray_state()
     # compare
     for prompt in prompts:
         assert llumnix_output[prompt] == vllm_output[prompt]

@@ -21,7 +21,7 @@ import torch
 import pandas as pd
 
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
-                    clear_ray_state, shutdown_llumnix_service)
+                    cleanup_ray_env, shutdown_llumnix_service)
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
@@ -69,7 +69,7 @@ def parse_manager_log_file(log_file):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
 @pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
-async def test_migration_benchmark(model, migration_backend, migrated_request_status):
+async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, model, migration_backend, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rpc':
         pytest.skip("When the migrated request status is waiting, only test the rpc migration backend.")
 
@@ -141,9 +141,6 @@ async def test_migration_benchmark(model, migration_backend, migrated_request_st
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(to_markdown_table(data))
-
-    shutdown_llumnix_service()
-    clear_ray_state()
 
     if dump_error_log:
         backup_instance_log()

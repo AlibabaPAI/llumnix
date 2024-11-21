@@ -21,7 +21,9 @@ import torch
 import numpy as np
 
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table, 
-                    shutdown_llumnix_service, clear_ray_state)
+                    shutdown_llumnix_service, cleanup_ray_env)
+
+BENCH_TEST_TIMEOUT_MINS = 30
 
 
 def parse_log_file():
@@ -59,14 +61,13 @@ def parse_log_file():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-async def test_simple_benchmark(model):
+async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model):
     device_count = torch.cuda.device_count()
     base_port = 37037
     for i in range(device_count):
         launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
                                                  launch_ray_cluster=False, port=base_port+i, model=model)
         subprocess.run(launch_command, shell=True, check=True)
-
     await asyncio.sleep(30)
 
     def run_bench_command(command):
@@ -94,7 +95,7 @@ async def test_simple_benchmark(model):
         for future in as_completed(future_to_command):
             try:
                 process = future.result()
-                process.wait(timeout=60*30)
+                process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
 
                 if process.returncode != 0:
                     dump_error_log = True
@@ -108,10 +109,6 @@ async def test_simple_benchmark(model):
 
     with open("performance.txt", "w", encoding="utf-8") as f:
         f.write(parse_log_file())
-
-    # TODO(KuilongCui): change clear_state function to fixture
-    shutdown_llumnix_service()
-    clear_ray_state()
 
     if dump_error_log:
         backup_instance_log()

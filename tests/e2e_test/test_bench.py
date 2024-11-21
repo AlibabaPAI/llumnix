@@ -20,7 +20,8 @@ import pytest
 import torch
 import numpy as np
 
-from .utils import (generate_launch_command, generate_bench_command, to_markdown_table, 
+# pylint: disable=unused-import
+from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
                     shutdown_llumnix_service, cleanup_ray_env)
 
 BENCH_TEST_TIMEOUT_MINS = 30

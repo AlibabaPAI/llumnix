@@ -20,6 +20,7 @@ import torch
 
 from vllm import LLM, SamplingParams
 
+# pylint: disable=unused-import
 from .utils import generate_launch_command, shutdown_llumnix_service, cleanup_ray_env
 
 

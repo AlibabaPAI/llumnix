@@ -20,6 +20,7 @@ import pytest
 import torch
 import pandas as pd
 
+# pylint: disable=unused-import
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
                     cleanup_ray_env, shutdown_llumnix_service)
 

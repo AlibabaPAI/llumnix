@@ -27,6 +27,8 @@ from .utils import (generate_launch_command, generate_bench_command, to_markdown
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
 
+MIGRATION_BENCH_TIMEOUT_MINS = 15
+
 
 def parse_instance_log_file(log_files):
     speed_dict = defaultdict(list)
@@ -100,7 +102,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
         bench_command = generate_bench_command(
             ip_ports=f"127.0.0.1:{base_port + i}",
             model=model,
-            num_prompts=300,
+            num_prompts=500,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=10,
@@ -116,7 +118,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
         for future in as_completed(future_to_command):
             try:
                 process = future.result()
-                process.wait(timeout=60*30)
+                process.wait(timeout=60*MIGRATION_BENCH_TIMEOUT_MINS)
 
                 if process.returncode != 0:
                     dump_error_log = True
@@ -126,11 +128,10 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
             except subprocess.TimeoutExpired:
                 process.kill()
                 dump_error_log = True
-                print("bench_test timed out after 30 minutes.")
+                print("bench_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS))
 
     await asyncio.sleep(5)
 
-    # TODO(s5u13b): use a more definitive way to determine that there is no memory leak.
     parse_manager_log_file("manager_instance.csv")
 
     if migrated_request_status == 'running':

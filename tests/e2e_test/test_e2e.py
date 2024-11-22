@@ -21,7 +21,7 @@ import torch
 from vllm import LLM, SamplingParams
 
 # pylint: disable=unused-import
-from .utils import generate_launch_command, shutdown_llumnix_service, cleanup_ray_env
+from .utils import generate_launch_command, cleanup_ray_env, shutdown_llumnix_service
 
 
 async def get_llumnix_response(prompt, sampling_params, ip_ports):
@@ -81,13 +81,15 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
     if len(vllm_output) == 0:
         vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
 
+    await asyncio.sleep(5)
+
     # generate llumnix outputs
     base_port = 37037
     command = generate_launch_command(model=model, max_model_len=max_model_len,
                                       port=base_port, migration_backend=migration_backend,
                                       launch_mode=launch_mode)
     subprocess.run(command, shell=True, check=True)
-    await asyncio.sleep(30)
+    await asyncio.sleep(45)
 
     llumnix_output = {}
     for prompt in prompts:

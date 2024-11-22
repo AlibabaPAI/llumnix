@@ -90,31 +90,34 @@ def generate_bench_command(ip_ports: str, model: str, num_prompts: int, dataset_
     return command
 
 @pytest.fixture
+def cleanup_ray_env():
+    yield
+    try:
+        named_actors = ray.util.list_named_actors(True)
+        for actor in named_actors:
+            try:
+                actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+            # pylint: disable=bare-except
+            except:
+                continue
+            try:
+                ray.kill(actor_handle)
+            # pylint: disable=bare-except
+            except:
+                continue
+        ray.shutdown()
+    except:
+        pass
+
+@pytest.fixture
 def shutdown_llumnix_service():
+    yield
     try:
         subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
         subprocess.run('pkill -f benchmark_serving.py', shell=True, check=True)
     # pylint: disable=broad-except
-    except Exception:
+    except:
         pass
-
-@pytest.fixture
-def cleanup_ray_env():
-    yield
-    named_actors = ray.util.list_named_actors(True)
-    for actor in named_actors:
-        try:
-            actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-        # pylint: disable=bare-except
-        except:
-            continue
-
-        try:
-            ray.kill(actor_handle)
-        # pylint: disable=bare-except
-        except:
-            continue
-    ray.shutdown()
 
 def to_markdown_table(data):
     headers = data[0]

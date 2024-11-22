@@ -62,7 +62,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     node_ip_address = get_ip_address()
     try:
         # Stop the existing ray processes on the node first.
-        subprocess.run(['ray', 'stop', '--force'], check=True, text=True, capture_output=True)
+        subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True)
     except subprocess.CalledProcessError as e:
         logger.info("'ray stop' failed with: \n{}".format(e.stderr))
         sys.exit(1)

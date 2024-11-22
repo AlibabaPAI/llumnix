@@ -176,20 +176,17 @@ options=[
     ('grpc.max_receive_message_length', MAX_MESSAGE_LENGHT),
 ]
 
-def worker_main(listen_addr: str, rank: int, args: ServingArgs, instance_id: int, migration_config: MigrationConfig,
-                naming_url: str, tranfer_type: TransferType, worker_type):
-    asyncio.run(
-        launch_worker(listen_addr, rank, args, instance_id, migration_config, naming_url,
-                      tranfer_type, worker_type)    
-    )
+def worker_main(rank: int, args: ServingArgs, instance_id: int, migration_config, worker_type):
+    asyncio.run(launch_worker(rank, args, instance_id, migration_config, worker_type))
 
-async def launch_worker(listen_addr: str, rank: int, args: ServingArgs, instance_id: int,
-                        migration_config: MigrationConfig, naming_url: str, tranfer_type: TransferType, worker_type):
-    worker = worker_type(instance_id, listen_addr, migration_config, naming_url, tranfer_type, rank, args)
+async def launch_worker(rank: int, args: ServingArgs, instance_id: int,
+                        migration_config: MigrationConfig, worker_type):
+    worker = worker_type(instance_id, migration_config, rank, args)
     server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
     bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
     migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
     mock_migration_worker_pb2_grpc.add_MockMigrationWorkerServicer_to_server(worker, server)
+    listen_addr = migration_config.migration_backend_server_address
     server.add_insecure_port(listen_addr)
 
     async def shutdown(server):
@@ -206,21 +203,25 @@ async def launch_worker(listen_addr: str, rank: int, args: ServingArgs, instance
 @pytest.mark.parametrize(
     "backend, attention_type, transfer_type",
     [
-        # ('kvtransfer', 'ragged_flash', TransferType.CUDA_IPC_DIRECT),
-        # ('kvtransfer', 'ragged_flash', TransferType.RDMA_DIRECT),
-        ('grpc', 'ragged_flash', None),
-        ('grpc', 'paged', None),
+        # ('kvtransfer', 'ragged_flash', "cuda_ipc"),
+        # ('kvtransfer', 'ragged_flash', "rdma"),
+        ('grpc', 'ragged_flash', ""),
+        ('grpc', 'paged', ""),
     ],
 )
 @pytest.mark.parametrize('worker_type', [MockMigrationRemoteWorker, MockMigrationLocalWorker])
-def test_remote_worker_migrate_cache(backend, attention_type, transfer_type, worker_type):
+def test_migrate_cache(backend, attention_type, transfer_type, worker_type):
     worker_count = 2
     worker_socket_addrs = []
     migration_cache_blocks = 2
+    naming_url = 'shm:migrate_cache_test'
     total_migration_cache_blocks = migration_cache_blocks + 1
     migration_config = EngineManagerArgs(migration_backend=backend,
         migration_cache_blocks=migration_cache_blocks).create_migration_config()
-    naming_url = 'shm:migrate_cache_test'
+    
+    migration_config.migration_backend_kvtransfer_naming_url = naming_url
+    migration_config.migration_backend_transfer_type = transfer_type
+   
     shm = shared_memory.SharedMemory(create=True, size=1024*1024, name='migrate_cache_test')
     # TODO(KuilongCui): check the best value for ACCL_MAX_USER_MR_GB
     os.environ['ACCL_MAX_USER_MR_GB'] = '10'
@@ -239,9 +240,9 @@ def test_remote_worker_migrate_cache(backend, attention_type, transfer_type, wor
                 model='/mnt/self-hosted/model/opt-125m', attn_cls=attention_type, disable_cuda_graph=True
             )
         )
+        migration_config.migration_backend_server_address = worker_socket_addrs[-1]
         p = Process(target=worker_main, daemon=True,
-                    args=(worker_socket_addrs[-1], 0, worker_args, i, migration_config,
-                          naming_url, transfer_type, worker_type))
+                    args=(0, worker_args, i, migration_config, worker_type))
         p.start()
         backends.append(p)
 

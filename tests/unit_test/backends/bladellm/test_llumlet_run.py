@@ -47,11 +47,12 @@ from tests.conftest import setup_ray_env
 @pytest.mark.asyncio
 async def test_llumlet(setup_ray_env):
     migration_config: MigrationConfig = EngineManagerArgs(migration_backend='grpc').create_migration_config()
-    engine_class = ray.remote(num_cpus=1, num_gpus=1, name="blade_llumlet", namespace='llumnix', max_concurrency=4)(Llumlet).\
+    llumlet_name = "0"
+    engine_class = ray.remote(num_cpus=1, num_gpus=1, name=f"instance_{llumlet_name}", namespace='llumnix', max_concurrency=4)(Llumlet).\
         options(scheduling_strategy=NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False))
     engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/self-hosted/model/Qwen-7B'))
 
-    llumlet0 = engine_class.remote("0", QueueType.RAYQUEUE, BackendType.BLADELLM, migration_config, engine_args, 
+    llumlet0 = engine_class.remote(llumlet_name, QueueType.RAYQUEUE, BackendType.BLADELLM, migration_config, engine_args, 
                                    None, ray.get_runtime_context().get_node_id())
     await llumlet0.is_ready.remote()
 

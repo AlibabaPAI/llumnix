@@ -31,13 +31,16 @@ from llumnix.logger import init_logger
 logger = init_logger(__name__)
 
 class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
-    def __init__(self, state_manager, instance_id: int, worker_addr: str, migration_config: MigrationConfig,
-                 naming_url: str,  tranfer_type: TransferType, rank: int, args: ServingArgs) -> None:
+    def __init__(self, state_manager, instance_id: int, migration_config: MigrationConfig,
+                 rank: int, args: ServingArgs) -> None:
         migration_worker_pb2_grpc.MigrationWorkerServicer.__init__(self)
-        torch.cuda.set_device(args.device)
+        device = args.device if args.device else torch.cuda.device(rank)
+        print("my_devide", device)
+        torch.cuda.set_device(device)
         self.instance_id = instance_id
-        self.migration_backend = get_migration_backend(instance_id, rank, rank, worker_addr, migration_config,
-                                                       state_manager, naming_url, args, tranfer_type)
+        self.migration_config = migration_config
+        self.migration_backend = get_migration_backend(instance_id, rank, rank, migration_config,
+                                                       state_manager, args)
 
     # pylint: disable=unused-argument
     def migrate_cache(self, request: migration_worker_pb2.MigrateRequests, context) -> None:

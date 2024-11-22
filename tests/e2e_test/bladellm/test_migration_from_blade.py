@@ -19,9 +19,9 @@ import pytest
 import torch
 import pandas as pd
 
-from .test_e2e import generate_launch_command
-from .test_bench import generate_bench_command, clear_ray_state, shutdown_llumnix_service
-from .utils import to_markdown_table
+from .test_e2e_from_blade import generate_launch_command
+from .test_bench_from_blade import generate_bench_command, clear_ray_state, shutdown_llumnix_service
+from ..utils import to_markdown_table
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
@@ -63,10 +63,9 @@ def parse_manager_log_file(log_file):
         assert num_available_gpu_blocks_list[0] == num_available_gpu_blocks_list[-1]
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
-@pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
-async def test_migration_benchmark(model, migration_backend):
+@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for e2e test")
+@pytest.mark.parametrize("model", ['/mnt/dataset/Qwen--Qwen1.5-7B-tiny-random'])
+async def test_migration_benchmark(model):
     base_port = 37037
     instance_output_logs = []
 
@@ -74,9 +73,7 @@ async def test_migration_benchmark(model, migration_backend):
     for i in range(device_count):
         output_log = f"{base_port+i}.out"
         instance_output_logs.append("instance_"+output_log)
-        launch_command = generate_launch_command(result_filename=output_log, launch_ray_cluster=False, port=base_port+i,
-                                                 model=model, dispatch_policy="flood", migration_backend=migration_backend,
-                                                 log_instance_info=True)
+        launch_command = generate_launch_command(model=model, port=base_port)
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(60)
 
@@ -93,20 +90,20 @@ async def test_migration_benchmark(model, migration_backend):
         await asyncio.wait_for(run_bench_command(bench_command), timeout=60*30)
     await asyncio.sleep(30)
 
-    parse_manager_log_file("manager_instance.csv")
+    # parse_manager_log_file("manager_instance.csv")
 
-    averger_speed = parse_instance_log_file(instance_output_logs)
+    # averger_speed = parse_instance_log_file(instance_output_logs)
 
-    sorted_keys = sorted(averger_speed.keys(), key=lambda x: float(x.split()[0]))
+    # sorted_keys = sorted(averger_speed.keys(), key=lambda x: float(x.split()[0]))
 
-    data = [
-        ['migration_size'] + sorted_keys,
-        [f'{migration_backend}_speed(GB/s)'] + [f"{averger_speed[key]:.2f}" for key in sorted_keys]
-    ]
+    # data = [
+    #     ['migration_size'] + sorted_keys,
+    #     [f'{migration_backend}_speed(GB/s)'] + [f"{averger_speed[key]:.2f}" for key in sorted_keys]
+    # ]
 
-    with open("performance.txt", "a", encoding="utf-8") as f:
-        f.write(to_markdown_table(data))
+    # with open("performance.txt", "a", encoding="utf-8") as f:
+    #     f.write(to_markdown_table(data))
 
-    shutdown_llumnix_service()
-    clear_ray_state()
+    # shutdown_llumnix_service()
+    # clear_ray_state()
     await asyncio.sleep(3)

@@ -19,7 +19,7 @@ import pytest
 import torch
 import numpy as np
 
-from .test_e2e import generate_launch_command, clear_ray_state
+from .vllm.test_e2e import generate_launch_command, clear_ray_state
 from .utils import to_markdown_table
 
 def launch_llumnix_service(command):

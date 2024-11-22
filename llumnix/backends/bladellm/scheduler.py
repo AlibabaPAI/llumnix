@@ -205,8 +205,10 @@ class PagedSchedulerLlumnix(PagedScheduler):
         request_groups_map = self.get_request_groups_map()
         for request_id in request_ids:
             request_groups_map[request_id].is_finished = True
-    
+        # return super().safe_remove_requests(request_ids)
+        
     def free_request(self, request_id: int):
+        # pass
         return super().safe_remove_requests({request_id})
 
     def step(self) -> SchedulerStepOutput:

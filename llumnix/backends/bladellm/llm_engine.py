@@ -277,7 +277,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         # metrics
         worker_timer, step_request = self.worker_timer_queue.get_nowait()
         worker_timer.done()
-        logger.debug("scheduler update:{}",resp)
+
         update_output = self._scheduler.update(resp)
         # handle update ouput
         if update_output.reset:

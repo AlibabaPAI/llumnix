@@ -20,7 +20,6 @@ import queue
 import gc
 import ray
 import json
-import grpc
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateRequests
@@ -60,7 +59,7 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import QueueType, init_output_queue_client
 from llumnix.backends.bladellm.utils import string_to_int, get_model_conf
 from llumnix.backends.bladellm.worker import launch_worker
-from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
+
 
 logger = init_logger(__name__)
 
@@ -73,9 +72,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                  node_id: Optional[str],
                  *arg, **kwargs) -> None:
         super().__init__(*arg, **kwargs)
-        import os   
-        print("engine CUDA_VISIBLE_DEVICES", os.environ["CUDA_VISIBLE_DEVICES"])
-
         engine_instance_id = string_to_int(instance_id)
         self._worker_processes = launch_worker(self._args, engine_instance_id, migration_config)
         # TODO[xinyi]: maybe inherit from Metirc Class in Bladellm or create a Metric Class for Llumnix
@@ -208,12 +204,10 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
-    def process_model_outputs(self, update_output):
+    def process_model_outputs(self, update_output, request_groups_map):
         try:
             server_infos = []
             request_outputs = []
-            request_groups_map = self._scheduler.get_request_groups_map()
-            running_requests = [gen_group.request_group_id for gen_group in self._scheduler.running]
             for req_id, l_resp in update_output.response.items():
                 if l_resp and l_resp.is_finished:
                     server_info = request_groups_map[req_id].server_info
@@ -221,7 +215,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                     request_outputs.append(GenerateStreamResponseLlumnix(req_id, l_resp))
                     # TODO[xinyi]: handle error info in back queue
                     del self._back_queue[req_id]
-                    self._scheduler.free_request(req_id)
                 elif l_resp and req_id in request_groups_map:
                     server_info = request_groups_map[req_id].server_info
                     server_infos.append(server_info)
@@ -291,8 +284,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             logger.debug("update_callback:{}",update_output)
             import sys
             if True and not self.is_warmup:#'llumnix' in sys.modules:
-                logger.debug("process_model_outputs")
-                self.process_model_outputs(update_output)
+                self.process_model_outputs(update_output, request_groups_map)
             else:
                 logger.debug("update_output")
                 for req_id, l_resp in update_output.response.items():
@@ -361,7 +353,8 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                 # TODO
                 if True:#isinstance(res, ServerRequest):
                     self._scheduler.add_request(res)
-
+                elif isinstance(res, bool):
+                    break
 
             for coru in pending:
                 coru.cancel()
@@ -375,7 +368,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
 
     # TODO(xinyi): for test, need delete
     async def _warmup(self):
-        return
         from blade_llm.model.config_base import ModelType
         from blade_llm.module.para_hybrid_qlinear import get_hybrid_gemm_threshold
 
@@ -435,17 +427,6 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                 ...
         logger.info("Finish server warmup. ")
 
-    async def _run_workers(self, worker_method, *args, **kwargs):
-        worker_address = self._worker_processes.migration_config.migration_backend_server_address.split(",")
-        coros = []
-        for worker in worker_address:
-            async with grpc.aio.insecure_channel(worker) as channel:
-                stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
-                method = getattr(stub, worker_method)
-                coros.append(method(*args, **kwargs))
-        all_outputs = await asyncio.gather(*coros)
-        return all_outputs
-        
 class BackendBladeLLM(BackendInterface):
     def __init__(
         self,
@@ -461,7 +442,7 @@ class BackendBladeLLM(BackendInterface):
                                                             node_id,
                                                             engine_args)
             self.instance_id = instance_id
-            self.worker_addrs_list = migration_config.migration_backend_server_address.split(",")
+            self.worker_addrs_list = [f"unix://{engine_args.worker_socket_path}.{i}" for i in range(engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size)]
             self._loop = asyncio.new_event_loop()#asyncio.new_event_loop()##
             self._engine_ready = threading.Event()
 
@@ -501,10 +482,7 @@ class BackendBladeLLM(BackendInterface):
                                                                 src_blocks=src_blocks,
                                                                 src_handlers=self.worker_addrs_list),
                                                            )
-            
-    def _run_workers(self, worker_method, *args, **kwargs):
-        self.engine._run_workers(worker_method, *args, **kwargs)
-
+        
     def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         seq = backend_request.paged_reqs[0]
         # seq.seq_id = next(self.engine.seq_counter) # TODO(xinyi): whether it is no need to change seq_id
@@ -514,12 +492,14 @@ class BackendBladeLLM(BackendInterface):
         backend_request.reset_migration_args()
         self.add_running_request(backend_request)
 
+    def _run_workers(self, worker_method, *args, **kwargs):
+        # pylint: disable=protected-access
+        executor = getattr(self.engine._workers, worker_method)
+        return executor(*args, **kwargs)
+
     def is_ready(self):
         return True
     
-    def stop(self):
-        self.engine.stop()
-
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
             request_id = (request_id,)

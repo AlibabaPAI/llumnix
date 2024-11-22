@@ -138,7 +138,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
                 dump_error_log = True
                 print("bench_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS))
 
-    await asyncio.sleep(5)
+    await asyncio.sleep(10)
 
     parse_manager_log_file("manager_instance.csv")
 

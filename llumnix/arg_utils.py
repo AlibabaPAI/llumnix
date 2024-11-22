@@ -132,6 +132,8 @@ class EngineManagerArgs:
     log_instance_info: bool = None
     profiling_result_file_path: str = None
 
+    migration_backend_kvtransfer_naming_url: str = None
+    migration_backend_server_address: str = None
     migration_backend_init_timeout: float = None
     migration_backend: str = None
     migration_backend_transfer_type: str = None
@@ -178,7 +180,9 @@ class EngineManagerArgs:
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
-                                           self.migration_backend_init_timeout)
+                                           self.migration_backend_init_timeout,
+                                           self.migration_backend_server_address,
+                                           self.migration_backend_kvtransfer_naming_url)
         return migration_config
 
     @classmethod
@@ -300,6 +304,13 @@ class EngineManagerArgs:
                             type=str,
                             choices=['cuda_ipc','rdma', ''],
                             help='transfer type for migration backend grpc and kvTransfer')
+        parser.add_argument('--grpc-migration-backend-address',
+                            type=str,
+                            help='address of grpc server for migration backend')
+        # TODO(xinyi): ensure one blade engine launched for every time
+        parser.add_argument('--migration-backend-kvtransfer-naming-url',
+                            type=str,
+                            help='url of naming server for kvtransfer migration backend')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
                             help='timeout(s) for initializing migration backend')

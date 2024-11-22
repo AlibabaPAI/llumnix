@@ -43,8 +43,8 @@ class AddressHandle:
         self.worker_id = worker_id
 
 class GrpcMigrationBackend(MigrationBackendBase):
-    def __init__(self, worker_address: str, migration_config: MigrationConfig, state_manager: StateManagerBase):
-        self.worker_address = worker_address
+    def __init__(self, rank: int, migration_config: MigrationConfig, state_manager: StateManagerBase):
+        self.worker_address = migration_config.migration_backend_server_address.split(",")[rank]
         self.state_manager = state_manager
         self.num_migration_cache_blocks = migration_config.migration_cache_blocks
 
@@ -189,16 +189,26 @@ class GrpcMigrationBackend(MigrationBackendBase):
         mapping[1::2] = blocks
         self.kv_cache_arena.swap_blocks(mapping, None)
 
+transfer_methods = {"cuda_ipc", "rdma"}
+
+def string_to_enum(transfer_str):
+    if transfer_str == "cuda_ipc":
+        return TransferType.CUDA_IPC_DIRECT
+    elif transfer_str == "rdma":
+        return TransferType.RDMA_DIRECT
+    else:
+        return None
+
 class KvTransferMigrationBackend(MigrationBackendBase):
-    def __init__(self, rank: int, instance_id: int, worker_id: int, worker_address: str, naming_url: str,
-                 serving_args: ServingArgs, tranfer_type: TransferType, state_manager: StateManagerBase):
+    def __init__(self, rank: int, instance_id: int, worker_id: int, migration_config: MigrationConfig,
+                 serving_args: ServingArgs, state_manager: StateManagerBase):
         self.instance_id = instance_id
         self.worker_id = worker_id
-        self.worker_address = worker_address
+        self.worker_address = migration_config.migration_backend_server_address.split(",")[rank]
         self.serving_args = serving_args
         self.state_manager = state_manager
 
-        self.tranfer_type = tranfer_type
+        self.tranfer_type = string_to_enum(migration_config.migration_backend_transfer_type)
         assert self.tranfer_type in [TransferType.RDMA_DIRECT, TransferType.CUDA_IPC_DIRECT]
 
         # TODO(KuilongCui): support PagedStateManager
@@ -209,12 +219,13 @@ class KvTransferMigrationBackend(MigrationBackendBase):
         token_bytes = token_tensor.element_size() * token_tensor.numel()
         block_bytes = self.state_manager.block_size * token_bytes
 
+        naming_url = migration_config.migration_backend_kvtransfer_naming_url
         self.client_kv = KVTransferClient(instance_id, serving_args.tensor_parallel_size, worker_id, rank,
-                                       block_bytes, token_bytes, tranfer_type, naming_url,
+                                       block_bytes, token_bytes, self.tranfer_type, naming_url,
                                        self.state_manager._kv_cache)
 
         self.server_kv = KVTransferServer(instance_id, serving_args.tensor_parallel_size, worker_id, rank,
-                                       block_bytes, token_bytes, tranfer_type, naming_url,
+                                       block_bytes, token_bytes, self.tranfer_type, naming_url,
                                        self.state_manager._kv_cache)
 
     def init_backend(self, group_name, world_size, rank) -> bool:
@@ -281,16 +292,16 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             .format(kv_request_id, src_instance_id, src_worker_id, self.instance_id,
             self.worker_id, src_blocks, dst_blocks))
 
-def get_migration_backend(instance_id: int, worker_id: int, rank: int, worker_address: str,
-                          migration_config: MigrationConfig, state_manager: StateManagerBase, naming_url: str,
-                          serving_args: ServingArgs, tranfer_type: TransferType) -> MigrationBackendBase:
+def get_migration_backend(instance_id: int, worker_id: int, rank: int,
+                          migration_config: MigrationConfig, state_manager: StateManagerBase,
+                          serving_args: ServingArgs) -> MigrationBackendBase:
     target_migration_backend = None
 
     backend = migration_config.migration_backend
     assert backend in ['grpc', 'kvtransfer']
     if backend == 'grpc':
-        target_migration_backend = GrpcMigrationBackend(worker_address, migration_config, state_manager)
+        target_migration_backend = GrpcMigrationBackend(rank, migration_config, state_manager)
     else:
-        target_migration_backend = KvTransferMigrationBackend(rank, instance_id, worker_id, worker_address, naming_url,
-                                                              serving_args, tranfer_type, state_manager)
+        target_migration_backend = KvTransferMigrationBackend(rank, instance_id, worker_id, migration_config,
+                                                              serving_args, state_manager)
     return target_migration_backend

@@ -482,7 +482,11 @@ class BackendBladeLLM(BackendInterface):
                                                                 src_blocks=src_blocks,
                                                                 src_handlers=self.worker_addrs_list),
                                                            )
-        
+            
+    def _run_workers(self, worker_method, *args, **kwargs):
+        return True
+        self.engine._run_workers(worker_method, *args, **kwargs)
+
     def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         seq = backend_request.paged_reqs[0]
         # seq.seq_id = next(self.engine.seq_counter) # TODO(xinyi): whether it is no need to change seq_id

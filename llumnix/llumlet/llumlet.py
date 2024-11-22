@@ -77,6 +77,9 @@ class Llumlet:
         try:
             lifetime = "detached" if detached else None
             assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], f'unimplemented backend {backend_type}'
+            num_gpu = 0
+            if backend_type == backend_type.BLADELLM:
+                num_gpu = args[0].tensor_parallel_size * args[0].pipeline_parallel_size
             actor_name = f"instance_{instance_id}"
             if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
                 if disable_fixed_node_init_instance:
@@ -85,6 +88,7 @@ class Llumlet:
                     print("placement_group",placement_group)
                     kwargs["placement_group"] = placement_group
                     engine_class = ray.remote(num_cpus=1,
+                                            num_gpus=num_gpu,
                                             name=actor_name,
                                             namespace='llumnix',
                                             max_concurrency=4,
@@ -97,7 +101,7 @@ class Llumlet:
                 else:
                     kwargs["node_id"] = node_id
                     engine_class = ray.remote(num_cpus=1,
-                                            num_gpus=1, # todo(xinyi) bladellm need this
+                                            num_gpus=num_gpu, # todo(xinyi) bladellm need this
                                             name=actor_name,
                                             namespace='llumnix',
                                             max_concurrency=4,
@@ -110,6 +114,7 @@ class Llumlet:
             else: # backend_type == backend_type.SIM_VLLM:
                 kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
+                                        num_gpu=num_gpu,
                                         name=actor_name,
                                         namespace='llumnix',
                                         max_concurrency=4,

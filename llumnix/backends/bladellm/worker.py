@@ -102,11 +102,11 @@ options=[
     ('grpc.max_receive_message_length', MAX_MESSAGE_LENGHT),
 ]
 
-async def create_migrate_service(worker: MigrationWorker):
+async def create_migrate_service(rank, worker: MigrationWorker):
     import grpc
     server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
     migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
-    server.add_insecure_port(worker.migration_config.migration_backend_server_address)
+    server.add_insecure_port(worker.migration_config.migration_backend_server_address.split(",")[rank])
     await server.start()
     await server.wait_for_termination()
 
@@ -116,7 +116,7 @@ def make_protocol_factory(*args, **kwargs):
         try:
             protocol = MigrationLocalWorker(*args, **kwargs)
             # TODO(xinyi): how to launch migrate_service
-            asyncio.create_task(create_migrate_service(protocol))
+            asyncio.create_task(create_migrate_service(kwargs['rank'], protocol))
             return protocol
         except Exception as e:
             logger.error(f"Exception in LocalWorker: {e}")

@@ -11,9 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import subprocess
 import pytest
 import ray
+import requests
 
 
 def parse_launch_mode(launch_mode: str):
@@ -32,10 +34,18 @@ def parse_launch_mode(launch_mode: str):
         disable_fixed_node_init_instance = True
     return disable_init_instance_by_manager, disable_fixed_node_init_instance
 
-def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool = True, HEAD_NODE_IP: str = "127.0.0.1",
-                            ip: str = "127.0.0.1", port: int = 37000, instances_num = 1, dispatch_policy: str = "load",
-                            migration_backend = "gloo", model = "facebook/opt-125m", max_model_len: int = 2048,
-                            launch_mode: str = 'eief', log_instance_info: bool = False,
+def generate_launch_command(result_filename: str = "",
+                            launch_ray_cluster: bool = True,
+                            HEAD_NODE_IP: str = "127.0.0.1",
+                            ip: str = "127.0.0.1",
+                            port: int = 37000,
+                            instances_num = 1,
+                            dispatch_policy: str = "load",
+                            migration_backend = "gloo",
+                            model = "facebook/opt-125m",
+                            max_model_len: int = 2048,
+                            launch_mode: str = 'eief',
+                            log_instance_info: bool = False,
                             request_migration_policy: str = 'SR'):
     disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
@@ -66,9 +76,32 @@ def generate_launch_command(result_filename: str = "", launch_ray_cluster: bool 
     )
     return command
 
-def generate_bench_command(ip_ports: str, model: str, num_prompts: int, dataset_type: str, dataset_path: str,
-                           qps: int, results_filename: str = "", query_distribution: str = "poisson",
-                           coefficient_variation: float = 1.0, priority_ratio: float = 0.0):
+def wait_for_llumnix_service_ready(ip_ports):
+    all_ready = False
+    while not all_ready:
+        all_ready = True
+        for ip_port in ip_ports:
+            try:
+                response = requests.get(f"http://{ip_port}/is_ready")
+                if 'true' not in response.text:
+                    all_ready = False
+                    break
+            except requests.exceptions.RequestException:
+                all_ready = False
+                break
+        if not all_ready:
+            time.sleep(1)
+
+def generate_bench_command(ip_ports: str,
+                           model: str,
+                           num_prompts: int,
+                           dataset_type: str,
+                           dataset_path: str,
+                           qps: int,
+                           results_filename: str = "",
+                           query_distribution: str = "poisson",
+                           coefficient_variation: float = 1.0,
+                           priority_ratio: float = 0.0):
     command = (
         f"python -u ./benchmark/benchmark_serving.py "
         f"--ip_ports {ip_ports} "
@@ -106,6 +139,7 @@ def cleanup_ray_env():
             except:
                 continue
         ray.shutdown()
+    # pylint: disable=bare-except
     except:
         pass
 
@@ -115,7 +149,7 @@ def shutdown_llumnix_service():
     try:
         subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
         subprocess.run('pkill -f benchmark_serving.py', shell=True, check=True)
-    # pylint: disable=broad-except
+    # pylint: disable=bare-except
     except:
         pass
 

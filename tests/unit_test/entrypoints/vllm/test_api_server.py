@@ -62,7 +62,7 @@ def api_server(request):
     yield
     uvicorn_process.terminate()
     # Waiting for api server subprocess to terminate.
-    time.sleep(1.0)
+    time.sleep(1)
 
 @pytest.mark.parametrize("interface", ['generate', 'generate_benchmark'])
 def test_api_server(setup_ray_env, api_server, interface: str):

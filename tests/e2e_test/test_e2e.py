@@ -21,7 +21,8 @@ import torch
 from vllm import LLM, SamplingParams
 
 # pylint: disable=unused-import
-from .utils import generate_launch_command, cleanup_ray_env, shutdown_llumnix_service
+from .utils import (generate_launch_command, wait_for_llumnix_service_ready,
+                    cleanup_ray_env, shutdown_llumnix_service)
 
 
 async def get_llumnix_response(prompt, sampling_params, ip_ports):
@@ -84,16 +85,21 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
     await asyncio.sleep(5)
 
     # generate llumnix outputs
+    ip = "127.0.0.1"
     base_port = 37037
-    command = generate_launch_command(model=model, max_model_len=max_model_len,
-                                      port=base_port, migration_backend=migration_backend,
+    command = generate_launch_command(model=model,
+                                      max_model_len=max_model_len,
+                                      ip=ip,
+                                      port=base_port,
+                                      migration_backend=migration_backend,
                                       launch_mode=launch_mode)
     subprocess.run(command, shell=True, check=True)
-    await asyncio.sleep(45)
+
+    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
 
     llumnix_output = {}
     for prompt in prompts:
-        response = await asyncio.wait_for(get_llumnix_response(prompt, sampling_params, f"127.0.0.1:{base_port}"),
+        response = await asyncio.wait_for(get_llumnix_response(prompt, sampling_params, f"{ip}:{base_port}"),
                                           timeout=60*5)
         llumnix_output[prompt] = response['text'][0]
 

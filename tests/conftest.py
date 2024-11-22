@@ -43,5 +43,6 @@ def setup_ray_env():
                 continue
         # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
         ray.shutdown()
+    # pylint: disable=bare-except
     except:
         pass

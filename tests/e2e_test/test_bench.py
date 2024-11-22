@@ -22,7 +22,7 @@ import numpy as np
 
 # pylint: disable=unused-import
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
-                    cleanup_ray_env, shutdown_llumnix_service)
+                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service)
 
 BENCH_TEST_TIMEOUT_MINS = 30
 
@@ -64,12 +64,21 @@ def parse_log_file():
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model):
     device_count = torch.cuda.device_count()
+    ip = "127.0.0.1"
     base_port = 37037
+    ip_ports = []
     for i in range(device_count):
+        port = base_port+i
+        ip_port = f"{ip}:{port}"
+        ip_ports.append(ip_port)
         launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                 launch_ray_cluster=False, port=base_port+i, model=model)
+                                                 launch_ray_cluster=False,
+                                                 ip=ip,
+                                                 port=port,
+                                                 model=model)
         subprocess.run(launch_command, shell=True, check=True)
-    await asyncio.sleep(30)
+
+    wait_for_llumnix_service_ready(ip_ports)
 
     def run_bench_command(command):
         # pylint: disable=consider-using-with

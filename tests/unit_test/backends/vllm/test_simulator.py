@@ -18,6 +18,7 @@ from tests.conftest import setup_ray_env
 from tests.unit_test.queue.utils import request_output_queue_server
 
 from .utils import create_dummy_prompt, initialize_scheduler
+
 class MockBackendSim(BackendSimVLLM):
 
     def _get_lantecy_mem(self, *args, **kwargs):

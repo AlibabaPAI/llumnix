@@ -34,6 +34,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--polling-interval POLLING_INTERVAL]
             [--migration-backend {gloo,nccl,rpc,grpc,kvtransfer}]
             [--migration-backend-transfer-type {cuda_ipc,rdma,}]
+            [--migration-backend-kvtransfer-naming-url MIGRATION_BACKEND_KVTRANSFER_NAMING_URL]
+            [--migration-backend-server-address MIGRATION_BACKEND_SERVER_ADDRESS]
             [--migration-cache-blocks MIGRATION_CACHE_BLOCKS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
@@ -146,9 +148,17 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: gloo, rpc, grpc, kvtransfer
 - Default: "rpc"
 
-`--migration-backend`
+`--migration-backend-transfer-type`
 - Transfer type for migration backend grpc and kvTransfer.
 - Possible choices: cuda_ipc, rdma, ""
+- Default: ""
+
+`--migration-backend-server-address`
+- Address of grpc server for migration backend
+- Default: "127.0.0.1:50051"
+
+`--migration-backend-kvtransfer-naming-url`
+- URL of naming server for kvtransfer migration backend
 - Default: ""
 
 `--migration-cache-blocks`

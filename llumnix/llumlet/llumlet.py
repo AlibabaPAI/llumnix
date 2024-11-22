@@ -43,7 +43,6 @@ class Llumlet:
         try:
             self.instance_id = instance_id
             self.actor_name = f"instance_{instance_id}"
-            os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
             self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
                                                                         output_queue_type,
                                                                         backend_type,

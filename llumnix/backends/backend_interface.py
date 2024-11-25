@@ -67,13 +67,6 @@ class BackendInterface(ABC):
             request_id: A single request ID or an iterable of request IDs to abort.
         """
         raise NotImplementedError
-    
-    # TODO(xinyi): why need this?
-    # @abstractmethod
-    # async def _start_engine_step_loop(self) -> None:
-    #     """Start step loop of backend engine.
-    #     """
-    #     raise NotImplementedError
 
     # Methods for migration
     @abstractmethod

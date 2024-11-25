@@ -75,33 +75,3 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         del self.migration_backend
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
-
-# TODO(xinyi): revise in bladellm repo
-# def worker_main(rank: int, serving_args: ServingArgs, *args):
-#     asyncio.run(worker_server(rank, serving_args, *args))
-
-# TODO(xinyi): revise `start_local_worker_server` in bladellm repo 
-# async def worker_server(rank: int, args: ServingArgs, instance_id: int, migration_config: MigrationConfig,
-#                         naming_url: str, tranfer_type: TransferType):
-#     if args.server_ip:
-#         worker_port = int(get_free_port())
-#         await RemoteManager.start_watch_dog(args, worker_port)
-#         await RemoteManager.wait_until_all_workers_ready()
-#     listen_addr = f"0.0.0.0:{worker_port}" if args.server_ip else f"unix://{args.worker_socket_path}.{rank}"
-#     worker = MigrationWorker(instance_id, listen_addr, migration_config, naming_url, tranfer_type, rank, args)
-#     server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=1))
-#     bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
-#     import sys
-#     if 'llumnix' in sys.modules:
-#         migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
-#     server.add_insecure_port(listen_addr)
-#     await server.start()
-
-#     if args.server_ip:
-#         await RemoteManager.wait_for_termination(server)
-#     else:
-#         await server.wait_for_termination()
-
-#     del server
-#     del worker
-#     gc.collect()

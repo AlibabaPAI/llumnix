@@ -37,9 +37,10 @@ def detect_unsupported_feature(engine_args: ServingArgs) -> None:
 
 def check_engine_args(engine_args: ServingArgs, engine_manager_args: EngineManagerArgs) -> None:
     migration_config = engine_manager_args.create_migration_config()
-    if (engine_args.tensor_parallel_size > 1 or engine_args.tensor_parallel_size > 1) and migration_config.migration_backend == 'nccl':
-        # TODO(s5u13b): fix logger
-        print("Llumnix does not support TP or PP enabled model when the migration backend is nccl, change migration backend to gloo.")
+    if (engine_args.tensor_parallel_size > 1 or engine_args.tensor_parallel_size > 1) and \
+        migration_config.migration_backend == 'nccl':
+        logger.info("Llumnix does not support TP or PP enabled model when the migration backend is nccl, \
+                    change migration backend to gloo.")
         engine_manager_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
 
@@ -50,9 +51,6 @@ def string_to_int(string: str) -> int:
     """
     hash_object = hashlib.sha256(string.encode())
     hex_dig = hash_object.hexdigest()
-    print(hex_dig)  # 输出十六进制表示的哈希值
-
-    # 如果需要整数表示，可以将其转换为整数
     int_value = int(hex_dig, 16)
     return int_value
 

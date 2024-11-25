@@ -74,6 +74,7 @@ class LlumnixEntrypointsArgs:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
                 assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
+    # TODO(KuilongCui): check this, inplace-update, no-need to return
     @staticmethod
     def add_cli_args(parser: ArgumentParser) -> ArgumentParser:
         parser.add_argument('--launch-ray-cluster',
@@ -205,6 +206,7 @@ class EngineManagerArgs:
             and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \
             ("When using gloo as migration backend, "
              "do not set --disable-init-instance-by-manager and --disable-fixed-node-init-instance.")
+
         # TODO[xinyi, kuilong]: grpc and kvtransfer can be used for vllm.
         # assert args.migration_backend not in ['grpc','kvtransfer'] or (args.migration_backend in ['grpc','kvtransfer'] \
         #     and args.migration_backend_transfer_type), \
@@ -307,7 +309,6 @@ class EngineManagerArgs:
         parser.add_argument('--grpc-migration-backend-address',
                             type=str,
                             help='address of grpc server for migration backend')
-        # TODO(xinyi): ensure one blade engine launched for every time
         parser.add_argument('--migration-backend-kvtransfer-naming-url',
                             type=str,
                             help='url of naming server for kvtransfer migration backend')

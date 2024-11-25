@@ -71,7 +71,6 @@ app = FastAPI(lifespan=lifespan)
 @app.post("/generate_benchmark")
 async def generate_benchmark(request: Request) -> Response:
     """Generate completion for the request.
-
     The request should be a JSON object with the following fields:
     - prompt: the prompt to use for the generation.
     - stream: whether to stream the results or not.

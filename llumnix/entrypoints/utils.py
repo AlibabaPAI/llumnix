@@ -28,7 +28,7 @@ from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo, RequestTimestamps
-from llumnix.queue.utils import init_output_queue_server
+from llumnix.queue.utils import init_output_queue_server, QueueServerBase
 
 logger = init_logger(__name__)
 
@@ -195,19 +195,11 @@ def init_llumnix_components(node_id: str,
                             *args,
                             ):
     engine_manager = init_manager(engine_manager_args)
-    print("init_manager")
-    try:
-        if True:#engine_manager_args.disable_init_instance_by_manager:
-            print("?why init")
-            instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
-        else:
-            instance_ids, llumlets = retry_manager_method_sync(
-                engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args)
-    except Exception as e:
-        import traceback
-        logger.error("Error in engine loop: {}".format(e))
-        logger.error("exception traceback: {}".format(traceback.format_exc()))
-        return engine_manager, [], [], None
+    if engine_manager_args.disable_init_instance_by_manager:
+        instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
+    else:
+        instance_ids, llumlets = retry_manager_method_sync(
+            engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args)
 
     available_instance_ids = []
     dead_instance_ids = []

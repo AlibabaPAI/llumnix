@@ -124,7 +124,7 @@ def make_protocol_factory(*args, **kwargs):
 
     return protocol_factory
 
-# not ready
+# TODO(xinyi): check remote worker
 class _RemoteWorkerProcessesLlumnix(_RemoteWorkerProcesses):
     def __init__(self, args: ServingArgs, instance_id: int, migration_config: MigrationConfig):
         super().__init__(args)

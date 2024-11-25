@@ -33,7 +33,7 @@ _C.SERVER.SSL_KEYFILE = None
 # Path to SSL certificate file for secure connections
 _C.SERVER.SSL_CERTFILE = None
 # Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "zmq"
+_C.SERVER.QUEUE_TYPE = "rayqueue"
 # Port number for the request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Disable logging requests in server
@@ -49,7 +49,7 @@ _C.SERVER.CONFIG_FILE = None
 # If True, launch Ray cluster in API server
 _C.SERVER.LAUNCH_RAY_CLUSTER = True
 # Port number for the Ray cluster
-_C.SERVER.RAY_CLUSTER_PORT = 6383
+_C.SERVER.RAY_CLUSTER_PORT = 6379
 
 # -----------------------------------------------------------------------------
 # MANAGER CONFIGURATION

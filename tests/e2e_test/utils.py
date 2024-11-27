@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import time
+import os
 import subprocess
 import pytest
 import ray

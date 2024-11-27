@@ -89,7 +89,7 @@ def wait_for_llumnix_service_ready(ip_ports):
                 if 'true' not in response.text:
                     all_ready = False
                     break
-            except requests.exceptions.RequestException:
+            except:
                 all_ready = False
                 break
         if not all_ready:

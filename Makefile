@@ -29,15 +29,15 @@ lint: check_pylint_installed check_pytest_installed
 
 .PHONY: test
 test: check_pytest_installed
-	@pytest -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
+	@pytest -v -s --tb=long --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
 	@python examlpes/offline_inference.py
-	@pytest -v ./tests/e2e_test/test_e2e.py
-	@pytest -v ./tests/e2e_test/test_bench.py
-	@pytest -v ./tests/e2e_test/test_migration.py
+	@pytest -v -s --tb=long ./tests/e2e_test/test_e2e.py
+	@pytest -v -s --tb=long ./tests/e2e_test/test_bench.py
+	@pytest -v -s --tb=long ./tests/e2e_test/test_migration.py
 
 .PHONY: unit_test
 unit_test: check_pytest_installed
-	@pytest -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
+	@pytest -v -s --tb=long --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
 	
 .PHONY: offline_test
 offline_test:
@@ -45,15 +45,15 @@ offline_test:
 
 .PHONY: e2e_test
 e2e_test:
-	@pytest -v ./tests/e2e_test/test_e2e.py
+	@pytest -v -s --tb=long ./tests/e2e_test/test_e2e.py
 
 .PHONY: bench_test
 bench_test:
-	@pytest -v ./tests/e2e_test/test_bench.py
+	@pytest -v -s --tb=long ./tests/e2e_test/test_bench.py
 
 .PHONY: migration_test
 migration_test:
-	@pytest -v ./tests/e2e_test/test_migration.py
+	@pytest -v -s --tb=long ./tests/e2e_test/test_migration.py
 
 #################### pygloo install for gloo migration backend begin ####################
 

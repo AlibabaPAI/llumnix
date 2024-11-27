@@ -23,7 +23,8 @@ import ray
 
 # pylint: disable=unused-import
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
-                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service)
+                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service,
+                    backup_error_log)
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
@@ -125,7 +126,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
         )
         tasks.append(bench_command)
 
-    dump_error_log = False
+    test_mode = f"migration_tests/{migration_backend}/{migrated_request_status}"
     # Execute the commands concurrently using ThreadPoolExecutor
     with ThreadPoolExecutor() as executor:
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
@@ -136,13 +137,13 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
                 process.wait(timeout=60*MIGRATION_BENCH_TIMEOUT_MINS)
 
                 if process.returncode != 0:
-                    dump_error_log = True
+                    backup_error_log(test_mode)
 
                 assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
-                dump_error_log = True
+                backup_error_log(test_mode)
                 print("bench_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS))
 
     instance_num_blocks_list_after_bench = get_instance_num_blocks()
@@ -158,8 +159,5 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(to_markdown_table(data))
-
-    if dump_error_log:
-        backup_instance_log()
 
     await asyncio.sleep(3)

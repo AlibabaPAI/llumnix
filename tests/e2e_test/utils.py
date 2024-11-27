@@ -129,18 +129,22 @@ def generate_bench_command(ip_ports: str,
 def cleanup_ray_env():
     yield
     try:
-        named_actors = ray.util.list_named_actors(True)
-        for actor in named_actors:
-            try:
-                actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-            # pylint: disable=bare-except
-            except:
-                continue
-            try:
-                ray.kill(actor_handle)
-            # pylint: disable=bare-except
-            except:
-                continue
+        try:
+            named_actors = ray.util.list_named_actors(True)
+            for actor in named_actors:
+                try:
+                    actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+                # pylint: disable=bare-except
+                except:
+                    continue
+                try:
+                    ray.kill(actor_handle)
+                # pylint: disable=bare-except
+                except:
+                    continue
+        # pylint: disable=bare-except
+        except:
+            pass
         ray.shutdown()
     # pylint: disable=bare-except
     except:

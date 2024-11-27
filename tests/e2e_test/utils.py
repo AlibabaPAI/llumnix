@@ -12,10 +12,7 @@
 # limitations under the License.
 
 import time
-import os
 import subprocess
-from datetime import datetime
-import shutil
 import pytest
 import ray
 import requests
@@ -181,21 +178,3 @@ def to_markdown_table(data):
 
     table = f"{header_row}\n{separator_row}\n" + "\n".join(data_rows) + "\n\n"
     return table
-
-def backup_error_log(test_mode):
-    curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
-    dst_dir = os.path.expanduser(f'/mnt/error_log/{test_mode}/{curr_time}/')
-    os.makedirs(dst_dir, exist_ok=True)
-
-    src_dir = os.getcwd()
-
-    for filename in os.listdir(src_dir):
-        if filename.startswith("instance_"):
-            src_file = os.path.join(src_dir, filename)
-            shutil.copy(src_file, dst_dir)
-            print(f"Copied instance log: {src_file} to {dst_dir}")
-
-        if filename.startswith("bench_"):
-            src_file = os.path.join(src_dir, filename)
-            shutil.copy(src_file, dst_dir)
-            print(f"Copied bench log: {src_file} to {dst_dir}")

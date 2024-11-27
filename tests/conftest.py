@@ -11,9 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime
+import shutil
+import os
 import subprocess
 import ray
 import pytest
+
+from llumnix.utils import random_uuid
+
 
 def pytest_sessionstart(session):
     subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -46,3 +52,35 @@ def setup_ray_env():
     # pylint: disable=bare-except
     except:
         pass
+
+def backup_error_log(func_name):
+    curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+    dst_dir = os.path.expanduser(f'/mnt/error_log/{curr_time}_{random_uuid()}')
+    os.makedirs(dst_dir, exist_ok=True)
+
+    src_dir = os.getcwd()
+
+    for filename in os.listdir(src_dir):
+        if filename.startswith("instance_"):
+            src_file = os.path.join(src_dir, filename)
+            shutil.copy(src_file, dst_dir)
+            print(f"Backup error instance log: {src_file} to {dst_dir}")
+
+        if filename.startswith("bench_"):
+            src_file = os.path.join(src_dir, filename)
+            shutil.copy(src_file, dst_dir)
+            print(f"Backup error bench log: {src_file} to {dst_dir}")
+
+    file_path = os.path.join(dst_dir, 'test.info')
+    print(f"Backup error test.info: {file_path}")
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(f'{func_name}')
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+
+    if report.when == "call" and report.failed:
+        func_name = item.name
+        backup_error_log(func_name)

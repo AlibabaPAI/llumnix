@@ -22,8 +22,7 @@ import numpy as np
 
 # pylint: disable=unused-import
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
-                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service,
-                    backup_error_log)
+                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service)
 
 BENCH_TEST_TIMEOUT_MINS = 30
 
@@ -99,7 +98,6 @@ async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model
         )
         tasks.append(bench_command)
 
-    test_mode = "e2e_tests"
     with ThreadPoolExecutor() as executor:
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
 
@@ -108,14 +106,10 @@ async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model
                 process = future.result()
                 process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
 
-                if process.returncode != 0:
-                    backup_error_log(test_mode)
-
                 assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
-                backup_error_log(test_mode)
                 print("bench_test timed out after 30 minutes.")
 
     with open("performance.txt", "w", encoding="utf-8") as f:

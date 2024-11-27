@@ -14,10 +14,10 @@
 import time
 import os
 import subprocess
+from datetime import datetime
 import pytest
 import ray
 import requests
-from datetime import datetime
 
 
 def parse_launch_mode(launch_mode: str):

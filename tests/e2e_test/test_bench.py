@@ -120,5 +120,5 @@ async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model
 
     with open("performance.txt", "w", encoding="utf-8") as f:
         f.write(parse_log_file())
-        
+
     await asyncio.sleep(3)

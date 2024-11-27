@@ -18,7 +18,6 @@ from collections import defaultdict
 import re
 import pytest
 import torch
-import pandas as pd
 import ray
 
 # pylint: disable=unused-import

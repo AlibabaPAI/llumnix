@@ -11,37 +11,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import time
 import asyncio
 import copy
-import json
-from typing import Tuple
+import random
 
 import ray
 
-from blade_llm.service.clients import BaseLLMClient, LLMResponse
+from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
+from blade_llm.service.communications.protocol import Stats
+from blade_llm.service.communications.response import LLMResponse
+from blade_llm.service.args import ServingArgs
+from blade_llm.protocol import ServerRequest
 from blade_llm.protocol import ServerRequest, GenerateStreamResponse
-from blade_llm.utils.status import Stats
-from blade_llm.service.schedulers import DynamicBatchingScheduler
+from blade_llm.service.communications.response import error_resp
 
 from llumnix.server_info import RequestTimestamps
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
 from llumnix.backends.bladellm.sequence import GenerateStreamResponseLlumnix
-from llumnix.entrypoints.utils import (
-    init_per_token_latency_breakdown_dict,
-    record_per_token_latency_breakdown,
-)
 from llumnix.logger import init_logger
-
+from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
 
 WAIT_MANAGER_INTERVAL = 5
 
 
-async def manager_generate(request,
-                           request_id: str,
-                           llumnix_context: LlumnixEntrypointsContext) -> LLMResponse:
+async def manager_generate(request, request_id: str, llumnix_context: LlumnixEntrypointsContext) -> LLMResponse:
+    logger.info("Client Add request: {}".format(request))
+
     results_queue = asyncio.Queue()
     llumnix_context.request_streams[request_id] = results_queue
 
@@ -54,9 +53,10 @@ async def manager_generate(request,
             server_info_copy.request_timestamps = RequestTimestamps()
             server_info_copy.request_timestamps.api_server_manager_generate_timestamp = time.time()
         # await to catch exception
-        await llumnix_context.engine_manager.generate.remote(request_id, server_info_copy, request)
+        await llumnix_context.engine_manager.generate.remote(str(request_id), server_info_copy, request)
         llumnix_context.manager_available = True
-    except ray.exceptions.RayActorError:
+    except Exception as e:
+        logger.error("Error in manager generate: {}".format(e))
         # Do not re-generate the request to avoid duplicate requests.
         if llumnix_context.manager_available:
             llumnix_context.manager_available = False
@@ -93,17 +93,22 @@ async def manager_is_ready(llumnix_context: LlumnixEntrypointsContext):
     ready_status = await llumnix_context.engine_manager.is_ready.remote()
     return ready_status
 
-async def background_process_outputs(llumnix_context):
+async def background_process_outputs(llumnix_context: LlumnixEntrypointsContext):
     try:
         while True:
             request_outputs = await llumnix_context.request_output_queue.get()
+            logger.info("Client Recv: {}".format(request_outputs))
             if request_outputs is None:
                 continue
             for request_output in request_outputs:
                 if hasattr(request_output, 'request_timestamps'):
                     request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
             for request_output in request_outputs:
-                request_output = GenerateStreamResponseLlumnix(**json.loads(request_output))
+                request_data = json.loads(request_output)
+                request_output = GenerateStreamResponseLlumnix(
+                    resp=GenerateStreamResponse(**request_data),
+                    request_id=request_data['request_id'],
+                )
                 request_id = request_output.request_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in llumnix_context.request_streams:
@@ -116,87 +121,40 @@ async def background_process_outputs(llumnix_context):
         logger.error("Error in engine loop: {}".format(e))
         logger.error("exception traceback: {}".format(traceback.format_exc()))
 
-class MeasureEntrypoint:
-    def __init__(self, request_id, start_time, expected_resp_len):
-        self.request_id = request_id
-        self.final_output = None
-        self.per_token_latency = []
-        self.generation_text = []
-        self.per_token_latency_breakdown_dict = init_per_token_latency_breakdown_dict()
-        self.start_time = start_time
-        self.expected_resp_len = expected_resp_len
-        self.final_output = None
+class AsyncLLMEngineClientLlumnix(MultiProcessingLLMClient):
+    def __init__(self, args: ServingArgs):
+        super().__init__(args, -1)
+
+    def connect(self):
+        pass
+
+    def close(self):
+        pass
+
+    async def add_request(self, req: ServerRequest) -> LLMResponse:
+        if req.sampling_params.n > 1 or req.sampling_params.use_beam_search:
+            return error_resp(req.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
     
-    @property
-    def generation(self) -> bool:
-        return f"{''.join(self.generation_text)}"
-
-
-def measure_single_resp(resp: GenerateStreamResponse, measure: MeasureEntrypoint):
-        now = time.time()
-        measure.per_token_latency.append([now, (now - measure.start_time)*1000])
-        measure.start_time = now
-        measure.generation_text.extend([t.text for t in resp.tokens])
-        measure.final_output = resp
-        if hasattr(resp, 'request_timestamps'):
-            resp.request_timestamps.api_server_generate_benchmark_timestamp_end = now
-            record_per_token_latency_breakdown(measure.per_token_latency_breakdown_dict, resp.request_timestamps)
-
-def measure_resp(measure_handle: MeasureEntrypoint):
-    final_output = measure_handle.final_output
-    assert final_output is not None
-    from llumnix.entrypoints.bladellm.api_server import llumnix_context
-    if llumnix_context.log_requests:
-        llumnix_context.num_finished_requests += 1
-        logger.info("Finished request {}.".format(measure_handle.request_id))
-        logger.info("num_finished_requests {}.".format(llumnix_context.num_finished_requests))
-
-    num_output_tokens = len(final_output.usage.completion_tokens)
-    num_input_tokens = len(final_output.usage.prompt_tokens)
-    if not max(measure_handle.expected_resp_len, 1) == max(num_output_tokens, 1):
-        "request_id={}, expected_resp_len={}, num_output_tokens={}, num_input_tokens={}".format(
-            measure_handle.request_id, measure_handle.expected_resp_len, num_output_tokens, num_input_tokens)
-    ret = {
-        'request_id': measure_handle.request_id,
-        'generated_text': measure_handle.generation,
-        'num_output_tokens_cf': num_output_tokens,
-        'per_token_latency': measure_handle.per_token_latency,
-        'per_token_latency_breakdown_dict': measure_handle.per_token_latency_breakdown_dict
-    }
-
-class AsyncLLMEngineClientLlumnix(BaseLLMClient):
-    def __init__(self, scheduler_cls):
-        super().__init__()
-        self.scheduler_cls = scheduler_cls
-
-    async def add_request(self, request: ServerRequest) -> LLMResponse:
-        measure = MeasureEntrypoint(request.id, time.time(), request.stopping_criterial.max_new_tokens)
+        return super().add_request(req)
+    
+    async def _add_request(self, request: ServerRequest) -> LLMResponse:
         from llumnix.entrypoints.bladellm.api_server import llumnix_context
-        resp_stream = await manager_generate(request.model_dump_json(), request.id, llumnix_context)
-        return resp_stream, measure
-    
-    async def drop_request(self, request_id: int):
+        request.id = random.randint(0, 2147483647) # 1<<31-1
+        resp_stream = await manager_generate(request.model_dump_json(), str(request.id), llumnix_context)
+        return resp_stream
+
+    async def drop_request(self, req_id: int):
         from llumnix.entrypoints.bladellm.api_server import llumnix_context
-        await manager_abort(request_id, llumnix_context)
-    
-    def support_beam_search(self):
-        return (False, "llumnix currently doesn't support beam_search.")
-    
-    # TODO(KuilongCui): maybe there is a better way to check this
-    def support_chat_stream(self) -> Tuple[bool, str]:
-        if self.scheduler_cls == DynamicBatchingScheduler:
-            return False, "DynamicBatchingScheduler not support chat_stream"
-        else:
-            return True, ""
+        await manager_abort(req_id, llumnix_context)
 
-    # TODO(kuilongCui): check get_stats
-    def get_stats(self) -> Stats:
-        pass
-        # return self._client.get_stats()
-
-    async def connect(self):
+    async def get_stats(self) -> Stats:
         pass
 
-    async def close(self):
+    async def get_metrics(self) -> str:
         pass
 
+    def start_profiler(self) -> None:
+        pass
+
+    def stop_profiler(self) -> None:
+        pass

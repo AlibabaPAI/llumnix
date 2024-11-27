@@ -23,7 +23,7 @@ from blade_llm.generation.statemanagers.base_state_manager import StateManagerBa
 from blade_llm.generation.statemanagers.ragged_flash_state_manager import RaggedFlashStateManager
 from blade_llm.generation.statemanagers.paged_state_manager import PagedStateManager
 from blade_llm.generation.kvcache.kv_cache_arena import PagedKVCacheArena, RaggedFlashKVCacheArena
-from blade_llm.generation.kvcache.kv_transfer import KVTransferClient, KVTransferServer, TransferType
+from blade_llm.generation.kvcache.kv_transfer import KVTransferClient, KVTransferServer, KVTransferProtocolType
 from blade_llm.service.args import ServingArgs
 from blade_llm.generation.request_state import RequestGroup, RequestState
 from blade_llm.service.proto.bladellm_pb2 import RequestMeta, WorkerRequest, LogProbs, LogProb
@@ -379,16 +379,6 @@ class GrpcMigrationBackend(MigrationBackendBase):
         mapping[1::2] = blocks
         self.kv_cache_arena.swap_blocks(mapping, None)
 
-transfer_methods = {"cuda_ipc", "rdma"}
-
-def string_to_enum(transfer_str):
-    if transfer_str == "cuda_ipc":
-        return TransferType.CUDA_IPC_DIRECT
-    elif transfer_str == "rdma":
-        return TransferType.RDMA_DIRECT
-    else:
-        return None
-
 class KvTransferMigrationBackend(MigrationBackendBase):
     def __init__(self, rank: int, instance_id: int, worker_id: int, migration_config: MigrationConfig,
                  serving_args: ServingArgs, state_manager: StateManagerBase):
@@ -398,8 +388,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
         self.serving_args = serving_args
         self.state_manager = state_manager
 
-        self.tranfer_type = string_to_enum(migration_config.migration_backend_transfer_type)
-        assert self.tranfer_type in [TransferType.RDMA_DIRECT, TransferType.CUDA_IPC_DIRECT]
+        self.tranfer_type = KVTransferProtocolType.to_protocol_type(migration_config.migration_backend_transfer_type)
 
         # TODO(KuilongCui): support PagedStateManager
         assert isinstance(state_manager, RaggedFlashStateManager)

@@ -83,7 +83,6 @@ class MockLlumletDoNotSchedule(Llumlet):
 
         self.backend_engine.engine.step_async = step_async_try_schedule
 
-# TODO(s5u13b): Test migrate waiting request.
 @pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio

@@ -20,41 +20,13 @@ import pytest
 import torch
 import numpy as np
 
-from .test_e2e import generate_launch_command, clear_ray_state
-from .utils import to_markdown_table, backup_instance_log
+# pylint: disable=unused-import
+from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
+                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service,
+                    backup_error_log)
 
-def launch_llumnix_service(command):
-    subprocess.run(command, shell=True, check=True)
+BENCH_TEST_TIMEOUT_MINS = 30
 
-def generate_bench_command(ip_ports: str, model: str, num_prompts: int, dataset_type: str, dataset_path: str,
-                           qps: int, results_filename: str = "", query_distribution: str = "poisson",
-                           coefficient_variation: float = 1.0, priority_ratio: float = 0.0):
-    command = (
-        f"python -u ./benchmark/benchmark_serving.py "
-        f"--ip_ports {ip_ports} "
-        f"--backend vLLM "
-        f"--tokenizer {model} "
-        f"--trust_remote_code "
-        f"--log_filename bench_{ip_ports.split(':')[1]} "
-        f"--random_prompt_count {num_prompts} "
-        f"--dataset_type {dataset_type} "
-        f"--dataset_path {dataset_path} "
-        f"--qps {qps} "
-        f"--distribution {query_distribution} "
-        f"--coefficient_variation {coefficient_variation} "
-        f"--priority_ratio {priority_ratio} "
-        f"--log_latencies "
-        f"--fail_on_response_failure "
-        f"{'> bench_'+results_filename if len(results_filename)> 0 else ''}"
-    )
-    return command
-
-def shutdown_llumnix_service():
-    try:
-        subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
-    # pylint: disable=broad-except
-    except Exception:
-        pass
 
 def parse_log_file():
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]
@@ -91,15 +63,23 @@ def parse_log_file():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-async def test_simple_benchmark(model):
+async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model):
     device_count = torch.cuda.device_count()
+    ip = "127.0.0.1"
     base_port = 37037
+    ip_ports = []
     for i in range(device_count):
+        port = base_port+i
+        ip_port = f"{ip}:{port}"
+        ip_ports.append(ip_port)
         launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                 launch_ray_cluster=False, port=base_port+i, model=model)
+                                                 launch_ray_cluster=False,
+                                                 ip=ip,
+                                                 port=port,
+                                                 model=model)
         subprocess.run(launch_command, shell=True, check=True)
 
-    await asyncio.sleep(30)
+    wait_for_llumnix_service_ready(ip_ports)
 
     def run_bench_command(command):
         # pylint: disable=consider-using-with
@@ -119,33 +99,26 @@ async def test_simple_benchmark(model):
         )
         tasks.append(bench_command)
 
-    dump_error_log = False
+    test_mode = "e2e_tests"
     with ThreadPoolExecutor() as executor:
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
 
         for future in as_completed(future_to_command):
             try:
                 process = future.result()
-                process.wait(timeout=60*30)
+                process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
 
                 if process.returncode != 0:
-                    dump_error_log = True
+                    backup_error_log(test_mode)
 
                 assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
-                dump_error_log = True
+                backup_error_log(test_mode)
                 print("bench_test timed out after 30 minutes.")
 
     with open("performance.txt", "w", encoding="utf-8") as f:
         f.write(parse_log_file())
-
-    # TODO(KuilongCui): change clear_state function to fixture
-    shutdown_llumnix_service()
-    clear_ray_state()
-
-    if dump_error_log:
-        backup_instance_log()
         
     await asyncio.sleep(3)

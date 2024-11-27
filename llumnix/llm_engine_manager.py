@@ -37,8 +37,9 @@ from llumnix.queue.queue_type import QueueType
 logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
-CLEARING_INTERVAL = 3600
+CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
 RETRIES_INTERVALS = 5.0
+WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
 class LLMEngineManager:
@@ -81,8 +82,8 @@ class LLMEngineManager:
 
         # request states
         self.request_instance: Dict[str, str] = {}
-        self.clearing_interval = CLEARING_INTERVAL
-        asyncio.create_task(self._clear_request_instance_loop(self.clearing_interval))
+        self.clear_request_intance_interval = CLEAR_REQUEST_INSTANCE_INTERVAL
+        asyncio.create_task(self._clear_request_instance_loop(self.clear_request_intance_interval))
 
         # migrate states
         self.num_instance_info_updates = 0
@@ -227,19 +228,20 @@ class LLMEngineManager:
             asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS))
 
     async def _migrate(self, pair_migration_type: PairMigrationConstraints) -> None:
+        # TODO(s5u13b): Remove the migration done callback through decentralized migration refactoring.
         async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
             self.num_migrating -= 1
             # TODO(s5u13b): Add more exception types for failover.
             if isinstance(ret, (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError)):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
-                # TODO(s5u13b): clear_migration_states by instance_id
-                # for i, has_error in enumerate(has_error_pair):
-                #     # Instance without error should clear migration states.
-                #     if not has_error:
-                #         try:
-                #             await self.instances[migrate_instance_pair[i]].clear_migration_states.remote(is_migrate_in=bool(i))
-                #         except (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError):
-                #             has_error = True
+                for i, has_error in enumerate(has_error_pair):
+                    # Instance without error should clear migration states.
+                    # TODO(s5u13b): Fix the clear_migration_states to adapt to the many-to-many migration.
+                    if not has_error:
+                        try:
+                            await self.instances[migrate_instance_pair[i]].clear_migration_states.remote(is_migrate_in=bool(i))
+                        except (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError):
+                            has_error = True
                 for i, has_error in enumerate(has_error_pair):
                     if has_error:
                         instance_id = migrate_instance_pair[i]
@@ -272,7 +274,6 @@ class LLMEngineManager:
                                       return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
-            # TODO(s5u13b): Migration failover could be implemented in Llumlet rather than manager.
             await asyncio.gather(*migration_tasks, return_exceptions=True)
         # pylint: disable=W0703
         except Exception as e:
@@ -282,7 +283,7 @@ class LLMEngineManager:
     async def rebuild_migrate_backend(self) -> None:
         # Wait for all instances to finish migration
         while self.num_migrating > 0:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
 
         # During rebuilding migration backend, disable migrate
         origin_config = self.enable_migration
@@ -452,7 +453,6 @@ class LLMEngineManager:
         return engine_manager
 
     # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
-    # TODO(s5u13b): Fix the logger when enabling init instance by manager.
     def init_llumlets(self, engine_args, node_id: str, output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
         engine_config = engine_args.create_engine_config()

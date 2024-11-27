@@ -132,6 +132,7 @@ class MigrationCoordinator:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
             return MigrationStatus.ABORTED_DST
+
         if migrate_out_request.should_abort_migration():
             return MigrationStatus.ABORTED_SRC
 

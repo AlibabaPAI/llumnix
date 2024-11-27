@@ -27,18 +27,22 @@ def pytest_sessionfinish(session, exitstatus):
 def setup_ray_env():
     ray.init(namespace="llumnix", ignore_reinit_error=True)
     yield
-    named_actors = ray.util.list_named_actors(True)
-    for actor in named_actors:
-        try:
-            actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-        # pylint: disable=bare-except
-        except:
-            continue
+    try:
+        named_actors = ray.util.list_named_actors(True)
+        for actor in named_actors:
+            try:
+                actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+            # pylint: disable=bare-except
+            except:
+                continue
 
-        try:
-            ray.kill(actor_handle)
-        # pylint: disable=bare-except
-        except:
-            continue
-    # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
-    ray.shutdown()
+            try:
+                ray.kill(actor_handle)
+            # pylint: disable=bare-except
+            except:
+                continue
+        # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
+        ray.shutdown()
+    # pylint: disable=bare-except
+    except:
+        pass

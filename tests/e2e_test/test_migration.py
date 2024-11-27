@@ -19,6 +19,7 @@ import re
 import pytest
 import torch
 import pandas as pd
+import ray
 
 # pylint: disable=unused-import
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
@@ -59,13 +60,18 @@ def parse_instance_log_file(log_files):
 
     return average_speed
 
-def parse_manager_log_file(log_file):
-    df = pd.read_csv(log_file)
-    instance_id_set = set(df["instance_id"])
-    for instance_id in instance_id_set:
-        df_instance = df[df["instance_id"] == instance_id]
-        num_available_gpu_blocks_list = df_instance["num_available_gpu_blocks"].to_numpy().tolist()
-        assert num_available_gpu_blocks_list[0] == num_available_gpu_blocks_list[-1]
+def get_instance_num_blocks():
+    named_actors = ray.util.list_named_actors(True)
+    instance_actor_handles = []
+    for actor in named_actors:
+        if actor['name'].startswith("instance"):
+            instance_actor_handles.append(ray.get_actor(actor['name'], namespace=actor['namespace']))
+    instance_num_blocks_list = []
+    for instance in instance_actor_handles:
+        instance_info = ray.get(instance.get_instance_info.remote())
+        instance_num_blocks_list.append(instance_info.num_available_gpu_blocks)
+
+    return instance_num_blocks_list
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
@@ -94,11 +100,12 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
                                                  model=model,
                                                  dispatch_policy="flood",
                                                  migration_backend=migration_backend,
-                                                 log_instance_info=True,
                                                  request_migration_policy=request_migration_policy)
         subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
+
+    instance_num_blocks_list_before_bench = get_instance_num_blocks()
 
     def run_bench_command(command):
         # pylint: disable=consider-using-with
@@ -138,9 +145,9 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
                 dump_error_log = True
                 print("bench_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS))
 
-    await asyncio.sleep(10)
+    instance_num_blocks_list_after_bench = get_instance_num_blocks()
 
-    parse_manager_log_file("manager_instance.csv")
+    assert instance_num_blocks_list_before_bench == instance_num_blocks_list_after_bench
 
     if migrated_request_status == 'running':
         average_speed = parse_instance_log_file(instance_output_logs)

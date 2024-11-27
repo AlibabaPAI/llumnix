@@ -79,12 +79,8 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
 
     global vllm_output
 
-    print("@@@ 1 @@@")
-
     if len(vllm_output) == 0:
         vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
-
-    print("@@@ 2 @@@")
 
     await asyncio.sleep(5)
 

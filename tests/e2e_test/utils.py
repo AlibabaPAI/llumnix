@@ -79,21 +79,28 @@ def generate_launch_command(result_filename: str = "",
     )
     return command
 
-def wait_for_llumnix_service_ready(ip_ports):
-    all_ready = False
-    while not all_ready:
+def wait_for_llumnix_service_ready(ip_ports, timeout=60):
+    start_time = time.time()
+    while True:
         all_ready = True
         for ip_port in ip_ports:
             try:
-                response = requests.get(f"http://{ip_port}/is_ready")
-                if 'true' not in response.text:
+                response = requests.get(f"http://{ip_port}/is_ready", timeout=5)
+                if 'true' not in response.text.lower():
                     all_ready = False
                     break
-            except:
+            except requests.RequestException:
                 all_ready = False
                 break
-        if not all_ready:
-            time.sleep(1)
+
+        if all_ready:
+            return True
+
+        elapsed_time = time.time() - start_time
+        if elapsed_time > timeout:
+            raise TimeoutError(f"Wait for llumnix service timeout({timeout} s).")
+
+        time.sleep(1)
 
 def generate_bench_command(ip_ports: str,
                            model: str,
@@ -152,13 +159,11 @@ def cleanup_ray_env():
 
 @pytest.fixture
 def shutdown_llumnix_service():
+    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
+    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     yield
-    try:
-        subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
-        subprocess.run('pkill -f benchmark_serving.py', shell=True, check=True)
-    # pylint: disable=bare-except
-    except:
-        pass
+    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
+    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
 
 def to_markdown_table(data):
     headers = data[0]

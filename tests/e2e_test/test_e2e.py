@@ -91,19 +91,15 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
     # generate llumnix outputs
     ip = "127.0.0.1"
     base_port = 37037
-    command = generate_launch_command(model=model,
+    launch_command = generate_launch_command(model=model,
                                       max_model_len=max_model_len,
                                       ip=ip,
                                       port=base_port,
                                       migration_backend=migration_backend,
                                       launch_mode=launch_mode)
-    subprocess.run(command, shell=True, check=True)
-
-    print("@@@ 3 @@@")
+    subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
-
-    print("@@@ 4 @@@")
 
     llumnix_output = {}
     for prompt in prompts:
@@ -111,10 +107,6 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
                                           timeout=60*5)
         llumnix_output[prompt] = response['text'][0]
 
-    print("@@@ 5 @@@")
-
     # compare
     for prompt in prompts:
         assert llumnix_output[prompt] == vllm_output[prompt]
-
-    print("@@@ 6 @@@")

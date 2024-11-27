@@ -145,6 +145,8 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
                 backup_error_log(test_mode)
                 print("bench_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS))
 
+    await asyncio.sleep(3)
+
     instance_num_blocks_list_after_bench = get_instance_num_blocks()
 
     assert instance_num_blocks_list_before_bench == instance_num_blocks_list_after_bench

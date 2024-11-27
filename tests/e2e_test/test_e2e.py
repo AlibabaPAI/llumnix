@@ -78,9 +78,13 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
     }
 
     global vllm_output
+    
+    print("@@@ 1 @@@")
 
     if len(vllm_output) == 0:
         vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
+        
+    print("@@@ 2 @@@")
 
     await asyncio.sleep(5)
 
@@ -94,15 +98,23 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
                                       migration_backend=migration_backend,
                                       launch_mode=launch_mode)
     subprocess.run(command, shell=True, check=True)
+    
+    print("@@@ 3 @@@")
 
     wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
+    
+    print("@@@ 4 @@@")
 
     llumnix_output = {}
     for prompt in prompts:
         response = await asyncio.wait_for(get_llumnix_response(prompt, sampling_params, f"{ip}:{base_port}"),
                                           timeout=60*5)
         llumnix_output[prompt] = response['text'][0]
+    
+    print("@@@ 5 @@@")
 
     # compare
     for prompt in prompts:
         assert llumnix_output[prompt] == vllm_output[prompt]
+    
+    print("@@@ 6 @@@")

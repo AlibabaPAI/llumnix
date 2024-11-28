@@ -154,7 +154,6 @@ def cleanup_ray_env_func():
 
 @pytest.fixture
 def cleanup_ray_env():
-    cleanup_ray_env_func()
     yield
     cleanup_ray_env_func()
 
@@ -164,7 +163,6 @@ def shutdown_llumnix_service_func():
 
 @pytest.fixture
 def shutdown_llumnix_service():
-    shutdown_llumnix_service_func()
     yield
     shutdown_llumnix_service_func()
 

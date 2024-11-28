@@ -22,12 +22,12 @@ from llumnix.utils import random_uuid
 
 
 def pytest_sessionstart(session):
-    subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
+    subprocess.run(["ray", "stop"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def pytest_sessionfinish(session, exitstatus):
-    subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ray", "stop"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 @pytest.fixture
 def setup_ray_env():

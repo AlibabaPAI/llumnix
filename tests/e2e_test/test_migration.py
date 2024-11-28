@@ -100,7 +100,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
                                                  dispatch_policy="flood",
                                                  migration_backend=migration_backend,
                                                  request_migration_policy=request_migration_policy)
-        subprocess.run(launch_command, shell=True, check=False)
+        subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
 

@@ -129,9 +129,7 @@ def generate_bench_command(ip_ports: str,
     )
     return command
 
-@pytest.fixture
-def cleanup_ray_env():
-    yield
+def cleanup_ray_env_func():
     try:
         try:
             named_actors = ray.util.list_named_actors(True)
@@ -155,12 +153,20 @@ def cleanup_ray_env():
         pass
 
 @pytest.fixture
-def shutdown_llumnix_service():
-    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
-    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
+def cleanup_ray_env():
+    cleanup_ray_env_func()
     yield
-    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
-    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
+    cleanup_ray_env_func()
+
+def shutdown_llumnix_service_func():
+    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
+    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=True)
+
+@pytest.fixture
+def shutdown_llumnix_service():
+    shutdown_llumnix_service_func()
+    yield
+    shutdown_llumnix_service_func()
 
 def to_markdown_table(data):
     headers = data[0]

@@ -64,7 +64,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
         )
         self.pre_alloc_cache_dict: Dict[int, BlockTable] = {}
         self.migrating_out_request_last_stage: List[GenerationGroupStateLlumnix] = []
-        self.pre_finished: List[GenerationGroupStateLlumnix] = []
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
@@ -248,20 +247,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
             heapq.heappush(self.waiting, gen_group)
         self._detokenizer.add_new_request(worker_req)
         return gen_group
-    
-    def _allocate(self, req_state: PagedRequestState) -> None:
-        if req_state.block_table_id not in self.block_manager.block_tables:
-            req_state.allocate_for_next_step()
-            block_table = req_state.block_table
-            for _ in range(req_state.required_blocks - len(req_state.block_table)):
-                block = self.block_manager.gpu_allocator.allocate()
-                # Set the reference counts of the token blocks.
-                # NOTE(yanghuan.zzp) vllm use seq_groups count, but we will fork later, so we set ref_count to 1.
-                block.ref_count = 1
-                block_table.append(block)
-            req_state.block_table_id = next(self.block_manager.block_table_counter)
-            self.block_manager.block_tables[req_state.block_table_id] = block_table
-
 
     def get_request_groups_map(self) -> Dict[str, GenerationGroupStateLlumnix]:
         request_groups_map = {}

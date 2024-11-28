@@ -94,7 +94,7 @@ async def generate_benchmark(request: Request) -> Response:
     request_id = server_request.id
     start = time.time()
 
-    results_generator = await manager_generate(server_request, request_id, llumnix_context)
+    results_generator = await manager_generate(server_request.model_dump_json(), request_id, llumnix_context)
 
     per_token_latency = []
     start = time.time()
@@ -106,7 +106,7 @@ async def generate_benchmark(request: Request) -> Response:
     per_token_latency_breakdown_dict = init_per_token_latency_breakdown_dict()
     stream = results_generator.async_stream()
     async for request_output in stream:
-        print("request_output",request_output)
+        logger.info("Received request output: {}".format(request_output))
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
             await manager_abort(request_id, llumnix_context)
@@ -126,7 +126,7 @@ async def generate_benchmark(request: Request) -> Response:
         logger.info("Finished request {}.".format(request_id))
         logger.info("num_finished_requests {}.".format(llumnix_context.num_finished_requests))
 
-    generation = final_output.outputs[0].text
+    generation = f"{''.join(texts)}"
     num_output_tokens = len(final_output.outputs[0].token_ids)
     num_input_tokens = len(final_output.prompt_token_ids)
     expected_resp_len = request_dict['max_tokens']

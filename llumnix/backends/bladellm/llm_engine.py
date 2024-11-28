@@ -20,10 +20,12 @@ import queue
 import gc
 import ray
 import json
+import grpc
+from google.protobuf.empty_pb2 import Empty
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
-from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateRequests
-
+from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateRequests, MigrateResGroupRequests
+from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
 from blade_llm.utils.counter import Counter
@@ -59,7 +61,7 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import QueueType, init_output_queue_client
 from llumnix.backends.bladellm.utils import string_to_int, get_model_conf
 from llumnix.backends.bladellm.worker import launch_worker
-
+from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 
 logger = init_logger(__name__)
 
@@ -132,6 +134,7 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         # thread and event loop with `step` method. Because we use default event loop for the following
         # objects.
         self._stop_event = asyncio.Event()
+        self._migrate_event = asyncio.Event()
         self._req_buffer = asyncio.Queue()
         client_args = (
             self._args,
@@ -142,6 +145,12 @@ class LLMEngineLlumnix(AsyncLLMEngine):
         await self._workers.wait_backend_ready()
 
         token_capacity, block_size, model_max_len, cpu_blocks = await self._workers.estimate_token_blocks_capacity()
+        logger.info(
+            "Workers estimate token capacity to: {}, cpu_blocks: {}, block_size: {}".format(
+            token_capacity,
+            cpu_blocks,
+            block_size)
+        )
         self._tokenizer = load_tokenizer(
             self._args.load_model_options.tokenizer_dir,
             self._args.load_model_options.special_token_dict,
@@ -214,7 +223,8 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                     server_infos.append(server_info)
                     request_outputs.append(GenerateStreamResponseLlumnix(req_id, l_resp))
                     # TODO[xinyi]: handle error info in back queue
-                    del self._back_queue[req_id]
+                    if req_id in self._back_queue:
+                        del self._back_queue[req_id]
                 elif l_resp and req_id in request_groups_map:
                     server_info = request_groups_map[req_id].server_info
                     server_infos.append(server_info)
@@ -281,12 +291,12 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             await self._handle_reset(update_output)
         elif update_output.response is not None:
             # TODO[xinyi]
-            logger.debug("update_callback:{}",update_output)
+            logger.info("update_callback:{}".format(update_output))
             import sys
             if True and not self.is_warmup:#'llumnix' in sys.modules:
                 self.process_model_outputs(update_output, request_groups_map)
             else:
-                logger.debug("update_output")
+                logger.info("update_output")
                 for req_id, l_resp in update_output.response.items():
                     if req_id in self._back_queue:
                         self._back_queue[req_id].put_nowait(l_resp)
@@ -337,10 +347,10 @@ class LLMEngineLlumnix(AsyncLLMEngine):
     
     # TODO(xinyi): for test, need delete
     async def _handle_hunger(self, hunger_timeout_ms: int):
-        logger.debug("hunger_timeout_ms: {}", hunger_timeout_ms)
+        logger.info("hunger_timeout_ms: {}".format(hunger_timeout_ms))
         if hunger_timeout_ms <= 0:
             completed, pending = await asyncio.wait(
-                [self._req_buffer.get(), self._stop_event.wait()],
+                [self._req_buffer.get(), self._stop_event.wait(), self._migrate_event.wait()],
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for coro in completed:
@@ -427,6 +437,23 @@ class LLMEngineLlumnix(AsyncLLMEngine):
                 ...
         logger.info("Finish server warmup. ")
 
+    async def _run_workers(self, worker_method, *args, **kwargs):
+        worker_address = self._worker_processes.migration_config.migration_backend_server_address.split(",")
+        coros = []
+        logger.info("_run_workers_worker_address {}".format(worker_address))
+
+        for worker in worker_address:
+            with grpc.insecure_channel(worker) as channel:
+                stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
+                method = getattr(stub, worker_method)
+                coros.append(method(*args, **kwargs))
+        all_outputs = await asyncio.gather(*coros)
+
+        return all_outputs
+
+    def stop(self):
+        self.engine.stop()
+
 class BackendBladeLLM(BackendInterface):
     def __init__(
         self,
@@ -442,7 +469,14 @@ class BackendBladeLLM(BackendInterface):
                                                             node_id,
                                                             engine_args)
             self.instance_id = instance_id
-            self.worker_addrs_list = [f"unix://{engine_args.worker_socket_path}.{i}" for i in range(engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size)]
+            self.worker_addrs_list = [
+                migration_worker_pb2.WorkerInfo(
+                    ip_address=addr,
+                    instance_id=int(instance_id),
+                    worker_id=idx
+                )
+                for idx, addr in enumerate(migration_config.migration_backend_server_address.split(","))
+            ]
             self._loop = asyncio.new_event_loop()#asyncio.new_event_loop()##
             self._engine_ready = threading.Event()
 
@@ -482,6 +516,7 @@ class BackendBladeLLM(BackendInterface):
                                                                 src_blocks=src_blocks,
                                                                 src_handlers=self.worker_addrs_list),
                                                            )
+<<<<<<< HEAD
             
     def _run_workers(self, worker_method, *args, **kwargs):
         return True
@@ -495,11 +530,31 @@ class BackendBladeLLM(BackendInterface):
         self.engine._scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.request_id)
         backend_request.reset_migration_args()
         self.add_running_request(backend_request)
+=======
+
+
+    async def send_request_group(self, dst_ray_actor: "ray.actor.ActorHandle", request_id: int):
+        await dst_ray_actor.execute_engine_method.remote("_run_workers",
+                                                           "migrate_request_group",
+                                                            MigrateResGroupRequests(
+                                                                id=request_id,
+                                                                src_handlers=self.worker_addrs_list),
+                                                           )
+>>>>>>> 2e29f13 (Your commit message)
 
     def _run_workers(self, worker_method, *args, **kwargs):
-        # pylint: disable=protected-access
-        executor = getattr(self.engine._workers, worker_method)
-        return executor(*args, **kwargs)
+        future= asyncio.run_coroutine_threadsafe(self.engine._run_workers(worker_method, *args, **kwargs), self._loop)
+        # future.result()
+    
+    def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
+        seq = backend_request.paged_reqs[0]
+        seq.block_table_id = next(self.engine._scheduler.block_manager.block_table_counter)
+        pre_alloc_blocks = self.engine._scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
+        logger.info("add seq {} to block table {}".format(seq.request_id, pre_alloc_blocks))
+        self.engine._scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.block_table_id)
+        backend_request.reset_migration_args()
+        self.engine._scheduler.add_request_to_running(backend_request)
+        self.engine._migrate_event.set()
 
     def is_ready(self):
         return True

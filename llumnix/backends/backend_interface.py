@@ -257,6 +257,24 @@ class BackendInterface(ABC):
                              cache where the incoming blocks should be stored.
         """
         raise NotImplementedError
+    
+    @abstractmethod
+    async def send_request_group(self, dst_ray_actor: "ray.actor.ActorHandle", request_id: int):
+        """
+        Sends request group from the source instance to the destination instance, specific to BladeLLM.
+
+        This method transfers the request group information between instances. It is responsible for ensuring that
+        the request group information corresponding to the specified request ID from the source instance's state
+        manager is sent to and properly received by the destination instance.
+
+        Args:
+            dst_ray_actor: A handle to the Ray actor representing the destination instance where the request group
+                           information is to be sent. This handle is used to reference the destination's
+                           execution context and manage the request group information transfer.
+            request_id :  A string representing the unique identifier of the request for which request group
+                            information is to be freed on the destination instance.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def commit_dst_request(self, backend_request: LlumnixRequest) -> None:

@@ -195,11 +195,26 @@ def init_llumnix_components(node_id: str,
                             *args,
                             ):
     engine_manager = init_manager(engine_manager_args)
+<<<<<<< HEAD
     if engine_manager_args.disable_init_instance_by_manager:
         instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
     else:
         instance_ids, llumlets = retry_manager_method_sync(
             engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args)
+=======
+    print("init_manager")
+    try:
+        if True:#engine_manager_args.disable_init_instance_by_manager:
+            instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
+        else:
+            instance_ids, llumlets = retry_manager_method_sync(
+                engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args)
+    except Exception as e:
+        import traceback
+        logger.error("Error in engine loop: {}".format(e))
+        logger.error("exception traceback: {}".format(traceback.format_exc()))
+        return engine_manager, [], [], None
+>>>>>>> 2e29f13 (Your commit message)
 
     available_instance_ids = []
     dead_instance_ids = []

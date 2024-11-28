@@ -16,6 +16,7 @@ limitations under the License.
 syntax = "proto3";
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/any.proto";
 
 message WarmupResponse {
   bool is_ok = 1;
@@ -50,8 +51,141 @@ message SendKvCacheResponse {
   bytes kv = 3;
 }
 
+message SendResourceGroupRequests {
+  int32 id = 1;
+}
+
+message MigrateResGroupRequests {
+  int32 id = 1;
+  repeated WorkerInfo src_handlers = 2;
+}
+
+message RequestGroup {
+    int32 rerquest_group_id = 1;
+    repeated int32 alives = 2;
+    repeated RequestState request_states = 3;
+    repeated RequestMetallumnix request_metas = 4;
+    bool return_logprobs = 5;
+    int32 top_logprobs = 6;
+    repeated string image_tensors = 7;
+    optional int32 image_pos = 8;
+    SamplingMetaData sampling_meta = 9;
+    repeated string shm_names = 10;
+    optional int32 rank = 11;
+    bool only_return_ids = 12;
+    bool return_raw_logits = 13;
+    optional float raw_logits = 14;
+}
+
+message RequestState {
+    int32 request_id = 1;
+    oneof prompt {
+        string prompt_str = 2;
+        PromptList prompt_list = 3;
+    }
+    int32 max_new_tokens = 4;
+    int32 prompt_len = 5;
+    int32 max_len = 6;
+    repeated string vlm_prompt = 7;
+    repeated int32 input_id = 8;
+    int32 cur_pos = 9;
+    repeated int32 prompt_tokens = 10;
+    optional bytes prompt_last_mask = 11;
+    optional bytes prompt_last_ids = 12;
+    optional bytes prompt_last_ids_cpu = 13;
+    optional bytes kv_cache = 14;
+    string text = 15;
+    repeated int32 token_cache = 16;
+    optional TensorMessage input_ids = 17;
+    float ntk_alpha = 18;
+    int32 seen_tokens = 19;
+    int32 in_flight_tokens = 20;
+    optional TensorMessage kv_blocks = 21;
+    bool prefill_done = 22;
+    optional TensorMessage img_emb = 23;
+    optional int32 has_replaced_tokens_num = 24;
+    optional bool in_replace_process = 25;
+}
+
+message TensorMessage {
+    bytes data = 1;        
+    repeated int32 shape = 2; 
+    string dtype = 3;     
+    string device = 4;   
+}
+
+
+message PromptList {
+    repeated PromptDict prompt_dicts = 1;
+}
+
+message PromptDict {
+    string key = 1;
+    string value = 2;
+}
+
+message SamplingMetaData {
+    float temperature = 1;
+    float top_p = 2;
+    int32 top_k = 3;
+    int32 best_of = 4;
+    float repetition_penalty = 5;
+    float frequency_penalty = 6;
+    float presence_penalty = 7;
+    bool use_beam_search = 8;
+    optional int64 seed = 9;
+    optional bytes generator = 10;
+    optional GuidedDecodingOptionsllumnix guided_decoding_options = 11;
+    optional ResponseFormatllumnix response_format = 12;
+    google.protobuf.Any guided_logits_processor = 13;
+    int32 curand_offset = 14;
+    bool is_prefilling = 15;
+    optional Device device = 16;
+}
+
+message Device {
+    string type = 1;
+    int32 index = 2;
+}
+
+message RequestMetallumnix {
+  int32 request_id = 1;
+  int32 num_in_token = 2;
+  int32 num_out_token = 3;
+  optional float probability = 4;
+  optional float logprob = 5;
+  optional LogProbsllumnix logprobs = 6;
+  int32 num_extra_token = 7;
+}
+
+
+message GuidedDecodingOptionsllumnix {
+  optional string guided_regex = 4;
+  optional string guided_json = 5;
+  repeated string guided_choice = 6;
+  optional string guided_grammar = 7;
+  optional string guided_whitespace_pattern = 8;
+  optional string guided_decoding_backend = 9;
+}
+
+
+message ResponseFormatllumnix {
+  string type = 1;
+}
+
+message LogProbllumnix {
+  int32 token_id = 1;
+  float token_prob = 2;
+}
+
+message LogProbsllumnix {
+  repeated LogProbllumnix log_prob = 1;
+}
+
 service MigrationWorker {
   rpc warmup (google.protobuf.Empty) returns (WarmupResponse) {}
   rpc migrate_cache (MigrateRequests) returns (google.protobuf.Empty) {}
+  rpc migrate_request_group (MigrateResGroupRequests) returns (google.protobuf.Empty) {}
+  rpc send_request_group (SendResourceGroupRequests) returns (RequestGroup) {}
   rpc do_send (SendKvCacheRequest) returns (SendKvCacheResponse) {}
 }

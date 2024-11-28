@@ -360,6 +360,9 @@ class BackendVLLM(BackendInterface):
                                                            dst_blocks=dst_blocks,
                                                            src_blocks=src_blocks,
                                                            src_worker_handle_list=self.worker_handle_list)
+    
+    def send_request_group(self, *args, **kwargs):
+        pass
 
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access

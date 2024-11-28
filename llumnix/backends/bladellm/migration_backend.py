@@ -16,6 +16,8 @@ from typing import List
 import torch
 import grpc
 import numpy as np
+from torch.types import Device
+
 
 from blade_llm.generation.statemanagers.base_state_manager import StateManagerBase
 from blade_llm.generation.statemanagers.ragged_flash_state_manager import RaggedFlashStateManager
@@ -23,10 +25,21 @@ from blade_llm.generation.statemanagers.paged_state_manager import PagedStateMan
 from blade_llm.generation.kvcache.kv_cache_arena import PagedKVCacheArena, RaggedFlashKVCacheArena
 from blade_llm.generation.kvcache.kv_transfer import KVTransferClient, KVTransferServer, TransferType
 from blade_llm.service.args import ServingArgs
+from blade_llm.generation.request_state import RequestGroup, RequestState
+from blade_llm.service.proto.bladellm_pb2 import RequestMeta, WorkerRequest, LogProbs, LogProb
+from blade_llm.protocol import GuidedDecodingOptions, ResponseFormat
+
+from blade_llm.generation.sampling_meta_data import SamplingMetaData
+
+from blade_llm.service.proto.bladellm_pb2 import (
+    StoppingCriteria,
+    WorkerRequest,
+)
 
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
+from llumnix.backends.bladellm.utils import tensor_message_to_tensor, tensor_to_tensor_message
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 
@@ -134,8 +147,185 @@ class GrpcMigrationBackend(MigrationBackendBase):
 
             for layer_idx in range(self.kv_cache_arena.num_layers):
                 self.kv_cache_arena.events[layer_idx].wait()
+        
+    
+    def migrate_request_group(self, src_handle, request_id: int):
+        with grpc.insecure_channel(src_handle.ip_address, options=self.channel_options) as channel:
+            stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
+            request_group = stub.send_request_group(migration_worker_pb2.SendResourceGroupRequests(id=request_id))
+            if request_id in self.state_manager._request_groups:
+                raise Exception("request_id already exists")
+            req_proto = WorkerRequest(
+                id=request_group.rerquest_group_id,
+                prompt=request_group.request_states[0].prompt_str,
+                stopping_criterial=StoppingCriteria(max_new_tokens=request_group.request_states[0].max_new_tokens),
+            )
+            
+            request_group_obj = RequestGroup(req_proto)
+            request_group_obj.rerquest_group_id = request_group.rerquest_group_id
+            request_group_obj.alives=request_group.alives
+            request_group_obj.request_states=[RequestState(
+                        request_id=rs.request_id,
+                        prompt=rs.prompt_str if rs.HasField('prompt_str') else [
+                            dict(key=pd.key, value=pd.value) for pd in rs.prompt_list.prompt_dicts
+                        ], 
+                        max_new_tokens=rs.max_new_tokens,
+                        prompt_len=rs.prompt_len,
+                        max_len=rs.max_len,
+                        vlm_prompt=list(rs.vlm_prompt),
+                        input_id=list(rs.input_id),
+                        cur_pos=rs.cur_pos,
+                        prompt_tokens=list(rs.prompt_tokens),
+                        prompt_last_mask=rs.prompt_last_mask if rs.prompt_last_mask != b'' else None,
+                        prompt_last_ids=rs.prompt_last_ids if rs.prompt_last_mask != b'' else None,
+                        prompt_last_ids_cpu=rs.prompt_last_ids_cpu if rs.prompt_last_mask != b'' else None,
+                        kv_cache=rs.kv_cache if rs.prompt_last_mask != b'' else None,
+                        text=rs.text,
+                        token_cache=list(rs.token_cache),
+                        input_ids=tensor_message_to_tensor(rs.input_ids) if rs.HasField('input_ids') else None,
+                        ntk_alpha=rs.ntk_alpha,
+                        seen_tokens=rs.seen_tokens,
+                        in_flight_tokens=rs.in_flight_tokens,
+                        kv_blocks=tensor_message_to_tensor(rs.kv_blocks) if rs.HasField('kv_blocks') else None,
+                        prefill_done=rs.prefill_done,
+                        img_emb=tensor_message_to_tensor(rs.img_emb) if rs.HasField('img_emb') else None,
+                        has_replaced_tokens_num=rs.has_replaced_tokens_num,
+                        in_replace_process=rs.in_replace_process
+                    ) for rs in request_group.request_states]
+            request_group_obj.request_metas=[RequestMeta(
+                request_id=rm.request_id,
+                num_in_token=rm.num_in_token,
+                num_out_token=rm.num_out_token,
+                probability=rm.probability,
+                logprob=rm.logprob,
+                logprobs=LogProbs(log_prob=[LogProb(token_id=lp.token_id, token_prob=lp.token_prob) for lp in rm.logprobs.log_prob]) if rm.logprobs else None,
+                num_extra_token=rm.num_extra_token
+            ) for rm in request_group.request_metas]
+            request_group_obj.return_logprobs=request_group.return_logprobs
+            request_group_obj.top_logprobs=request_group.top_logprobs
+            request_group_obj.image_tensors=list(request_group.image_tensors)
+            request_group_obj.image_pos=request_group.image_pos if request_group.HasField('image_pos') else None
+            
+            sampling_meta_obj = SamplingMetaData(req_proto)
+            sampling_meta_obj.temperature=request_group.sampling_meta.temperature
+            sampling_meta_obj.top_p=request_group.sampling_meta.top_p
+            sampling_meta_obj.top_k=request_group.sampling_meta.top_k
+            sampling_meta_obj.best_of=request_group.sampling_meta.best_of
+            sampling_meta_obj.repetition_penalty=request_group.sampling_meta.repetition_penalty
+            sampling_meta_obj.frequency_penalty=request_group.sampling_meta.frequency_penalty
+            sampling_meta_obj.presence_penalty=request_group.sampling_meta.presence_penalty
+            sampling_meta_obj.use_beam_search=request_group.sampling_meta.use_beam_search
+            sampling_meta_obj.seed=request_group.sampling_meta.seed
+            sampling_meta_obj.generator=request_group.sampling_meta.generator if request_group.sampling_meta.HasField('generator') else None
+            sampling_meta_obj.guided_decoding_options=GuidedDecodingOptions(
+                    guided_regex=request_group.sampling_meta.guided_decoding_options.guided_regex  if request_group.sampling_meta.guided_decoding_options.HasField('guided_regex') else None,
+                    guided_json=request_group.sampling_meta.guided_decoding_options.guided_json if request_group.sampling_meta.guided_decoding_options.HasField('guided_json') else None,
+                    guided_choice=list(request_group.sampling_meta.guided_decoding_options.guided_choice),
+                    guided_grammar=request_group.sampling_meta.guided_decoding_options.guided_grammar if request_group.sampling_meta.guided_decoding_options.HasField('guided_grammar') else None,
+                    guided_whitespace_pattern=request_group.sampling_meta.guided_decoding_options.guided_whitespace_pattern if request_group.sampling_meta.guided_decoding_options.HasField('guided_whitespace_pattern') else None,
+                    guided_decoding_backend=request_group.sampling_meta.guided_decoding_options.guided_decoding_backend if request_group.sampling_meta.guided_decoding_options.HasField('guided_decoding_backend') else None
+                )
+            sampling_meta_obj.response_format=ResponseFormat(type=request_group.sampling_meta.response_format.type) if request_group.sampling_meta.response_format.type else None
+            sampling_meta_obj.guided_logits_processor=request_group.sampling_meta.guided_logits_processor if request_group.sampling_meta.HasField('guided_logits_processor') else None
+            sampling_meta_obj.curand_offset=request_group.sampling_meta.curand_offset
+            sampling_meta_obj.is_prefilling=request_group.sampling_meta.is_prefilling
+            sampling_meta_obj.device=self.state_manager.device #Device(type=request_group.sampling_meta.device.type, index=request_group.sampling_meta.device.index) if request_group.sampling_meta.device.type else None
+            request_group_obj.sampling_meta=sampling_meta_obj
+            
+            request_group_obj.shm_names=list(request_group.shm_names)
+            request_group_obj.rank=request_group.rank if request_group.HasField('rank') else None
+            request_group_obj.only_return_ids=request_group.only_return_ids
+            request_group_obj.return_raw_logits=request_group.return_raw_logits
+            request_group_obj.raw_logits=request_group.raw_logits if request_group.HasField('raw_logits') else None
+            request_group_obj.rank = self.state_manager.rank
+            self.state_manager._request_groups[request_id] = request_group_obj
+            logger.info("Receiving request_group: {} {} {}".format(request_group_obj.request_states,request_group_obj.sampling_meta,request_group_obj.return_logprobs))
+            # TODO(xinyi): vit_images and lora_requests
 
-    # pylint: disable=unused-argument
+    def send_request_group(self, request, context):
+        if request.id not in self.state_manager._request_groups:
+            raise Exception(f"Request group ID {request.id} not found.")
+        request_group = self.state_manager._request_groups[request.id]
+        logger.info("Sending request_group: {} {} {}".format(request_group.request_states,request_group.sampling_meta,request_group.return_logprobs))
+        response = migration_worker_pb2.RequestGroup(
+            rerquest_group_id=request_group.rerquest_group_id,
+            alives=request_group.alives,
+            request_states=[migration_worker_pb2.RequestState(
+                request_id=rs.request_id,
+                prompt_str=rs.prompt if type(rs.prompt) == str else None,
+                prompt_list=migration_worker_pb2.PromptList(prompt_dicts=[
+                    migration_worker_pb2.PromptDict(key=pd.key, value=pd.value) for pd in rs.prompt
+                ]) if type(rs.prompt) == list else None,
+                max_new_tokens=rs.max_new_tokens,
+                prompt_len=rs.prompt_len,
+                max_len=rs.max_len,
+                vlm_prompt=rs.vlm_prompt,
+                input_id=rs.input_id,
+                cur_pos=rs.cur_pos,
+                prompt_tokens=rs.prompt_tokens,
+                prompt_last_mask=rs.prompt_last_mask if rs.prompt_last_mask else None,
+                prompt_last_ids=rs.prompt_last_ids,
+                prompt_last_ids_cpu=rs.prompt_last_ids_cpu,
+                kv_cache=rs.kv_cache,
+                text=rs.text,
+                token_cache=rs.token_cache,
+                input_ids=tensor_to_tensor_message(rs.input_ids),
+                ntk_alpha=rs.ntk_alpha,
+                seen_tokens=rs.seen_tokens,
+                in_flight_tokens=rs.in_flight_tokens,
+                kv_blocks=rs.kv_blocks,
+                prefill_done=rs.prefill_done,
+                img_emb=rs.img_emb,
+                has_replaced_tokens_num=rs.has_replaced_tokens_num,
+                in_replace_process=rs.in_replace_process
+            ) for rs in request_group.request_states],
+            request_metas=[migration_worker_pb2.RequestMetallumnix(
+                request_id=rm.request_id,
+                num_in_token=rm.num_in_token,
+                num_out_token=rm.num_out_token,
+                probability=rm.probability if rm.HasField("probability") else None,
+                logprob=rm.logprob if rm.HasField("logprob") else None,
+                logprobs=migration_worker_pb2.LogProbsllumnix(log_prob=[migration_worker_pb2.LogProbllumnix(token_id=lp.token_id, token_prob=lp.token_prob) for lp in rm.logprobs.log_prob]) if rm.logprobs else None,
+                num_extra_token=rm.num_extra_token,
+            ) for rm in request_group.request_metas],
+            return_logprobs=request_group.return_logprobs,
+            top_logprobs=request_group.top_logprobs,
+            image_tensors=request_group.image_tensors,
+            image_pos=request_group.image_pos,
+            sampling_meta=migration_worker_pb2.SamplingMetaData(
+                temperature=request_group.sampling_meta.temperature,
+                top_p=request_group.sampling_meta.top_p,
+                top_k=request_group.sampling_meta.top_k,
+                best_of=request_group.sampling_meta.best_of,
+                repetition_penalty=request_group.sampling_meta.repetition_penalty,
+                frequency_penalty=request_group.sampling_meta.frequency_penalty,
+                presence_penalty=request_group.sampling_meta.presence_penalty,
+                use_beam_search=request_group.sampling_meta.use_beam_search,
+                seed=request_group.sampling_meta.seed,
+                generator=request_group.sampling_meta.generator,
+                guided_decoding_options=migration_worker_pb2.GuidedDecodingOptionsllumnix(
+                    guided_regex=request_group.sampling_meta.guided_decoding_options.guided_regex,
+                    guided_json=request_group.sampling_meta.guided_decoding_options.guided_json,
+                    guided_choice=request_group.sampling_meta.guided_decoding_options.guided_choice,
+                    guided_grammar=request_group.sampling_meta.guided_decoding_options.guided_grammar,
+                    guided_whitespace_pattern=request_group.sampling_meta.guided_decoding_options.guided_whitespace_pattern,
+                    guided_decoding_backend=request_group.sampling_meta.guided_decoding_options.guided_decoding_backend
+                ),
+                response_format=migration_worker_pb2.ResponseFormatllumnix(type=request_group.sampling_meta.response_format.type) if request_group.sampling_meta.response_format else None,
+                guided_logits_processor=request_group.sampling_meta.guided_logits_processor,
+                curand_offset=request_group.sampling_meta.curand_offset,
+                is_prefilling=request_group.sampling_meta.is_prefilling,
+                device=migration_worker_pb2.Device(type=request_group.sampling_meta.device.type, index=request_group.sampling_meta.device.index) if request_group.sampling_meta.device else None,
+            ),
+            shm_names=request_group.shm_names,
+            rank=request_group.rank if request_group.rank else None,
+            only_return_ids=request_group.only_return_ids,
+            return_raw_logits=request_group.return_raw_logits,
+            raw_logits=request_group.raw_logits if request_group.raw_logits else None,
+        )
+        self.state_manager.remove_state(request.id)
+        return response
+
     def do_send(self, request, context):
         blocks = list(request.src_blocks)
 

@@ -35,7 +35,6 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
                  rank: int, args: ServingArgs) -> None:
         migration_worker_pb2_grpc.MigrationWorkerServicer.__init__(self)
         device = args.device if args.device else torch.cuda.device(rank)
-        print("my_devide", device)
         torch.cuda.set_device(device)
         self.instance_id = instance_id
         self.migration_config = migration_config
@@ -44,8 +43,8 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
 
     # pylint: disable=unused-argument
     def migrate_cache(self, request: migration_worker_pb2.MigrateRequests, context) -> None:
-        src_worker_handle = request.src_handlers[self._rank]
         try:
+            src_worker_handle = request.src_handlers[self._rank]
             self.migration_backend.migrate_cache(src_worker_handle, request.src_blocks, request.dst_blocks)
         # pylint: disable=broad-except
         except Exception as e:
@@ -69,6 +68,20 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             resp.is_ok = False
             resp.error_msg = f"warmup failed: {e}"
         return resp
+    
+    def migrate_request_group(self, request: migration_worker_pb2.MigrateResGroupRequests, context):
+        try:
+            src_worker_handle = request.src_handlers[self._rank]
+            self.migration_backend.migrate_request_group(src_worker_handle, request.id)
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.info("[migrate_request_group] rank: {}, {} is dead, err : {}.".format(self._rank, src_worker_handle, e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
+        
+        return empty_pb2.Empty()
+    
+    def send_request_group(self, request: migration_worker_pb2.SendResourceGroupRequests, context):
+        return self.migration_backend.send_request_group(request, context) 
 
     def shutdown(self) -> None:
         torch.cuda.synchronize()

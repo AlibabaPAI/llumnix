@@ -65,7 +65,7 @@ _C.MANAGER.LOG_FILENAME = "server.log"
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = ""
 
 # Disable fixing the placement of instance to current node
-_C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = False
+_C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = True
 # Disable initializing instance by manager
 _C.MANAGER.DISABLE_INIT_INSTANCE_BY_MANAGER = True
 # Number of instances created at initialization

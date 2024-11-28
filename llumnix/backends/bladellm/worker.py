@@ -32,6 +32,7 @@ from blade_llm.service.workers.remote_worker import (
     RemoteManager,
     start_remote_worker_server,
 )
+from blade_llm.service.proto import bladellm_pb2
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.bladellm.migration_worker import MigrationWorker
@@ -146,7 +147,7 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
         state_manager = self._engine._state_manager
         MigrationWorker.__init__(self, state_manager, instance_id, migration_config,
                                  rank, serving_args)
-        
+
 class MigrationRemoteWorker(RemoteWorker, MigrationWorker):
     def __init__(self, instance_id: int, migration_config: MigrationConfig,
                 rank: int, serving_args: ServingArgs) -> None:

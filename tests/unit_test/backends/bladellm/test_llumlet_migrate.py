@@ -51,10 +51,10 @@ async def test_llumlet_migrate(setup_ray_env):
     llumlet_name = "0"
     engine_class = ray.remote(num_cpus=1, num_gpus=1, name=f"instance_{llumlet_name}", namespace='llumnix', max_concurrency=4)(Llumlet).\
         options(scheduling_strategy=NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False))
-    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/self-hosted/model/Qwen2.5-7B'))
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/Qwen--Qwen1.5-7B-Chat',disable_cuda_graph=True))
     llumlet0 = engine_class.remote(llumlet_name, QueueType.RAYQUEUE, BackendType.BLADELLM, migration_config, engine_args, 
                                    None, ray.get_runtime_context().get_node_id())
-    await llumlet0.is_ready.remote()
+    
 
     request_output_queue = RayQueueServer()
     server_info = ServerInfo("my_server", QueueType.RAYQUEUE, request_output_queue, None, None)
@@ -63,31 +63,51 @@ async def test_llumlet_migrate(setup_ray_env):
         prompt="hello",
         prompt_tokens=[10001,10002,10003],
         sampling_params=SamplingParams(top_p=0.9),
-        stopping_criterial=StoppingCriteria(max_new_tokens=2),
+        stopping_criterial=StoppingCriteria(max_new_tokens=50),
     )
-    await llumlet0.generate.remote("0", server_info, math.inf, engine_request.model_dump_json())
+    request_output_queue2 = RayQueueServer()
+    server_info2 = ServerInfo("my_server2", QueueType.RAYQUEUE, request_output_queue2, None, None)
+    engine_request2 = ServerRequest(
+        id=12,
+        prompt="hello",
+        prompt_tokens=[10003],
+        sampling_params=SamplingParams(top_p=0.9),
+        stopping_criterial=StoppingCriteria(max_new_tokens=50),
+    )
+    # await llumlet0.generate.remote("0", server_info, math.inf, engine_request.model_dump_json())
     
-    finish = False
-    while not finish:
-        request_outputs = await request_output_queue.get()
-        for request_output in request_outputs:
-            print(" -------- from_test -----  ", type(request_output), json.loads(request_output))
-            if json.loads(request_output)['is_finished']:
-                finish = True
-
-    await llumlet0.generate.remote("0", server_info, math.inf, engine_request.model_dump_json())
+    # finish = False
+    # while not finish:
+    #     request_outputs = await request_output_queue.get()
+    #     for request_output in request_outputs:
+    #         print(" -------- from_test -----  ", type(request_output), json.loads(request_output))
+    #         if json.loads(request_output)['is_finished']:
+    #             finish = True
+    
 
     migration_config: MigrationConfig = EngineManagerArgs(migration_backend='grpc').create_migration_config()
     migration_config.migration_backend_server_address = "127.0.0.1:50052"
     llumlet_name = "1"
     engine_class = ray.remote(num_cpus=1, num_gpus=1, name=f"instance_{llumlet_name}", namespace='llumnix', max_concurrency=4)(Llumlet).\
         options(scheduling_strategy=NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False))
-    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/self-hosted/model/Qwen2.5-7B'))
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/Qwen--Qwen1.5-7B-Chat'))
     engine_args.worker_socket_path += "1"
     
     llumlet1 = engine_class.remote(llumlet_name, QueueType.RAYQUEUE, BackendType.BLADELLM, migration_config, engine_args, 
                                    None, ray.get_runtime_context().get_node_id())
+    await llumlet0.is_ready.remote()
+
     await llumlet1.is_ready.remote()
+
+    
+    
+    await llumlet1.generate.remote(11, server_info, math.inf, engine_request.model_dump_json())
+    # await llumlet0.generate.remote(12, server_info2, math.inf, engine_request2.model_dump_json())
+
+    import time
+    time.sleep(1)
+
+    await llumlet1.migrate_out.remote("instance_0", 1)
     
     finish = False
     while not finish:
@@ -97,7 +117,6 @@ async def test_llumlet_migrate(setup_ray_env):
             if json.loads(request_output)['is_finished']:
                 finish = True
 
-    # await llumlet1.migrate_out.remote("1", 1)
 
-    await llumlet0.execute_engine_method.remote("stop")
-    await llumlet1.execute_engine_method.remote("stop")
+    # await llumlet0.execute_engine_method.remote("stop")
+    # await llumlet1.execute_engine_method.remote("stop")

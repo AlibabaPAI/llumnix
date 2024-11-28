@@ -208,10 +208,10 @@ class EngineManagerArgs:
              "do not set --disable-init-instance-by-manager and --disable-fixed-node-init-instance.")
 
         # TODO[xinyi, kuilong]: grpc and kvtransfer can be used for vllm.
-        # assert args.migration_backend not in ['grpc','kvtransfer'] or (args.migration_backend in ['grpc','kvtransfer'] \
-        #     and args.migration_backend_transfer_type), \
-        #     ("When using grpc or kvTransfer as migration backend, "
-        #      "do not set --migration-backend-transfer-type as empty.")
+        assert args.migration_backend not in ['kvtransfer'] or (args.migration_backend == 'kvtransfer' \
+            and args.migration_backend_transfer_type), \
+            ("When using kvTransfer as migration backend, "
+             "do not set --migration-backend-transfer-type as empty.")
 
     @staticmethod
     def add_cli_args(

@@ -159,8 +159,8 @@ def cleanup_ray_env():
     cleanup_ray_env_func()
 
 def shutdown_llumnix_service_func():
-    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
-    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=True)
+    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
+    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
 
 @pytest.fixture
 def shutdown_llumnix_service():

@@ -110,7 +110,7 @@ async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
-                print("bench_test timed out after 30 minutes.")
+                assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
     with open("performance.txt", "w", encoding="utf-8") as f:
         f.write(parse_log_file())

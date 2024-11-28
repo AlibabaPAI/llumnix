@@ -190,20 +190,25 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             seq_group_metadata_list = new_seq_group_metadata_list
         for ignored_seq_group in ignored_seq_groups:
             server_infos.append(ignored_seq_group.server_info)
+
         for server_info in server_infos:
             if hasattr(server_info, 'request_timestamps'):
                 server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
+
         request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+
         for request_output, server_info in zip(request_outputs, server_infos):
             if hasattr(server_info, 'request_timestamps'):
                 request_output.request_timestamps = server_info.request_timestamps
                 request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+
         # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
         return request_outputs, server_infos
 
     async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         step_begin_time = time.time()
         request_outputs, server_infos = await super().step_async()
+
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
@@ -225,9 +230,12 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
+
+        self.instance_info = instance_info
+
         if request_outputs:
             self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
-        self.instance_info = instance_info
+
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()

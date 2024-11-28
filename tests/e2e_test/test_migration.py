@@ -137,7 +137,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
-                print("bench_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS))
+                assert False, "migration_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS)
 
     await asyncio.sleep(3)
 

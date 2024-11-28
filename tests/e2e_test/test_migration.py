@@ -27,7 +27,7 @@ from .utils import (generate_launch_command, generate_bench_command, to_markdown
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
 
-MIGRATION_BENCH_TIMEOUT_MINS = 15
+MIGRATION_BENCH_TIMEOUT_MINS = 30
 
 
 def parse_instance_log_file(log_files):
@@ -116,7 +116,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
         bench_command = generate_bench_command(
             ip_ports=f"127.0.0.1:{base_port + i}",
             model=model,
-            num_prompts=500,
+            num_prompts=1000,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=10,

@@ -19,7 +19,7 @@ from typing import List
 import asyncio
 import sys
 
-from blade_llm.generation.kvcache.kv_transfer import TransferType
+import blade_llm.generation.kvcache.kv_transfer as kv_transfer
 from blade_llm.service.workers.remote_worker import RemoteWorker, RemoteManager
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.worker import _RemoteWorkerProcesses, _WorkerProcesses, setup_dist
@@ -41,7 +41,7 @@ from llumnix.logger import init_logger
 logger = init_logger(__name__)
 
 class _WorkerProcessesLlumnix(_WorkerProcesses):
-    def __init__(self, args: ServingArgs, instance_id: int, migration_config: MigrationConfig):
+    def __init__(self, args: ServingArgs, instance_id: str, migration_config: MigrationConfig):
         super().__init__(args)
         self.instance_id = instance_id
         self.migration_config = migration_config
@@ -132,16 +132,16 @@ class _RemoteWorkerProcessesLlumnix(_RemoteWorkerProcesses):
         self.instance_id = instance_id
         self.migration_config = migration_config
 
-def launch_worker(args: ServingArgs, instance_id: int, migration_config: MigrationConfig):
-    if args.enable_remote_worker:
+def launch_worker(serving_args: ServingArgs, instance_id: int, migration_config: MigrationConfig):
+    if serving_args.enable_remote_worker:
         # TODO(xinyi): not support RemoteWorkerProcesses
-        return _RemoteWorkerProcessesLlumnix(args, instance_id, migration_config)
+        return _RemoteWorkerProcessesLlumnix(serving_args, instance_id, migration_config)
     else:
-        return _WorkerProcessesLlumnix(args, instance_id, migration_config)
+        return _WorkerProcessesLlumnix(serving_args, instance_id, migration_config)
 
 class MigrationLocalWorker(LocalWorker, MigrationWorker):
-    def __init__(self, instance_id: int, migration_config: MigrationConfig,
-                rank: int, serving_args: ServingArgs) -> None:
+    def __init__(self, rank: int, serving_args: ServingArgs,
+                 instance_id: int, migration_config: MigrationConfig,) -> None:
         LocalWorker.__init__(self, rank, serving_args)
 
         state_manager = self._engine._state_manager
@@ -149,8 +149,8 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
                                  rank, serving_args)
 
 class MigrationRemoteWorker(RemoteWorker, MigrationWorker):
-    def __init__(self, instance_id: int, migration_config: MigrationConfig,
-                rank: int, serving_args: ServingArgs) -> None:
+    def __init__(self, rank: int, serving_args: ServingArgs,
+                 instance_id: int, migration_config: MigrationConfig,) -> None:
         RemoteWorker.__init__(self, rank, serving_args)
 
         state_manager = self._engine._state_manager

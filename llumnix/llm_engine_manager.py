@@ -107,37 +107,26 @@ class LLMEngineManager:
             self.instance_last_logged_empty = {}
 
         # When manager starts, it automatically connects to all existing instances.
-        self._connect_to_instances()
+        asyncio.run_coroutine_threadsafe(self._connect_to_instances(), asyncio.get_event_loop())
 
-    async def generate(
-            self,
-            request_id: str,
-            server_info: ServerInfo,
-            *args,
-            **kwargs,) -> None:
+    async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
+        while self.num_instances == 0:
+            logger.info("No instance available temporarily, sleep {}s, "
+                        "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
+            await asyncio.sleep(RETRIES_INTERVALS)
+
+        instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:
-            while self.num_instances == 0:
-                logger.info("No instance available temporarily, sleep {}s, "
-                            "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
-                await asyncio.sleep(RETRIES_INTERVALS)
-            instance_id, request_expected_steps = self.global_scheduler.dispatch()
-            try:
-                if hasattr(server_info, 'request_timestamps'):
-                    server_info.request_timestamps.manager_generate_timestamp = time.time()
-                logger.info("llmManager is ")
-                await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
-                if self.log_requests:
-                    logger.info("received request {}.".format(request_id))
-                    logger.info("dispath to instance {}".format(instance_id))
-                    self.request_instance[request_id] = instance_id
-            except (ray.exceptions.RayActorError, KeyError):
-                logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
-                self.scale_down(instance_id)
-        except Exception as e:
-            import traceback
-            logger.error("Error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
-            return None 
+            if hasattr(server_info, 'request_timestamps'):
+                server_info.request_timestamps.manager_generate_timestamp = time.time()
+            await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
+            if self.log_requests:
+                logger.info("received request {}.".format(request_id))
+                logger.info("dispath to instance {}".format(instance_id))
+                self.request_instance[request_id] = instance_id
+        except (ray.exceptions.RayActorError, KeyError):
+            logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
+            self.scale_down(instance_id)
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -375,7 +364,7 @@ class LLMEngineManager:
         # a coroutine is already handling the changes in the number of instances in the cluster and it will account for the changes
         # caused by this scale-up (see rebuild_migrate_backend for details). Therefore, we simply return in this case. Specifically,
         # for RPC, the Ray actor handle is used for the migration cache, so there is no need to rebuild the group.
-        if self.engine_manager_args.migration_backend != 'rpc' and indeed_update and no_pending_instance:
+        if self.engine_manager_args.migration_backend in ['gloo', 'nccl'] and indeed_update and no_pending_instance:
             asyncio.create_task(self.rebuild_migrate_backend())
 
         return self.num_instances
@@ -399,7 +388,7 @@ class LLMEngineManager:
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
 
-        if self.engine_manager_args.migration_backend != 'rpc':
+        if self.engine_manager_args.migration_backend in ['gloo', 'nccl']:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
 
@@ -410,7 +399,7 @@ class LLMEngineManager:
 
         return self.num_instances
 
-    def _connect_to_instances(self):
+    async def _connect_to_instances(self):
         actor_names_dict = ray.util.list_named_actors(True)
         instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'] != MANAGER_ACTOR_NAME]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
@@ -420,7 +409,7 @@ class LLMEngineManager:
             instance_id = instance_actor_name[len('instance_'):]
             if instance_id not in self.instances:
                 try:
-                    ray.get(instance_actor_handle.is_ready.remote())
+                    await instance_actor_handle.is_ready.remote()
                 # pylint: disable=W0703
                 except Exception as e:
                     logger.info("connect to instance {} abort, which may be not ready or alive, err: {}".format(instance_id, e))

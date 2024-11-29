@@ -19,7 +19,6 @@ from google.protobuf import empty_pb2
 import torch
 import grpc
 
-from blade_llm.generation.kvcache.kv_transfer import TransferType
 from blade_llm.service.args import ServingArgs
 from blade_llm.utils.network import get_free_port
 

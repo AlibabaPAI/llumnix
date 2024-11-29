@@ -11,26 +11,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Tuple
+import json
+
+from typing import Any, List, Tuple, Union
 from pydantic import BaseModel, Field
 from blade_llm.service.scheduler_types import GenerationGroupState
 from blade_llm.protocol import ServerRequest, GenerateStreamResponse
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.server_info import ServerInfo
 
+from loguru import logger
 
 class GenerateStreamResponseLlumnix(GenerateStreamResponse):
-    request_id: int = Field(default=None, description="Request ID associated with the response")
+    request_id: str = Field(default="", description="Request ID associated with the request")
+    server_info: Any = Field(default=None, description="Server info associated with the response")
 
-    def __init__(self, request_id: int, resp: GenerateStreamResponse = None, **kwargs: Any) -> None:
-        if resp is not None:
-            super().__init__(**resp.dict(), request_id=request_id, **kwargs)
-        else:
-            super().__init__(request_id = request_id, **kwargs)
+    def __init__(self, resp: GenerateStreamResponse, request_id: str = None, server_info: ServerInfo = None) -> None:
+        super().__init__(**resp.model_dump())
+        self.request_id = request_id
+        self.server_info = server_info
 
 class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
-    def __init__(self, gen_group: GenerationGroupState, llumnix_request_args) -> None:
+    def __init__(self, gen_group: GenerationGroupState, *args) -> None:
         GenerationGroupState.__init__(self, **gen_group.__dict__)
-        LlumnixRequest.__init__(self, *llumnix_request_args)
+        LlumnixRequest.__init__(self, *args)
         #TODO[xinyi]: pagedreqstate prefill
         self.is_prefill = True
         self.is_finished = False
@@ -87,23 +91,13 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         """Return the number of prefill tokens that are not computed."""
         return self.request_len - self.get_num_computed_tokens()
 
-class ServerRequestLlumnix():
-    def __init__(self, server_request: ServerRequest, *args) -> None:
-        self.server_request = server_request
-        self.llumnix_request_args = args
+class ServerRequestLlumnix(ServerRequest):
+    request_id: str = Field(default="", description="Request ID associated with the request")
+    server_info: Any = Field(default=None, description="Server info associated with the response")
+    expected_steps: int = Field(default=-1, description="Expected number of steps for the request")
 
-    def __getattr__(self, item):
-        try:
-            return getattr(self.server_request, item)
-        except AttributeError:
-            try:
-                return self.__getattribute__(item)
-            except AttributeError:
-                raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
-    
-    def __setattr__(self, name, value):
-        if 'server_request' in self.__dict__ and hasattr(self.server_request, name):
-            setattr(self.server_request, name, value)
-        else:
-            super().__setattr__(name, value)
-            
+    def __init__(self, server_request: str, request_id, server_info, expected_steps) -> None:
+        super().__init__(**json.loads(server_request))
+        self.request_id = request_id
+        self.server_info = server_info
+        self.expected_steps = expected_steps

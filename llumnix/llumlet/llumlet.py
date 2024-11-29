@@ -76,7 +76,8 @@ class Llumlet:
                   **kwargs):
         try:
             lifetime = "detached" if detached else None
-            assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], f'unimplemented backend {backend_type}'
+            assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], \
+                f'unimplemented backend {backend_type}'
             num_gpu = 0
             if backend_type == backend_type.BLADELLM:
                 num_gpu = args[0].tensor_parallel_size * args[0].pipeline_parallel_size
@@ -192,20 +193,11 @@ class Llumlet:
             logger.error("Error in engine loop: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc())) 
             return None
-    
 
-    def generate(
-        self,
-        request_id: str,
-        server_info: ServerInfo,
-        expected_steps: int,
-        *args,
-        **kwargs,
-    ) -> None:
+    def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         # This should not be used for logging, as it is monotonic time.
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.llumlet_generate_timestamp = time.time()
-        logger.info("backend_engine add_request")
         self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:

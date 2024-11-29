@@ -249,18 +249,17 @@ class BackendBladeLLM(BackendInterface):
         placement_group: PlacementGroup = None,
         node_id: str = None
     ) -> None:
-
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix(instance_id, output_queue_type, migration_config,
+                                                            placement_group, node_id, engine_args)
         self.worker_addrs_list = [
             migration_worker_pb2.WorkerInfo(
                 ip_address=addr,
-                instance_id=int(instance_id),
+                instance_id=instance_id,
                 worker_id=idx
             )
             for idx, addr in enumerate(migration_config.migration_backend_server_address.split(","))
         ]
 
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix(instance_id, output_queue_type, migration_config,
-                                                            placement_group, node_id, engine_args)
         self.instance_id = instance_id
         self._loop = asyncio.new_event_loop()
         self._engine_ready = threading.Event()
@@ -297,8 +296,8 @@ class BackendBladeLLM(BackendInterface):
                                                            )
 
     def _run_workers(self, worker_method, *args, **kwargs):
-        future= asyncio.run_coroutine_threadsafe(self.engine._run_workers(worker_method, *args, **kwargs), self._loop)
-        # future.result()
+        pass
+        # asyncio.run_coroutine_threadsafe(self.engine._run_workers(worker_method, *args, **kwargs), self._loop)
     
     def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         seq = backend_request.paged_reqs[0]

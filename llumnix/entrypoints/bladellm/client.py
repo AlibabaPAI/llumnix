@@ -130,14 +130,11 @@ class AsyncLLMEngineClientLlumnix(MultiProcessingLLMClient):
 
     def close(self):
         pass
-
-    async def add_request(self, req: ServerRequest) -> LLMResponse:
-        if req.sampling_params.n > 1 or req.sampling_params.use_beam_search:
-            return error_resp(req.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
-    
-        return super().add_request(req)
     
     async def _add_request(self, request: ServerRequest) -> LLMResponse:
+        if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
+            return error_resp(request.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
+    
         from llumnix.entrypoints.bladellm.api_server import llumnix_context
         request.id = random.randint(0, 2147483647) # 1<<31-1
         resp_stream = await manager_generate(request.model_dump_json(), str(request.id), llumnix_context)

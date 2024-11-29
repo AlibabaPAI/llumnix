@@ -25,7 +25,7 @@ message WarmupResponse {
 
 message WorkerInfo {
   string ip_address = 1;
-  int32 instance_id = 2;
+  string instance_id = 2;
   int32 worker_id = 3;
 }
 

@@ -64,17 +64,16 @@ def backup_error_log(func_name):
         if filename.startswith("instance_"):
             src_file = os.path.join(src_dir, filename)
             shutil.copy(src_file, dst_dir)
-            print(f"Backup error instance log: {src_file} to {dst_dir}")
 
-        if filename.startswith("bench_"):
+        elif filename.startswith("bench_"):
             src_file = os.path.join(src_dir, filename)
             shutil.copy(src_file, dst_dir)
-            print(f"Backup error bench log: {src_file} to {dst_dir}")
 
     file_path = os.path.join(dst_dir, 'test.info')
-    print(f"Backup error test.info: {file_path}")
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(f'{func_name}')
+
+    print(f"Backup error instance log to directory {dst_dir}")
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):

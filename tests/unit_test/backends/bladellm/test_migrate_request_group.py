@@ -67,14 +67,55 @@ class MockMigrationRequestGroup(mock_migration_request_group_pb2_grpc.MockMigrat
     def __init__(self, migration_backend):
         mock_migration_request_group_pb2_grpc.MockMigrationRequestGroupServicer.__init__(self)
         self.migration_backend = migration_backend
+        
 
     def set_request_group(self, request, context):
         state_manager = self.migration_backend.state_manager
-        state_manager._request_groups[11] = _make_data(1)
-        print("why",state_manager._request_groups[11])
-        print("why",state_manager._request_groups[11].request_states)
-        print("why",state_manager._request_groups[11].request_metas)
+        state_manager._request_groups[request.request_id] = _make_data(request.request_id)
+        self.src_request_group = state_manager._request_groups[request.request_id]
         return empty_pb2.Empty()
+    
+    def check_request_group(self, request, context):
+        resp = migration_worker_pb2.WarmupResponse(is_ok=True)
+        try:
+            src_request_group = self.src_request_group
+            target_request_group = self.migration_backend.state_manager._request_groups[request.request_id]
+            # Attribute specific to different instance
+            target_request_group.sampling_meta.device = None
+            src_request_group.sampling_meta.device = None
+            for state in target_request_group.request_states:
+                state.input_ids = None
+                state.vlm_prompt = None
+            for state in src_request_group.request_states:
+                state.input_ids = None
+                state.vlm_prompt = None
+            src_request_group.request_metas = []
+            target_request_group.request_metas = []
+            src_request_group.rank = None
+            target_request_group.rank = None
+
+            if src_request_group.rerquest_group_id != target_request_group.rerquest_group_id or \
+                src_request_group.alives != target_request_group.alives or \
+                src_request_group.request_states != target_request_group.request_states or \
+                src_request_group.request_metas != target_request_group.request_metas or \
+                src_request_group.return_logprobs != target_request_group.return_logprobs or \
+                src_request_group.top_logprobs != target_request_group.top_logprobs or \
+                src_request_group.image_tensors != target_request_group.image_tensors or \
+                src_request_group.image_pos != target_request_group.image_pos or \
+                src_request_group.sampling_meta != target_request_group.sampling_meta or \
+                src_request_group.shm_names != target_request_group.shm_names or \
+                src_request_group.rank != target_request_group.rank or \
+                src_request_group.only_return_ids != target_request_group.only_return_ids or \
+                src_request_group.return_raw_logits != target_request_group.return_raw_logits or \
+                src_request_group.raw_logits != target_request_group.raw_logits:
+                resp.is_ok = False
+                resp.error_msg = "The request group information before and after migration is not the same."
+                return resp
+        except Exception as e:
+            resp.is_ok = False
+            resp.error_msg = f"Check failed: {e}"
+        return resp
+        
 
 class MockMigrationRemoteWorker(MockMigrationRequestGroup, MigrationRemoteWorker):
     def __init__(self, *args, **kwargs) -> None:
@@ -142,7 +183,7 @@ def test_migrate_request_group(backend, attention_type, transfer_type, worker_ty
             device=i,
             server_ip="127.0.0.1",
             rank=0,
-            max_gpu_memory_utilization=0.5,
+            max_gpu_memory_utilization=0.8,
             load_model_options=LoadModelOptions(
                 model='/mnt/dataset/opt-125m', attn_cls=attention_type, disable_cuda_graph=True
             )
@@ -154,9 +195,6 @@ def test_migrate_request_group(backend, attention_type, transfer_type, worker_ty
         backends.append(p)
 
     time.sleep(10)
-
-    print(worker_socket_addrs)
-    print(backends)
 
     worker0_channel = grpc.insecure_channel(worker_socket_addrs[0], options=options)
     worker1_channel = grpc.insecure_channel(worker_socket_addrs[1], options=options)
@@ -175,23 +213,39 @@ def test_migrate_request_group(backend, attention_type, transfer_type, worker_ty
     warmup_resp = worker1_stub.warmup(empty_pb2.Empty())
     assert warmup_resp.is_ok
 
-    responce = mock_worker0_stub.set_request_group(empty_pb2.Empty())
-
+    # migration across instances
+    request_id = 11
+    responce = mock_worker0_stub.set_request_group(mock_migration_request_group_pb2.RequestGroupRequest(
+        request_id = request_id,
+    ))
     src_worker_info = migration_worker_pb2.WorkerInfo(
         ip_address=worker_socket_addrs[0],
         instance_id=0,
         worker_id=0
     )
-
-    warmup_resp = worker1_stub.migrate_request_group(migration_worker_pb2.MigrateResGroupRequests(
-        id = 11,
+    worker1_stub.migrate_request_group(migration_worker_pb2.MigrateResGroupRequests(
+        id = request_id,
         src_handlers=[src_worker_info],
     ))
-    print(warmup_resp)
-    assert warmup_resp.is_ok
 
-    # request = mock_migration_request_group_pb2.(block_idxs=list(range(total_migration_cache_blocks)))
-
+    # check request group correctness for migration
+    request_id += 1
+    responce = mock_worker0_stub.set_request_group(mock_migration_request_group_pb2.RequestGroupRequest(
+        request_id = request_id,
+    ))
+    src_worker_info = migration_worker_pb2.WorkerInfo(
+        ip_address=worker_socket_addrs[0],
+        instance_id=0,
+        worker_id=0
+    )
+    worker0_stub.migrate_request_group(migration_worker_pb2.MigrateResGroupRequests(
+        id = request_id,
+        src_handlers=[src_worker_info],
+    ))
+    check_resp = mock_worker0_stub.check_request_group(mock_migration_request_group_pb2.RequestGroupRequest(
+        request_id = request_id,
+    ))
+    assert check_resp.is_ok
 
     worker0_channel.close()
     worker1_channel.close()

@@ -220,7 +220,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
             sampling_meta_obj.guided_decoding_options=GuidedDecodingOptions(
                     guided_regex=request_group.sampling_meta.guided_decoding_options.guided_regex  if request_group.sampling_meta.guided_decoding_options.HasField('guided_regex') else None,
                     guided_json=request_group.sampling_meta.guided_decoding_options.guided_json if request_group.sampling_meta.guided_decoding_options.HasField('guided_json') else None,
-                    guided_choice=list(request_group.sampling_meta.guided_decoding_options.guided_choice),
+                    guided_choice=list(request_group.sampling_meta.guided_decoding_options.guided_choice) if len(request_group.sampling_meta.guided_decoding_options.guided_choice)>0 else None,
                     guided_grammar=request_group.sampling_meta.guided_decoding_options.guided_grammar if request_group.sampling_meta.guided_decoding_options.HasField('guided_grammar') else None,
                     guided_whitespace_pattern=request_group.sampling_meta.guided_decoding_options.guided_whitespace_pattern if request_group.sampling_meta.guided_decoding_options.HasField('guided_whitespace_pattern') else None,
                     guided_decoding_backend=request_group.sampling_meta.guided_decoding_options.guided_decoding_backend if request_group.sampling_meta.guided_decoding_options.HasField('guided_decoding_backend') else None
@@ -229,7 +229,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
             sampling_meta_obj.guided_logits_processor=request_group.sampling_meta.guided_logits_processor if request_group.sampling_meta.HasField('guided_logits_processor') else None
             sampling_meta_obj.curand_offset=request_group.sampling_meta.curand_offset
             sampling_meta_obj.is_prefilling=request_group.sampling_meta.is_prefilling
-            sampling_meta_obj.device=self.state_manager.device #Device(type=request_group.sampling_meta.device.type, index=request_group.sampling_meta.device.index) if request_group.sampling_meta.device.type else None
+            sampling_meta_obj.device=self.state_manager.device
             request_group_obj.sampling_meta=sampling_meta_obj
             
             request_group_obj.shm_names=list(request_group.shm_names)
@@ -239,14 +239,14 @@ class GrpcMigrationBackend(MigrationBackendBase):
             request_group_obj.raw_logits=request_group.raw_logits if request_group.HasField('raw_logits') else None
             request_group_obj.rank = self.state_manager.rank
             self.state_manager._request_groups[request_id] = request_group_obj
-            logger.info("Receiving request_group: {} {} {}".format(request_group_obj.request_states,request_group_obj.sampling_meta,request_group_obj.return_logprobs))
+            logger.info("Receiving request_group: {} {} {}".format(request_group_obj.request_states,request_group_obj.sampling_meta,request_group_obj.request_metas))
             # TODO(xinyi): vit_images and lora_requests
 
     def send_request_group(self, request, context):
         if request.id not in self.state_manager._request_groups:
             raise Exception(f"Request group ID {request.id} not found.")
         request_group = self.state_manager._request_groups[request.id]
-        logger.info("Sending request_group: {} {} {}".format(request_group.request_states,request_group.sampling_meta,request_group.return_logprobs))
+        logger.info("Sending request_group: {} {} {}".format(request_group.request_states,request_group.sampling_meta,request_group.request_metas))
         response = migration_worker_pb2.RequestGroup(
             rerquest_group_id=request_group.rerquest_group_id,
             alives=request_group.alives,
@@ -283,7 +283,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 request_id=rm.request_id,
                 num_in_token=rm.num_in_token,
                 num_out_token=rm.num_out_token,
-                probability=rm.probability if rm.HasField("probability") else None,
+                probability=rm.probability,
                 logprob=rm.logprob if rm.HasField("logprob") else None,
                 logprobs=migration_worker_pb2.LogProbsllumnix(log_prob=[migration_worker_pb2.LogProbllumnix(token_id=lp.token_id, token_prob=lp.token_prob) for lp in rm.logprobs.log_prob]) if rm.logprobs else None,
                 num_extra_token=rm.num_extra_token,

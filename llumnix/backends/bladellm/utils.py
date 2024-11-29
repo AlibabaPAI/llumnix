@@ -54,10 +54,6 @@ def string_to_int(string: str) -> int:
     """
     hash_object = hashlib.sha256(string.encode())
     hex_dig = hash_object.hexdigest()
-<<<<<<< HEAD
-=======
-
->>>>>>> 2e29f13 (Your commit message)
     int_value = int(hex_dig, 16)
     return int_value
 

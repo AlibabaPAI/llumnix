@@ -516,22 +516,6 @@ class BackendBladeLLM(BackendInterface):
                                                                 src_blocks=src_blocks,
                                                                 src_handlers=self.worker_addrs_list),
                                                            )
-<<<<<<< HEAD
-            
-    def _run_workers(self, worker_method, *args, **kwargs):
-        return True
-        self.engine._run_workers(worker_method, *args, **kwargs)
-
-    def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
-        seq = backend_request.paged_reqs[0]
-        # seq.seq_id = next(self.engine.seq_counter) # TODO(xinyi): whether it is no need to change seq_id
-        logger.info("add seq {} to block table".format(seq.request_id))
-        pre_alloc_blocks = self.engine._scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
-        self.engine._scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.request_id)
-        backend_request.reset_migration_args()
-        self.add_running_request(backend_request)
-=======
-
 
     async def send_request_group(self, dst_ray_actor: "ray.actor.ActorHandle", request_id: int):
         await dst_ray_actor.execute_engine_method.remote("_run_workers",
@@ -540,7 +524,6 @@ class BackendBladeLLM(BackendInterface):
                                                                 id=request_id,
                                                                 src_handlers=self.worker_addrs_list),
                                                            )
->>>>>>> 2e29f13 (Your commit message)
 
     def _run_workers(self, worker_method, *args, **kwargs):
         future= asyncio.run_coroutine_threadsafe(self.engine._run_workers(worker_method, *args, **kwargs), self._loop)

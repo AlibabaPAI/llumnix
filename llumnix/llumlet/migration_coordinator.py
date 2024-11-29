@@ -66,8 +66,8 @@ class MigrationCoordinator:
         else:
             # last stage migration, stop inference, transfer all blocks
             migration_status = MigrationStatus.FINISHED_DONE
-            await self.backend_engine.send_request_group(migrate_in_ray_actor, migrate_out_request.request_id)
             self.backend_engine.remove_running_request(migrate_out_request.request_id)
+            await self.backend_engine.send_request_group(migrate_in_ray_actor, migrate_out_request.request_id)
             self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
             stage_block_num = len(incremental_blocks)
             src_blocks = incremental_blocks[:]

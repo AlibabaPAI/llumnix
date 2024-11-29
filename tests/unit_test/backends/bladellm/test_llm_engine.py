@@ -101,30 +101,30 @@ async def test_llm_engine_process_model_outputs():
     request_outputs, _ = llm_engine.put_queue_args_queue.get_nowait()
     assert len(request_outputs) == 1
 
-# def test_llm_engine_init():
-#     engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'))
-#     migration_config = EngineManagerArgs().create_migration_config()
-#     llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
-#                                     engine_args)
-#     assert isinstance(llm_engine._worker_processes, _WorkerProcessesLlumnix)
-#     loop = asyncio.new_event_loop()
-#     llm_engine.start(loop)
-#     assert isinstance(llm_engine._workers, LlumnixLocalWorkerClient)
-#     assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
-#     llm_engine.stop()
-#     loop.close()
+def test_llm_engine_init():
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'))
+    migration_config = EngineManagerArgs().create_migration_config()
+    llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
+                                    engine_args)
+    assert isinstance(llm_engine._worker_processes, _WorkerProcessesLlumnix)
+    loop = asyncio.new_event_loop()
+    llm_engine.start(loop)
+    assert isinstance(llm_engine._workers, LlumnixLocalWorkerClient)
+    assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
+    llm_engine.stop()
+    loop.close()
 
-    # engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'), enable_remote_worker=True, device=0, server_ip="127.0.0.1",
-    #         rank=0)
-    # migration_config = EngineManagerArgs().create_migration_config()
-    # llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
-    #                                 engine_args)
-    # assert isinstance(llm_engine._worker_processes, _RemoteWorkerProcessesLlumnix)
+    engine_args = ServingArgs(load_model_options=LoadModelOptions(model='/mnt/dataset/opt-125m'), enable_remote_worker=True, device=0, server_ip="127.0.0.1",
+            rank=0)
+    migration_config = EngineManagerArgs().create_migration_config()
+    llm_engine = LLMEngineLlumnix("0", QueueType.RAYQUEUE, migration_config, None, ray.get_runtime_context().get_node_id(),
+                                    engine_args)
+    assert isinstance(llm_engine._worker_processes, _RemoteWorkerProcessesLlumnix)
     # need to start worker
-    # llm_engine.start(asyncio.new_event_loop())
-    # assert isinstance(llm_engine._workers, LlumnixPipelineWorkerClient)
-    # assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
-    # llm_engine.stop()
+    llm_engine.start(asyncio.new_event_loop())
+    assert isinstance(llm_engine._workers, LlumnixPipelineWorkerClient)
+    assert isinstance(llm_engine._scheduler, PagedSchedulerLlumnix)
+    llm_engine.stop()
 
 @pytest.mark.asyncio
 async def test_llm_engine_add_requset():

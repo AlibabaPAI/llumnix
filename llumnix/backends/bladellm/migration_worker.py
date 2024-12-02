@@ -12,15 +12,12 @@
 # limitations under the License.
 
 from typing import Dict
-import gc
 import traceback
-from concurrent.futures import ThreadPoolExecutor
-from google.protobuf import empty_pb2
+
 import torch
-import grpc
+from google.protobuf import empty_pb2
 
 from blade_llm.service.args import ServingArgs
-from blade_llm.utils.network import get_free_port
 
 from llumnix.backends.bladellm.migration_backend import get_migration_backend
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2

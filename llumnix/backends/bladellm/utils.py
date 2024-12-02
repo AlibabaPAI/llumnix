@@ -11,19 +11,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import wraps
-from typing import Dict, List, Optional, Tuple
-import hashlib
 import torch
 import numpy as np
 
 from blade_llm.service.args import ServingArgs
-from blade_llm.model.config_utils import load_config
-from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 
-
-from llumnix.logger import init_logger
+from llumnix.backends.bladellm.proto import migration_worker_pb2
 from llumnix.arg_utils import EngineManagerArgs
+from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -47,34 +42,10 @@ def check_engine_args(engine_args: ServingArgs, engine_manager_args: EngineManag
         engine_manager_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
 
-# instance_id is string format in Llumnix while Bladellm only accepts int format.
-def string_to_int(string: str) -> int:
-    """
-    Convert a string to an integer.
-    """
-    hash_object = hashlib.sha256(string.encode())
-    hex_dig = hash_object.hexdigest()
-    int_value = int(hex_dig, 16)
-    return int_value
-
-def get_model_conf(args: ServingArgs):
-    model_conf = None
-    try:
-        model_conf = load_config(args.load_model_options.model)
-        model_conf.verify_with_parallel_config(
-            args.tensor_parallel_size, args.pipeline_parallel_size, args.enable_hybrid_dp
-        )
-    except Exception as e:
-        raise type(e)("Failed to load model config when init AsyncLLMEngine: {}", str(e)) from e
-    return model_conf
-
-
-
 def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
     if tensor is not None:
         return tensor.numpy().tobytes()
     return None
-
 
 def tensor_to_tensor_message(tensor: torch.Tensor) -> migration_worker_pb2.TensorMessage:
     if tensor is not None:
@@ -87,7 +58,6 @@ def tensor_to_tensor_message(tensor: torch.Tensor) -> migration_worker_pb2.Tenso
         return tensor_message
     else:
         return None
-
 
 def tensor_message_to_tensor(message: migration_worker_pb2.TensorMessage) -> torch.Tensor:
     # print("crewve",message.data,message.dtype,message.shape)

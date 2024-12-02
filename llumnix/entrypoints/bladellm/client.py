@@ -97,7 +97,6 @@ async def background_process_outputs(llumnix_context: LlumnixEntrypointsContext)
     try:
         while True:
             request_outputs = await llumnix_context.request_output_queue.get()
-            logger.info("Client Recv: {}".format(request_outputs))
             if request_outputs is None:
                 continue
             for request_output in request_outputs:
@@ -109,7 +108,7 @@ async def background_process_outputs(llumnix_context: LlumnixEntrypointsContext)
                     resp=GenerateStreamResponse(**request_data),
                     request_id=request_data['request_id'],
                 )
-                request_id = request_output.request_id
+                request_id = str(request_output.request_id)
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in llumnix_context.request_streams:
                     continue

@@ -43,8 +43,9 @@ class BlockManagerLlumnix(BlockSpaceManager):
         for _ in range(num_required_blocks):
             block = self.gpu_allocator.allocate()
             blocks.append(block)
+
         return blocks
-    
+
     def add_block_table(self, block_table: BlockTable, block_table_id: int) -> None:
         self.block_tables[block_table_id] = block_table.copy()
 
@@ -217,19 +218,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
         instance_info.finished_request_ids = len(self._finished_req_to_remove)
         logger.info("update in scheduler {}".format(instance_info.num_running_requests))
         return instance_info
-    
-    def safe_remove_requests(self, request_ids: Set[int]):
-        request_groups_map = self.get_request_groups_map()
-        for request_id in request_ids:
-            request_groups_map[request_id].is_finished = True
-        return super().safe_remove_requests(request_ids)
-        
-        
-    def safe_remove_requests(self, request_ids: Set[int]):
-        request_groups_map = self.get_request_groups_map()
-        for request_id in request_ids:
-            request_groups_map[request_id].is_finished = True
-        return super().safe_remove_requests(request_ids)
         
     def step(self) -> SchedulerStepOutput:
         step_out = super().step()

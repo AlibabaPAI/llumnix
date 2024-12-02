@@ -37,7 +37,6 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         LlumnixRequest.__init__(self, *args)
         #TODO[xinyi]: pagedreqstate prefill
         self.is_prefill = True
-        self.is_finished = False
         # The total chunk size (number of tokens) to process for next iteration.
         # 1 for decoding. Same as prompt tokens for prefill, but if prefill is
         # chunked, it can be smaller than that.

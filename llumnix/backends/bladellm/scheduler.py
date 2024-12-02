@@ -17,24 +17,21 @@ from typing import Dict, List, Set, Union
 
 from blade_llm.service.paged_utils import PreemptionMode
 from blade_llm.service.block_space_manager import BlockSpaceManager
-from blade_llm.service.proto.bladellm_pb2 import BlockTable, GenerationGroup
+from blade_llm.service.proto.bladellm_pb2 import BlockTable, GenerationGroup, WorkerStepRequest
 from blade_llm.service.schedulers import PagedScheduler
 from blade_llm.service.scheduler_types import SchedulerStepOutput, GenerationGroupState
-from blade_llm.protocol import ServerRequest
-from blade_llm.service.paged_utils import PagedRequestState, PreemptionMode
-from blade_llm.service.request_utils import _process_List_prompt
+from blade_llm.service.paged_utils import PreemptionMode
 from blade_llm.service.args import ServingArgs
-from blade_llm.service.proto.bladellm_pb2 import VitPrompt, WorkerRequest
-from blade_llm.service.request_utils import server_request_to_worker_request
 from blade_llm.service.scheduler_types import GenerationGroupState
 from blade_llm.protocol import GenerateStreamResponse
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.logger import init_logger
 from llumnix.llumlet.request import RequestInferenceType
-from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix, ServerRequestLlumnix
+from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.sequence import GenerateStreamResponseLlumnix
 from loguru import logger as my_logger
+
 logger = init_logger(__name__)
 
 class BlockManagerLlumnix(BlockSpaceManager):
@@ -171,9 +168,8 @@ class PagedSchedulerLlumnix(PagedScheduler):
         seq = backend_request.paged_reqs[0]
         logger.info("free seq {}".format(seq.request_id))
         self._free_req(backend_request)
-    
 
-    def _get_instance_info(self, scheduled_gen_groups: List[GenerationGroupStateLlumnix]) -> InstanceInfo:
+    def _get_instance_info(self, steps: List[WorkerStepRequest]) -> InstanceInfo:
         num_total_gpu_blocks = self._max_processing_units
         num_free_gpu_blocks = self.block_manager.get_num_free_gpu_blocks()
         num_used_gpu_blocks = num_total_gpu_blocks - num_free_gpu_blocks
@@ -207,19 +203,28 @@ class PagedSchedulerLlumnix(PagedScheduler):
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
         )
-        for gen_group in scheduled_gen_groups:
+
+        for gen_group in self.running:
             instance_info.running_seq_lens.extend([len(req_state.token_ids) for req_state in gen_group.paged_reqs])
             instance_info.num_seqs = len(instance_info.running_seq_lens)
-        if scheduled_gen_groups:
-            instance_info.inference_type = scheduled_gen_groups[-1].inference_type
-        # TODO(ZeldaHuang) adapt chunked-prefill
-        instance_info.num_batched_tokens = sum([gen_group.request_len for gen_group in scheduled_gen_groups])\
-                                            if instance_info.inference_type == RequestInferenceType.PREFILL else len(instance_info.running_seq_lens)
-        instance_info.finished_request_ids = [gen_group.request_id for gen_group in self.running if gen_group.is_finished]
-        logger.info("update {}".format(instance_info.num_running_requests))
 
+        instance_info.inference_type = RequestInferenceType.generate_inference_type(
+            exist_prefill=any(len(step.prefill) > 0 for step in steps),
+            exist_decode=any(len(step.decode) > 0 for step in steps))
+        instance_info.num_batched_tokens = sum([
+            len(step.decode) + sum([len(prefill.prompt_tokens) for prefill in step.prefill]) for step in steps
+        ])
+        instance_info.finished_request_ids = len(self._finished_req_to_remove)
+        logger.info("update in scheduler {}".format(instance_info.num_running_requests))
         return instance_info
     
+    def safe_remove_requests(self, request_ids: Set[int]):
+        request_groups_map = self.get_request_groups_map()
+        for request_id in request_ids:
+            request_groups_map[request_id].is_finished = True
+        return super().safe_remove_requests(request_ids)
+        
+        
     def safe_remove_requests(self, request_ids: Set[int]):
         request_groups_map = self.get_request_groups_map()
         for request_id in request_ids:
@@ -229,50 +234,23 @@ class PagedSchedulerLlumnix(PagedScheduler):
     def step(self) -> SchedulerStepOutput:
         step_out = super().step()
         my_logger.info(step_out)
-        # if step_out.step:
-        #     request_groups_map = self.get_request_groups_map()
-        #     step_ids = list(step_out.step.decode) + [r.id for r in step_out.step.prefill]
-        #     scheduled_gen_groups= [request_groups_map[step_id] for step_id in step_ids]
-        #     for r_id in step_ids:
-        #         num_new_tokens = request_groups_map[r_id].get_num_new_tokens() 
-        #         request_groups_map[r_id].token_chunk_size = num_new_tokens
-        #     self.update_instance_info_callback(self._get_instance_info(scheduled_gen_groups))
+
+        if step_out.step:
+            request_groups_map = self.get_request_groups_map()
+            for single_step in step_out.step:
+                step_ids = list(single_step.decode) + [r.id for r in single_step.prefill]
+                for r_id in step_ids:
+                    num_new_tokens = request_groups_map[r_id].get_num_new_tokens() 
+                    request_groups_map[r_id].token_chunk_size = num_new_tokens
+            self.update_instance_info_callback(self._get_instance_info(step_out.step))
         return step_out
 
-    def add_request(self, server_req: ServerRequestLlumnix):
-        worker_req = server_request_to_worker_request(server_req)
-        gen_group: GenerationGroupState = GenerationGroupState.from_request(
-            request=worker_req,
-            total_length=len(worker_req.prompt_tokens),
-            prompt_len_priority_scale=self.prompt_len_priority_scale,
-        )
-
-        gen_group.add_paged_req_state(PagedRequestState(worker_req, self.block_size, self.gamma_blank))
-        import heapq
-        import sys
-        if True:#'llumnix' in sys.modules:
-            gen_group_llumnix = GenerationGroupStateLlumnix(
-                gen_group, server_req.request_id, server_req.server_info, server_req.expected_steps)
-            if hasattr(gen_group_llumnix.server_info, 'request_timestamps'):
-                gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
-            heapq.heappush(self.waiting, gen_group_llumnix)
-        else:
-            heapq.heappush(self.waiting, gen_group)
-        self._detokenizer.add_new_request(worker_req)
-        return gen_group
-    
-    def _allocate(self, req_state: PagedRequestState) -> None:
-        if req_state.block_table_id not in self.block_manager.block_tables:
-            req_state.allocate_for_next_step()
-            block_table = req_state.block_table
-            for _ in range(req_state.required_blocks - len(req_state.block_table)):
-                block = self.block_manager.gpu_allocator.allocate()
-                # Set the reference counts of the token blocks.
-                # NOTE(yanghuan.zzp) vllm use seq_groups count, but we will fork later, so we set ref_count to 1.
-                block.ref_count = 1
-                block_table.append(block)
-            req_state.block_table_id = next(self.block_manager.block_table_counter)
-            self.block_manager.block_tables[req_state.block_table_id] = block_table
+    def add_gen_group(self, gen_group, server_req):
+        gen_group_llumnix = GenerationGroupStateLlumnix(
+            gen_group, server_req.request_id, server_req.server_info, server_req.expected_steps)
+        if hasattr(gen_group_llumnix.server_info, 'request_timestamps'):
+            gen_group_llumnix.server_info.request_timestamps.engine_add_request_timestamp = time.time()
+        super().add_gen_group(gen_group_llumnix, server_req)
 
     def get_request_groups_map(self) -> Dict[str, GenerationGroupStateLlumnix]:
         request_groups_map = {}

@@ -18,8 +18,23 @@ import time
 from llumnix.server_info import ServerInfo
 
 class RequestInferenceType(str, Enum):
+    UNKNOWN = "unknown"
     PREFILL = "prefill"
     DECODE = "decode"
+    PREFILL_AND_DECODE = "prefill_and_decode"
+
+    @classmethod
+    def generate_inference_type(cls, exist_prefill: bool, exist_decode: bool):
+        if exist_prefill and exist_decode:
+            inference_type = RequestInferenceType.PREFILL_AND_DECODE
+        elif exist_prefill:
+            inference_type = RequestInferenceType.PREFILL
+        elif exist_decode:
+            inference_type = RequestInferenceType.DECODE
+        else:
+            inference_type = RequestInferenceType.UNKNOWN
+
+        return RequestInferenceType(inference_type)
 
 class LlumnixRequest:
     def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:

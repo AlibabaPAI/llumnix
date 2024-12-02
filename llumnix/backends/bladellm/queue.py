@@ -10,26 +10,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import time
 import traceback
-from typing import Any, List, Optional, Dict, Union, Iterable, Tuple
-from collections import defaultdict
-import threading
 import asyncio
-import queue
-import gc
-import os
+
 import ray
-from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
-from llumnix.logger import init_logger
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import QueueType, init_output_queue_client
+from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
 
 
-#TODO(xinyi): the same to the function in vllm, maybe put into utils/common.py ?
 class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
         try:

@@ -16,13 +16,16 @@ from blade_llm.protocol import (
 
 port = 8081
 
+finish = 0
+
 async def hello(max_new_tokens, ignore_eos):
     headers = {
         # "Authorization": "<You may need this header for EAS."
     }
     url = f"ws://0.0.0.0:{port}/generate_stream"
     with connect(url, additional_headers=headers) as websocket:
-        prompts = ["what's 3 plus 4?"]
+        import random
+        prompts = [f"what's {random.randint(a=0, b=1000000)} plus {random.randint(a=0, b=1000000)}?"]
         for p in prompts:
             print(f"Prompt : {p}")
             req = GenerateRequest(
@@ -37,6 +40,7 @@ async def hello(max_new_tokens, ignore_eos):
             websocket.send(req.model_dump_json())
             texts = []
             idx = 0
+            global finish
             while True:
                 await asyncio.sleep(0)
                 msg = websocket.recv()
@@ -44,9 +48,10 @@ async def hello(max_new_tokens, ignore_eos):
                 texts.extend([t.text for t in resp.tokens])
                 idx += 1
                 if resp.is_finished:
+                    finish += 1
                     break
             print(len(texts), idx)
-            print(f"Generated text: {''.join(texts)}")
+            print(f"{finish}, Generated text: {''.join(texts)}")
             print("-" * 40)
 
 
@@ -58,9 +63,9 @@ async def get_range(n):
 
 async def main():
     tasks: List[asyncio.Task] = []
-    num_requests = 5
-    max_new_tokens = 10
-    ignore_eos = True
+    num_requests = 500
+    max_new_tokens = 20
+    ignore_eos = False
     start = time.time()
     async for i in get_range(num_requests):
         await asyncio.sleep(0.001)

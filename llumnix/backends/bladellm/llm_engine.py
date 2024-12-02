@@ -18,41 +18,32 @@ from collections import defaultdict
 import threading
 import asyncio
 import queue
+
 import ray
-import json
 import grpc
-from google.protobuf.empty_pb2 import Empty
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
-from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateRequests, MigrateResGroupRequests
-from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
 from blade_llm.utils.counter import Counter
 from blade_llm.protocol import GenerateStreamResponse
-from blade_llm.protocol import ServerRequest
 from blade_llm.service.worker import launch_worker
-
 from blade_llm.service.communications.engine_wrapper import APIWrapper
-from blade_llm.protocol import (
-    GenerateStreamResponse,
-    ServerRequest,
-)
+from blade_llm.protocol import GenerateStreamResponse
+
 from llumnix.backends.bladellm.queue import AsyncPutQueueActor
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, EngineState
-from llumnix.backends.bladellm.sequence import ServerRequestLlumnix, GenerationGroupStateLlumnix, GenerateStreamResponseLlumnix
+from llumnix.backends.bladellm.sequence import ServerRequestLlumnix, GenerationGroupStateLlumnix
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
-from llumnix.queue.queue_client_base import QueueClientBase
-from llumnix.queue.utils import QueueType, init_output_queue_client
-from llumnix.backends.bladellm.utils import string_to_int, get_model_conf
+from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateRequests, MigrateResGroupRequests
+from llumnix.queue.utils import QueueType
 from llumnix.backends.bladellm.worker import launch_worker
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
-from llumnix.queue.utils import QueueType
-from llumnix.backends.bladellm.scheduler import PagedSchedulerLlumnix
 
 logger = init_logger(__name__)
 from loguru import logger as my_logger
@@ -134,12 +125,13 @@ class LLMEngineLlumnix(AsyncLLMEngine):
 
         self.instance_id = instance_id
         self.step_counter = Counter()
-        self.instance_info = None
         self.state = EngineState.INIT
         self.placement_group = placement_group
         self.output_queue_type = output_queue_type
         self.node_id = node_id
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
+
+        self.instance_info = None
 
     def start(self, loop: asyncio.AbstractEventLoop):
         super().start(loop)
@@ -175,12 +167,13 @@ class LLMEngineLlumnix(AsyncLLMEngine):
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
     async def step(self):
-        # TODO[xinyi]: async step may lead to put info not in order for both put_queue_args_queue and step_request_queue
-        await super().step()
-
+        self.instance_info = self.instance_info if self.instance_info else InstanceInfo()
         self.instance_info.instance_id = self.instance_id
         self.instance_info.step_id = next(self.step_counter)
         self.instance_info.timestamp = time.time()
+    
+        # TODO[xinyi]: async step may lead to put info not in order for both put_queue_args_queue and step_request_queue
+        await super().step()
         # TODO(KuilongCui): update instance_info.profiling_data
         
         gen_groups = self._scheduler.running
@@ -195,20 +188,29 @@ class LLMEngineLlumnix(AsyncLLMEngine):
 
     async def update_callback(self, resp_list, step_requests):
         my_logger.info(resp_list)
-        my_logger.info(step_requests)
 
+        request_groups_map = self._scheduler.get_request_groups_map()
         for resp in resp_list:
-            my_logger.info(resp)
-            request_groups = resp.generation_groups.generation_group
-            request_groups_map = self._scheduler.get_request_groups_map()
-            for req_state in request_groups:
+            resp_gen_groups = resp.generation_groups.generation_group
+            for req_state in resp_gen_groups:
                 req_id = req_state.request_group_id
                 if req_id in request_groups_map:
                     request_groups_map[req_id].update_num_computed_tokens(request_groups_map[req_id].token_chunk_size)
 
+        last_running_gen_group_id = resp_list[-1].generation_groups.generation_group[-1].request_group_id
+        if len(resp_list) > 0 and last_running_gen_group_id in request_groups_map:
+            last_running_gen_group = request_groups_map[last_running_gen_group_id]
+            tot_blocks = []
+            for req_state in last_running_gen_group.paged_reqs:
+                blocks = self._scheduler.block_manager.get_block_table(req_state)
+                tot_blocks.extend(blocks)
+            tot_blocks = set(tot_blocks)
+
+            if self.instance_info:
+                self.instance_info.num_blocks_last_running_request = len(tot_blocks)
+
         await super().update_callback(resp_list, step_requests)
 
-    #TODO[xinyi]: the same to the function in vllm, maybe put into utils.py
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         if self.instance_info is not None:
             instance_info.instance_id = self.instance_info.instance_id

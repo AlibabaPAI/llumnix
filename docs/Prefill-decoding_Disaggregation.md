@@ -1,8 +1,8 @@
 # Prefill-decoding Disaggregation (Experimental)
 
-Prefill-decoding disaggregation is a technique that computes the prefill and decoding phases on separate instances, designed for reducing the inteference between the two phases and better utilizing heterogeneous hardware. For each request, following the prefill phase, the system migrates the generated key-value (KV) cache to the decoding instance and continues the computation. 
+Prefill-decoding disaggregation is a technique that computes the prefill and decoding phases on separate instances, designed mainly for reducing the inteference between the two phases and better utilizing heterogeneous hardware. For each request, following the prefill phase, the system migrates the generated key-value (KV) cache to the decoding instance and continues the computation. 
 
-We find Llumnix well-suited for implementing P-D disaggregation, because this technique is inherently a special request scheduling policy and fits well in Llumnix's modeling for request scheduling. Specifically, P-D disaggregation can be decomposed into two rules (shown as below): (1) a special dispatching rule, i.e., P-instances-only; and (2) a special migration rule, i.e., migrate to D instances after one step. Llumnix provides an implementation of P-D disaggregation following this principle.
+We find Llumnix well-suited for implementing P-D disaggregation, because this technique is inherently a special request scheduling policy and fits well in Llumnix's modeling for request scheduling. Specifically, P-D disaggregation can be decomposed into two rules (shown below): (1) a special dispatching rule, i.e., P-instances-only; and (2) a special migration rule, i.e., migrate to D instances after one step. Llumnix provides an implementation of P-D disaggregation following this principle.
 
 <div align=center>
 <img src="./pdd_1.png" align="center" width=80%/>
@@ -35,14 +35,15 @@ Currently P-D disaggregation is an experimental feature, mainly to demonstrate t
 
 1. Per-layer KV cache transfer (currently we use a simple blocking transfer);
 2. Explicit or automatic assignment of P/D instances (currently we only allow users to specify the instance numbers, with simple assignment rules);
-3. Heterogeneous instances, e.g., different device types, sizes, or parallelisms;
-4. Fine tuning of the scheduling policies.
+3. Smarter fault tolerance (currently, due to the simple P/D assignment, if one of the instance types has all of its instances gone, the service will hang; we will implement better P/D assignment and fault tolerance strategies to ensure high availability);
+4. Heterogeneous instances, e.g., different device types, sizes, or parallelisms;
+5. Fine tuning of the scheduling policies.
 
 We are actively working on these items. Stay tuned :)
 
 ## How to use
-Llumnix only uses two arguments to enable prefill-decoding disaggregation for simplicity. 
+Llumnix uses two simple arguments to enable prefill-decoding disaggregation in the current version. 
 - `--enable-pd-disagg True` is used to enable prefill-decoding disaggregation.
-- `--num-available-dispatch-instances` is used to configure the number of prefill instances. 
+- `--num-available-dispatch-instances` is used to configure the initial number of prefill instances. 
 
-Note that `num-available-dispatch-instances` < `initial_instance-num` especially when `--enable-scaling` is not set, as it determines the number of decoding instances.
+Note that one should make sure that `num-available-dispatch-instances` is smaller than `initial_instance-num` (especially when `--enable-scaling` is not set), otherwise there would be no instances for decoding.

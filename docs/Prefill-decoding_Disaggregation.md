@@ -46,4 +46,4 @@ Llumnix uses two simple arguments to enable prefill-decoding disaggregation in t
 - `--enable-pd-disagg True` is used to enable prefill-decoding disaggregation.
 - `--num-available-dispatch-instances` is used to configure the initial number of prefill instances. 
 
-Note that one should make sure that `num-available-dispatch-instances` is smaller than `initial_instance-num` (especially when `--enable-scaling` is not set), otherwise there would be no instances for decoding.
+Note that one should make sure that `num-available-dispatch-instances` is smaller than `initial_instances` (especially when `--enable-scaling` is not set), otherwise there would be no instances for decoding.

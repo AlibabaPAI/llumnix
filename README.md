@@ -54,10 +54,11 @@ python -m llumnix.entrypoints.vllm.api_server \
 During the serving deployment execution, Llumnix will automatically configure itself and serve as the request scheduling layer on top of the multiple vLLM engine instances.
 
 Visit our [documentation](./docs/) to get started:
-- [QuickStart](./docs/Quickstart.md)
+- [Quick Start](./docs/Quickstart.md)
 - [Supported Models](./docs/Supported_Models.md)
 - [Fault Tolerance](./docs/Fault_Tolerance.md)
 - [Simulator](./docs/Simulator.md)
+- [Prefill-decoding Disaggregation](./docs/Prefill-decoding_Disaggregation.md)
 
 ## Performance
 We evaluate the performance of the KV-cache-aware load-balancing scheduler and migration mechanism of Llumnix with 16 Llama2-7B/Qwen1.5-7B instances, each using an A10 GPU (24GB).

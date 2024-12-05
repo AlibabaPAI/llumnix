@@ -126,6 +126,9 @@ async def generate_benchmark(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
+    if llumnix_context.log_requests:
+        logger.info("entrypoints received request {}.".format(request_id))
+
     start = time.time()
 
     results_generator = await manager_generate(prompt, sampling_params, request_id, llumnix_context)
@@ -150,7 +153,7 @@ async def generate_benchmark(request: Request) -> Response:
 
     if llumnix_context.log_requests:
         llumnix_context.num_finished_requests += 1
-        logger.info("Finished request {}.".format(request_id))
+        logger.info("entrypoints finished request {}.".format(request_id))
         logger.info("num_finished_requests {}.".format(llumnix_context.num_finished_requests))
 
     generation = final_output.outputs[0].text

@@ -11,50 +11,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 import json
 import os
-import subprocess
 import pytest
 import torch
 import numpy as np
 
-from .test_e2e import generate_launch_command, clear_ray_state
 # pylint: disable=unused-import
-from .utils import to_markdown_table, setup_ray_env
+from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
+                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service)
 
-def launch_llumnix_service(command):
-    subprocess.run(command, shell=True, check=True)
+BENCH_TEST_TIMEOUT_MINS = 30
 
-def generate_bench_command(ip_ports: str, model: str, num_prompts: int, dataset_type: str, dataset_path: str,
-                           qps: int, results_filename: str = "", query_distribution: str = "poisson",
-                           coefficient_variation: float = 1.0, priority_ratio: float = 0.0):
-    command = (
-        f"python -u ./benchmark/benchmark_serving.py "
-        f"--ip_ports {ip_ports} "
-        f"--backend vLLM "
-        f"--tokenizer {model} "
-        f"--trust_remote_code "
-        f"--log_filename bench_{ip_ports.split(':')[1]} "
-        f"--random_prompt_count {num_prompts} "
-        f"--dataset_type {dataset_type} "
-        f"--dataset_path {dataset_path} "
-        f"--qps {qps} "
-        f"--distribution {query_distribution} "
-        f"--coefficient_variation {coefficient_variation} "
-        f"--priority_ratio {priority_ratio} "
-        f"--log_latencies "
-        f"--fail_on_response_failure "
-        f"{'> bench_'+results_filename if len(results_filename)> 0 else ''}"
-    )
-    return command
-
-def shutdown_llumnix_service():
-    try:
-        subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=True)
-    # pylint: disable=broad-except
-    except Exception:
-        pass
 
 def parse_log_file():
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]
@@ -91,35 +62,57 @@ def parse_log_file():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-async def test_simple_benchmark(setup_ray_env, model):
+async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model):
     device_count = torch.cuda.device_count()
+    ip = "127.0.0.1"
     base_port = 37037
+    ip_ports = []
     for i in range(device_count):
+        port = base_port+i
+        ip_port = f"{ip}:{port}"
+        ip_ports.append(ip_port)
         launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                 launch_ray_cluster=False, port=base_port+i, model=model)
+                                                 launch_ray_cluster=False,
+                                                 ip=ip,
+                                                 port=port,
+                                                 model=model)
         subprocess.run(launch_command, shell=True, check=True)
 
-    await asyncio.sleep(60)
+    wait_for_llumnix_service_ready(ip_ports)
 
-    async def run_bench_command(command):
-        process = await asyncio.create_subprocess_shell(command)
-        await process.wait()
-        assert process.returncode == 0
+    def run_bench_command(command):
+        # pylint: disable=consider-using-with
+        process = subprocess.Popen(command, shell=True)
+        return process
 
     tasks = []
     for i in range(device_count):
-        bench_command = generate_bench_command(ip_ports=f"127.0.0.1:{base_port+i}", model=model, num_prompts=300,
-                                               dataset_type="sharegpt",
-                                               dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl" ,
-                                               qps=2,
-                                               results_filename=f"{base_port+i}.out")
-        tasks.append(run_bench_command(bench_command))
+        bench_command = generate_bench_command(
+            ip_ports=f"127.0.0.1:{base_port + i}",
+            model=model,
+            num_prompts=200,
+            dataset_type="sharegpt",
+            dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
+            qps=5,
+            results_filename=f"{base_port + i}.out"
+        )
+        tasks.append(bench_command)
 
-    await asyncio.wait(tasks, timeout=60*30)
+    with ThreadPoolExecutor() as executor:
+        future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
+
+        for future in as_completed(future_to_command):
+            try:
+                process = future.result()
+                process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
+
+                assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
+            # pylint: disable=broad-except
+            except subprocess.TimeoutExpired:
+                process.kill()
+                assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
     with open("performance.txt", "w", encoding="utf-8") as f:
         f.write(parse_log_file())
 
-    shutdown_llumnix_service()
-    clear_ray_state()
     await asyncio.sleep(3)

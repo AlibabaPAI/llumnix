@@ -15,6 +15,7 @@ import time
 from typing import Dict, List
 import math
 import torch
+import ray
 
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 from vllm.utils import is_pin_memory_available

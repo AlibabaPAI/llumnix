@@ -13,12 +13,12 @@
 
 from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
-from llumnix.queue.utils import init_output_queue_server, QueueType
+from llumnix.queue.utils import init_request_output_queue_server, QueueType
 
-def request_output_queue_server(output_queue_type: QueueType):
+def request_output_queue_server(request_output_queue_type: QueueType):
     ip = '127.0.0.1'
     port = 1234
-    output_queue = init_output_queue_server(ip, port, output_queue_type)
+    output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
     server_id = random_uuid()
-    server_info = ServerInfo(server_id, output_queue_type, output_queue, ip, port)
+    server_info = ServerInfo(server_id, request_output_queue_type, output_queue, ip, port)
     return output_queue, server_info

@@ -91,7 +91,7 @@ async def manager_abort(request_id: str, llumnix_context: LlumnixEntrypointsCont
         logger.info("abort request: {}.".format(request_id))
         await llumnix_context.engine_manager.abort.remote(request_id)
     except ray.exceptions.RayActorError:
-        logger.info("Manager is unavailable")
+        logger.info("manager is unavailable")
 
 async def manager_is_ready(llumnix_context: LlumnixEntrypointsContext):
     ready_status = await llumnix_context.engine_manager.is_ready.remote()

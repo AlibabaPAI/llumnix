@@ -23,7 +23,7 @@ import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.utils import random_uuid
-from llumnix.queue.utils import init_output_queue_server, init_output_queue_client, QueueType
+from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
 
 app = llumnix.entrypoints.vllm.api_server.app
@@ -33,10 +33,10 @@ MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 
 @ray.remote(num_cpus=0)
 class MockLLMEngineManager:
-    def __init__(self, output_queue_type: QueueType):
+    def __init__(self, request_output_queue_type: QueueType):
         self._num_generates = 0
         self._num_aborts = 0
-        self.request_output_queue = init_output_queue_client(output_queue_type)
+        self.request_output_queue = init_request_output_queue_client(request_output_queue_type)
 
     async def generate(self, request_id, server_info, *args, **kwargs):
         self._num_generates += 1
@@ -52,9 +52,9 @@ class MockLLMEngineManager:
         return {"num_aborted_requests": self._num_aborts}
 
 
-def init_manager(output_queue_type: QueueType):
+def init_manager(request_output_queue_type: QueueType):
     engine_manager = MockLLMEngineManager.options(name=MANAGER_ACTOR_NAME,
-                                                  namespace='llumnix').remote(output_queue_type)
+                                                  namespace='llumnix').remote(request_output_queue_type)
     return engine_manager
 
 @app.get("/stats")
@@ -67,22 +67,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--output-queue-type", type=str, choices=["zmq", "rayqueue"])
+    parser.add_argument("--request-output-queue-type", type=str, choices=["zmq", "rayqueue"])
     parser = EngineManagerArgs.add_cli_args(parser)
     args = parser.parse_args()
 
-    output_queue_type = QueueType(args.output_queue_type)
-    engine_manager = init_manager(output_queue_type)
+    request_output_queue_type = QueueType(args.request_output_queue_type)
+    engine_manager = init_manager(request_output_queue_type)
     llumnix.entrypoints.vllm.api_server.llumnix_context = LlumnixEntrypointsContext()
     llumnix.entrypoints.vllm.api_server.llumnix_context.engine_manager = engine_manager
     ip = '127.0.0.1'
     port = 1234
     llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue = \
-        init_output_queue_server(ip, port, output_queue_type)
+        init_request_output_queue_server(ip, port, request_output_queue_type)
     ray_queue_server = None
-    if output_queue_type == QueueType.RAYQUEUE:
+    if request_output_queue_type == QueueType.RAYQUEUE:
         ray_queue_server = llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue
-    server_info = ServerInfo(random_uuid(), output_queue_type, ray_queue_server, ip, port)
+    server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
     llumnix.entrypoints.vllm.api_server.llumnix_context.server_info = server_info
 
     uvicorn.run(

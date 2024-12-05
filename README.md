@@ -10,7 +10,8 @@ Efficient and easy <i>multi-instance</i> LLM serving
 
 ## 🔥 Latest News
 
-- [2024.7] We officially released the first version of Llumnix!
+- [2024.11] Llumnix v0.1.0 launched!
+- [2024.7] We officially released the first version of Llumnix.
 - [2024.6] We released our OSDI '24 [research paper](https://arxiv.org/abs/2406.03243) on arxiv.
 
 ## 🚀 Why Llumnix
@@ -22,14 +23,16 @@ Llumnix provides optimized multi-instance serving performance in terms of:
 - *Low latency*
   - **Reduced time-to-first-token** (TTFT) and queuing delays with less memory fragmentation
   - **Reduced time-between-tokens** (TBT) and preemption stalls with better load balancing
-- *High throughput* with integration with state-of-the-art inference engines
+- *High throughput*
+  - Integration with state-of-the-art inference engines
+  - Support for techniques like prefill-decoding disaggregation
 
 Llumnix achieves this with:
 
 - Dynamic, fine-grained, KV-cache-aware scheduling
 - Continuous **rescheduling** across instances
   - Enabled by a KV cache migration mechanism with near-zero overhead
-  - Exploited for continuous load balancing and de-fragmentation
+  - Exploited for continuous load balancing, de-fragmentation, and prefill-decoding disaggregation
 
 Llumnix is easy to use with:
 
@@ -61,17 +64,17 @@ Visit our [documentation](./docs/) to get started:
 - [Prefill-decoding Disaggregation](./docs/Prefill-decoding_Disaggregation.md)
 
 ## Performance
-We evaluate the performance of the KV-cache-aware load-balancing scheduler and migration mechanism of Llumnix with 16 Llama2-7B/Qwen1.5-7B instances, each using an A10 GPU (24GB).
+We evaluate the performance of the KV-cache-aware load-balancing scheduler and migration mechanism of Llumnix with 16 Qwen2.5-7B instances (each using an A10-24GB GPU) and 16 Llama2-13B instances (each using an A800-80GB GPU).
 
 We use Poisson distributions with different request rates to generate request arrivals. For the input/output lengths of requests, we use ShareGPT dataset.
 
 <div align=center>
-<img src="./docs/performance.png" align="center" width=80%/>
+<img src="./docs/v0.1.0_benchmark.png" align="center" width=80%/>
 </div>
 
-With the KV-cache-aware load-balancing scheduler, Llumnix outperforms a simple load balancing scheduler based on queue sizes in TTFT (prefill) by up to 1.8x and 7.7x for mean and P99, and 1.4x for P99 TBT (decode).
+Llumnix outperforms a simple round-robin scheduler in TTFT (prefill) by up to 6.4x and 12.1x for mean and P99, and 12% for P99 TBT (decode). Llumnix also shows significantly shorter average preemption stalls (by two orders of magnitude).
 
-With migration mechanism, Llumnix maintains lower preemption stalls, further outperformers load-balance scheduler in TTFT by up to 1.7x and 3.3x for mean and P99, and 1.3x for P99 TBT.
+With the KV-cache-aware load-balancing scheduler and the migration mechanism, Llumnix also outperforms a simple load balancing scheduler based on queue sizes in TTFT (prefill) by up to 4.6x and 9.1x for mean and P99, and 15% for P99 TBT (decode).
 
 ## Roadmap
 

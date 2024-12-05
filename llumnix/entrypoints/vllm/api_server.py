@@ -125,7 +125,7 @@ async def generate_benchmark(request: Request) -> Response:
     _ = request_dict.pop("stream", False)
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
-    
+
     if llumnix_context.log_requests:
         logger.info("entrypoints received request {}.".format(request_id))
 

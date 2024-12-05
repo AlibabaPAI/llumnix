@@ -25,7 +25,7 @@ except ImportError:
     pass
 
 _FORMAT = "Llumnix %(levelname)s %(asctime)s %(filename)s:%(lineno)d] %(message)s"
-_DATE_FORMAT = "%m-%d %H:%M:%S %z"
+_DATE_FORMAT = "%m-%d %H:%M:%S"
 
 
 class NewLineFormatter(logging.Formatter):

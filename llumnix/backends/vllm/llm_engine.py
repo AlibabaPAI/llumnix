@@ -202,7 +202,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 request_output.request_timestamps = server_info.request_timestamps
                 request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
             if request_output.finished:
-                logger.info("engine finished request: {}".format(request_output.request_id))
+                logger.info("engine finished request {}".format(request_output.request_id))
 
         # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
         return request_outputs, server_infos
@@ -361,7 +361,6 @@ class BackendVLLM(BackendInterface):
     def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
-        logger.info("add seq {} to block table".format(seq.seq_id))
         logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)

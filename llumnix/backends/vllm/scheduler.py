@@ -253,15 +253,14 @@ class SchedulerLlumnix(Scheduler):
         return seq_group_metadata_list, scheduler_outputs
 
     def _schedule_running(self, running_queue: deque, *args, **kwargs):
-        # filtered_running_queue = deque()
-        # remove_running = deque()
-        # for seq_group in running_queue:
-        #     if seq_group.output_len >= seq_group.expected_steps:
-        #         remove_running.extend([seq_group])
-        #     else:
-        #         filtered_running_queue.extend([seq_group])
-        # remaining_running, running_scheduled = super()._schedule_running(filtered_running_queue, *args, **kwargs)
-        remaining_running, running_scheduled = super()._schedule_running(running_queue, *args, **kwargs)
-        # for seq_group in remove_running:
-        #     remaining_running.extend([seq_group])
+        filtered_running_queue = deque()
+        remove_running = deque()
+        for seq_group in running_queue:
+            if seq_group.output_len >= seq_group.expected_steps:
+                remove_running.extend([seq_group])
+            else:
+                filtered_running_queue.extend([seq_group])
+        remaining_running, running_scheduled = super()._schedule_running(filtered_running_queue, *args, **kwargs)
+        for seq_group in remove_running:
+            remaining_running.extend([seq_group])
         return remaining_running, running_scheduled

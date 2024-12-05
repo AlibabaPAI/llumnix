@@ -5,7 +5,7 @@ Prefill-decoding disaggregation is a technique that computes the prefill and dec
 We find Llumnix well-suited for implementing P-D disaggregation, because this technique is inherently a special request scheduling policy and fits well in Llumnix's modeling for request scheduling. Specifically, P-D disaggregation can be decomposed into two rules (shown below): (1) a special dispatching rule, i.e., P-instances-only; and (2) a special migration rule, i.e., migrate to D instances after one step. Llumnix provides an implementation of P-D disaggregation following this principle.
 
 <div align=center>
-<img src="./pdd_1.png" align="center" width=80%/>
+<img src="./pdd_rationale.png" align="center" width=80%/>
 </div>
 
 ## Benefits
@@ -17,7 +17,7 @@ Implementing P-D disaggregation in Llumnix has the following benefits.
 3. **Seamlessly integrates with Llumnix's native scheduling capabilities**. In the P-D disaggregation scheme, we still have scheduling decisions to make: which P instance to dispatch, which D instance to migrate. Llumnix's scheduling policies are readily available for them. Moreover, the migration between D instances is still helpful, e.g., for load balancing. The graph below shows the three scheduling behaviors and how Llumnix combines them.
 
 <div align=center>
-<img src="./pdd_2.png" align="center" width=80%/>
+<img src="./pdd_design.png" align="center" width=80%/>
 </div>
 
 ## Supported Features

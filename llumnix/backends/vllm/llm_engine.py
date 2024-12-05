@@ -204,6 +204,9 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             if request_output.finished:
                 logger.info("engine finished request {}".format(request_output.request_id))
 
+        request_ids = [request_output.request_id for request_output in request_outputs]
+        logger.info("[_process_model_outputs] engine request_ids: {}".format(request_ids))
+
         # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
         return request_outputs, server_infos
 

@@ -28,7 +28,7 @@ from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo, RequestTimestamps
-from llumnix.queue.utils import init_output_queue_server
+from llumnix.queue.utils import init_request_output_queue_server
 
 logger = init_logger(__name__)
 
@@ -219,7 +219,7 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
                     .format(len(available_instance_ids), available_instance_ids))
 
-    request_output_queue = init_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
+    request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
     return engine_manager, available_instance_ids, available_llumlets, request_output_queue
 
@@ -230,12 +230,12 @@ def setup_llumnix(engine_manager_args, engine_args, cfg):
         init_llumnix_components(engine_manager_args,
                                 engine_args,
                                 node_id,
-                                cfg.SERVER.QUEUE_TYPE,
+                                cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,
                                 ip,
                                 cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
     server_id = random_uuid()
     server_info = ServerInfo(server_id,
-                             cfg.SERVER.QUEUE_TYPE,
+                             cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,
                              request_output_queue,
                              ip,
                              cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
@@ -275,6 +275,7 @@ async def _background_process_outputs(llumnix_context):
             if request_output.finished:
                 llumnix_context.request_streams[request_id].finish()
                 del llumnix_context.request_streams[request_id]
+                logger.info("background process finished request {}".format(request_id))
 
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {

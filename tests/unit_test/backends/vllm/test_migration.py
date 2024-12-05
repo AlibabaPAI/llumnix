@@ -95,14 +95,14 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
         request_migration_policy = "FCW"
     migration_config = MigrationConfig(request_migration_policy, migration_backend, 16, 1, 4, 5, 20, 2)
 
-    output_queue_type = QueueType.RAYQUEUE
-    que, server_info = request_output_queue_server(output_queue_type)
+    request_output_queue_type = QueueType.RAYQUEUE
+    que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
     node_id = ray.get_runtime_context().get_node_id()
     scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
 
     llumlet_0: Llumlet = Llumlet.from_args(
-                            output_queue_type,
+                            request_output_queue_type,
                             False,
                             False,
                             node_id,
@@ -113,7 +113,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
                             engine_args)
 
     llumlet_1: Llumlet = Llumlet.from_args(
-                            output_queue_type,
+                            request_output_queue_type,
                             False,
                             False,
                             node_id,
@@ -128,7 +128,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
         namespace='llumnix',
         scheduling_strategy=scheduling_strategy).remote(
             instance_id="2",
-            output_queue_type=output_queue_type,
+            request_output_queue_type=request_output_queue_type,
             backend_type=BackendType.VLLM,
             migration_config=migration_config,
             engine_args=engine_args,
@@ -210,12 +210,12 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20, 2)
 
-    output_queue_type = QueueType.RAYQUEUE
-    que, server_info = request_output_queue_server(output_queue_type)
+    request_output_queue_type = QueueType.RAYQUEUE
+    que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
     llumlet_0:Llumlet = Llumlet.from_args(
-                            output_queue_type,
+                            request_output_queue_type,
                             False,
                             True,
                             ray.get_runtime_context().get_node_id(),
@@ -226,7 +226,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
                             engine_args,)
 
     llumlet_1:Llumlet = Llumlet.from_args(
-                            output_queue_type,
+                            request_output_queue_type,
                             False,
                             True,
                             ray.get_runtime_context().get_node_id(),

@@ -121,8 +121,8 @@ class LLMEngineManager:
                 server_info.request_timestamps.manager_generate_timestamp = time.time()
             await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
             if self.log_requests:
-                logger.info("received request {}.".format(request_id))
-                logger.info("dispath to instance {}".format(instance_id))
+                logger.info("manager received request {}.".format(request_id))
+                logger.info("dispath request {} to instance {}".format(request_id, instance_id))
                 self.request_instance[request_id] = instance_id
         except (ray.exceptions.RayActorError, KeyError):
             logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
@@ -453,7 +453,7 @@ class LLMEngineManager:
         return engine_manager
 
     # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
-    def init_llumlets(self, engine_args, node_id: str, output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
+    def init_llumlets(self, engine_args, node_id: str, request_output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
         engine_config = engine_args.create_engine_config()
         parallel_config = engine_config.parallel_config
@@ -463,7 +463,7 @@ class LLMEngineManager:
             instance_id = random_uuid()
             if not engine_manager_args.profiling_result_file_path:
                 llumlet = Llumlet.from_args(
-                    output_queue_type,
+                    request_output_queue_type,
                     engine_manager_args.disable_fixed_node_init_instance,
                     True,
                     node_id,
@@ -475,7 +475,7 @@ class LLMEngineManager:
                 )
             else:
                 llumlet = Llumlet.from_args(
-                    output_queue_type,
+                    request_output_queue_type,
                     engine_manager_args.disable_fixed_node_init_instance,
                     True,
                     node_id,

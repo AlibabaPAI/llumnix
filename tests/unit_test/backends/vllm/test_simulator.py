@@ -74,8 +74,8 @@ async def test_backend(setup_ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     migration_config = MigrationConfig("SR", "gloo", 16, 1, 4, 5, 20, 2)
 
-    output_queue_type = QueueType.RAYQUEUE
-    que, server_info = request_output_queue_server(output_queue_type)
+    request_output_queue_type = QueueType.RAYQUEUE
+    que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
     class DummyActor:
         def __init__(self):
@@ -86,7 +86,7 @@ async def test_backend(setup_ray_env):
                                 max_concurrency=4)(DummyActor)
     dummy_actor = dummy_actor.remote()
     sim_backend = MockBackendSim(instance_id="0",
-                                 output_queue_type=output_queue_type,
+                                 request_output_queue_type=request_output_queue_type,
                                  migration_config=migration_config,
                                  profiling_result_file_path="",
                                  engine_args=engine_args)

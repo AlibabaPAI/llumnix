@@ -22,7 +22,7 @@ from llumnix.entrypoints.utils import (get_ip_address,
                                        retry_manager_method_sync,
                                        retry_manager_method_async)
 from llumnix.llm_engine_manager import MANAGER_ACTOR_NAME
-from llumnix.queue.utils import init_output_queue_server
+from llumnix.queue.utils import init_request_output_queue_server
 
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
@@ -46,7 +46,7 @@ def test_init_manager(setup_ray_env):
 def test_init_zmq(setup_ray_env):
     ip = '127.0.0.1'
     port = 1234
-    request_output_queue = init_output_queue_server(ip, port, 'zmq')
+    request_output_queue = init_request_output_queue_server(ip, port, 'zmq')
     assert request_output_queue is not None
 
 def test_retry_manager_method_sync(setup_ray_env):

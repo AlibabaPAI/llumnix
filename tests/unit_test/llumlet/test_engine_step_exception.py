@@ -48,7 +48,7 @@ def test_engine_step_exception(setup_ray_env):
     actor_name = "instance_0"
     llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
                                   scheduling_strategy=scheduling_strategy).remote(
-        output_queue_type=QueueType.RAYQUEUE,
+        request_output_queue_type=QueueType.RAYQUEUE,
         instance_id="0",
         backend_type=BackendType.VLLM,
         migration_config=migration_config,

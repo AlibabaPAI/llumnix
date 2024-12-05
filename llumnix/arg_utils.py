@@ -47,7 +47,7 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
 class LlumnixEntrypointsArgs:
     launch_ray_cluster: bool = None
     ray_cluster_port: int = None
-    queue_type: str = None
+    request_output_queue_type: str = None
     request_output_queue_port: int = None
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
@@ -82,10 +82,10 @@ class LlumnixEntrypointsArgs:
         parser.add_argument("--ray-cluster-port",
                             type=int,
                             help='ray cluster port')
-        parser.add_argument("--queue-type",
+        parser.add_argument("--request-output-queue-type",
                             type=str,
                             choices=['rayqueue', 'zmq'],
-                            help='queue type for request output queue')
+                            help='request output queue type for request output queue')
         parser.add_argument("--request-output-queue-port",
                             type=int,
                             help='port for zmq')

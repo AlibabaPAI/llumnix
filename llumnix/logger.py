@@ -25,7 +25,6 @@ except ImportError:
     pass
 
 _FORMAT = "Llumnix %(levelname)s %(asctime)s %(filename)s:%(lineno)d] %(message)s"
-_DATE_FORMAT = "%m-%d %H:%M:%S"
 
 
 class NewLineFormatter(logging.Formatter):
@@ -54,7 +53,7 @@ def _setup_logger():
         _default_handler.flush = sys.stdout.flush  # type: ignore
         _default_handler.setLevel(logging.INFO)
         _root_logger.addHandler(_default_handler)
-    fmt = NewLineFormatter(_FORMAT, datefmt=_DATE_FORMAT)
+    fmt = NewLineFormatter(_FORMAT)
     _default_handler.setFormatter(fmt)
     # Setting this will avoid the message
     # being propagated to the parent logger.

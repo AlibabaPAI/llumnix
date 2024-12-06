@@ -77,6 +77,6 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs):
         llumnix_context = setup_llumnix(llumnix_config, engine_manager_args, BackendType.BLADELLM, world_size, engine_args)
         llm_client = AsyncLLMEngineClientLlumnix(bladellm_args)
         entrypoint_cls = EntrypointLlumnix 
-        decode_entrypoint_cls = DecodeEntrypointLlumnix
+        decode_entrypoint_cls = DecodeEntrypoint
 
     return llm_client, entrypoint_cls, decode_entrypoint_cls

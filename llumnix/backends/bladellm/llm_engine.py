@@ -103,7 +103,7 @@ class AsyncBackQueue(APIWrapper):
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
-        my_logger.info(server_request_outputs)
+        logger.debug("_put_request_outputs_to_server, {}", server_request_outputs)
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     async def send(self, req_id, msg, reset=False):
@@ -136,15 +136,13 @@ class LLMEngineLlumnixMixin:
         # TODO(KuilongCui): "After Blade unify engine implementation, delete this
         self.trans_warpper = self.init_trans_wrapper(self, self._args)
 
-        self.instance_info = None
-
     def start(self, loop: asyncio.AbstractEventLoop):
         super().start(loop)
         self._client = self.init_client_from_engine()
 
     async def _init_scheduler(self) -> None:
         await super()._init_scheduler()
-        self._scheduler.add_update_instance_info_callback(self.update_instance_info)
+        self._scheduler.set_update_instance_info_callback(self.update_instance_info)
 
     def init_trans_wrapper(self, engine, serving_args: ServingArgs, *args, **kwargs) -> APIWrapper:
         return AsyncBackQueue(serving_args, None, self.placement_group,
@@ -188,15 +186,16 @@ class LLMEngineLlumnixMixin:
                 if req_id in request_groups_map:
                     request_groups_map[req_id].update_num_computed_tokens(request_groups_map[req_id].token_chunk_size)
 
-        last_running_gen_group_id = resp_list[-1].generation_groups.generation_group[-1].request_group_id
-        if len(resp_list) > 0 and last_running_gen_group_id in request_groups_map and self.instance_info:
-            last_running_gen_group = request_groups_map[last_running_gen_group_id]
-            tot_blocks = []
-            for req_state in last_running_gen_group.paged_reqs:
-                blocks = self._scheduler.block_manager.get_block_table(req_state)
-                tot_blocks.extend(blocks)
-            tot_blocks = set(tot_blocks)
-            self.instance_info.num_blocks_last_running_request = len(tot_blocks)
+        if len(resp_list) > 0 and len(resp_list[-1].generation_groups.generation_group) > 0 and self.instance_info:
+            if last_running_gen_group_id in request_groups_map:
+                last_running_gen_group_id = resp_list[-1].generation_groups.generation_group[-1].request_group_id
+                last_running_gen_group = request_groups_map[last_running_gen_group_id]
+                tot_blocks = []
+                for req_state in last_running_gen_group.paged_reqs:
+                    blocks = self._scheduler.block_manager.get_block_table(req_state)
+                    tot_blocks.extend(blocks)
+                tot_blocks = set(tot_blocks)
+                self.instance_info.num_blocks_last_running_request = len(tot_blocks)
 
         await super().update_callback(resp_list, step_requests)
 
@@ -227,10 +226,7 @@ class LLMEngineLlumnixMixin:
 
         return all_outputs
 
-    def stop(self):
-        self.engine.stop()
-
-class AsyncLLMEngineLlumnix(AsyncLLMEngine, LLMEngineLlumnixMixin):
+class AsyncLLMEngineLlumnix(LLMEngineLlumnixMixin, AsyncLLMEngine):
     def __init__(self,
                 instance_id: str,
                 output_queue_type: QueueType,
@@ -242,7 +238,7 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngine, LLMEngineLlumnixMixin):
         AsyncLLMEngine.__init__(self, *args, **kwargs)
         LLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group, node_id)
 
-class PrefillAsyncLLMEngineLlumnix(PrefillAsyncLLMEngine, LLMEngineLlumnixMixin):
+class PrefillAsyncLLMEngineLlumnix(LLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,
             instance_id: str,
             output_queue_type: QueueType,
@@ -309,7 +305,7 @@ class PrefillAsyncLLMEngineLlumnix(PrefillAsyncLLMEngine, LLMEngineLlumnixMixin)
             await asyncio.sleep(0)
         logger.info('stop event is set exit pull token loop')
 
-class DecodeAsyncLLMEngineLlumnix(DecodeAsyncLLMEngine, LLMEngineLlumnixMixin):
+class DecodeAsyncLLMEngineLlumnix(LLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
             instance_id: str,
             output_queue_type: QueueType,
@@ -320,6 +316,9 @@ class DecodeAsyncLLMEngineLlumnix(DecodeAsyncLLMEngine, LLMEngineLlumnixMixin):
             ) -> None:
         DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
         LLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group, node_id)
+
+    def start(self, loop: asyncio.AbstractEventLoop):
+        LLMEngineLlumnixMixin.start(self, loop)
         self.decode_entrypoint = DecodeEntrypoint(self._client, self._args)
 
     def _make_generation_group(self, server_req: ServerRequest):
@@ -368,7 +367,7 @@ class BackendBladeLLM(BackendInterface):
     def _get_engine_cls(self):
         engine_cls = None
         if not self.engine_args.enable_disagg:
-            engine_cls = LLMEngineLlumnix
+            engine_cls = AsyncLLMEngineLlumnix
         else:
             if self.engine_args.disagg_options.inst_role == InstanceRole.PREFILL:
                 engine_cls = PrefillAsyncLLMEngineLlumnix
@@ -385,6 +384,7 @@ class BackendBladeLLM(BackendInterface):
     # TODO(KuilongCui): change add_request to async
     def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, server_request: str) -> None:
         server_request = ServerRequestLlumnix(server_request, request_id, server_info, expected_steps)
+        logger.debug("engine {} add request {}", self.instance_id, server_request)
         asyncio.run_coroutine_threadsafe(self.engine.add_request(server_request), self._loop)
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:

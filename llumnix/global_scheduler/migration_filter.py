@@ -56,8 +56,10 @@ class MigrationInstanceFilter(ABC):
 
     def filter_instances(self, instance_infos: List[InstanceInfo],
                          pair_migration_type: PairMigrationConstraints) -> Dict[str, InstanceInfo]:
-        src_filter_conditions = [filter.filter_src_condition() for filter in self.registered_filters.values()]
-        dst_filter_conditions = [filter.filter_dst_condition() for filter in self.registered_filters.values()]
+        src_filter_conditions = [filter.filter_src_condition(self.filter_config, pair_migration_type)
+                                 for filter in self.registered_filters.values()]
+        dst_filter_conditions = [filter.filter_dst_condition(self.filter_config, pair_migration_type)
+                                 for filter in self.registered_filters.values()]
 
         if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
             policy_filter = MigrationFilterPolicyFactory.get_policy("load")

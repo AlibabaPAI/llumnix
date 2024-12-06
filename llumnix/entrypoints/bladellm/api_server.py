@@ -13,9 +13,13 @@
 
 
 import asyncio
+from typing import Optional
 from aiohttp import web
 
+from blade_llm.service.args import ServingArgs
 from blade_llm.service.server import Entrypoint
+from blade_llm.service.disagg_decode_server import DecodeEntrypoint
+from blade_llm.service.communications import BaseLLMClient
 
 from llumnix.entrypoints.bladellm.utils import get_args
 from llumnix.config import get_llumnix_config, LlumnixConfig
@@ -46,17 +50,16 @@ app.on_startup.append(on_startup)
 app.on_cleanup.append(on_cleanup)
 
 class EntrypointLlumnix(Entrypoint):
-    def create_web_app(self):
+    def __init__(self, client: BaseLLMClient, args: Optional[ServingArgs]):
+        super().__init__(client, args)
         global app
-        app.add_routes(
-            [
-                web.get('/', self.hello),
-                web.get('/generate_stream', self.generate_stream),
-            ]
-        )
-        return app
+        self.app = app
 
-def setup_llumnix_api_server(bladellm_args):
+class DecodeEntrypointLlumnix:
+    def __init__(self, *args, **kwargs):
+        pass
+
+def setup_llumnix_api_server(bladellm_args: ServingArgs):
     # generate llumnix_parser for checking parameters with choices
     llumnix_parser: LlumnixArgumentParser = LlumnixArgumentParser()
     llumnix_parser = LlumnixEntrypointsArgs.add_cli_args(llumnix_parser)
@@ -66,13 +69,14 @@ def setup_llumnix_api_server(bladellm_args):
 
     setup_ray_cluster(llumnix_config)
 
-    llm_client, entrypoint_cls = None, None
+    llm_client, entrypoint_cls, decode_entrypoint_cls = None, None, None
     # if gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         global llumnix_context
         llumnix_context = setup_llumnix(llumnix_config, engine_manager_args, BackendType.BLADELLM, world_size, engine_args)
         llm_client = AsyncLLMEngineClientLlumnix(bladellm_args)
-        entrypoint_cls =  EntrypointLlumnix
+        entrypoint_cls = EntrypointLlumnix 
+        decode_entrypoint_cls = DecodeEntrypointLlumnix
 
-    return llm_client, entrypoint_cls
+    return llm_client, entrypoint_cls, decode_entrypoint_cls

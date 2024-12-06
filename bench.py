@@ -22,7 +22,7 @@ async def hello(max_new_tokens, ignore_eos):
     headers = {
         # "Authorization": "<You may need this header for EAS."
     }
-    url = f"ws://0.0.0.0:{port}/generate_stream"
+    url = f"ws://22.3.131.34:{port}/generate_stream"
     with connect(url, additional_headers=headers) as websocket:
         import random
         prompts = [f"what's {random.randint(a=0, b=1000000)} plus {random.randint(a=0, b=1000000)}?"]
@@ -47,6 +47,8 @@ async def hello(max_new_tokens, ignore_eos):
                 resp = GenerateStreamResponse(**json.loads(msg))
                 texts.extend([t.text for t in resp.tokens])
                 idx += 1
+                for t in resp.tokens:
+                    print(t.text, end="")
                 if resp.is_finished:
                     finish += 1
                     break
@@ -58,8 +60,6 @@ async def hello(max_new_tokens, ignore_eos):
 async def get_range(n):
     for i in range(n):
         yield i
-
-
 
 async def main():
     tasks: List[asyncio.Task] = []

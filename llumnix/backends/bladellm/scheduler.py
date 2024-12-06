@@ -63,6 +63,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         )
         self.pre_alloc_cache_dict: Dict[int, BlockTable] = {}
         self.migrating_out_request_last_stage: List[GenerationGroupStateLlumnix] = []
+        self.update_instance_info_callback = lambda instance_info: None
 
     def _handle_single_response(
         self,
@@ -71,14 +72,16 @@ class PagedSchedulerLlumnix(PagedScheduler):
         client_resp: Dict[int, Union[GenerateStreamResponse, GenerateStreamResponseLlumnix]],
         running_request_groups_map: Dict[int, GenerationGroupStateLlumnix],
     ):
-        my_logger.info(gen_group)
-        my_logger.info(running_request_groups_map)
-
         gen_group_id = gen_group['request_group_id']
         request_id, server_info = "", None
         if gen_group_id in running_request_groups_map:
             request_id = running_request_groups_map[gen_group_id].request_id
             server_info = running_request_groups_map[gen_group_id].server_info
+        else:
+            hang_request_groups_map = {group.request_group_id: group for group in self.hanging}
+            if gen_group_id in hang_request_groups_map:
+                request_id = hang_request_groups_map[gen_group_id].request_id
+                server_info = hang_request_groups_map[gen_group_id].server_info
 
         super()._handle_single_response(gen_group, req_group, client_resp, running_request_groups_map)
 
@@ -89,9 +92,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
                 resp=client_resp[generation['request_id']],
             )
 
-        my_logger.info(client_resp)
-
-    def add_update_instance_info_callback(self, update_instance_info_callback):
+    def set_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
         self.update_instance_info_callback(self._get_instance_info([]))
     

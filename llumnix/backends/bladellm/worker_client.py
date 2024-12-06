@@ -13,24 +13,15 @@
 
 import asyncio
 from typing import List
-import grpc
 
 from blade_llm.service.workers.worker_client import PipelineWorkerClient, LocalWorkerClient
-from blade_llm.service.proto import bladellm_pb2_grpc
-from blade_llm.service.proto import bladellm_pb2
-from blade_llm.service.args import ServingArgs
+from blade_llm.service.proto import bladellm_pb2_grpc, bladellm_pb2
 from google.protobuf.empty_pb2 import Empty
 
-# pylint: disable=unused-import
+from llumnix.backends.bladellm.proto import migration_worker_pb2, migration_worker_pb2_grpc
 from llumnix.logger import init_logger
 
-from llumnix.backends.bladellm.proto import (
-    migration_worker_pb2,
-    migration_worker_pb2_grpc,
-)
-
 logger = init_logger(__name__)
-
 
 class MigrationWorkerStub:
     def __init__(self, channel) -> None:

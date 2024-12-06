@@ -12,15 +12,25 @@
 # limitations under the License.
 
 import json
+from typing import Any
 
-from typing import Any, List, Tuple, Union
-from pydantic import BaseModel, Field
+from pydantic import Field
+
 from blade_llm.service.scheduler_types import GenerationGroupState
-from blade_llm.protocol import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol import ServerRequest, GenerateStreamResponse, DisaggPDAllocateRequest
+from blade_llm.protocol import GenerateStreamResponse, RemoteGenerateStreamResponse
+
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
 from llumnix.server_info import ServerInfo
 
-from loguru import logger
+class RemoteGenerateStreamResponseLlumnix(RemoteGenerateStreamResponse):
+    request_id: str = Field(default="", description="Request ID associated with the request")
+    server_info: Any = Field(default=None, description="Server info associated with the response")
+
+    def __init__(self, resp: RemoteGenerateStreamResponse, request_id: str = None, server_info: ServerInfo = None) -> None:
+        super().__init__(**resp.model_dump())
+        self.request_id = request_id
+        self.server_info = server_info
 
 class GenerateStreamResponseLlumnix(GenerateStreamResponse):
     request_id: str = Field(default="", description="Request ID associated with the request")
@@ -100,3 +110,12 @@ class ServerRequestLlumnix(ServerRequest):
         self.request_id = request_id
         self.server_info = server_info
         self.expected_steps = expected_steps
+
+class DisaggPDAllocateRequestLlumnix(DisaggPDAllocateRequest):
+    request_id: str = Field(default="", description="Request ID associated with the request")
+    server_info: Any = Field(default=None, description="Server info associated with the response")
+
+    def to_server_request(self, id: int) -> ServerRequestLlumnix:
+        server_request = super().to_server_request(id)
+        server_request.dst_instance_id = ""
+        return ServerRequestLlumnix(server_request.model_dump_json(), self.request_id, self.server_info, -1)

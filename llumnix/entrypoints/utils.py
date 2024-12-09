@@ -150,11 +150,13 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
     return engine_manager
 
 def init_llumlets(node_id: str, request_output_queue_type: QueueType, engine_manager_args: EngineManagerArgs,
-                  backend_type: BackendType, world_size: int, *args
+                  backend_type: BackendType, world_size: int, *args, **kwargs
                   ) -> Tuple[List[str], List[Llumlet]]:
     instance_ids: List[str] = []
     llumlets: List[Llumlet] = []
     instance_ids = [random_uuid() for _ in range(engine_manager_args.initial_instances)]
+    if 'instance_ids' in kwargs:
+        instance_ids = kwargs['instance_ids']
     migration_configs = engine_manager_args.create_migration_config()
     for idx in range(engine_manager_args.initial_instances):
         instance_id = instance_ids[idx]
@@ -169,6 +171,7 @@ def init_llumlets(node_id: str, request_output_queue_type: QueueType, engine_man
                 migration_configs,
                 world_size,
                 *args,
+                **kwargs
             )
         else:
             assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
@@ -183,6 +186,7 @@ def init_llumlets(node_id: str, request_output_queue_type: QueueType, engine_man
                 world_size,
                 engine_manager_args.profiling_result_file_path,
                 *args,
+                **kwargs,
             )
         llumlets.append(llumlet)
     return instance_ids, llumlets
@@ -193,13 +197,14 @@ def init_llumnix_components(node_id: str,
                             request_output_queue_port: str,
                             engine_manager_args: EngineManagerArgs,
                             *args,
+                            **kwargs
                             ):
     engine_manager = init_manager(engine_manager_args)
     if engine_manager_args.disable_init_instance_by_manager:
-        instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args)
+        instance_ids, llumlets = init_llumlets(node_id, request_output_queue_type, engine_manager_args, *args, **kwargs)
     else:
         instance_ids, llumlets = retry_manager_method_sync(
-            engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args)
+            engine_manager.init_llumlets.remote, 'init_llumlets', node_id, request_output_queue_type, *args, **kwargs)
 
     available_instance_ids = []
     dead_instance_ids = []
@@ -224,7 +229,7 @@ def init_llumnix_components(node_id: str,
 
     return engine_manager, available_instance_ids, available_llumlets, request_output_queue
 
-def setup_llumnix(cfg, *args):
+def setup_llumnix(cfg, *args, **kwargs):
     ip = get_ip_address()
     node_id = ray.get_runtime_context().get_node_id()
     engine_manager, instance_ids, llumlets, request_output_queue = \
@@ -232,7 +237,8 @@ def setup_llumnix(cfg, *args):
                                 cfg.SERVER.QUEUE_TYPE,
                                 ip,
                                 cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT,
-                                *args)
+                                *args,
+                                **kwargs)
     server_id = random_uuid()
     server_info = ServerInfo(server_id,
                              cfg.SERVER.QUEUE_TYPE,

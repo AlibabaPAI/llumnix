@@ -74,7 +74,10 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs):
     if is_gpu_available():
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         global llumnix_context
-        llumnix_context = setup_llumnix(llumnix_config, engine_manager_args, BackendType.BLADELLM, world_size, engine_args)
+        instance_ids = [engine_args.disagg_options.inst_id]
+        
+        llumnix_context = setup_llumnix(llumnix_config, engine_manager_args, BackendType.BLADELLM,
+                                        world_size, engine_args, instance_ids=instance_ids)
         llm_client = AsyncLLMEngineClientLlumnix(bladellm_args)
         entrypoint_cls = EntrypointLlumnix 
         decode_entrypoint_cls = DecodeEntrypoint

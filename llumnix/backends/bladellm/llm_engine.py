@@ -187,8 +187,8 @@ class LLMEngineLlumnixMixin:
                     request_groups_map[req_id].update_num_computed_tokens(request_groups_map[req_id].token_chunk_size)
 
         if len(resp_list) > 0 and len(resp_list[-1].generation_groups.generation_group) > 0 and self.instance_info:
+            last_running_gen_group_id = resp_list[-1].generation_groups.generation_group[-1].request_group_id
             if last_running_gen_group_id in request_groups_map:
-                last_running_gen_group_id = resp_list[-1].generation_groups.generation_group[-1].request_group_id
                 last_running_gen_group = request_groups_map[last_running_gen_group_id]
                 tot_blocks = []
                 for req_state in last_running_gen_group.paged_reqs:
@@ -251,14 +251,18 @@ class PrefillAsyncLLMEngineLlumnix(LLMEngineLlumnixMixin, PrefillAsyncLLMEngine)
         LLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group, node_id)
 
     async def _fetch_post(self, url, data, headers, inst_id):
-        decode_actor = ray.get_actor(inst_id, namespace="llumnix")
+        logger.info("fetch_post {} {} {}", url, inst_id, data)
+        decode_actor = ray.get_actor("instance_"+inst_id, namespace="llumnix")
         response = await decode_actor.exec_entrypoint_method.remote("inner_"+url.split("/")[-1], data)
-        return await response.json()
+        logger.info("response {}", response)
+        import json
+        return json.loads(response)
 
     def server_requests_to_dict(self, reqs: List[ServerRequestLlumnix], prefill_inst_id: str, src_naming_info: str):
-        all_reqs = super().server_requests_to_dict(reqs, prefill_inst_id, src_naming_info)["reqs"]
-        for single_req in all_reqs:
-            single_req["server_info"] = str(pickle.dumps(single_req.server_info))
+        all_reqs = super().server_requests_to_dict(reqs, prefill_inst_id, src_naming_info)
+        for index, single_req in enumerate(all_reqs["reqs"]):
+            single_req["server_info"] = str(pickle.dumps(reqs[index].server_info))
+        return all_reqs
 
     async def post_scheduler_update(self, resp, update_output):
         self._scheduler.remove_request_from_hanging(list(resp.kv_transfer_done_ids))
@@ -319,7 +323,7 @@ class DecodeAsyncLLMEngineLlumnix(LLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
 
     def start(self, loop: asyncio.AbstractEventLoop):
         LLMEngineLlumnixMixin.start(self, loop)
-        self.decode_entrypoint = DecodeEntrypoint(self._client, self._args)
+        self.entrypoint = DecodeEntrypoint(self._client, self._args)
 
     def _make_generation_group(self, server_req: ServerRequest):
         gen_group = super()._make_generation_group(server_req)
@@ -331,10 +335,6 @@ class DecodeAsyncLLMEngineLlumnix(LLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
         llumnix_responce = RemoteGenerateStreamResponseLlumnix(response, l_resp.request_id, l_resp.server_info)
         return llumnix_responce
 
-    def exec_entrypoint_method(self, method, *args, **kwargs):
-        executor = getattr(self.decode_entrypoint, method)
-        return executor(*args, **kwargs)
-
 class BackendBladeLLM(BackendInterface):
     def __init__(
         self,
@@ -343,7 +343,9 @@ class BackendBladeLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: ServingArgs,
         placement_group: PlacementGroup = None,
-        node_id: str = None
+        node_id: str = None,
+        *args,
+        **kwargs
     ) -> None:        
         self.instance_id = instance_id
         self.engine_args = engine_args
@@ -356,7 +358,7 @@ class BackendBladeLLM(BackendInterface):
             for idx, addr in enumerate(migration_config.migration_backend_server_address.split(","))
         ]
         engine_cls = self._get_engine_cls()
-        self.engine: LLMEngineLlumnix = engine_cls(instance_id, output_queue_type, migration_config,
+        self.engine = engine_cls(instance_id, output_queue_type, migration_config,
                                                             placement_group, node_id, engine_args)
         self._loop = asyncio.new_event_loop()
         self._engine_ready = threading.Event()
@@ -386,6 +388,10 @@ class BackendBladeLLM(BackendInterface):
         server_request = ServerRequestLlumnix(server_request, request_id, server_info, expected_steps)
         logger.debug("engine {} add request {}", self.instance_id, server_request)
         asyncio.run_coroutine_threadsafe(self.engine.add_request(server_request), self._loop)
+
+    def exec_entrypoint_method(self, method, *args, **kwargs):
+        executor = getattr(self.engine.entrypoint, method)
+        return asyncio.run_coroutine_threadsafe(executor(*args, **kwargs), self._loop).result()
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         await dst_ray_actor.execute_engine_method.remote("_run_workers",

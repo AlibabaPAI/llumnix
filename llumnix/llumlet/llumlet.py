@@ -228,3 +228,6 @@ class Llumlet:
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
     
+    def exec_entrypoint_method(self, method, *args, **kwargs):
+        executor = getattr(self.backend_engine, "exec_entrypoint_method")
+        return executor(method, *args, **kwargs)

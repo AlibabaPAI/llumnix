@@ -59,6 +59,21 @@ def parse_instance_log_file(log_files):
 
     return average_speed
 
+def wait_for_all_instances_finished():
+    named_actors = ray.util.list_named_actors(True)
+    instance_actor_handles = []
+    for actor in named_actors:
+        if actor['name'].startswith("instance"):
+            instance_actor_handles.append(ray.get_actor(actor['name'], namespace=actor['namespace']))
+    while True:
+        all_finished = True
+        for instance in instance_actor_handles:
+            all_request_ids = ray.get(instance.execute_engine_method.remote("get_all_request_ids"))
+            if len(all_request_ids) != 0:
+                all_finished = False
+        if all_finished:
+            break
+
 def get_instance_num_blocks():
     named_actors = ray.util.list_named_actors(True)
     instance_actor_handles = []
@@ -139,8 +154,7 @@ async def test_migration_benchmark(cleanup_ray_env, shutdown_llumnix_service, mo
                 process.kill()
                 assert False, "migration_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS)
 
-    await asyncio.sleep(10)
-
+    wait_for_all_instances_finished()
     instance_num_blocks_list_after_bench = get_instance_num_blocks()
 
     assert instance_num_blocks_list_before_bench == instance_num_blocks_list_after_bench

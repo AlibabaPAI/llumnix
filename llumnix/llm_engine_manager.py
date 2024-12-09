@@ -256,6 +256,7 @@ class LLMEngineManager:
             ret = fut.result()
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
+
         try:
             migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
             migration_tasks = []

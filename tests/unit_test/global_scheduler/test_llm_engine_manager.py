@@ -27,6 +27,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.backends.vllm.simulator import BackendSimVLLM
+from llumnix.backends.profiling import LatencyMemData
 
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
@@ -41,6 +42,7 @@ class MockLlumlet:
         self.request_id_set = set()
         self.instance_info = None
         self.num_migrate_out = 0
+        self.num_migrate_in = 0
 
     def get_instance_id(self) -> str:
         return self.instance_id
@@ -76,14 +78,24 @@ class MockLlumlet:
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 
-    def migrate_out(self, src_instance_name, dst_instance_name):
+    def migrate_out(self, dst_instance_name):
         self.num_migrate_out += 1
+        migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
+        ray.get(migrate_in_ray_actor.migrate_in.remote(self.actor_name))
+        time.sleep(0.1)
+        return self.num_migrate_out
+
+    def migrate_in(self, src_instance_name):
+        self.num_migrate_in += 1
+        return self.num_migrate_in
 
     def get_num_migrate_out(self):
         return self.num_migrate_out
 
-class MockBackendSim(BackendSimVLLM):
+    def get_num_migrate_in(self):
+        return self.num_migrate_in
 
+class MockBackendSim(BackendSimVLLM):
     def _get_lantecy_mem(self, *args, **kwargs):
         latency_mem = LatencyMemData({}, {}, {})
         latency_mem.prefill_model_params = (0,0)
@@ -242,20 +254,41 @@ def get_instance_info_migrate_out(instance_id):
     return instance_info
 
 def test_update_instance_info_loop_and_migrate(setup_ray_env, engine_manager):
-    instance_ids, llumlets = init_llumlets(2)
-    instance_id, instance_id_1 = instance_ids[0], instance_ids[1]
-    llumlet, llumlet_1 = llumlets[0], llumlets[1]
-    request_id = random_uuid()
-    request_id_1 = random_uuid()
-    ray.get(llumlet.generate.remote(request_id, None, math.inf, None, None))
-    ray.get(llumlet_1.generate.remote(request_id_1, None, math.inf, None, None))
-    instance_info_migrate_out = get_instance_info_migrate_out(instance_id)
-    instance_info_migrate_in = get_instance_info_migrate_in(instance_id_1)
-    ray.get(llumlet.set_instance_info.remote(instance_info_migrate_out))
-    ray.get(llumlet_1.set_instance_info.remote(instance_info_migrate_in))
-    num_migrate_out = ray.get(llumlet.get_num_migrate_out.remote())
-    assert num_migrate_out == 0
+    num_llumlets = 5
+    instance_ids, llumlets = init_llumlets(num_llumlets)
+
+    for i in range(num_llumlets):
+        for _ in range(2*(i+1)):
+            ray.get(llumlets[i].generate.remote(random_uuid(), None, math.inf, None, None))
+
+    instance_info = InstanceInfo()
+    instance_info.instance_type = InstanceType.NO_CONSTRAINTS
+
+    for i in range(num_llumlets):
+        instance_info.instance_id = instance_ids[i]
+        instance_info.num_available_gpu_blocks = 40 - i * 10
+        instance_info.num_running_requests = i
+        instance_info.num_blocks_first_waiting_request = i
+        ray.get(llumlets[i].set_instance_info.remote(instance_info))
+
+    for i in range(num_llumlets):
+        num_migrate_out = ray.get(llumlets[i].get_num_migrate_out.remote())
+        assert num_migrate_out == 0
+
     ray.get(engine_manager.scale_up.remote(instance_ids, llumlets))
-    time.sleep(0.5)
-    num_migrate_out = ray.get(llumlet.get_num_migrate_out.remote())
-    assert num_migrate_out != 0
+    time.sleep(2)
+
+    for i in range(num_llumlets):
+        num_migrate_out = ray.get(llumlets[i].get_num_migrate_out.remote())
+        num_migrate_in = ray.get(llumlets[i].get_num_migrate_in.remote())
+
+        if i == 0:
+            assert num_migrate_in > 1 and num_migrate_out == 0
+        elif i == num_llumlets - 1:
+            assert num_migrate_in == 0 and num_migrate_out > 1
+        else:
+            assert num_migrate_in == 0 and num_migrate_out == 0
+
+@pytest.mark.skip("Not implemented yet")
+def test_concurrent_migrate(setup_ray_env):
+    pass

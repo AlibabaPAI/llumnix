@@ -72,7 +72,7 @@ async def test_backend(setup_ray_env):
     # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    migration_config = MigrationConfig("SR", "gloo", 16, 1, 4, 5, 20, 2)
+    migration_config = MigrationConfig("SR", "gloo", 16, 1, 4, 5, 20)
 
     request_output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(request_output_queue_type)

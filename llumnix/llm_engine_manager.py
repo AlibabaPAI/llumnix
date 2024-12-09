@@ -66,11 +66,6 @@ class LLMEngineManager:
 
         self.enable_pd_disagg = global_scheduler_config.enable_pd_disagg
 
-        logger.info("LLMEngineManager starts")
-        logger.info("enable_migration: {}".format(self.enable_migration))
-        logger.info("num_instances: {}".format(self.num_instances))
-        logger.info("max_instances: {}, min_instances: {}".format(self.max_instances, self.min_instances))
-
         self.instances: Dict[str, Llumlet] = {}
         self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0

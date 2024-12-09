@@ -275,7 +275,6 @@ async def _background_process_outputs(llumnix_context):
             if request_output.finished:
                 llumnix_context.request_streams[request_id].finish()
                 del llumnix_context.request_streams[request_id]
-                logger.info("background process finished request {}".format(request_id))
 
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {

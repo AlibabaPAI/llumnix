@@ -126,9 +126,6 @@ async def generate_benchmark(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
-    if llumnix_context.log_requests:
-        logger.info("entrypoints received request {}.".format(request_id))
-
     start = time.time()
 
     results_generator = await manager_generate(prompt, sampling_params, request_id, llumnix_context)

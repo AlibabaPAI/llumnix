@@ -74,7 +74,7 @@ class AsyncPutQueueActor:
                     logger.info("server {} is dead".format(server_id))
                     if self.request_output_queue_type == QueueType.ZMQ:
                         logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                                server_info.request_output_queue_port))
+                                                                                   server_info.request_output_queue_port))
                     req_outputs = list(server_request_outputs.values())[idx]
                     request_ids = [req_output.request_id for req_output in req_outputs]
                     self.engine_actor_handle.abort_request.remote(request_ids)
@@ -205,7 +205,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 logger.info("engine finished request {}".format(request_output.request_id))
 
         request_ids = [request_output.request_id for request_output in request_outputs]
-        logger.info("[_process_model_outputs] engine request_ids: {}".format(request_ids))
 
         # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
         return request_outputs, server_infos

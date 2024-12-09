@@ -46,7 +46,8 @@ def generate_launch_command(result_filename: str = "",
                             max_model_len: int = 2048,
                             launch_mode: str = 'eief',
                             log_instance_info: bool = False,
-                            request_migration_policy: str = 'SR'):
+                            request_migration_policy: str = 'SR',
+                            max_num_batched_tokens: int = 16000):
     disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -72,6 +73,7 @@ def generate_launch_command(result_filename: str = "",
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
+        f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command

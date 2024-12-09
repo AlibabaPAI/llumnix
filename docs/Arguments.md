@@ -32,15 +32,14 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
             [--polling-interval POLLING_INTERVAL]
-            [--migration-backend {gloo,rpc}]
-            [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
+            [--migration-backend {gloo,nccl,rpc}]
+            [--migration-cache-blocks MIGRATION_CACHE_BLOCKS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
             [--enable-pd-disagg]
             [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
-            [--migration-internal-buffer-num MIGRATION_INTERNAL_BUFFER_NUM]
             [--log-request-timestamps]
 
 ```
@@ -148,8 +147,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: gloo, rpc
 - Default: "rpc"
 
-`--migration-buffer-blocks`
-- Number of cache blocks in each migration buffer.
+`--migration-cache-blocks`
+- Number of cache blocks in migration.
 - Default: 512
 
 `--migration-backend-init-timeout`
@@ -167,10 +166,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--max-stages`
 - Drop migration if the number of stages > max_stages.
 - Default: 3
-
-`--migration-internal-buffer-num`
-- Number of the buffer in migration backend for sending and receiving
-- Default: 2
 
 `--log-request-timestamps`
 - Enable logging request timestamps.

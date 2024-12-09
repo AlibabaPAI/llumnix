@@ -15,15 +15,11 @@ from typing import List
 import torch
 from func_timeout import func_set_timeout, FunctionTimedOut
 
-import cupy
-from cupy.cuda import nccl
 import ray
 import ray.util.collective as col
-from ray.util.collective.collective_group import nccl_util
-
 from vllm.worker.cache_engine import CacheEngine
 from llumnix.internal_config import MigrationConfig
-from llumnix.backends.migration_backend_interface import MigrationBackendBase, BufferMigrationBackend
+from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
@@ -44,16 +40,17 @@ class ProxyActor:
 
 NUMPY_SUPPORTED_DTYPES = [torch.float32, torch.float16]
 
-class RayRpcMigrationBackend(BufferMigrationBackend):
+class RayRpcMigrationBackend(MigrationBackendBase):
     def __init__(self, migration_config: MigrationConfig, cache_engine: CacheEngine,  worker_rank, worker_handle_list, \
                   scheduling_strategy, is_driver_worker, gpu_cache) -> None:
+        super().__init__()
+
         self.migration_config = migration_config
         self.cache_engine = cache_engine
 
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
-        self.migration_stream = torch.cuda.Stream()
 
         self.rpc_dtype = self.cache_engine.dtype
         if self.cache_engine.dtype in NUMPY_SUPPORTED_DTYPES:
@@ -65,13 +62,17 @@ class RayRpcMigrationBackend(BufferMigrationBackend):
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
         self.cache_device = "cpu"
-        self.num_migration_buffer_blocks = self.migration_config.migration_buffer_blocks
+        self.num_migration_cache_blocks = self.migration_config.migration_cache_blocks
         self.num_layers = self.cache_engine.num_layers
         self.migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
-        buffer_shape = (self.num_migration_buffer_blocks, self.num_layers, 2, self.migration_cache_size)
 
-        super().__init__(migration_config.migration_internal_buffer_num, buffer_shape, self.cache_engine.dtype,
-                         self.cache_device, pin_memory=True)
+        self.dummy_cache = torch.empty(
+            size=(self.num_migration_cache_blocks, self.num_layers, 2, self.migration_cache_size),
+            dtype=self.cache_engine.dtype,
+            device=self.cache_device,
+            pin_memory=True
+        )
+        self.migration_stream = torch.cuda.Stream()
 
     def init_backend(self, group_name, world_size, rank) -> bool:
         logger.info("create rpc migration backend successfully.")
@@ -93,38 +94,30 @@ class RayRpcMigrationBackend(BufferMigrationBackend):
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
-        for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
-            offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
+        for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
+            offset = min(self.num_migration_cache_blocks, tot_blocks - start_idx)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", None, send_blocks)
             if rpc_numpy_cache is not None:
                 self.do_recv(rpc_numpy_cache, recv_blocks)
-            rpc_numpy_cache_ref = ray.get(ray_obj)
-            rpc_numpy_cache = ray.get(rpc_numpy_cache_ref)
+            rpc_numpy_cache = ray.get(ray_obj)
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
         self.do_recv(rpc_numpy_cache, recv_blocks)
 
     def do_send(self, dst_handle, blocks: List[int]):
         num_blocks = len(blocks)
-        dummy_cache_idx = self.get_available_cache()
-        send_cache = self.dummy_buffer[dummy_cache_idx][:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
+        send_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
                 self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], send_cache[layer_idx], src_to_dst)
         torch.cuda.Stream.synchronize(self.migration_stream)
-        # Here, we use ray.put to store data and finally return the object reference so that we can release the internal buffer.
-        # This might seem like an anti-pattern, but it's okay since the kv-cache transferred is in the MB range and won't utilize
-        # Ray's optimization for returning small objects (<100KB).
-        data = ray.put(send_cache.to(self.rpc_dtype).numpy())
-        self.put_back_cache(dummy_cache_idx)
-        return data
+        return send_cache.to(self.rpc_dtype).numpy()
 
     def do_recv(self, src_handle, blocks: List[int]):
         num_blocks = len(blocks)
         src_to_dst = dict(enumerate(blocks))
-        dummy_cache_idx = self.get_available_cache()
-        recv_cache = self.dummy_buffer[dummy_cache_idx][:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
+        recv_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         # use pin memory dummy_cache to speed up data transfer
         recv_cache.copy_(torch.from_numpy(src_handle))
 
@@ -132,7 +125,6 @@ class RayRpcMigrationBackend(BufferMigrationBackend):
             for layer_idx in range(self.num_layers):
                 self.cache_engine.attn_backend.swap_blocks(recv_cache[layer_idx], self.gpu_cache[layer_idx], src_to_dst)
         torch.cuda.Stream.synchronize(self.migration_stream)
-        self.put_back_cache(dummy_cache_idx)
 
 def try_import_gloo():
     try:
@@ -147,14 +139,19 @@ def try_import_gloo():
     except ImportError as e:
         raise ImportError("Gloo is not installed. Please install it first.") from e
 
-class RayColMigrationBackend(BufferMigrationBackend):
+class RayColMigrationBackend(MigrationBackendBase):
     def __init__(self, migration_config: MigrationConfig, cache_engine: CacheEngine, local_rank,
                  scheduling_strategy, is_driver_worker, gpu_cache) -> None:
+        super().__init__()
+
+        # pylint: disable=C0415
+        import cupy
+
         self.migration_config = migration_config
         self.cache_engine = cache_engine
         self.backend = migration_config.migration_backend
         self.migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine.num_layers)
-        self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
+        self.num_migration_cache_blocks = migration_config.migration_cache_blocks
 
         self.backend = migration_config.migration_backend
         self.global_world_size = -1
@@ -165,7 +162,6 @@ class RayColMigrationBackend(BufferMigrationBackend):
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
-        self.migration_stream = cupy.cuda.Stream()
 
         self.migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
 
@@ -173,13 +169,17 @@ class RayColMigrationBackend(BufferMigrationBackend):
             try_import_gloo()
             self.cache_device = "cpu"
         else:
-            nccl_util.TORCH_NCCL_DTYPE_MAP[torch.bfloat16] = nccl.NCCL_FLOAT16
             self.cache_device = torch.device(f"cuda:{self.local_rank}")
 
         pin_memory = (self.backend == 'gloo')
-        buffer_shape = (self.num_migration_buffer_blocks, self.migration_num_layers, 2, self.migration_cache_size)
-        super().__init__(migration_config.migration_internal_buffer_num, buffer_shape, self.cache_engine.dtype,
-                         self.cache_device, pin_memory=pin_memory)
+        self.dummy_cache = torch.empty(
+            size=(self.num_migration_cache_blocks, self.migration_num_layers, 2, self.migration_cache_size),
+            dtype=self.cache_engine.dtype,
+            device=self.cache_device,
+            pin_memory=pin_memory
+        )
+
+        self.migration_stream = cupy.cuda.Stream()
 
     def init_backend(self, group_name, world_size, rank) -> bool:
         @func_set_timeout(self.migration_config.migration_backend_init_timeout)
@@ -224,7 +224,7 @@ class RayColMigrationBackend(BufferMigrationBackend):
     def warmup(self) -> bool:
         if self.global_world_size > 1:
             try:
-                col.allreduce(self.dummy_buffer[0][0], self.group_name)
+                col.allreduce(self.dummy_cache[0], self.group_name)
             # pylint: disable=W0703
             except Exception as e:
                 logger.info("warmup migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
@@ -241,8 +241,8 @@ class RayColMigrationBackend(BufferMigrationBackend):
         tot_blocks = len(src_blocks)
         src_rank = ray.get(self.actor.exec_method.remote(self.is_driver_worker, src_handle, "get_global_rank"))
 
-        for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
-            offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
+        for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
+            offset = min(self.num_migration_cache_blocks, tot_blocks - start_idx)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
             self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", self.global_rank, send_blocks)
@@ -250,8 +250,7 @@ class RayColMigrationBackend(BufferMigrationBackend):
 
     def do_send(self, dst_handle, blocks: List[int]):
         num_blocks = len(blocks)
-        dummy_cache_idx = self.get_available_cache()
-        send_cache = self.dummy_buffer[dummy_cache_idx][:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
+        send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
 
         with self.migration_stream:
@@ -262,13 +261,11 @@ class RayColMigrationBackend(BufferMigrationBackend):
                     # TODO(KuilongCui): check the error code if peer is dead
                     col.send(send_cache, dst_handle, self.group_name)
         self.migration_stream.synchronize()
-        self.put_back_cache(dummy_cache_idx)
 
     def do_recv(self, src_handle, blocks: List[int]):
         num_blocks = len(blocks)
         src_to_dst = dict(enumerate(blocks))
-        dummy_cache_idx = self.get_available_cache()
-        recv_cache = self.dummy_buffer[dummy_cache_idx][:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
+        recv_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
 
         with self.migration_stream:
             for layer_idx in range(self.cache_engine.num_layers):
@@ -277,18 +274,16 @@ class RayColMigrationBackend(BufferMigrationBackend):
                     col.recv(recv_cache, src_handle, self.group_name)
                 self.cache_engine.attn_backend.swap_blocks(recv_cache[cache_idx], self.gpu_cache[layer_idx], src_to_dst)
         self.migration_stream.synchronize()
-        self.put_back_cache(dummy_cache_idx)
 
 def get_migration_backend(migration_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy,
                         is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
-    if cache_engine.num_gpu_blocks < migration_config.migration_buffer_blocks:
-        logger.warning("migration_buffer_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
-                       .format(migration_config.migration_buffer_blocks, cache_engine.num_gpu_blocks))
-        migration_config.migration_buffer_blocks = cache_engine.num_gpu_blocks
+    if cache_engine.num_gpu_blocks < migration_config.migration_cache_blocks:
+        logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
+                       .format(migration_config.migration_cache_blocks, cache_engine.num_gpu_blocks))
+        migration_config.migration_cache_blocks = cache_engine.num_gpu_blocks
 
     target_migration_backend = None
     backend = migration_config.migration_backend
-    assert backend in ['nccl', 'gloo', 'rpc'], "Unsupported migration backend: {} for llumnix".format(backend)
 
     if backend in ['nccl', 'gloo']:
         target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,

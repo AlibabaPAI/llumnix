@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import time
 import ray
 import torch
@@ -29,12 +30,23 @@ from tests.conftest import setup_ray_env
 
 @ray.remote(num_cpus=1, max_concurrency=4)
 class MockLlumlet(Llumlet):
-    def set_error_step(self):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.origin_step = self.backend_engine.engine.step_async
+
+    def set_error_step(self, broken: bool):
+        self.backend_engine._stop_event.set()
+
         async def raise_error_step():
             await self.origin_step()
             raise ValueError("Mock engine step error")
 
-        self.backend_engine.engine.step_async = raise_error_step
+        if broken:
+            self.backend_engine.engine.step_async = raise_error_step
+        else:
+            self.backend_engine.engine.step_async = self.origin_step
+
+        asyncio.create_task(self.backend_engine._start_engine_step_loop())
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(setup_ray_env):
@@ -64,7 +76,7 @@ def test_engine_step_exception(setup_ray_env):
     cur_free_memory, _ = torch.cuda.mem_get_info()
     assert cur_free_memory < origin_free_memory
 
-    ray.get(llumlet.set_error_step.remote())
+    ray.get(llumlet.set_error_step.remote(True))
     time.sleep(3)
 
     all_actors = ray.util.list_named_actors(True)

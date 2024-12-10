@@ -33,7 +33,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--gpu-type GPU_TYPE]
             [--polling-interval POLLING_INTERVAL]
             [--migration-backend {gloo,nccl,rpc}]
-            [--migration-cache-blocks MIGRATION_CACHE_BLOCKS]
+            [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
@@ -147,7 +147,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: gloo, rpc
 - Default: "rpc"
 
-`--migration-cache-blocks`
+`--migration-buffer-blocks`
 - Number of cache blocks in migration.
 - Default: 512
 

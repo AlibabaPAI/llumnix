@@ -134,7 +134,7 @@ class EngineManagerArgs:
 
     migration_backend_init_timeout: float = None
     migration_backend: str = None
-    migration_cache_blocks: int = None
+    migration_buffer_blocks: int = None
     migration_num_layers: int = None
     last_stage_max_blocks: int = None
     max_stages: int = None
@@ -172,7 +172,7 @@ class EngineManagerArgs:
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
-                                           self.migration_cache_blocks,
+                                           self.migration_buffer_blocks,
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
@@ -309,7 +309,7 @@ class EngineManagerArgs:
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
                             help='timeout(s) for initializing migration backend')
-        parser.add_argument('--migration-cache-blocks',
+        parser.add_argument('--migration-buffer-blocks',
                             type=int,
                             help='number of cache blocks in migration')
         parser.add_argument('--migration-num-layers',

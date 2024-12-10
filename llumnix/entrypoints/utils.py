@@ -28,11 +28,10 @@ from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo, RequestTimestamps
-from llumnix.queue.utils import init_output_queue_server
+from llumnix.queue.utils import init_request_output_queue_server
 
 logger = init_logger(__name__)
 
-# TODO(s5u13b): Set the values through tests.
 MAX_RESTARTS = 30
 RESTART_INTERVALS = 1
 MAX_TASK_RETRIES = 300
@@ -62,7 +61,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     node_ip_address = get_ip_address()
     try:
         # Stop the existing ray processes on the node first.
-        subprocess.run(['ray', 'stop', '--force'], check=True, text=True, capture_output=True)
+        subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True)
     except subprocess.CalledProcessError as e:
         logger.info("'ray stop' failed with: \n{}".format(e.stderr))
         sys.exit(1)
@@ -220,7 +219,7 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
                     .format(len(available_instance_ids), available_instance_ids))
 
-    request_output_queue = init_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
+    request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
     return engine_manager, available_instance_ids, available_llumlets, request_output_queue
 
@@ -231,12 +230,12 @@ def setup_llumnix(engine_manager_args, engine_args, cfg):
         init_llumnix_components(engine_manager_args,
                                 engine_args,
                                 node_id,
-                                cfg.SERVER.QUEUE_TYPE,
+                                cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,
                                 ip,
                                 cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
     server_id = random_uuid()
     server_info = ServerInfo(server_id,
-                             cfg.SERVER.QUEUE_TYPE,
+                             cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,
                              request_output_queue,
                              ip,
                              cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
@@ -260,6 +259,7 @@ def setup_llumnix(engine_manager_args, engine_args, cfg):
 
     return context
 
+# TODO(s5u13b): Fix the potential output token out-of-order issue caused by the migration.
 async def _background_process_outputs(llumnix_context):
     while True:
         request_outputs = await llumnix_context.request_output_queue.get()

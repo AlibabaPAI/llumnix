@@ -47,7 +47,7 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
 class LlumnixEntrypointsArgs:
     launch_ray_cluster: bool = None
     ray_cluster_port: int = None
-    queue_type: str = None
+    request_output_queue_type: str = None
     request_output_queue_port: int = None
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
@@ -82,10 +82,10 @@ class LlumnixEntrypointsArgs:
         parser.add_argument("--ray-cluster-port",
                             type=int,
                             help='ray cluster port')
-        parser.add_argument("--queue-type",
+        parser.add_argument("--request-output-queue-type",
                             type=str,
                             choices=['rayqueue', 'zmq'],
-                            help='queue type for request output queue')
+                            help='request output queue type for request output queue')
         parser.add_argument("--request-output-queue-port",
                             type=int,
                             help='port for zmq')
@@ -138,7 +138,6 @@ class EngineManagerArgs:
     migration_num_layers: int = None
     last_stage_max_blocks: int = None
     max_stages: int = None
-    migration_internal_buffer_num: int = None
 
     enable_pd_disagg: bool = None
 
@@ -177,8 +176,7 @@ class EngineManagerArgs:
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
-                                           self.migration_backend_init_timeout,
-                                           self.migration_internal_buffer_num)
+                                           self.migration_backend_init_timeout)
         return migration_config
 
     @classmethod
@@ -196,9 +194,6 @@ class EngineManagerArgs:
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
                 assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
-
-        assert args.migration_backend != 'nccl', 'NCCL has been temporarily deprecated due to its incompatibility with \
-            concurrent migrations in Llumnix.'
 
         assert args.migration_backend != 'gloo' or (args.migration_backend == 'gloo' \
             and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \
@@ -316,16 +311,13 @@ class EngineManagerArgs:
                             help='timeout(s) for initializing migration backend')
         parser.add_argument('--migration-buffer-blocks',
                             type=int,
-                            help='number of cache blocks in each migration buffer')
+                            help='number of cache blocks in migration')
         parser.add_argument('--migration-num-layers',
                             type=int,
                             help='number of kv-cache layers to transfer in each round during migration')
         parser.add_argument('--last-stage-max-blocks',
                             type=int,
                             help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
-        parser.add_argument('--migration-internal-buffer-num',
-                            type=int,
-                            help='number of the buffer in migration backend for sending and receiving')
         parser.add_argument('--max-stages',
                             type=int,
                             help='drop migration if the number of stages > max_stages')

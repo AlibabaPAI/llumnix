@@ -140,6 +140,7 @@ class SchedulerLlumnix(Scheduler):
         blocks = self.block_manager.get_free_blocks(block_num)
         pre_blocks = self.pre_alloc_cache_dict.get(request_id, [])
         pre_blocks.extend(blocks)
+        logger.info("add request {} to pre_alloc_cache_dict".format(request_id))
         self.pre_alloc_cache_dict[request_id] = pre_blocks
         blocks = [block.block_number for block in blocks]
         return blocks
@@ -170,14 +171,15 @@ class SchedulerLlumnix(Scheduler):
             super()._allocate_and_set_running(seq_group)
 
     def _set_status(self,
-                   seq_group: SequenceGroup,
-                   status_to: SequenceStatus,
-                   status_from: SequenceStatus = None):
+                    seq_group: SequenceGroup,
+                    status_to: SequenceStatus,
+                    status_from: SequenceStatus = None):
         for seq in seq_group.get_seqs(status=status_from):
             seq.status = status_to
 
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
         if request_id:
+            logger.info("pop request {} from pre_alloc_cache_dict".format(request_id))
             blocks = self.pre_alloc_cache_dict.pop(request_id, [])
             # pylint: disable=protected-access
             self.block_manager._free_block_table(blocks)
@@ -186,6 +188,7 @@ class SchedulerLlumnix(Scheduler):
             # Clear all pre-allocated cache of dst instance when src instance encounters exception.
             request_ids = list(self.pre_alloc_cache_dict.keys())
             for req_id in request_ids:
+                logger.info("pop request {} from pre_alloc_cache_dict".format(req_id))
                 blocks = self.pre_alloc_cache_dict.pop(req_id, [])
                 # pylint: disable=protected-access
                 self.block_manager._free_block_table(blocks)

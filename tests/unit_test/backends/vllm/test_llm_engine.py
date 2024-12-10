@@ -89,19 +89,19 @@ def test_llm_engine_process_model_outputs():
 
 def test_llm_engine_from_engine_args():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
+    llm_engine = MockEngine.from_engine_args(engine_args, request_output_queue_type=QueueType.RAYQUEUE,
                                              instance_id="0", migration_config=None)
     assert llm_engine.executor_class == LlumnixRayGPUExecutor
 
     latency_data = LatencyMemData({},{},{})
-    llm_engine = MockEngine.from_engine_args(engine_args, output_queue_type=QueueType.RAYQUEUE,
+    llm_engine = MockEngine.from_engine_args(engine_args, request_output_queue_type=QueueType.RAYQUEUE,
                                              instance_id="0", migration_config=None, latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
 
 def test_llm_engine_add_requset():
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
-                                                   output_queue_type=QueueType.RAYQUEUE,
+                                                   request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
                                                    placement_group=None,
                                                    node_id=ray.get_runtime_context().get_node_id(),

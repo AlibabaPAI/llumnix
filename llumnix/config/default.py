@@ -33,7 +33,7 @@ _C.SERVER.SSL_KEYFILE = None
 # Path to SSL certificate file for secure connections
 _C.SERVER.SSL_CERTFILE = None
 # Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "rayqueue"
+_C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "rayqueue"
 # Port number for the request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Disable logging requests in server
@@ -111,8 +111,6 @@ _C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 _C.MANAGER.MIGRATION_BUFFER_BLOCKS = 512
 # Number of kv-cache layers to transfer in each round during migration
 _C.MANAGER.MIGRATION_NUM_LAYERS = 1
-# Number of internal cache size in migration backend for sending and receiving
-_C.MANAGER.MIGRATION_INTERNAL_BUFFER_NUM = 2
 
 # -----------------------------------------------------------------------------
 # SCALING CONFIGURATION

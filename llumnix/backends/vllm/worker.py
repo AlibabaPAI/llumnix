@@ -14,6 +14,7 @@
 import time
 from typing import Dict, List
 import math
+import ray
 import torch
 
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
@@ -50,10 +51,9 @@ class MigrationWorker(Worker):
     def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
                                      cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
         migrate_cache_blocks_size = migration_config.migration_buffer_blocks
-        migrate_num_layers = migration_config.migration_num_layers
-        dummy_cache_size = migration_config.migration_internal_buffer_num * migrate_num_layers * migrate_cache_blocks_size \
-                        * CacheEngine.get_cache_block_size(cache_config, model_config, parallel_config) \
-                        // model_config.get_num_layers(parallel_config)
+        migration_num_layers = migration_config.migration_num_layers
+        dummy_cache_size = migration_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
+            cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
 
         # For nccl migration backend, reserve gpu memory for dummy cache in migration backend. For other backends,
         # CPU memory is used for the dummy cache, which is almost unlimited, so no special action is needed.

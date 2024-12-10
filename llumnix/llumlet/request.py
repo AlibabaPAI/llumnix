@@ -41,6 +41,8 @@ class LlumnixRequest:
         self.stage_num_blocks_list = []
         self.try_schedule_times = 0
         self._status = None
+        self.migration_start_time = None
+        self.is_migrating = False
 
         # end-of-migration, for multiple requests migration
         self.eom = False
@@ -53,11 +55,15 @@ class LlumnixRequest:
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
         self.try_schedule_times = 0
+        self.migration_start_time = None
+        self.is_migrating = False
 
     def reset_migration_args_src(self):
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
+        self.migration_start_time = None
+        self.is_migrating = False
 
     def reset_status(self):
         self._status = None
@@ -104,5 +110,7 @@ class LlumnixRequest:
         return self.output_len >= self.expected_steps
 
     def should_abort_migration(self) -> bool:
-        return self.finished \
-            or (self.last_preemption_time is not None and self.last_preemption_time > self.stage_timestamps[-1])
+        begin_time = self.stage_timestamps[-1] if len(self.stage_timestamps) > 0 else self.migration_start_time
+        preempted = self.last_preemption_time is not None and self.last_preemption_time > begin_time
+
+        return self.finished or preempted

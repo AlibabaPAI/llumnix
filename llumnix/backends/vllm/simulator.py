@@ -32,7 +32,7 @@ class BackendSimVLLM(BackendVLLM):
     def __init__(
         self,
         instance_id: str,
-        output_queue_type: QueueType,
+        request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
         profiling_result_file_path: str,
         engine_args: EngineArgs,
@@ -41,7 +41,7 @@ class BackendSimVLLM(BackendVLLM):
         # multi-instance args
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          output_queue_type=output_queue_type,
+                                                                          request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           latency_mem=latency_mem,

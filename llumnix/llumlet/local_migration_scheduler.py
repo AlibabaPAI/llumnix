@@ -58,6 +58,7 @@ class LocalMigrationScheduler:
                 if request.status == RequestStatus.RUNNING \
                     and request.inference_type == RequestInferenceType.DECODE \
                     and min_request_len < request.request_len < max_request_len \
+                    and (not request.is_migrating) \
         ]
         return filtered_running
 
@@ -67,6 +68,7 @@ class LocalMigrationScheduler:
                 if request.status == RequestStatus.WAITING \
                     and request.try_schedule_times >= 1 \
                     and min_request_len < request.request_len < max_request_len \
+                    and (not request.is_migrating) \
         ]
         return filtered_waiting
 

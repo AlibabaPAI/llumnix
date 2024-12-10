@@ -20,7 +20,8 @@ from llumnix.queue.ray_queue_client import RayQueueClient
 from llumnix.queue.zmq_utils import get_open_zmq_ipc_path
 from llumnix.queue.queue_type import QueueType
 
-def init_output_queue_server(zmq_ip: str, zmq_port: int, queue_type: QueueType) -> QueueServerBase:
+
+def init_request_output_queue_server(zmq_ip: str, zmq_port: int, queue_type: QueueType) -> QueueServerBase:
     output_queue_server: QueueServerBase = None
     if queue_type == QueueType.ZMQ:
         rpc_path = get_open_zmq_ipc_path(zmq_ip, zmq_port)
@@ -29,7 +30,7 @@ def init_output_queue_server(zmq_ip: str, zmq_port: int, queue_type: QueueType) 
         output_queue_server = RayQueueServer()
     return output_queue_server
 
-def init_output_queue_client(queue_type: QueueType) -> QueueClientBase:
+def init_request_output_queue_client(queue_type: QueueType) -> QueueClientBase:
     output_queue_client: QueueClientBase = None
     if queue_type == QueueType.ZMQ:
         output_queue_client= ZmqClient()

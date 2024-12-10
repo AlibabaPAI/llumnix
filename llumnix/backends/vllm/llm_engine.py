@@ -39,16 +39,18 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_client_base import QueueClientBase
-from llumnix.queue.utils import init_output_queue_client, QueueType
+from llumnix.queue.utils import init_request_output_queue_client, QueueType
 
 logger = init_logger(__name__)
 
+NO_OUTPUTS_STEP_INTERVAL = 0.01
+
 
 class AsyncPutQueueActor:
-    def __init__(self, instance_id, output_queue_type: QueueType):
+    def __init__(self, instance_id, request_output_queue_type: QueueType):
         self.instance_id = instance_id
-        self.output_queue_type = output_queue_type
-        self.request_output_queue_client: QueueClientBase = init_output_queue_client(output_queue_type)
+        self.request_output_queue_type = request_output_queue_type
+        self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None
 
     async def put_nowait_to_servers(self,
@@ -66,13 +68,13 @@ class AsyncPutQueueActor:
                 tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
             rets = await asyncio.gather(*tasks, return_exceptions=True)
             for idx, ret in enumerate(rets):
-                if isinstance(ret, (TimeoutError, ray.exceptions.RayActorError)):
+                if isinstance(ret, Exception):
                     server_id = list(server_request_outputs.keys())[idx]
                     server_info = server_info_dict[server_id]
-                    logger.info("Server {} is dead".format(server_id))
-                    if self.output_queue_type == QueueType.ZMQ:
+                    logger.info("server {} is dead".format(server_id))
+                    if self.request_output_queue_type == QueueType.ZMQ:
                         logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                                server_info.request_output_queue_port))
+                                                                                   server_info.request_output_queue_port))
                     req_outputs = list(server_request_outputs.values())[idx]
                     request_ids = [req_output.request_id for req_output in req_outputs]
                     self.engine_actor_handle.abort_request.remote(request_ids)
@@ -85,7 +87,7 @@ class AsyncPutQueueActor:
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
-                 output_queue_type: QueueType,
+                 request_output_queue_type: QueueType,
                  placement_group: Optional[PlacementGroup],
                  node_id: Optional[str],
                  *arg, **kwargs) -> None:
@@ -116,7 +118,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.async_put_queue_actor = ray.remote(
             num_cpus=0,
             scheduling_strategy=scheduling_strategy
-        )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
+        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
 
     # pylint: disable=W0221
@@ -124,7 +126,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
     def from_engine_args(
         cls,
         engine_args: EngineArgs,
-        output_queue_type: QueueType,
+        request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
@@ -153,7 +155,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
-            output_queue_type=output_queue_type,
+            request_output_queue_type=request_output_queue_type,
             placement_group=placement_group,
             node_id=node_id,
             **engine_config.to_dict(),
@@ -188,20 +190,27 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             seq_group_metadata_list = new_seq_group_metadata_list
         for ignored_seq_group in ignored_seq_groups:
             server_infos.append(ignored_seq_group.server_info)
+
         for server_info in server_infos:
             if hasattr(server_info, 'request_timestamps'):
                 server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
+
         request_outputs = super()._process_model_outputs(output, scheduled_seq_groups, ignored_seq_groups, seq_group_metadata_list)
+
         for request_output, server_info in zip(request_outputs, server_infos):
             if hasattr(server_info, 'request_timestamps'):
                 request_output.request_timestamps = server_info.request_timestamps
                 request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+            if request_output.finished:
+                logger.info("engine finished request {}".format(request_output.request_id))
+
         # TODO(ZeldaHuang): Use LlumnixRequestOutput to store llumnix output args.
         return request_outputs, server_infos
 
     async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         step_begin_time = time.time()
         request_outputs, server_infos = await super().step_async()
+
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
@@ -223,9 +232,12 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
+
+        self.instance_info = instance_info
+
         if request_outputs:
             self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
-        self.instance_info = instance_info
+
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
@@ -276,14 +288,14 @@ class BackendVLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
-        output_queue_type: QueueType,
+        request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
         placement_group: PlacementGroup = None,
         node_id: str = None
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          output_queue_type=output_queue_type,
+                                                                          request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
@@ -318,7 +330,7 @@ class BackendVLLM(BackendInterface):
             try:
                 request_outputs, _ = await self.engine.step_async()
                 if len(request_outputs) == 0:
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
                 logger.error("Error in engine loop: {}".format(e))
@@ -349,7 +361,7 @@ class BackendVLLM(BackendInterface):
     def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
-        logger.info("add seq {} to block table".format(seq.seq_id))
+        logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_args_dst()

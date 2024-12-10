@@ -42,7 +42,8 @@ class GlobalSchedulerConfig:
             scaling_policy: str,
             scale_up_threshold: float,
             scale_down_threshold: float,
-            enable_pd_disagg: bool) -> None:
+            enable_pd_disagg: bool,
+            migration_backend: str,) -> None:
         self.initial_instances = initial_instances
         self.load_metric = load_metric
 
@@ -60,3 +61,5 @@ class GlobalSchedulerConfig:
 
         self.enable_pd_disagg = enable_pd_disagg
         self.num_dispatch_instances = num_dispatch_instances
+
+        self.migration_backend = migration_backend

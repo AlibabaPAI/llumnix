@@ -59,18 +59,18 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
 @pytest.mark.parametrize("backend", ['rpc', 'gloo', 'nccl'])
 def test_reserve_memory_for_migration(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
-    migraiton_config = EngineManagerArgs(migration_cache_blocks=1).create_migration_config()
-    migraiton_config.migration_backend = backend
+    migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()
+    migration_config.migration_backend = backend
     worker = create_worker(rank=0, local_rank=0, engine_config=engine_config)
     ray.get(worker.execute_method.remote('init_device'))
 
     block_size = CacheEngine.get_cache_block_size(engine_config.cache_config, engine_config.model_config,
                                                   engine_config.parallel_config)
     num_layers = engine_config.model_config.get_num_layers(engine_config.parallel_config)
-    occupy_memory = migraiton_config.migration_cache_blocks * block_size * migraiton_config.migration_num_layers // num_layers
+    occupy_memory = migration_config.migration_buffer_blocks * block_size * migration_config.migration_num_layers // num_layers
 
     migration_cache_size = ray.get(worker.execute_method.remote('reserve_memory_for_migration',
-                                                                migration_config=migraiton_config,
+                                                                migration_config=migration_config,
                                                                 model_config=engine_config.model_config,
                                                                 cache_config=engine_config.cache_config,
                                                                 parallel_config=engine_config.parallel_config))
@@ -80,8 +80,8 @@ def test_reserve_memory_for_migration(setup_ray_env, backend):
 @pytest.mark.parametrize("backend", ['rpc', 'gloo', 'nccl'])
 def test_rebuild_migration_backend(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
-    migraiton_config = EngineManagerArgs(migration_cache_blocks=1).create_migration_config()
-    migraiton_config.migration_backend = backend
+    migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()
+    migration_config.migration_backend = backend
 
     worker0 = create_worker(rank=0, local_rank=0, engine_config=engine_config)
     worker0_id = random_uuid()
@@ -90,7 +90,7 @@ def test_rebuild_migration_backend(setup_ray_env, backend):
     ray.get(worker0.execute_method.remote(
         'init_migration',
         instance_id=worker0_id,
-        migration_config=migraiton_config,
+        migration_config=migration_config,
         src_worker_handle_list=[worker0],
         node_id=ray.get_runtime_context().get_node_id()))
     instance_rank = {worker0_id: 0}
@@ -105,7 +105,7 @@ def test_rebuild_migration_backend(setup_ray_env, backend):
     ray.get(worker1.execute_method.remote(
         'init_migration',
         instance_id=worker1_id,
-        migration_config=migraiton_config,
+        migration_config=migration_config,
         src_worker_handle_list=[worker1],
         node_id=ray.get_runtime_context().get_node_id()))
 

@@ -62,12 +62,12 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
         self.cache_device = "cpu"
-        self.num_migration_cache_blocks = self.migration_config.migration_cache_blocks
+        self.num_migration_buffer_blocks = self.migration_config.migration_buffer_blocks
         self.num_layers = self.cache_engine.num_layers
         self.migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
 
         self.dummy_cache = torch.empty(
-            size=(self.num_migration_cache_blocks, self.num_layers, 2, self.migration_cache_size),
+            size=(self.num_migration_buffer_blocks, self.num_layers, 2, self.migration_cache_size),
             dtype=self.cache_engine.dtype,
             device=self.cache_device,
             pin_memory=True
@@ -94,8 +94,8 @@ class RayRpcMigrationBackend(MigrationBackendBase):
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
-        for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
-            offset = min(self.num_migration_cache_blocks, tot_blocks - start_idx)
+        for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
+            offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", None, send_blocks)
             if rpc_numpy_cache is not None:
@@ -151,7 +151,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.cache_engine = cache_engine
         self.backend = migration_config.migration_backend
         self.migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine.num_layers)
-        self.num_migration_cache_blocks = migration_config.migration_cache_blocks
+        self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
 
         self.backend = migration_config.migration_backend
         self.global_world_size = -1
@@ -173,7 +173,7 @@ class RayColMigrationBackend(MigrationBackendBase):
 
         pin_memory = (self.backend == 'gloo')
         self.dummy_cache = torch.empty(
-            size=(self.num_migration_cache_blocks, self.migration_num_layers, 2, self.migration_cache_size),
+            size=(self.num_migration_buffer_blocks, self.migration_num_layers, 2, self.migration_cache_size),
             dtype=self.cache_engine.dtype,
             device=self.cache_device,
             pin_memory=pin_memory
@@ -241,8 +241,8 @@ class RayColMigrationBackend(MigrationBackendBase):
         tot_blocks = len(src_blocks)
         src_rank = ray.get(self.actor.exec_method.remote(self.is_driver_worker, src_handle, "get_global_rank"))
 
-        for start_idx in range(0, tot_blocks, self.num_migration_cache_blocks):
-            offset = min(self.num_migration_cache_blocks, tot_blocks - start_idx)
+        for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
+            offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
             self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", self.global_rank, send_blocks)
@@ -277,18 +277,21 @@ class RayColMigrationBackend(MigrationBackendBase):
 
 def get_migration_backend(migration_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy,
                         is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
-    if cache_engine.num_gpu_blocks < migration_config.migration_cache_blocks:
-        logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
-                       .format(migration_config.migration_cache_blocks, cache_engine.num_gpu_blocks))
-        migration_config.migration_cache_blocks = cache_engine.num_gpu_blocks
+    if cache_engine.num_gpu_blocks < migration_config.migration_buffer_blocks:
+        logger.warning("migration_buffer_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
+                       .format(migration_config.migration_buffer_blocks, cache_engine.num_gpu_blocks))
+        migration_config.migration_buffer_blocks = cache_engine.num_gpu_blocks
 
-    target_col = None
+    target_migration_backend = None
     backend = migration_config.migration_backend
+
+    assert backend in ['nccl', 'gloo', 'rpc'], "Unsupported migration backend: {} for llumnix".format(backend)
+
     if backend in ['nccl', 'gloo']:
-        target_col = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
+        target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
                                             is_driver_worker, gpu_cache)
     else:
-        target_col = RayRpcMigrationBackend(migration_config, cache_engine, worker_rank, worker_handle_list,
+        target_migration_backend = RayRpcMigrationBackend(migration_config, cache_engine, worker_rank, worker_handle_list,
                                             scheduling_strategy, is_driver_worker, gpu_cache)
 
-    return target_col
+    return target_migration_backend

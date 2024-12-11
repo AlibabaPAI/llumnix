@@ -18,7 +18,8 @@ from llumnix.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
-from llumnix.global_scheduler.migration_scheduler import MigrationScheduler, PairMigrationConstraints
+from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
+from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 
 logger = init_logger(__name__)
@@ -42,12 +43,14 @@ class GlobalScheduler:
         # migrate args
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
-                                                      self.instance_load_calculator)
+                                                      self.instance_load_calculator,
+                                                      global_scheduler_config.migration_backend)
         # auto-scaling args
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,
                                                   global_scheduler_config.scaling_policy,
                                                   self.instance_load_calculator,
+                                                  self.enable_pd_disagg,
                                                   global_scheduler_config.num_dispatch_instances)
 
         self.num_instances = 0

@@ -11,9 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from vllm.sequence import SequenceGroup
+from vllm.sequence import SequenceGroup, SequenceStatus
 
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType
+from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
 
 class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
@@ -41,3 +41,29 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         if self.is_prefill():
             return RequestInferenceType.PREFILL
         return RequestInferenceType.DECODE
+
+    @property
+    def finished(self) -> bool:
+        return self.get_seqs()[0].is_finished()
+
+    @property
+    def arrival_time(self) -> float:
+        return self.metrics.arrival_time
+
+    @property
+    def status(self) -> RequestStatus:
+        if self._status:
+            return self._status
+        status = self.get_seqs()[0].status
+        if status == SequenceStatus.RUNNING:
+            request_status = RequestStatus.RUNNING
+        elif status == SequenceStatus.WAITING:
+            request_status = RequestStatus.WAITING
+        else:
+            request_status = RequestStatus.FINISHED
+        return request_status
+
+    @property
+    def prefill_num_blocks(self) -> int:
+        # Get the prefill len of the waiting request.
+        return len(self.get_seqs()[0].logical_token_blocks)

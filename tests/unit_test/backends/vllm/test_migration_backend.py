@@ -40,7 +40,7 @@ class MockMigrationWorker(MigrationWorker):
 @pytest.mark.parametrize("backend", ['rpc', 'gloo', 'nccl'])
 def test_migrate_cache(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
-    migraiton_config = EngineManagerArgs(migration_cache_blocks=3, migration_num_layers=5).create_migration_config()
+    migraiton_config = EngineManagerArgs(migration_buffer_blocks=3, migration_num_layers=5).create_migration_config()
     migraiton_config.migration_backend = backend
 
     worker0 = create_worker(rank=0, local_rank=0, engine_config=engine_config,

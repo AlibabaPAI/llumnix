@@ -47,7 +47,7 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
 class LlumnixEntrypointsArgs:
     launch_ray_cluster: bool = None
     ray_cluster_port: int = None
-    queue_type: str = None
+    request_output_queue_type: str = None
     request_output_queue_port: int = None
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
@@ -82,10 +82,10 @@ class LlumnixEntrypointsArgs:
         parser.add_argument("--ray-cluster-port",
                             type=int,
                             help='ray cluster port')
-        parser.add_argument("--queue-type",
+        parser.add_argument("--request-output-queue-type",
                             type=str,
                             choices=['rayqueue', 'zmq'],
-                            help='queue type for request output queue')
+                            help='request output queue type for request output queue')
         parser.add_argument("--request-output-queue-port",
                             type=int,
                             help='port for zmq')
@@ -134,7 +134,7 @@ class EngineManagerArgs:
 
     migration_backend_init_timeout: float = None
     migration_backend: str = None
-    migration_cache_blocks: int = None
+    migration_buffer_blocks: int = None
     migration_num_layers: int = None
     last_stage_max_blocks: int = None
     max_stages: int = None
@@ -166,13 +166,14 @@ class EngineManagerArgs:
                                                         self.scaling_policy,
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
-                                                        self.enable_pd_disagg)
+                                                        self.enable_pd_disagg,
+                                                        self.migration_backend,)
         return global_scheduler_config
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
-                                           self.migration_cache_blocks,
+                                           self.migration_buffer_blocks,
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
@@ -223,8 +224,13 @@ class EngineManagerArgs:
 
         parser.add_argument('--dispatch-policy',
                             type=str,
-                            choices=['balanced', 'load', 'queue', 'flood'],
-                            help='request dispatch policy')
+                            choices=['balanced', 'load', 'queue', 'flood', 'rr'],
+                            help='The request dispatch policy.\n\n'
+                            '* "balanced" dispatch request to the instance with minimum requests dispatched.\n'
+                            '* "load" dispatch request to the instance with lowest instance load.\n'
+                            '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
+                            '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
+                            '* "rr" dispatch requests with round-robin policy.\n')
         parser.add_argument('--num-available-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatching')
@@ -238,14 +244,25 @@ class EngineManagerArgs:
         parser.add_argument('--pair-migration-policy',
                             type=str,
                             choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
-                            help='pair migration policy')
+                            help='The pair migration policy.\n\n'
+                            '* "balanced" pair migration to make the instance load of instance more balanced.\n'
+                            '* "defrag_constrained" pair migration without balanced constraint to '
+                            'achieve defragmentation thoroughly (with instance constraints).\n'
+                            '* "defrag_relaxed" pair migration to without balanced constraint '
+                            'to achieve defragmentation thoroughly (without instance constraints).\n')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
                             help='migrate out instance load threshold')
         parser.add_argument('--request-migration-policy',
                             type=str,
-                            choices=['LCFS', 'SJF', 'LJF'],
-                            help='request migration policy')
+                            default=None,
+                            choices=['LCR', 'SR', 'LR', 'FCW', 'FCWSR'],
+                            help='The request migration policy.\n\n'
+                            '* "LCR" migrate the running request last come.\n'
+                            '* "SR" migrate the running request shortest.\n'
+                            '* "LR" migrate the running request longest.\n'
+                            '* "FCW" migrate the waiting request first come.\n'
+                            '* "FCWSR" migrate the waiting request first come and running request shortest.\n')
         parser.add_argument('--enable-defrag',
                             type=bool,
                             help='enable defragmentation through migration based on virtual usage')
@@ -288,12 +305,12 @@ class EngineManagerArgs:
 
         parser.add_argument('--migration-backend',
                             type=str,
-                            choices=['gloo','nccl','rpc'],
+                            choices=['gloo', 'nccl', 'rpc'],
                             help='communication backend of migration')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
                             help='timeout(s) for initializing migration backend')
-        parser.add_argument('--migration-cache-blocks',
+        parser.add_argument('--migration-buffer-blocks',
                             type=int,
                             help='number of cache blocks in migration')
         parser.add_argument('--migration-num-layers',
@@ -306,6 +323,9 @@ class EngineManagerArgs:
                             type=int,
                             help='drop migration if the number of stages > max_stages')
         parser.add_argument('--enable-pd-disagg',
-                            type=bool,
+                            action='store_true',
                             help='enable prefill decoding disaggregation')
+        parser.add_argument('--num-dispatch-instances',
+                            type=int,
+                            help='number of available instances for dispatch')
         return parser

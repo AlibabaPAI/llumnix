@@ -12,12 +12,12 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--initial-instances INITIAL_INSTANCES]
             [--load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
-            [--dispatch-policy {balanced,load,queue}]
+            [--dispatch-policy {balanced,load,queue,rr}]
             [--enable-migration]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag_constrained,defrag_relaxed}]
             [--migrate-out-threshold MIGRATE_OUT_THRESHOLD]
-            [--request-migration-policy {LCFS,SJF,LJF}]
+            [--request-migration-policy {LCR,SR,LR,FCW,FCWSR}]
             [--enable-defrag ENABLE_DEFRAG]
             [--enable-scaling]
             [--min-instances MIN_INSTANCES]
@@ -33,11 +33,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--gpu-type GPU_TYPE]
             [--polling-interval POLLING_INTERVAL]
             [--migration-backend {gloo,nccl,rpc}]
-            [--migration-cache-blocks MIGRATION_CACHE_BLOCKS]
+            [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
+            [--enable-pd-disagg]
+            [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
             [--log-request-timestamps]
 
 ```
@@ -66,7 +68,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--dispatch-policy`
 - Request dispatch policy.
-- Possible choices: balanced, load, queue
+- Possible choices: balanced, load, queue, rr
 - Default: "load"
 
 `--enable-migration`
@@ -87,8 +89,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--request-migration-policy`
 - Request migration policy.
-- Possible choices: LCFS, SJF, LJF
-- Default: "SJF"
+- Possible choices: LCR, SR, LR, FCW, FCWSR
+- Default: "SR"
 
 `--enable-defrag`
 - Enable defragmentation through migration based on virtual usage.
@@ -145,7 +147,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: gloo, rpc
 - Default: "rpc"
 
-`--migration-cache-blocks`
+`--migration-buffer-blocks`
 - Number of cache blocks in migration.
 - Default: 512
 
@@ -167,6 +169,12 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--log-request-timestamps`
 - Enable logging request timestamps.
+
+`--enable-pd-disagg`
+- Enable prefill decoding disaggregation.
+
+`--num-dispatch-instances`
+- Number of available instances for dispatch.
 
 # Unsupported vLLM feature options
 

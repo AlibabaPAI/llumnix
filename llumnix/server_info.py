@@ -67,14 +67,14 @@ class RequestTimestamps:
 class ServerInfo:
     def __init__(self,
                  server_id: str,
-                 output_queue_type: QueueType,
+                 request_output_queue_type: QueueType,
                  request_output_queue: RayQueueServer,
                  request_output_queue_ip: str,
                  request_output_queue_port: int) -> None:
         self.server_id = server_id
-        self.output_queue_type = output_queue_type
-        if output_queue_type == QueueType.RAYQUEUE:
+        self.request_output_queue_type = request_output_queue_type
+        if request_output_queue_type == QueueType.RAYQUEUE:
             assert request_output_queue is not None
-        self.request_output_queue = request_output_queue.queue if output_queue_type == QueueType.RAYQUEUE else None
+        self.request_output_queue = request_output_queue.queue if request_output_queue_type == QueueType.RAYQUEUE else None
         self.request_output_queue_ip = request_output_queue_ip
         self.request_output_queue_port = request_output_queue_port

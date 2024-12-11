@@ -16,7 +16,7 @@ class MigrationConfig:
             self,
             request_migration_policy: str,
             migration_backend: str,
-            migration_cache_blocks: int,
+            migration_buffer_blocks: int,
             migration_num_layers: int,
             last_stage_max_blocks: int,
             max_stages: int,
@@ -24,7 +24,7 @@ class MigrationConfig:
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
         self.migration_num_layers = migration_num_layers
-        self.migration_cache_blocks = migration_cache_blocks
+        self.migration_buffer_blocks = migration_buffer_blocks
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.migration_backend_init_timeout = migration_backend_init_timeout
@@ -42,13 +42,16 @@ class GlobalSchedulerConfig:
             scaling_policy: str,
             scale_up_threshold: float,
             scale_down_threshold: float,
-            enable_pd_disagg: bool) -> None:
+            enable_pd_disagg: bool,
+            migration_backend: str,) -> None:
         self.initial_instances = initial_instances
         self.load_metric = load_metric
 
         self.dispatch_policy = dispatch_policy
 
         self.pair_migration_policy = pair_migration_policy
+        # TODO(KuilongCui): Use a better way to set the threshold, as having both positive and negative
+        # values can cause confusion.
         self.migrate_out_load_threshold = migrate_out_threshold*(-1)
         self.enable_defrag = enable_defrag
 
@@ -58,3 +61,5 @@ class GlobalSchedulerConfig:
 
         self.enable_pd_disagg = enable_pd_disagg
         self.num_dispatch_instances = num_dispatch_instances
+
+        self.migration_backend = migration_backend

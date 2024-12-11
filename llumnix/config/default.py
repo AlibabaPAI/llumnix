@@ -33,7 +33,7 @@ _C.SERVER.SSL_KEYFILE = None
 # Path to SSL certificate file for secure connections
 _C.SERVER.SSL_CERTFILE = None
 # Queue type for request output queue
-_C.SERVER.QUEUE_TYPE = "rayqueue"
+_C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "rayqueue"
 # Port number for the request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Disable logging requests in server
@@ -80,7 +80,7 @@ _C.MANAGER.POLLING_INTERVAL = 0.05
 _C.MANAGER.LOAD_METRIC = 'remaining_steps'
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
-# Number of available dispatch instances. -1 indicates that all instances can be used for dispatching
+# Number of available dispatch instances. math.inf indicates that all instances can be used for dispatching
 _C.MANAGER.NUM_DISPATCH_INSTANCES = math.inf
 
 # -----------------------------------------------------------------------------
@@ -95,7 +95,7 @@ _C.MANAGER.PAIR_MIGRATION_POLICY = 'defrag_constrained'
 # Migrate out instance load threshold
 _C.MANAGER.MIGRATE_OUT_THRESHOLD = 3.0
 # Request migration policy
-_C.MANAGER.REQUEST_MIGRATION_POLICY = 'SJF'
+_C.MANAGER.REQUEST_MIGRATION_POLICY = 'SR'
 # Enable defragmentation through migration based on virtual usage
 _C.MANAGER.ENABLE_DEFRAG = False
 # Drop migration if the number of stages > max_stages
@@ -108,7 +108,7 @@ _C.MANAGER.MIGRATION_BACKEND = "gloo"
 # Timeout(s) for initializing migration backend
 _C.MANAGER.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 # Number of cache blocks in migration
-_C.MANAGER.MIGRATION_CACHE_BLOCKS = 512
+_C.MANAGER.MIGRATION_BUFFER_BLOCKS = 512
 # Number of kv-cache layers to transfer in each round during migration
 _C.MANAGER.MIGRATION_NUM_LAYERS = 1
 

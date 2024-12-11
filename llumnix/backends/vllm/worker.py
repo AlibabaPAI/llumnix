@@ -50,9 +50,9 @@ class MigrationWorker(Worker):
 
     def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
                                      cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
-        migrate_cache_blocks_size = migration_config.migration_cache_blocks
-        migrate_num_layers = migration_config.migration_num_layers
-        dummy_cache_size = migrate_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
+        migrate_cache_blocks_size = migration_config.migration_buffer_blocks
+        migration_num_layers = migration_config.migration_num_layers
+        dummy_cache_size = migration_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
             cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
 
         # For nccl migration backend, reserve gpu memory for dummy cache in migration backend. For other backends,
@@ -150,7 +150,3 @@ class MigrationWorker(Worker):
         del self.migration_backend
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
-
-    def restart(self) -> None:
-        self.init_model()
-        self.init_cache_engine(self.cache_config)

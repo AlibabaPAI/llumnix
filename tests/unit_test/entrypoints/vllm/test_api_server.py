@@ -47,7 +47,7 @@ def _query_server_generate_benchmark(prompt: str) -> dict:
 
 @pytest.fixture(params=["zmq", "rayqueue"])
 def api_server(request):
-    output_queue_type = QueueType(request.param)
+    request_output_queue_type = QueueType(request.param)
     script_path = Path(__file__).parent.joinpath(
         "api_server_manager.py").absolute()
     commands = [
@@ -55,14 +55,14 @@ def api_server(request):
         "-u",
         str(script_path),
         "--host", "127.0.0.1",
-        "--output-queue-type", output_queue_type,
+        "--request-output-queue-type", request_output_queue_type,
     ]
     # pylint: disable=consider-using-with
     uvicorn_process = subprocess.Popen(commands)
     yield
     uvicorn_process.terminate()
     # Waiting for api server subprocess to terminate.
-    time.sleep(1.0)
+    time.sleep(1)
 
 @pytest.mark.parametrize("interface", ['generate', 'generate_benchmark'])
 def test_api_server(setup_ray_env, api_server, interface: str):

@@ -71,6 +71,10 @@ class DispatchScheduler:
             del self.instance_num_requests[instance_id]
         if instance_id in self.available_dispatch_instance_set:
             self.available_dispatch_instance_set.remove(instance_id)
+            # TODO(KuilongCui): Check it when there is no decode instance.
+            if self.num_instances >= self.num_dispatch_instances:
+                free_instance_id = next(iter(self.instance_id_set - self.available_dispatch_instance_set))
+                self.available_dispatch_instance_set.add(free_instance_id)
 
     def _sort_instance_infos(self,
                             descending: bool = True) -> None:
@@ -133,12 +137,26 @@ class Queue(DispatchPolicy):
         logger.info("dispatch to {}, queue size: {}".format(instance_id, sorted_instance_infos[0].num_waiting_requests))
         return instance_id
 
+class RoundRobin(DispatchPolicy):
+    prev_instance_idx: int = -1
+
+    def dispatch(self,
+                 instance_num_requests: Dict[str, int],
+                 sorted_instance_infos: List[InstanceInfo]) -> str:
+        all_instance_ids = sorted(instance_num_requests.keys())
+        cur_instance_idx = (self.prev_instance_idx + 1) % len(all_instance_ids)
+
+        target_instance_id = all_instance_ids[cur_instance_idx]
+        self.prev_instance_idx = cur_instance_idx
+        return target_instance_id
+
 class DispatchPolicyFactory:
     _POLICY_REGISTRY = {
         'flood': Flood,
         'balanced': Balanced,
         'load': Load,
         'queue': Queue,
+        'rr': RoundRobin,
     }
 
     @classmethod

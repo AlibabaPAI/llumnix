@@ -27,14 +27,17 @@ from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 
 logger = init_logger(__name__)
+
+CHECK_ENGINE_STATE_INTERVAL = 1.0
 
 
 class Llumlet:
     def __init__(self,
                  instance_id: str,
-                 output_queue_type: QueueType,
+                 request_output_queue_type: QueueType,
                  backend_type: BackendType,
                  migration_config: MigrationConfig,
                  *args,
@@ -43,7 +46,7 @@ class Llumlet:
             self.instance_id = instance_id
             self.actor_name = f"instance_{instance_id}"
             self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
-                                                                        output_queue_type,
+                                                                        request_output_queue_type,
                                                                         backend_type,
                                                                         migration_config,
                                                                         *args,
@@ -55,7 +58,7 @@ class Llumlet:
                                                             self.backend_engine)
             self.log_requests = True
 
-            self.check_state_thread = asyncio.create_task(self.check_state())
+            asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))
@@ -63,7 +66,7 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
-                  output_queue_type: QueueType,
+                  request_output_queue_type: QueueType,
                   disable_fixed_node_init_instance: bool,
                   detached: bool,
                   node_id: str,
@@ -115,12 +118,12 @@ class Llumlet:
                                                 soft=False,
                                             )
                                         )
-        llumlet = engine_class.remote(instance_id, output_queue_type, backend_type, migration_config, *args, **kwargs)
+        llumlet = engine_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 
-    async def check_state(self):
+    async def _check_engine_state_loop(self):
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(CHECK_ENGINE_STATE_INTERVAL)
             if self.backend_engine.state == EngineState.CRASHED:
                 logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
                 # pylint: disable=protected-access
@@ -128,39 +131,63 @@ class Llumlet:
                 self_actor = ray.get_actor(self.actor_name)
                 ray.kill(self_actor)
 
-    async def migrate_out(self, dst_instance_name: str, num_requests: int) -> List[str]:
+    async def migrate_out(self, dst_instance_name: str) -> List[str]:
+        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+        if len(migrate_out_requests) == 0:
+            return []
+
+        for migrate_out_request in migrate_out_requests:
+            migrate_out_request.is_migrating = True
+
+        migrated_request_list = []
+        for migrate_out_request in migrate_out_requests:
+            migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
+            migrated_request_list.extend(migrated_request)
+            if len(migrated_request) == 0 and migrate_out_request.eom:
+                break
+        return migrated_request_list
+
+    async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
         try:
+            t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
             dst_instance_id = dst_instance_name[len("instance_"):]
-            migrated_request_list = []
-            continue_migrate = True
-            while continue_migrate and len(migrated_request_list) < num_requests:
-                t0 = time.time()
-                migrate_out_request = self.migration_scheduler.get_migrate_out_request()
-                if migrate_out_request is not None:
-                    logger.info("migrate_out {}".format(migrate_out_request.request_id))
-                if migrate_out_request is None:
-                    return migrated_request_list
-                logger.info("{}->{} begin migrate out {}".format(self.instance_id, dst_instance_id, migrate_out_request.request_id))
-                status = await self.migration_coordinator.migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
-                if status == MigrationStatus.FINISHED_DONE:
-                    await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
-                    self.backend_engine.free_src_request(migrate_out_request)
-                    migrated_request_list.append(migrate_out_request.request_id)
-                    migrate_out_request.stage_timestamps.append(time.time())
-                    self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-                else:
-                    migrate_out_request.reset_migration_args()
+            logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
+            migrated_request = []
+
+            if migrate_out_request.status == RequestStatus.RUNNING:
+                migrate_out_request.migration_start_time = time.time()
+                status = await self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
+            elif migrate_out_request.status == RequestStatus.WAITING:
+                migrate_out_request.migration_start_time = time.time()
+                status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
+            else:
+                return migrated_request
+
+            if status == MigrationStatus.FINISHED:
+                await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
+                self.backend_engine.free_src_request(migrate_out_request)
+                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                migrated_request.append(migrate_out_request.request_id)
+            else: # ABORTED_SRC or ABORTED_DST
+                migrate_out_request.reset_migration_args_src()
+                migrate_out_request.reset_status()
+                # If dst aborts itself, dst proactively frees the pre allocated cache in migrate_in_pre_alloc.
+                if status == MigrationStatus.ABORTED_SRC:
                     await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
-                    continue_migrate = False
-                t1 = time.time()
-                logger.info("{}->{} migrate done, migrate request {}, status:{}, len:{} blocks, cost:{} ms" \
-                    .format(self.instance_id, dst_instance_id, migrated_request_list, status, \
-                    sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
+            t1 = time.time()
+            logger.info("{}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
+                        .format(self.instance_id, dst_instance_id, migrated_request, status, \
+                                sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:
             logger.info("[migrate_out] instance {} is dead".format(dst_instance_name[len("instance_"):]))
             raise
-        return migrated_request_list
+        # pylint: disable=W0703
+        except Exception as e:
+            logger.error("unexpected exception occurs: {}".format(e))
+            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            raise
+        return migrated_request
 
     def get_instance_info(self) -> InstanceInfo:
         return self.backend_engine.engine.instance_info
@@ -202,7 +229,13 @@ class Llumlet:
             migrating_out_requests_last_stage = self.backend_engine.pop_migrating_out_requests_last_stage()
             for backend_request in migrating_out_requests_last_stage:
                 logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
-                self.backend_engine.add_running_request(backend_request)
+                assert backend_request.status in [RequestStatus.WAITING_MIGRATING, RequestStatus.RUNNING_MIGRATING], \
+                    "The status of request in migrating_out_requests_last_stage should be \
+                     RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
+                if backend_request.status == RequestStatus.RUNNING_MIGRATING:
+                    self.backend_engine.add_running_request(backend_request)
+                else: # WAITING_MIGRATING
+                    self.backend_engine.add_waiting_request(backend_request)
 
     def execute_migration_method(self, method, *args, **kwargs):
         executor = getattr(self.migration_coordinator, method)

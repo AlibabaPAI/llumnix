@@ -27,7 +27,7 @@ INSTANCE_NUM = 16
 
 def init_migration_scheduler(policy='balanced'):
     instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
-    migration_scheduler = MigrationScheduler(policy, MIGRATE_OUT_LOAD_THRESHOLD, instance_load_calculator)
+    migration_scheduler = MigrationScheduler(policy, MIGRATE_OUT_LOAD_THRESHOLD, instance_load_calculator, 'rpc')
     return migration_scheduler
 
 @pytest.fixture

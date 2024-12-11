@@ -25,6 +25,7 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
+from llumnix.global_scheduler.migration_filter import CustomFilter
 from llumnix.instance_info import InstanceInfo
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.arg_utils import EngineManagerArgs
@@ -329,6 +330,12 @@ class LLMEngineManager:
         if len(alive_instances) == 0:
             self.pending_rebuild_migration_instances = 0
             group_name = None
+
+        migration_filter: CustomFilter = self.global_scheduler.migration_scheduler\
+            .migration_filter.get_filter("migration_backend_init_filter")
+        migration_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_id in alive_instances,
+            dst_filter=lambda instance_info: instance_info.instance_id in alive_instances)
 
         logger.info("rebuild {} migrate backend done, group_name: {}, alive instance ({}): {}"
             .format(self.engine_manager_args.migration_backend, group_name, len(alive_instances), alive_instances))

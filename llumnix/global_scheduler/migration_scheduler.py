@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Set
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
-from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig
+from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig, CustomFilter
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
 
 logger = init_logger(__name__)
@@ -24,9 +24,19 @@ class MigrationScheduler:
     def __init__(self,
                  pair_migration_policy: str,
                  migrate_out_load_threshold: float,
-                 instance_load_calculator: InstanceLoadCalculator) -> None:
+                 instance_load_calculator: InstanceLoadCalculator,
+                 migration_backend: str,) -> None:
         self.filter_config = MigrationFilterConfig(migrate_out_load_threshold=migrate_out_load_threshold)
         self.migration_filter = MigrationInstanceFilter(self.filter_config)
+
+        # Some migration backends require init_process_group before passing the KV cache. Here, we add a filter
+        # to prevent instances of migration backends that have not been initialized from participating in migration.
+        migration_backend_init_filter = CustomFilter()
+        migration_backend_init_filter.set_filter_condtition(
+            src_filter=lambda _: migration_backend == 'rpc',
+            dst_filter=lambda _: migration_backend == 'rpc')
+        self.migration_filter.register_filter("migration_backend_init_filter",
+                                              migration_backend_init_filter)
 
         self.instance_load_calculator = instance_load_calculator
         self.enable_defrag = instance_load_calculator.enable_defrag

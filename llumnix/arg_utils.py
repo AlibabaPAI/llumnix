@@ -166,7 +166,8 @@ class EngineManagerArgs:
                                                         self.scaling_policy,
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
-                                                        self.enable_pd_disagg)
+                                                        self.enable_pd_disagg,
+                                                        self.migration_backend,)
         return global_scheduler_config
 
     def create_migration_config(self) -> MigrationConfig:

@@ -21,20 +21,16 @@ from blade_llm.service.server import Entrypoint
 from blade_llm.service.disagg_decode_server import DecodeEntrypoint
 from blade_llm.service.communications import BaseLLMClient
 
-from llumnix.entrypoints.bladellm.utils import get_args
 from llumnix.config import get_llumnix_config, LlumnixConfig
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import LlumnixEntrypointsArgs, EngineManagerArgs, LlumnixArgumentParser
 from llumnix.entrypoints.utils import setup_ray_cluster, setup_llumnix, is_gpu_available
 from llumnix.entrypoints.bladellm.client import AsyncLLMEngineClientLlumnix, background_process_outputs
 from llumnix.entrypoints.utils import LlumnixEntrypointsContext
-from llumnix.logger import init_logger
-
-logger = init_logger(__name__)
+from llumnix.entrypoints.bladellm.utils import check_args
 
 llumnix_context: LlumnixEntrypointsContext = None
 
-# pylint: disable=unused-argument
 async def on_startup(app):
     app['server_task'] = asyncio.create_task(llumnix_context.request_output_queue.run_server_loop())
     app['background_task'] = asyncio.create_task(background_process_outputs(llumnix_context))
@@ -55,17 +51,13 @@ class EntrypointLlumnix(Entrypoint):
         global app
         self.app = app
 
-class DecodeEntrypointLlumnix:
-    def __init__(self, *args, **kwargs):
-        pass
-
 def setup_llumnix_api_server(bladellm_args: ServingArgs):
     # generate llumnix_parser for checking parameters with choices
     llumnix_parser: LlumnixArgumentParser = LlumnixArgumentParser()
     llumnix_parser = LlumnixEntrypointsArgs.add_cli_args(llumnix_parser)
     llumnix_parser = EngineManagerArgs.add_cli_args(llumnix_parser)
     llumnix_config: LlumnixConfig = get_llumnix_config(bladellm_args.llumnix_config)
-    _, engine_manager_args, engine_args = get_args(llumnix_config, llumnix_parser, bladellm_args)
+    _, engine_manager_args, engine_args = check_args(llumnix_config, llumnix_parser, bladellm_args)
 
     setup_ray_cluster(llumnix_config)
 

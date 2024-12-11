@@ -81,7 +81,6 @@ async def manager_generate(request, request_id: str, llumnix_context: LlumnixEnt
                 return await asyncio.create_task(manager_generate(request, request_id, llumnix_context))
     return LLMResponse(request_id, resp_queue=results_queue)
 
-# TODO[xinyi]: the same to the function in vllm.utils
 async def manager_abort(request_id: str, llumnix_context: LlumnixEntrypointsContext) -> None:
     try:
         logger.info("abort request: {}.".format(request_id))
@@ -123,6 +122,7 @@ async def background_process_outputs(llumnix_context: LlumnixEntrypointsContext)
 class AsyncLLMEngineClientLlumnix(MultiProcessingLLMClient):
     def __init__(self, args: ServingArgs):
         super().__init__(args, -1)
+        self.entrypoint_id2llumnix_id = {}
 
     def connect(self):
         pass
@@ -135,13 +135,16 @@ class AsyncLLMEngineClientLlumnix(MultiProcessingLLMClient):
             return error_resp(request.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
     
         from llumnix.entrypoints.bladellm.api_server import llumnix_context
-        request.id = random.randint(0, 2147483647) # 1<<31-1
-        resp_stream = await manager_generate(request.model_dump_json(), str(request.id), llumnix_context)
+        llumnix_id = random.randint(0, 2147483647) # 1<<31-1
+        self.entrypoint_id2llumnix_id[request.id] = llumnix_id
+        resp_stream = await manager_generate(request.model_dump_json(), str(llumnix_id), llumnix_context)
         return resp_stream
 
     async def drop_request(self, req_id: int):
         from llumnix.entrypoints.bladellm.api_server import llumnix_context
-        await manager_abort(req_id, llumnix_context)
+        llumnix_id = self.entrypoint_id2llumnix_id.get(req_id, None)
+        if llumnix_id:
+            await manager_abort(llumnix_id, llumnix_context)
 
     async def get_stats(self) -> Stats:
         pass

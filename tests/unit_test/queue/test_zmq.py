@@ -34,10 +34,10 @@ class Server:
         asyncio.create_task(self.server.run_server_loop())
         request_output_queue = self.server
         self.stop_signal = asyncio.Event()
-        asyncio.create_task(self._background_process_outputs(request_output_queue))
+        asyncio.create_task(self.background_process_request_outputs(request_output_queue))
         asyncio.create_task(self._wait_until_done())
 
-    async def _background_process_outputs(self, request_output_queue):
+    async def background_process_request_outputs(self, request_output_queue):
         while True:
             request_outputs = await request_output_queue.get()
             for request_output in request_outputs:

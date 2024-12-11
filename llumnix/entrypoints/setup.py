@@ -29,6 +29,7 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.queue.utils import init_request_output_queue_server
+from llumnix.queue.queue_server_base import QueueServerBase
 
 logger = init_logger(__name__)
 
@@ -39,17 +40,20 @@ RETRIES_INTERVALS = 0.1
 
 
 class LlumnixEntrypointsContext:
-    def __init__(self):
-        self.engine_manager: LLMEngineManager = None
-        self.instances: Dict[str, Llumlet] = {}
-        self.request_output_queue: QueueServerBase = None
-        self.server_info: ServerInfo = None
-        self.request_streams: Dict[str, AsyncStream] = {}
-        self.manager_available = True
-        self.num_finished_requests = 0
-        self.instance_num_requests: Dict[str, int] = {}
-        self.log_requests: bool = None
-        self.log_request_timestamps: bool = None
+    def __init__(self,
+                 engine_manager: LLMEngineManager,
+                 instances: Dict[str, Llumlet],
+                 request_output_queue: QueueServerBase,
+                 server_info: ServerInfo,
+                 log_requests: bool,
+                 log_request_timestamps: bool):
+        self.engine_manager = engine_manager
+        self.instances = instances
+        self.request_output_queue = request_output_queue
+        self.server_info = server_info
+        self.log_requests = log_requests
+        self.log_request_timestamps = log_request_timestamps
+
 
 def get_ip_address():
     hostname = socket.gethostname()
@@ -240,41 +244,38 @@ def setup_llumnix(engine_manager_args, engine_args, cfg):
                              ip,
                              cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
     instances: Dict[str, Llumlet] = {}
-    instance_num_requests: Dict[str, int] = {}
     for idx, ins_id in enumerate(instance_ids):
         instances[ins_id] = llumlets[idx]
-        instance_num_requests[ins_id] = 0
+
     log_requests = not cfg.SERVER.DISABLE_LOG_REQUESTS_SERVER
     log_request_timestamps = cfg.SERVER.LOG_REQUEST_TIMESTAMPS
     logger.info("log_requests: {}, log_request_timestamps: {}".format(log_requests, log_request_timestamps))
 
-    context = LlumnixEntrypointsContext()
-    context.engine_manager = engine_manager
-    context.instances = instances
-    context.request_output_queue = request_output_queue
-    context.server_info = server_info
-    context.instance_num_requests = instance_num_requests
-    context.log_requests = log_requests
-    context.log_request_timestamps = log_request_timestamps
+    llumnix_entrypoints_context = LlumnixEntrypointsContext(engine_manager,
+                                                            instances,
+                                                            request_output_queue,
+                                                            server_info,
+                                                            log_requests,
+                                                            log_request_timestamps)
 
-    return context
+    return llumnix_entrypoints_context
 
 # TODO(s5u13b): Fix the potential output token out-of-order issue caused by the migration.
-async def _background_process_outputs(llumnix_context):
+async def background_process_request_outputs(llumnix_client):
     while True:
-        request_outputs = await llumnix_context.request_output_queue.get()
+        request_outputs = await llumnix_client.request_output_queue.get()
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
         for request_output in request_outputs:
             request_id = request_output.request_id
             # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-            if request_id not in llumnix_context.request_streams:
+            if request_id not in llumnix_client.request_streams:
                 continue
-            llumnix_context.request_streams[request_id].put(request_output)
+            llumnix_client.request_streams[request_id].put(request_output)
             if request_output.finished:
-                llumnix_context.request_streams[request_id].finish()
-                del llumnix_context.request_streams[request_id]
+                llumnix_client.request_streams[request_id].finish()
+                del llumnix_client.request_streams[request_id]
 
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {
@@ -290,11 +291,5 @@ def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     return per_token_latency_breakdown_dict
 
 def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_timestamps: RequestTimestamps):
-    per_token_latency_breakdown_dict['step_latency_engine'].append(request_timestamps.step_latency_engine)
-    per_token_latency_breakdown_dict['process_model_outputs_latency'].append(request_timestamps.process_model_outputs_latency)
-    per_token_latency_breakdown_dict['step_postprocess_latency'].append(request_timestamps.step_postprocess_latency)
-    per_token_latency_breakdown_dict['across_async_put_queue_thread_latency'].append(request_timestamps.across_async_put_queue_thread_latency)
-    per_token_latency_breakdown_dict['across_async_put_queue_actor_latency'].append(request_timestamps.across_async_put_queue_actor_latency)
-    per_token_latency_breakdown_dict['queue_rpc_latency'].append(request_timestamps.queue_rpc_latency)
-    per_token_latency_breakdown_dict['background_process_get_queue_latency'].append(request_timestamps.background_process_get_queue_latency)
-    per_token_latency_breakdown_dict['generate_benchmark_return_output_latency'].append(request_timestamps.generate_benchmark_return_output_latency)
+    for key in per_token_latency_breakdown_dict.keys():
+        per_token_latency_breakdown_dict[key].append(getattr(request_timestamps, key))

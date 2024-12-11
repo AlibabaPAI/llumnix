@@ -24,7 +24,8 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.utils import random_uuid
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
-from llumnix.entrypoints.utils import LlumnixEntrypointsContext
+from llumnix.entrypoints.setup import LlumnixEntrypointsContext
+from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 
 app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
@@ -73,17 +74,22 @@ if __name__ == "__main__":
 
     request_output_queue_type = QueueType(args.request_output_queue_type)
     engine_manager = init_manager(request_output_queue_type)
-    llumnix.entrypoints.vllm.api_server.llumnix_context = LlumnixEntrypointsContext()
-    llumnix.entrypoints.vllm.api_server.llumnix_context.engine_manager = engine_manager
     ip = '127.0.0.1'
     port = 1234
-    llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue = \
-        init_request_output_queue_server(ip, port, request_output_queue_type)
+    request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
     ray_queue_server = None
     if request_output_queue_type == QueueType.RAYQUEUE:
-        ray_queue_server = llumnix.entrypoints.vllm.api_server.llumnix_context.request_output_queue
+        ray_queue_server = request_output_queue
     server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
-    llumnix.entrypoints.vllm.api_server.llumnix_context.server_info = server_info
+    print(request_output_queue)
+    llumnix_context = LlumnixEntrypointsContext(engine_manager,
+                                                {'0': None},
+                                                request_output_queue,
+                                                server_info,
+                                                None,
+                                                None)
+    llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(llumnix_context)
+    print(llumnix.entrypoints.vllm.api_server.llumnix_client.request_output_queue)
 
     uvicorn.run(
         app,

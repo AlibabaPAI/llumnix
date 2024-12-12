@@ -81,7 +81,6 @@ if __name__ == "__main__":
     if request_output_queue_type == QueueType.RAYQUEUE:
         ray_queue_server = request_output_queue
     server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
-    print(request_output_queue)
     llumnix_context = LlumnixEntrypointsContext(engine_manager,
                                                 {'0': None},
                                                 request_output_queue,
@@ -89,7 +88,6 @@ if __name__ == "__main__":
                                                 None,
                                                 None)
     llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(llumnix_context)
-    print(llumnix.entrypoints.vllm.api_server.llumnix_client.request_output_queue)
 
     uvicorn.run(
         app,

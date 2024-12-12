@@ -260,23 +260,6 @@ def setup_llumnix(engine_manager_args, engine_args, cfg):
 
     return llumnix_entrypoints_context
 
-# TODO(s5u13b): Fix the potential output token out-of-order issue caused by the migration.
-async def background_process_request_outputs(llumnix_client):
-    while True:
-        request_outputs = await llumnix_client.request_output_queue.get()
-        for request_output in request_outputs:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
-        for request_output in request_outputs:
-            request_id = request_output.request_id
-            # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-            if request_id not in llumnix_client.request_streams:
-                continue
-            llumnix_client.request_streams[request_id].put(request_output)
-            if request_output.finished:
-                llumnix_client.request_streams[request_id].finish()
-                del llumnix_client.request_streams[request_id]
-
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {
         'step_latency_engine': [],

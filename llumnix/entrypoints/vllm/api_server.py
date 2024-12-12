@@ -26,7 +26,6 @@ from llumnix.arg_utils import LlumnixArgumentParser
 from llumnix.entrypoints.setup import (setup_ray_cluster,
                                        setup_llumnix,
                                        is_gpu_available,
-                                       background_process_request_outputs,
                                        init_per_token_latency_breakdown_dict,
                                        record_per_token_latency_breakdown)
 from llumnix.entrypoints.vllm.arg_utils import (add_cli_args,
@@ -47,10 +46,8 @@ llumnix_client: LlumnixClientVLLM = None
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
-    print(llumnix_client)
-    print(llumnix_client.request_output_queue)
     asyncio.create_task(llumnix_client.request_output_queue.run_server_loop())
-    asyncio.create_task(background_process_request_outputs(llumnix_client))
+    asyncio.create_task(llumnix_client.get_request_outputs_loop())
     yield
     llumnix_client.request_output_queue.cleanup()
 

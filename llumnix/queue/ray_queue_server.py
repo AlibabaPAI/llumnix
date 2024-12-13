@@ -19,6 +19,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.queue.queue_server_base import QueueServerBase
 
+
 class RayQueueServer(QueueServerBase):
     def __init__(self) -> None:
         self.queue = RayQueue(

@@ -12,7 +12,7 @@
 # limitations under the License.
 
 from functools import wraps
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import torch
 
 from vllm.config import ModelConfig, ParallelConfig
@@ -45,7 +45,7 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
 
 def check_engine_args(engine_args: AsyncEngineArgs, engine_manager_args: EngineManagerArgs) -> None:
     assert engine_args.worker_use_ray, \
-            ("In Llumnix, engine and worker must be ray actor.")
+            ("In Llumnix, worker must be ray actor.")
     migration_config = engine_manager_args.create_migration_config()
     engine_config = engine_args.create_engine_config()
     parallel_config = engine_config.parallel_config

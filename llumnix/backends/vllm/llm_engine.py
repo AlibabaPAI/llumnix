@@ -155,7 +155,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             from llumnix.backends.vllm.executor import SimGPUExecutor
             executor_class = SimGPUExecutor
             executor_class.latency_mem = latency_mem
-        elif engine_config.parallel_config.worker_use_ray:
+        elif engine_config.parallel_config.use_ray:
             from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor
             executor_class = LlumnixRayGPUExecutor
             executor_class.migration_config = migration_config
@@ -275,8 +275,10 @@ class BackendVLLM(BackendInterface):
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           node_id=node_id)
-        self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)]
-        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
+        self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
+                                 for _ in range(engine_args.pipeline_parallel_size)]
+        for vid in range(engine_args.pipeline_parallel_size):
+            self.engine.scheduler[vid].add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
@@ -337,8 +339,8 @@ class BackendVLLM(BackendInterface):
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
         logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))
-        pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
-        self.engine.scheduler.block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
+        pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(backend_request.request_id)
+        self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_args_dst()
         assert backend_request.status in [RequestStatus.WAITING_MIGRATING, RequestStatus.RUNNING_MIGRATING], \
             "The status of request migrated to dst instance should be  \
@@ -369,47 +371,47 @@ class BackendVLLM(BackendInterface):
         request_ids = set(request_id)
         return self.engine.abort_request(request_ids)
 
-    def get_running_queue(self) -> Deque[SequenceGroupLlumnix]:
-        return self.engine.scheduler.get_running_queue()
+    def get_running_queue(self) -> List[SequenceGroupLlumnix]:
+        return self.engine.scheduler[0].get_running_queue()
 
     def get_waiting_queue(self) -> Deque[SequenceGroupLlumnix]:
         return self.engine.scheduler.get_waiting_queue()
 
     def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
-        return self.engine.scheduler.get_request_incremental_blocks(*args, **kwargs)
+        return self.engine.scheduler[0].get_request_incremental_blocks(*args, **kwargs)
 
-    def remove_running_request(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler.remove_running_request(*args, **kwargs)
+    def remove_running_request(self, *args, **kwargs) -> None:
+        return self.engine.scheduler[0].remove_running_request(*args, **kwargs)
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.remove_waiting_request(*args, **kwargs)
 
     def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.add_migrating_out_request_last_stage(*args, **kwargs)
+        return self.engine.scheduler[0].add_migrating_out_request_last_stage(*args, **kwargs)
 
     def remove_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.remove_migrating_out_request_last_stage(*args, **kwargs)
+        return self.engine.scheduler[0].remove_migrating_out_request_last_stage(*args, **kwargs)
 
     def pop_migrating_out_requests_last_stage(self, *args, **kwargs) -> List[Any]:
-        return self.engine.scheduler.pop_migrating_out_requests_last_stage(*args, **kwargs)
+        return self.engine.scheduler[0].pop_migrating_out_requests_last_stage(*args, **kwargs)
 
     def pre_alloc(self, *args, **kwargs) -> List[int]:
-        return self.engine.scheduler.pre_alloc(*args, **kwargs)
+        return self.engine.scheduler[0].pre_alloc(*args, **kwargs)
 
     def should_abort_migration(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler.should_abort_migration(*args, **kwargs)
+        return self.engine.scheduler[0].should_abort_migration(*args, **kwargs)
 
     def add_running_request(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.add_running_request(*args, **kwargs)
+        return self.engine.scheduler[0].add_running_request(*args, **kwargs)
 
-    def add_waiting_request(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.add_waiting_request(*args, **kwargs)
+    def is_request_running(self, *args, **kwargs) -> bool:
+        return self.engine.scheduler[0].is_request_running(*args, **kwargs)
 
     def free_dst_pre_alloc_cache(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.free_dst_pre_alloc_cache(*args, **kwargs)
+        return self.engine.scheduler[0].free_dst_pre_alloc_cache(*args, **kwargs)
 
     def free_src_request(self, backend_request: SequenceGroup) -> None:
-        return self.engine.scheduler.free_src_request(backend_request)
+        return self.engine.scheduler[0].free_src_request(backend_request)
 
     def get_all_request_ids(self) -> List[str]:
-        return self.engine.scheduler.get_all_request_ids()
+        return self.engine.scheduler[0].get_all_request_ids()

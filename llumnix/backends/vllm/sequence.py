@@ -37,6 +37,13 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         return self.get_seqs()[0].get_output_len()
 
     @property
+    def n_blocks(self) -> int:
+        return self.get_seqs()[0].n_blocks
+    @property
+    def token_ids(self) -> int:
+        return self.get_seqs()[0].get_token_ids()
+
+    @property
     def inference_type(self) -> RequestInferenceType:
         if self.is_prefill():
             return RequestInferenceType.PREFILL

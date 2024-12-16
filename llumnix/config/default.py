@@ -62,7 +62,7 @@ _C.MANAGER.LOG_INSTANCE_INFO = False
 # Log filename
 _C.MANAGER.LOG_FILENAME = "server.log"
 # Profiling result file path
-_C.MANAGER.PROFILING_RESULT_FILE_PATH = ""
+_C.MANAGER.PROFILING_RESULT_FILE_PATH = "/mnt/huangziming/dev/llumnix/llumnix/backends/llama3_0929.pkl"
 
 # Disable fixing the placement of instance to current node
 _C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = False

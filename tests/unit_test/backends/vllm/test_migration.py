@@ -288,13 +288,13 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     que.cleanup()
 
 def test_clear_migration_states():
-    llumlet = MockLlumlet()
-    llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, 1)
     num_gpu_blocks = 8
     block_size = 4
+    llumlet = MockLlumlet()
+    llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, 1, range(4))
 
     llumlet.clear_migration_states(is_migrate_in=True)
-    assert len(llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks)) == num_gpu_blocks
+    assert len(llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks, range(4*num_gpu_blocks))) == num_gpu_blocks
     _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.RUNNING)
     seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)

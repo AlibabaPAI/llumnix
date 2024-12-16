@@ -44,6 +44,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     src_blocks = [1, 2, 3]
     dst_blocks = [1, 2]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
+    migrate_out_request.n_blocks = 3
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
@@ -67,6 +68,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     src_blocks = [1, 2, 3]
     dst_blocks = []
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
+    migrate_out_request.n_blocks = 3
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
@@ -78,6 +80,7 @@ async def test_migrate_out_onestage(setup_ray_env):
     src_blocks = [1, 2, 3]
     dst_blocks = [1, 2]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks
+    migrate_out_request.n_blocks = 3
     migrate_out_request.should_abort_migration.return_value = True
     migrate_out_request.blocking_migration = False
     migrate_in_ray_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)

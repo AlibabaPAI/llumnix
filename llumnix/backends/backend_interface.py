@@ -195,7 +195,8 @@ class BackendInterface(ABC):
                   request_id: str,
                   request_status: RequestStatus,
                   request_arrival_time: float,
-                  block_num: int) -> List[int]:
+                  block_num: int,
+                  token_ids: List[int]) -> List[int]:
         """Pre-allocates cache blocks for a migrating request.
 
         This method selects a specified number of free cache blocks to be reserved for an incoming
@@ -211,7 +212,7 @@ class BackendInterface(ABC):
             request_status: The status (waiting/running) of the request.
             request_arrival_time: The arrival time of the request.
             block_num: The number of cache blocks that need to be pre-allocated for the request.
-
+            token_ids: The token IDs of the request.
         Returns:
             A list of integers where each integer represents the block table reserved for the migration request.
         """

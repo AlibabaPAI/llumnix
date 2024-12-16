@@ -28,13 +28,14 @@ from .test_worker import create_worker
 
 class MockMigrationWorker(MigrationWorker):
     def set_gpu_cache(self, data):
-        for layer_idx in range(self.cache_engine.num_layers):
-            self.gpu_cache[layer_idx].copy_(data[layer_idx])
+        print(f"data shape:::{self.gpu_cache[0][0].shape, data[0].shape}")
+        for layer_idx in range(self.cache_engine[0].num_attention_layers):
+            self.gpu_cache[0][layer_idx].copy_(data[layer_idx])
         torch.cuda.synchronize()
 
     def get_gpu_cache(self):
         torch.cuda.synchronize()
-        return self.gpu_cache
+        return self.gpu_cache[0]
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rpc', 'gloo', 'nccl'])
@@ -87,7 +88,7 @@ def test_migrate_cache(setup_ray_env, backend):
     num_heads = engine_config.model_config.get_num_kv_heads(engine_config.parallel_config)
     block_size = engine_config.cache_config.block_size
 
-    dummy_data = torch.randn(size=(num_layers, 2, num_gpu_blocks, block_size*num_heads*head_size))
+    dummy_data = torch.randn(size=(num_layers, 2, num_gpu_blocks, block_size, num_heads, head_size))
     ray.get(worker0.execute_method.remote('set_gpu_cache', data=dummy_data))
     worker0_data = ray.get(worker0.execute_method.remote('get_gpu_cache'))
 

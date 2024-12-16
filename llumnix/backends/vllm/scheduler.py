@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple, Deque
 from collections import deque
 
 from vllm.utils import Device
-from vllm.core.block_manager import SelfAttnBlockSpaceManager, BlockTable, Block
+from vllm.core.block_manager import SelfAttnBlockSpaceManager, BlockTable
 from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, SequenceGroupMetadata, SchedulerOutputs)
 from vllm.sequence import SequenceGroup
 from vllm.core.interfaces import AllocStatus
@@ -36,21 +36,21 @@ logger = init_logger(__name__)
 class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
     def get_free_blocks(self, num_required_blocks: int, token_ids: List[int]) -> BlockTable:
         num_free_gpu_blocks = self.block_allocator.get_num_free_blocks(device=Device.GPU)
-        if (num_free_gpu_blocks - num_required_blocks <
-                self.watermark_blocks):
-            return []
-
         block_table = BlockTable(
             block_size=self.block_size,
             block_allocator=self.block_allocator,
             max_block_sliding_window=self.max_block_sliding_window,
         )
-        block_table.allocate(token_ids)
+        if (num_free_gpu_blocks - num_required_blocks >=
+                self.watermark_blocks):
+            block_table.allocate(token_ids)
 
         return block_table
 
     def add_block_table(self, block_table: BlockTable, seq_id: int) -> None:
         self.block_tables[seq_id] = block_table
+        self._computed_blocks_tracker.add_seq(seq_id)
+        self._last_access_blocks_tracker.add_seq(seq_id)
 
 class SchedulerLlumnix(Scheduler):
     def __init__(self, *args, **kwargs) -> None:
@@ -146,8 +146,8 @@ class SchedulerLlumnix(Scheduler):
             block_table = self.block_manager.get_free_blocks(block_num, token_ids)
             self.pre_alloc_cache_dict[request_id] = block_table
         else:
-            block_table.allocate(token_ids)
-        return block_table.blocks
+            block_table.append_token_ids(token_ids)
+        return block_table.physical_block_ids[-block_num:]
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
         self._set_status(backend_request, status_to=SequenceStatus.RUNNING)

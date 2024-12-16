@@ -103,6 +103,14 @@ class LlumnixRequest:
     def prefill_num_blocks(self) -> int:
         raise NotImplementedError
 
+    @property
+    def n_blocks(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def token_ids(self) -> int:
+        raise NotImplementedError
+
     # Whether the migration of request is completed within one stage. For requests that have already reached
     # the expected steps, blocking_migration is True.
     @property

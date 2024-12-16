@@ -19,6 +19,7 @@ from typing import Iterable, Optional, Tuple
 from vllm import SamplingParams
 from vllm.lora.request import LoRARequest
 from vllm.sequence import Logprob, Sequence, SequenceStatus
+from vllm.inputs import token_inputs
 from vllm.config import SchedulerConfig, CacheConfig
 from vllm.core.scheduler import SchedulingBudget
 
@@ -47,7 +48,6 @@ def create_dummy_prompt(
     block_size: Optional[int] = None,
     status: SequenceStatus = SequenceStatus.WAITING,
     lora_request: Optional[LoRARequest] = None,
-    use_beam_search: bool = False,
     best_of: int = 1,
     expected_steps: int = math.inf,
 ) -> Tuple[Sequence, SequenceGroupLlumnix]:
@@ -57,16 +57,15 @@ def create_dummy_prompt(
     # Create dummy prompt sequence with tokens 0...block_size-1
     # and prompt "0 ... block_size".
     prompt_tokens = list(range(prompt_length))
-    prompt_str = " ".join([str(t) for t in prompt_tokens])
-    prompt = Sequence(int(request_id), prompt_str, prompt_tokens, block_size)
+    seq = Sequence(int(request_id), token_inputs(prompt_tokens), block_size)
     server_info = ServerInfo(None, None, None, None, None)
     seq_group = SequenceGroupLlumnix(
-        request_id, server_info, expected_steps, [prompt],
-        SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
-        time.time(), lora_request)
-    seq_group.get_seqs()[0].status = status
+        request_id, server_info, expected_steps, [seq],
+        time.time(),
+        SamplingParams(best_of=best_of),
+        lora_request)
 
-    return prompt, seq_group
+    return seq, seq_group
 
 
 def create_seq_group(

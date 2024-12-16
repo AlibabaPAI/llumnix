@@ -25,6 +25,9 @@ def detect_unsupported_feature(engine_args: ServingArgs) -> None:
         unsupported_feature = "automatic prompt caching"
     elif engine_args.use_sps:
         unsupported_feature = "speculative decoding"
+    elif engine_args.enable_remote_worker:
+        unsupported_feature = "enable_remote_worker"
+
     if unsupported_feature:
         raise ValueError(f'Llumnix does not support "{unsupported_feature}" for bladeLLM currently.')
 

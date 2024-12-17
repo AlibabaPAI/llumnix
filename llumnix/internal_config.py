@@ -16,14 +16,14 @@ class MigrationConfig:
             self,
             request_migration_policy: str,
             migration_backend: str,
+            migration_backend_transfer_type: str,
             migration_buffer_blocks: int,
             migration_num_layers: int,
             last_stage_max_blocks: int,
             max_stages: int,
             migration_backend_init_timeout: float,
-            migration_backend_transfer_type: str = "",
-            migration_backend_server_address: str = "",
-            migration_backend_kvtransfer_naming_url: str = "",
+            migration_backend_server_port: int,
+            migration_backend_kvtransfer_naming_url: str,
             ) -> None:
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
@@ -33,7 +33,7 @@ class MigrationConfig:
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.migration_backend_init_timeout = migration_backend_init_timeout
-        self.migration_backend_server_address = migration_backend_server_address
+        self.migration_backend_server_port = migration_backend_server_port
         self.migration_backend_kvtransfer_naming_url = migration_backend_kvtransfer_naming_url
 
 class GlobalSchedulerConfig:
@@ -42,7 +42,6 @@ class GlobalSchedulerConfig:
             initial_instances: int,
             load_metric: str,
             dispatch_policy: str,
-            num_dispatch_instances: int,
             pair_migration_policy: str,
             migrate_out_threshold: float,
             enable_defrag: bool,
@@ -67,6 +66,5 @@ class GlobalSchedulerConfig:
         self.scale_down_threshold = scale_down_threshold*(-1)
 
         self.enable_pd_disagg = enable_pd_disagg
-        self.num_dispatch_instances = num_dispatch_instances
 
         self.migration_backend = migration_backend

@@ -17,6 +17,7 @@ from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig, CustomFilter
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
+from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
 
@@ -66,10 +67,12 @@ class MigrationScheduler:
                               instance_info: Dict[str, InstanceInfo]) -> None:
         self.instance_info = instance_info
 
-    def add_instance(self, instance_id: str) -> None:
+    # pylint: disable=unused-argument
+    def add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
 
     def remove_instance(self, instance_id: str) -> None:
-        self.instance_id_set.remove(instance_id)
+        if instance_id in self.instance_id_set:
+            self.instance_id_set.remove(instance_id)
         self.num_instances = len(self.instance_id_set)

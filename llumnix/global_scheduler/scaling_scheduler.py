@@ -18,15 +18,16 @@ import numpy as np
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
 
 class InstanceType(str, Enum):
-    NO_CONSTRAINTS = "NO_CONSTRAINTS"
+    NO_CONSTRAINTS = "no_constraints"
 
     # Specific to Prefill-Decoding disaggregation.
-    PREFILL = "PREFILL"
-    DECODE = "DECODE"
+    PREFILL = "prefill"
+    DECODE = "decode"
 
 
 class ScalingScheduler:
@@ -35,8 +36,7 @@ class ScalingScheduler:
                  scale_down_threshold: float,
                  scaling_policy: str,
                  instance_load_calculator: InstanceLoadCalculator,
-                 enable_pd_disagg: bool,
-                 maximum_prefill_instance_num: int) -> None:
+                 enable_pd_disagg: bool,) -> None:
         self.scale_up_threshold = scale_up_threshold
         self.scale_down_threshold = scale_down_threshold
         self.scaling_policy = ScalePolicyFactory.get_policy(scaling_policy,
@@ -45,7 +45,6 @@ class ScalingScheduler:
 
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
-        self.maximum_prefill_instance_num = maximum_prefill_instance_num
         self.enable_pd_disagg = enable_pd_disagg
         # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
@@ -71,26 +70,18 @@ class ScalingScheduler:
             scale_down_num = 1
         return scale_up_num, scale_down_num
 
-    def update_instance_infos(self,
-                              instance_info: Dict[str, InstanceInfo]) -> None:
+    def update_instance_infos(self, instance_info: Dict[str, InstanceInfo]) -> None:
         self.instance_info = instance_info
 
-    def add_instance(self, instance_id: str) -> None:
+    def add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
-        instance_type = None
-        if not self.enable_pd_disagg:
-            instance_type = InstanceType.NO_CONSTRAINTS
-        else:
-            if len(self.instance_type_id_set[InstanceType.PREFILL]) < self.maximum_prefill_instance_num:
-                instance_type = InstanceType.PREFILL
-            else:
-                instance_type = InstanceType.DECODE
+        instance_type = InstanceType(instance_args.instance_type)
         self.instance_type_id_set[instance_type].add(instance_id)
-        return instance_type
 
     def remove_instance(self, instance_id: str) -> None:
-        self.instance_id_set.remove(instance_id)
+        if instance_id in self.instance_id_set:
+            self.instance_id_set.remove(instance_id)
         for instance_type in InstanceType:
             if instance_id in self.instance_type_id_set[instance_type]:
                 self.instance_type_id_set[instance_type].remove(instance_id)
@@ -108,11 +99,11 @@ class ScalingScheduler:
         dummy_intance_info.num_available_gpu_blocks_waiting = np.inf
         return dummy_intance_info
 
-    def get_instance_type_info(self, instance_id: str) -> InstanceInfo:
+    def get_instance_type_info(self, instance_id: str) -> InstanceType:
         for instance_type in InstanceType:
             if instance_id in self.instance_type_id_set[instance_type]:
                 return instance_type
-        return self.add_instance(instance_id)
+        return None
 
 class ScalePolicy(ABC):
     def __init__(self,

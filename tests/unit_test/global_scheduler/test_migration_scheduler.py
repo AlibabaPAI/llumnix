@@ -21,6 +21,7 @@ from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
+from llumnix.arg_utils import InstanceArgs
 
 MIGRATE_OUT_LOAD_THRESHOLD = 3.0
 INSTANCE_NUM = 16
@@ -36,9 +37,9 @@ def migration_scheduler():
     yield migration_scheduler
 
 def test_add_instance_and_remove_instance(migration_scheduler):
-    migration_scheduler.add_instance('instance_1')
+    migration_scheduler.add_instance('instance_1', InstanceArgs(instance_type="no_constraints"))
     assert migration_scheduler.num_instances == 1
-    migration_scheduler.add_instance('instance_2')
+    migration_scheduler.add_instance('instance_2', InstanceArgs(instance_type="no_constraints"))
     assert migration_scheduler.num_instances == 2
     migration_scheduler.remove_instance('instance_1')
     assert migration_scheduler.num_instances == 1

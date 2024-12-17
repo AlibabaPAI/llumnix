@@ -13,17 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import dataclasses
 from dataclasses import dataclass
-import argparse
 from typing import Tuple
+from simple_parsing import ArgumentParser
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
 
-class LlumnixArgumentParser(argparse.ArgumentParser):
+class LlumnixArgumentParser(ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -68,14 +69,15 @@ class LlumnixEntrypointsArgs:
         return llumnix_entrypoints_args
 
     @classmethod
-    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
                 assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
+    # TODO(KuilongCui): check this, inplace-update, no-need to return
     @staticmethod
-    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def add_cli_args(parser: ArgumentParser) -> ArgumentParser:
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
                             help='if launch ray cluster in api server')
@@ -110,7 +112,6 @@ class EngineManagerArgs:
     polling_interval: float = None
 
     dispatch_policy: str = None
-    num_dispatch_instances: int = None
 
     enable_migration: bool = None
     enable_defrag: bool = None
@@ -133,7 +134,7 @@ class EngineManagerArgs:
     profiling_result_file_path: str = None
 
     migration_backend_kvtransfer_naming_url: str = None
-    migration_backend_server_address: str = None
+    migration_backend_server_port: int = None
     migration_backend_init_timeout: float = None
     migration_backend: str = None
     migration_buffer_blocks: int = None
@@ -162,7 +163,6 @@ class EngineManagerArgs:
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.load_metric,
                                                         self.dispatch_policy,
-                                                        self.num_dispatch_instances,
                                                         self.pair_migration_policy,
                                                         self.migrate_out_threshold,
                                                         self.enable_defrag,
@@ -176,13 +176,13 @@ class EngineManagerArgs:
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
+                                           self.migration_backend_transfer_type,
                                            self.migration_buffer_blocks,
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
                                            self.migration_backend_init_timeout,
-                                           self.migration_backend_transfer_type,
-                                           self.migration_backend_server_address,
+                                           self.migration_backend_server_port,
                                            self.migration_backend_kvtransfer_naming_url)
         return migration_config
 
@@ -196,7 +196,7 @@ class EngineManagerArgs:
         return engine_manager_args
 
     @classmethod
-    def check_args(cls, args: 'EngineManagerArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'EngineManagerArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -351,4 +351,48 @@ class EngineManagerArgs:
         parser.add_argument('--num-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatch')
+        return parser
+
+@dataclass
+class InstanceArgs:
+    instance_type: str = None
+
+    def __post_init__(self):
+        # Check if all fields default to None
+        for field_info in dataclasses.fields(self):
+            if field_info.default is not None:
+                raise ValueError(f"The default value of '{field_info.name}' should be None")
+
+        for attr in dataclasses.fields(self):
+            if getattr(self, attr.name) is None:
+                setattr(self, attr.name, getattr(_C.INSTANCE, attr.name.upper()))
+
+    @classmethod
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'InstanceArgs':
+        # Get the list of attributes of this dataclass.
+        attrs = [attr.name for attr in dataclasses.fields(cls)]
+        # Set the attributes from the parsed arguments.
+        # The defalut values of attributes are defined in default.py.
+        instance_args = cls(**{attr: getattr(cfg.INSTANCE, attr.upper()) for attr in attrs})
+        return instance_args
+
+    @classmethod
+    def check_args(cls, args: 'InstanceArgs', manager_args: EngineManagerArgs, parser: argparse.ArgumentParser):
+        # pylint: disable=protected-access
+        for action in parser._optionals._actions:
+            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
+                assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
+
+        # instance_type check
+        if manager_args.enable_pd_disagg:
+            assert args.instance_type in ['prefill', 'decode'], \
+                "instance_type should be prefill or decode if enable_pd_disagg is set."
+
+    @staticmethod
+    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        parser.add_argument('--instance-type',
+                            type=str,
+                            choices=['prefill', 'decode', 'no_constraints'],
+                            help='instance type for the engine')
+
         return parser

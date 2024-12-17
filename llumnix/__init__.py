@@ -16,7 +16,7 @@ from llumnix.entrypoints.setup import (launch_ray_cluster,
                                        connect_to_ray_cluster,
                                        init_manager,
                                        init_llumlets)
-from llumnix.arg_utils import EngineManagerArgs
+from llumnix.arg_utils import EngineManagerArgs, InstanceArgs
 from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
@@ -31,6 +31,7 @@ __all__ = [
     "init_manager",
     "init_llumlets",
     "EngineManagerArgs",
+    "InstanceArgs",
     "LLMEngineManager",
     "Llumlet",
     "QueueType",

@@ -11,8 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 from .config import LlumnixConfig as LC
 
 # -----------------------------------------------------------------------------
@@ -25,7 +23,7 @@ _C = LC()
 # -----------------------------------------------------------------------------
 _C.SERVER = LC()
 # Hostname for the server
-_C.SERVER.HOST = "localhost"
+_C.SERVER.HOST = "172.23.75.207"
 # Port number for the server
 _C.SERVER.PORT = 8000
 # Path to SSL key file for secure connections
@@ -47,7 +45,7 @@ _C.SERVER.CONFIG_FILE = None
 # RAY CONFIGURATION
 # -----------------------------------------------------------------------------
 # If True, launch Ray cluster in API server
-_C.SERVER.LAUNCH_RAY_CLUSTER = False
+_C.SERVER.LAUNCH_RAY_CLUSTER = True
 # Port number for the Ray cluster
 _C.SERVER.RAY_CLUSTER_PORT = 6379
 
@@ -65,9 +63,9 @@ _C.MANAGER.LOG_FILENAME = "server.log"
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = ""
 
 # Disable fixing the placement of instance to current node
-_C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = False
+_C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = True
 # Disable initializing instance by manager
-_C.MANAGER.DISABLE_INIT_INSTANCE_BY_MANAGER = False
+_C.MANAGER.DISABLE_INIT_INSTANCE_BY_MANAGER = True
 # Number of instances created at initialization
 _C.MANAGER.INITIAL_INSTANCES = 1
 # Time interval(s) to update instance info and pair migration
@@ -80,8 +78,6 @@ _C.MANAGER.POLLING_INTERVAL = 0.05
 _C.MANAGER.LOAD_METRIC = 'remaining_steps'
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
-# Number of available dispatch instances. math.inf indicates that all instances can be used for dispatching
-_C.MANAGER.NUM_DISPATCH_INSTANCES = math.inf
 
 # -----------------------------------------------------------------------------
 # MIGRATION CONFIGURATION
@@ -108,7 +104,7 @@ _C.MANAGER.MIGRATION_BACKEND = "gloo"
 # Transfer type for migration backend kvTransfer
 _C.MANAGER.MIGRATION_BACKEND_TRANSFER_TYPE = "rdma"
 # Address of grpc server for migration backend
-_C.MANAGER.MIGRATION_BACKEND_SERVER_ADDRESS = "127.0.0.1:50051"
+_C.MANAGER.MIGRATION_BACKEND_SERVER_PORT = 50051
 # URL of naming server for kvtransfer migration backend
 _C.MANAGER.MIGRATION_BACKEND_KVTRANSFER_NAMING_URL = "file:/tmp/llumnix/naming/"
 # Timeout(s) for initializing migration backend
@@ -141,3 +137,10 @@ _C.MANAGER.SCALE_DOWN_THRESHOLD = 60
 # -----------------------------------------------------------------------------
 # Enable prefill decoding disaggregation
 _C.MANAGER.ENABLE_PD_DISAGG = False
+
+# -----------------------------------------------------------------------------
+# INSTANCE CONFIGURATION
+# -----------------------------------------------------------------------------
+_C.INSTANCE = LC()
+# Engine types: prefill, decode, no_constraints
+_C.INSTANCE.INSTANCE_TYPE = "no_constraints"

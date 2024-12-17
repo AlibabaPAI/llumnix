@@ -25,6 +25,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.arg_utils import InstanceArgs
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -60,6 +61,7 @@ def test_engine_step_exception(setup_ray_env):
     actor_name = "instance_0"
     llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
                                   scheduling_strategy=scheduling_strategy).remote(
+        InstanceArgs(instance_type="no_constraints"),
         request_output_queue_type=QueueType.RAYQUEUE,
         instance_id="0",
         backend_type=BackendType.VLLM,

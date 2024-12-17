@@ -16,10 +16,10 @@ import traceback
 from typing import List, Union, Iterable
 import time
 
+from loguru import logger
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
-from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
 from llumnix.backends.utils import init_backend_engine, initialize_placement_group
@@ -29,14 +29,14 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-
-logger = init_logger(__name__)
+from llumnix.arg_utils import InstanceArgs
 
 CHECK_ENGINE_STATE_INTERVAL = 1.0
 
 
 class Llumlet:
     def __init__(self,
+                 instance_args: InstanceArgs,
                  instance_id: str,
                  request_output_queue_type: QueueType,
                  backend_type: BackendType,
@@ -44,6 +44,7 @@ class Llumlet:
                  *args,
                  **kwargs) -> None:
         try:
+            self.instance_args = instance_args
             self.instance_id = instance_id
             self.actor_name = f"instance_{instance_id}"
             self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
@@ -53,12 +54,9 @@ class Llumlet:
                                                                         *args,
                                                                         **kwargs)
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                            migration_config.last_stage_max_blocks,
                                                             migration_config.max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                             self.backend_engine)
-            self.log_requests = True
-
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
@@ -67,6 +65,7 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
+                  instance_args: InstanceArgs,
                   request_output_queue_type: QueueType,
                   disable_fixed_node_init_instance: bool,
                   detached: bool,
@@ -127,7 +126,7 @@ class Llumlet:
                                                     soft=False,
                                                 )
                                             )
-            llumlet = engine_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
+            llumlet = engine_class.remote(instance_args, instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))
@@ -147,19 +146,26 @@ class Llumlet:
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:
-        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
-        if len(migrate_out_requests) == 0:
-            return []
+        try:
+            migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+            logger.info("Migrate out requests: {}".format(len(migrate_out_requests)))
+            if len(migrate_out_requests) == 0:
+                return []
 
-        for migrate_out_request in migrate_out_requests:
-            migrate_out_request.is_migrating = True
+            for migrate_out_request in migrate_out_requests:
+                migrate_out_request.is_migrating = True
 
-        migrated_request_list = []
-        for migrate_out_request in migrate_out_requests:
-            migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
-            migrated_request_list.extend(migrated_request)
-            if len(migrated_request) == 0 and migrate_out_request.eom:
-                break
+            migrated_request_list = []
+            for migrate_out_request in migrate_out_requests:
+                logger.info("Migrate target requests: {}".format(migrate_out_request.request_id))
+                migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
+                migrated_request_list.extend(migrated_request)
+                if len(migrated_request) == 0 and migrate_out_request.eom:
+                    break
+        except Exception as e:
+            logger.exception("Failed to migrate out")
+            raise e
+
         return migrated_request_list
 
     async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
@@ -207,17 +213,18 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         return self.backend_engine.engine.instance_info
 
-    def is_ready(self) -> bool:
-        return True
+    async def is_ready(self) -> InstanceArgs:
+        await self.backend_engine.is_ready()
+        return self.instance_args
 
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()
 
-    def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         # This should not be used for logging, as it is monotonic time.
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.llumlet_generate_timestamp = time.time()
-        self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+        await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -226,7 +233,6 @@ class Llumlet:
         return self.backend_engine.abort_request(request_ids)
 
     def clear_migration_states(self, is_migrate_in: bool) -> None:
-        logger.info("instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
             logger.info("clear_migration_states: free_dst_pre_alloc_cache")
@@ -252,3 +258,7 @@ class Llumlet:
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
+
+    async def execute_async_engine_method(self, method, *args, **kwargs):
+        executor = getattr(self.backend_engine, method)
+        return await executor(*args, **kwargs)

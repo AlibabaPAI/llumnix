@@ -14,7 +14,6 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-
 class MigrationBackendBase(ABC):
     @abstractmethod
     def init_backend(self, group_name, world_size, rank) -> bool:
@@ -30,12 +29,4 @@ class MigrationBackendBase(ABC):
 
     @abstractmethod
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def do_send(self, dst_handle, blocks: List[int]):
-        raise NotImplementedError
-
-    @abstractmethod
-    def do_recv(self, src_handle, blocks: List[int]):
         raise NotImplementedError

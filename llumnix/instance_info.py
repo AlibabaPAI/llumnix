@@ -12,7 +12,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, List
 import numpy as np
 
 from llumnix.logger import init_logger
@@ -37,7 +37,13 @@ class InstanceInfo:
                  inference_type: RequestInferenceType = RequestInferenceType.PREFILL,
                  instance_type: str = "",
                  num_batched_tokens: int = 0,
-                 instance_id: str = "",) -> None:
+                 instance_id: str = "",
+                 num_blocks_last_running_request: int = 0,
+                 all_request_ids: List = None,
+                 num_cached_request_ids: int = 0,
+                 num_wait_update_request_ids: int = 0,
+                 num_trans_wrapper_cached_request: int = 0,
+                 ) -> None:
         self.num_total_gpu_blocks = num_total_gpu_blocks
         self.num_watermark_blocks = num_watermark_blocks
         self.num_used_gpu_blocks = num_used_gpu_blocks
@@ -52,7 +58,7 @@ class InstanceInfo:
         self.num_blocks_all_waiting_requests = num_blocks_all_waiting_requests
         self.num_available_gpu_blocks_waiting = self.num_available_gpu_blocks - self.num_blocks_all_waiting_requests
         # For instance load computation before migration.
-        self.num_blocks_last_running_request = 0
+        self.num_blocks_last_running_request = num_blocks_last_running_request
 
         # For global scheduling.
         self.instance_load_migrate = -np.inf
@@ -72,6 +78,11 @@ class InstanceInfo:
         self.step_id = None
         self.timestamp = None
         self.profiling_data = ()
+        self.all_request_ids = all_request_ids
+
+        self.num_cached_request_ids = num_cached_request_ids
+        self.num_wait_update_request_ids = num_wait_update_request_ids
+        self.num_trans_wrapper_cached_request = num_trans_wrapper_cached_request
 
 class InstanceLoadInfo:
     def __init__(self, instance_info: InstanceInfo) -> None:

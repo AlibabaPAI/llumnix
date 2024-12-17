@@ -21,6 +21,7 @@ from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix, is_gpu_a
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.setup import LlumnixEntrypointsContext
 from llumnix.entrypoints.bladellm.utils import get_args
+from llumnix.utils import random_uuid
 
 def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     # generate llumnix_parser for checking parameters with choices
@@ -28,21 +29,18 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
     llumnix_parser = LlumnixEntrypointsArgs.add_cli_args(llumnix_parser)
     llumnix_parser = EngineManagerArgs.add_cli_args(llumnix_parser)
     llumnix_config: LlumnixConfig = get_llumnix_config(bladellm_args.llumnix_config)
-    _, engine_manager_args, engine_args = get_args(llumnix_config, llumnix_parser, bladellm_args)
+    _, engine_manager_args, instance_args, engine_args = get_args(llumnix_config, llumnix_parser, bladellm_args)
 
     setup_ray_cluster(llumnix_config)
 
+    bladellm_args.worker_socket_path = bladellm_args.worker_socket_path + "." + random_uuid()
     llm_client = None
     # if gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-        instance_ids = None
-        if engine_args.enable_disagg:
-            instance_ids = [engine_args.disagg_options.inst_id]
-
         llumnix_context: LlumnixEntrypointsContext = \
-            setup_llumnix(engine_manager_args, engine_args, llumnix_config, BackendType.BLADELLM,
-                                        world_size, instance_ids=instance_ids)
+            setup_llumnix(engine_manager_args, instance_args, engine_args, llumnix_config,
+                          BackendType.BLADELLM, world_size)
         llm_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
 
     return llm_client

@@ -12,13 +12,18 @@
 # limitations under the License.
 
 from blade_llm.service.block_space_manager import BlockSpaceManager
-from blade_llm.service.schedulers.paged_scheduler import PagedScheduler
+from llumnix.metrics.variable import Status, PassiveStatus
 
-from llumnix.backends.bladellm.llm_engine import AsyncLLMEngineLlumnixMixin
 from llumnix.metrics.base_metrics import LlumnixMetrics
 from llumnix.metrics.dumper import LoggerDumper
 
 class BladeLLMMetrics(LlumnixMetrics):
+    def __init__(self):
+        super().__init__()
+        self.num_cached_request_ids = Status("num_cached_request_ids")
+        self.num_wait_update_request_ids = PassiveStatus("num_wait_update_request_ids")
+        self.num_trans_wrapper_cached_request = PassiveStatus("num_trans_wrapper_cached_request")
+
     def _init_dumper(self,):
         self.dumper = LoggerDumper()
 
@@ -26,31 +31,38 @@ class BladeLLMMetrics(LlumnixMetrics):
         self.num_total_gpu_blocks.observe(block_manager.num_total_gpu_blocks)
         self.num_watermark_blocks.observe(block_manager.reserved_blocks)
 
-    def engine_init_metrics(self, engine: AsyncLLMEngineLlumnixMixin):
-        self.instance_id.observe(engine.instance_id)
+    def scheduler_init_metrics(self, scheduler):
+        pass
 
-    def scheduler_step_metrics(self, scheduler: PagedScheduler):
+    def engine_init_metrics(self, engine):
+        self.instance_id.observe(engine.instance_id)
+        self.num_wait_update_request_ids.observe(engine.get_num_wait_update_request_ids)
+        self.num_trans_wrapper_cached_request.observe(engine.get_num_trans_wrapper_cached_request)
+
+    def scheduler_step_metrics(self, scheduler):
         block_manager: BlockSpaceManager = scheduler.block_manager
         self.num_used_gpu_blocks.observe(block_manager.get_blocks_usage()*block_manager.num_total_gpu_blocks)
         self.num_running_requests.observe(len(scheduler.running))
         self.num_waiting_requests.observe(len(scheduler.waiting))
-
-        num_blocks_all_waiting_requests = 0
-        for gen_group_state in scheduler.waiting:
-            num_blocks_all_waiting_requests += sum([page_req.required_blocks for page_req in gen_group_state.paged_reqs])
-        self.num_blocks_all_waiting_requests.observe(num_blocks_all_waiting_requests)
+        self.num_blocks_all_waiting_requests.observe(scheduler.get_num_blocks_all_waiting_requests())
+        self.num_cached_request_ids.observe(scheduler.get_num_cached_request_ids())
+        self.num_killed_requests.observe(scheduler.get_num_killed_requests())
+        self.num_blocks_first_waiting_request.observe(scheduler.get_num_blocks_first_waiting_request())
+        self.num_blocks_last_running_request.observe(scheduler.get_num_blocks_last_running_request())
+        self.all_request_ids.observe(scheduler.get_all_request_ids())
 
         self.dump()
 
-    def engine_step_metrics(self, scheduler: PagedScheduler):
+    def engine_step_metrics(self, scheduler):
         block_manager: BlockSpaceManager = scheduler.block_manager
         self.num_used_gpu_blocks.observe(block_manager.get_blocks_usage()*block_manager.num_total_gpu_blocks)
         self.num_running_requests.observe(len(scheduler.running))
         self.num_waiting_requests.observe(len(scheduler.waiting))
-
-        num_blocks_all_waiting_requests = 0
-        for gen_group_state in scheduler.waiting:
-            num_blocks_all_waiting_requests += sum([page_req.required_blocks for page_req in gen_group_state.paged_reqs])
-        self.num_blocks_all_waiting_requests.observe(num_blocks_all_waiting_requests)
+        self.num_blocks_all_waiting_requests.observe(scheduler.get_num_blocks_all_waiting_requests())
+        self.num_cached_request_ids.observe(scheduler.get_num_cached_request_ids())
+        self.num_killed_requests.observe(scheduler.get_num_killed_requests())
+        self.num_blocks_first_waiting_request.observe(scheduler.get_num_blocks_first_waiting_request())
+        self.num_blocks_last_running_request.observe(scheduler.get_num_blocks_last_running_request())
+        self.all_request_ids.observe(scheduler.get_all_request_ids())
 
         self.dump()

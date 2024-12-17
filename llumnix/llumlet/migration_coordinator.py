@@ -14,15 +14,14 @@
 import time
 import enum
 from typing import List
+import traceback
 
 # pylint: disable=unused-import
 import ray
-
-from llumnix.logger import init_logger
+from loguru import logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface
 
-logger = init_logger(__name__)
 
 class MigrationStatus(enum.Enum):
     """Status of Migration."""
@@ -42,9 +41,7 @@ class MigrationStatus(enum.Enum):
 class MigrationCoordinator:
     def __init__(self,
                  backend_engine: BackendInterface,
-                 last_stage_max_blocks: int,
                  max_stages: int) -> None:
-        self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.backend_engine = backend_engine
 
@@ -115,9 +112,12 @@ class MigrationCoordinator:
                 return MigrationStatus.ABORTED_SRC
 
             pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
-            incremental_blocks = self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
+            incremental_blocks, is_last_stage = await self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
+            
+            if migrate_out_request.should_abort_migration():
+                return MigrationStatus.ABORTED_SRC
+            
             # live migration, transfer all blocks except last one(currently updating)
-            is_last_stage = (len(incremental_blocks) <= self.last_stage_max_blocks) or migrate_out_request.blocking_migration
             if not is_last_stage:
                 migration_status = MigrationStatus.RUNNING
                 src_blocks = incremental_blocks[:-1]
@@ -156,16 +156,16 @@ class MigrationCoordinator:
             migrate_out_request.stage_timestamps.append(time.time())
             migrate_out_request.stage_num_blocks_list.append(stage_block_num)
             # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
-            await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
+            await self.backend_engine.send_blocks(migrate_in_ray_actor, migrate_out_request.request_id,
+                                                  src_blocks, dst_blocks, not is_last_stage)
 
             if not is_last_stage and migrate_out_request.should_abort_migration():
                 # migrate-out request abort by scheduler during send/recv
                 return MigrationStatus.ABORTED_SRC
 
             return migration_status
-        except Exception as e:
-            logger.error("unexpected exception occurs: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+        except Exception:
+            logger.exception("_migrate_out_onestage failed")
             raise
 
     def migrate_in_pre_alloc(self,

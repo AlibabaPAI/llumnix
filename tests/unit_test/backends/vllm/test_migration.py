@@ -102,6 +102,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
 async def test_migration_correctness(ray_env, migration_backend, migration_request_status):
+    instance_args = InstanceArgs(instance_type="no_constraints")
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0": 0, "1": 1, "2": 2}
     if migration_request_status == 'running':
@@ -132,7 +133,6 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
 
     while True:
         res = ray.get([llumlet_0.is_ready.remote(), llumlet_1.is_ready.remote(), llumlet_2.is_ready.remote()])
-        print("--------", res)
         if all(res):
             break
 
@@ -202,6 +202,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(ray_env, migration_backend):
+    instance_args = InstanceArgs(instance_type="no_constraints")
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0":0, "1":1}
 

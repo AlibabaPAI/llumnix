@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# 1. install LLM engine env
+# 2. install llumnix env
+# 3. install bazel
+# 4. install pygloo
+# 5. install pylint pytest
+# 6. apt-get update
+# 7. apt-get install bc
+# 8. build docker llumnix-dev or llumnix
+
 if [ -z "$1" ]; then
     echo "Usage: $0 <NAMESPACE>"
     exit 1

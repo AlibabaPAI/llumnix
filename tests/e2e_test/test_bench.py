@@ -22,11 +22,11 @@ import numpy as np
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
-from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
+from .utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service,
-                    generate_serve_command)
+                    generate_vllm_serve_command, generate_bladellm_launch_command)
 
-BENCH_TEST_TIMEOUT_MINS = 30
+BENCH_TEST_TIMEOUT_MINS = 60
 
 
 def parse_log_file():
@@ -66,23 +66,33 @@ def parse_log_file():
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [True, False])
-async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg):
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg, engine):
+    engine = engine.split("_")[1]
+
+    if engine == "bladeLLM" and launch_mode == "global":
+        pytest.skip("Global launch model for bladeLLM is not supported yet.")
+    if engine == "bladeLLM" and enable_pd_disagg:
+        pytest.skip("PDD based on llumnix for bladeLLM is not supported yet.")
+
     if launch_mode == 'local':
         num_prompts = 500 if not enable_pd_disagg else 50
+        num_prompts = 300 if engine == 'bladeLLM' else num_prompts
     else:
-        num_prompts = 50 if not enable_pd_disagg else 50
+        num_prompts = 50
 
     ip = "127.0.0.1"
     base_port = 37037
     ip_ports = []
+    device_count = torch.cuda.device_count()
+
     if launch_mode == 'local':
-        device_count = torch.cuda.device_count()
         if enable_pd_disagg:
             for i in range(device_count//2):
                 port = base_port+i
                 ip_port = f"{ip}:{port}"
                 ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                launch_command = generate_vllm_launch_command(result_filename=str(base_port+i)+".out",
                                                         launch_ray_cluster=False,
                                                         ip=ip,
                                                         port=port,
@@ -94,7 +104,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                 port = base_port+i+device_count//2
                 ip_port = f"{ip}:{port}"
                 ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                launch_command = generate_vllm_launch_command(result_filename=str(base_port+i)+".out",
                                                         launch_ray_cluster=False,
                                                         ip=ip,
                                                         port=port,
@@ -107,11 +117,19 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                 port = base_port+i
                 ip_port = f"{ip}:{port}"
                 ip_ports.append(ip_port)
+
+                if "vLLM" in engine:
+                    generate_launch_command = generate_vllm_launch_command
+                elif "bladeLLM" in engine:
+                    generate_launch_command = generate_bladellm_launch_command
+                else:
+                    raise ValueError(f"Unknown engine: {engine}")
+
                 launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
                                                         launch_ray_cluster=False,
                                                         ip=ip,
                                                         port=port,
-                                                        model=model)
+                                                        model=model,)
                 subprocess.run(launch_command, shell=True, check=True)
     else: # global
         device_count = torch.cuda.device_count()
@@ -119,7 +137,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
             port = base_port+i
             ip_port = f"{ip}:{port}"
             ip_ports.append(ip_port)
-        serve_command = generate_serve_command(result_filename=str(base_port)+".out",
+        serve_command = generate_vllm_serve_command(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,
                                                model=model,
@@ -137,6 +155,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
     tasks = []
     for i in range(device_count):
         bench_command = generate_bench_command(
+            backend=engine,
             ip_ports=f"127.0.0.1:{base_port + i}",
             model=model,
             num_prompts=num_prompts,
@@ -153,7 +172,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
         for future in as_completed(future_to_command):
             try:
                 process = future.result()
-                process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
+                process.wait(timeout=90*BENCH_TEST_TIMEOUT_MINS)
 
                 assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except

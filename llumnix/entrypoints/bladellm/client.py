@@ -16,15 +16,15 @@ import time
 import asyncio
 import copy
 import random
-from typing import Dict
+from typing import Dict, Tuple
 
 import ray
 
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
-from blade_llm.service.communications.protocol import Stats
+from blade_llm.service.communications.protocol import Stats, GenerateStreamMessage
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol import ServerRequest
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.server_info import RequestTimestamps
@@ -32,33 +32,40 @@ from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 
+# TODO(KuilongCui): fix logging output error
 logger = init_logger(__name__)
-
-# TODO(KuilongCui): Update LlumnixCient of BladeLLM.
 
 
 class LlumnixClientBladeLLM(MultiProcessingLLMClient):
     def __init__(self, args: ServingArgs, llumnix_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
-        super().__init__(args, -1)
+        super().__init__(args, -1, -1)
         self.entrypoint_id2llumnix_id = {}
         self.llumnix_id2entrypoint_id = {}
         self.llumnix_context = llumnix_context
         self.request_streams: Dict[str, asyncio.Queue] = {}
         loop.create_task(self.background_process_outputs())
 
+    async def is_ready(self) -> bool:
+        ready_status = await self.llumnix_context.manager.is_ready.remote()
+        return ready_status
+
     async def background_process_outputs(self):
         while True:
-            request_outputs = await self.llumnix_context.request_output_queue.get()
-            if request_outputs is None:
+            request_output_jsons = await self.llumnix_context.request_output_queue.get()
+            if request_output_jsons is None:
                 continue
-            for (request_id, request_output) in request_outputs:
-                request_output = GenerateStreamResponse(**json.loads(request_output))
+            for request_output_json in request_output_jsons:
+                output_message = GenerateStreamMessage(**json.loads(request_output_json))
+                request_id = output_message.req_id
+                request_output = output_message.resp
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
-                await self.request_streams[request_id].put(request_output)
+                self.request_streams[request_id].put_nowait(request_output)
+
                 if request_output.is_finished:
-                    logger.debug("client recv request output: {}".format(request_output))
+                    print("Client finish request output: {}".format(output_message), flush=True)
+                    logger.debug("Client finish request output: {}".format(output_message))
                     del self.entrypoint_id2llumnix_id[self.llumnix_id2entrypoint_id[request_id]]
                     del self.llumnix_id2entrypoint_id[request_id]
                     del self.request_streams[request_id]
@@ -67,15 +74,18 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
             return error_resp(request.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
 
-        llumnix_id = random.randint(0, 2147483647) # 1<<31-1
-        self.llumnix_id2entrypoint_id[str(llumnix_id)] = request.id
+        # To prevent different api_servers from generating the same request_id, a random number is used to replace original req_id.
+        llumnix_id = random.randint(0, (1 << 31) - 1)
+        self.llumnix_id2entrypoint_id[llumnix_id] = request.id
         self.entrypoint_id2llumnix_id[request.id] = llumnix_id
+        logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_id))
         request.id = llumnix_id
-        resp_stream = await self._manager_generate(request.model_dump_json(), str(llumnix_id))
+
+        resp_stream = await self._manager_generate(llumnix_id, request.model_dump_json())
         return resp_stream
 
-    async def _manager_generate(self, request, request_id: str) -> LLMResponse:
-        logger.debug("client add request: {}:{}".format(request_id, request))
+    async def _manager_generate(self, request_id: int, request: str) -> LLMResponse:
+        logger.debug("Client add request: {}:{}".format(request_id, request))
 
         results_queue = asyncio.Queue()
         self.request_streams[request_id] = results_queue
@@ -102,20 +112,19 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 if self.llumnix_context.instance_num_requests:
                     instance_id = min(self.llumnix_context.instance_num_requests, key=self.llumnix_context.instance_num_requests.get)
                     self.llumnix_context.instance_num_requests[instance_id] += 1
-                    # TODO(Xinyi): set expected step here
                     await self.llumnix_context.instances[instance_id].generate.remote(request_id, server_info_copy, -1, request)
                     logger.info("Manager is unavailable, directly pass request {} to instance {}.".format(request_id, instance_id))
                 else:
                     logger.info("Manager is unavailable, but there is no instance behind this api server, "
                         "sleep {}s, waiting for manager restarts.".format(WAIT_MANAGER_INTERVAL))
                     await asyncio.sleep(WAIT_MANAGER_INTERVAL)
-                    return await asyncio.create_task(self._manager_generate(request, request_id))
+                    return await asyncio.create_task(self._manager_generate(request_id, request))
             except (ray.exceptions.RayActorError, KeyError):
                 if instance_id in self.llumnix_context.instances:
                     logger.info("Instance {} is dead.".format(instance_id))
                     del self.llumnix_context.instances[instance_id]
                     del self.llumnix_context.instance_num_requests[instance_id]
-                    return await asyncio.create_task(self._manager_generate(request, request_id))
+                    return await asyncio.create_task(self._manager_generate(request_id, request))
         return LLMResponse(request_id, resp_queue=results_queue)
 
     async def drop_request(self, req_id: int):
@@ -123,7 +132,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         if llumnix_id:
             try:
                 logger.info("Abort request: {}.".format(req_id))
-                await self.llumnix_context.manager.abort.remote(str(req_id))
+                self.llumnix_context.manager.abort.remote(str(req_id))
                 self.entrypoint_id2llumnix_id.pop(req_id, None)
             except ray.exceptions.RayActorError:
                 logger.info("Manager is unavailable.")
@@ -139,6 +148,9 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
 
     async def get_metrics(self) -> str:
         pass
+
+    def support_beam_search(self) -> Tuple[bool, str]:
+        return False, "Unsupported feature: multiple sequence decoding in Llumnix."
 
     async def start_profiler(self) -> None:
         pass

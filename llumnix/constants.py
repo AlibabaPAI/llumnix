@@ -11,6 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+
+
 # llumnix/manager.py
 CLEAR_REQUEST_INSTANCE_INTERVAL: float = 1000.0
 NO_INSTANCE_RETRY_INTERVAL: float = 1.0
@@ -45,3 +48,7 @@ RPC_ZMQ_HWM: int = 0
 # llumnix/entrypoints/utils.py
 MAX_TASK_RETRIES: int = 10
 RETRIES_INTERVAL: float = 5.0
+
+# llumnix.backends/*/migration_backend.py, llumnix/backends/*/migration_worker.py
+GRPC_MAX_MESSAGE_LENGTH = 1 << 31 - 1
+NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION = [torch.float32, torch.float16]

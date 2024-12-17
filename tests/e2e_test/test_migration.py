@@ -22,8 +22,8 @@ import ray
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
-from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
-                    wait_for_llumnix_service_ready, shutdown_llumnix_service)
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
+                    wait_for_llumnix_service_ready, shutdown_llumnix_service, generate_bladellm_launch_command)
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
@@ -91,11 +91,29 @@ def get_instance_num_blocks():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'grpc'])
 @pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
-async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migrated_request_status):
+@pytest.mark.parametrize("engine", [ "engine_bladeLLM"]) # "engine_vLLM",
+async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model,
+                                   migration_backend, migrated_request_status, engine):
+    engine = engine.split("_")[1]
+
+    if engine == "bladeLLM" and migration_backend != "grpc":
+        pytest.skip("BladeLLM does not support migration backend other than grpc and kv-transfer.")
+
+    if engine == "vLLM" and migration_backend == "grpc":
+        pytest.skip("vLLM does not support migration backend grpc.")
+
+    if migrated_request_status == 'waiting' and engine == 'bladeLLM':
+        pytest.skip("BladeLLm does not support migrating waiting request temporarily.")
+
     if migrated_request_status == 'waiting' and migration_backend != 'rayrpc':
         pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
+
+    if engine == "bladeLLM":
+        generate_launch_command = generate_bladellm_launch_command
+    else:
+        generate_launch_command = generate_vllm_launch_command
 
     request_migration_policy = 'SR' if migrated_request_status == 'running' else 'FCW'
     ip = "127.0.0.1"
@@ -130,6 +148,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
     tasks = []
     for i in range(device_count // 2):
         bench_command = generate_bench_command(
+            backend=engine,
             ip_ports=f"127.0.0.1:{base_port + i}",
             model=model,
             num_prompts=500,
@@ -147,7 +166,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         for future in as_completed(future_to_command):
             try:
                 process = future.result()
-                process.wait(timeout=60*MIGRATION_BENCH_TIMEOUT_MINS)
+                process.wait(timeout=90*MIGRATION_BENCH_TIMEOUT_MINS)
 
                 assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except

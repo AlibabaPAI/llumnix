@@ -11,36 +11,61 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint: disable=protected-access
+
+import sys
+from functools import partial
 import json
 import traceback
-from typing import List, Optional, Tuple, Union, Iterable, Deque
+from typing import List, Optional, Tuple, Union, Iterable, Any
 from collections import defaultdict
 import threading
 import asyncio
 import queue
 
 import ray
+import grpc
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+from loguru import logger as loguru_logger
 
+from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import GenerateStreamResponse, ServerRequest
+from blade_llm.protocol import ServerRequest
+from blade_llm.service.proto.bladellm_pb2 import WorkerStepResponse
 from blade_llm.service.communications.engine_wrapper import APIWrapper
 from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
+from blade_llm.service.communications.protocol import GenerateStreamMessage
+from blade_llm.service.worker import launch_worker
 
+from llumnix.entrypoints.setup import get_ip_address
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
 from llumnix.backends.utils import AsyncPutQueueActor
-from llumnix.llumlet.request import LlumnixRequest, RequestStatus
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
+from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
+from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateCacheRequest, WorkerInfo
+from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 
 logger = init_logger(__name__)
 
+
+class RequestBarrier:
+    def __init__(self, request_id: int):
+        self.request_id = request_id
+        self.wait_event = asyncio.Event()
+
+    def notify(self):
+        self.wait_event.set()
+
+    async def wait(self):
+        await self.wait_event.wait()
 
 class AsyncBackQueueWrapper(APIWrapper):
     def __init__(self, placement_group, instance_id, request_output_queue_type) -> None:
@@ -64,50 +89,59 @@ class AsyncBackQueueWrapper(APIWrapper):
 
     def _put_request_outputs_loop(self):
         while True:
-            request_outputs, req_id_outputs, server_info_outputs = [], [], []
+            request_outputs, server_info_outputs = [], []
 
-            resp, req_id, server_info = self.put_queue_args_queue.get()
+            resp, server_info = self.put_queue_args_queue.get()
             request_outputs.append(resp)
-            req_id_outputs.append(req_id)
             server_info_outputs.append(server_info)
 
             if self.put_queue_args_queue.qsize() > 0:
                 request_size = self.put_queue_args_queue.qsize()
                 for _ in range(request_size):
-                    resp, req_id, server_info = self.put_queue_args_queue.get()
+                    resp, server_info = self.put_queue_args_queue.get()
                     request_outputs.append(resp)
-                    req_id_outputs.append(req_id)
                     server_info_outputs.append(server_info)
 
-            self._put_request_outputs_to_server(request_outputs, req_id_outputs, server_info_outputs)
+            self._put_request_outputs_to_server(request_outputs, server_info_outputs)
 
-    def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
-                                       req_ids: List[str], server_infos: List[ServerInfo]) -> None:
+    def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamMessage],
+                                       server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
-        # Reorganize data in orther to put request output to queue in batch at one time.
-        for request_output, req_id, server_info in zip(request_outputs, req_ids, server_infos):
+        # Reorganize data in order to put request output to queue in batch at one time.
+        for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            server_request_outputs[server_id].append((req_id, request_output.model_dump_json()))
+            server_request_outputs[server_id].append(request_output.model_dump_json())
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        logger.debug("server_request_outputs: {}".format(server_request_outputs))
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     # pylint: disable=unused-argument
-    async def send(self, req_id, msg, reset=False):
-        self.put_queue_args_queue.put_nowait((msg, str(req_id), self.request_server_map[req_id]))
-        if msg.is_finished:
-            self.request_server_map.pop(req_id)
+    async def send(self, dst_instance_id: str, msg: GenerateStreamMessage):
+        req_id = msg.req_id
+        if req_id not in self.request_server_map:
+            logger.warning("req_id {} not in request_server_map, maybe already be migrated.".format(req_id))
+            return
+
+        self.put_queue_args_queue.put_nowait((msg, self.request_server_map[req_id]))
+        if msg.resp.is_finished:
+            logger.info("msg_producer finish_request {}".format(req_id))
+            self.request_server_map.pop(req_id, None)
 
     async def recv(self):
         return None
 
     def drop_request(self, request_id: int) -> None:
-        self.request_server_map.pop(request_id)
+        self.request_server_map.pop(request_id, None)
+        logger.debug("msg_producer drop_request {}".format(request_id))
 
-    def add_request(self, request_id: str, server_info: ServerInfo) -> None:
+    def add_request(self, request_id: int, server_info: ServerInfo) -> None:
         self.request_server_map[request_id] = server_info
+        logger.debug("msg_producer add_request {} {}".format(request_id, server_info))
+
+    def clear(self):
+        self.request_server_map = {}
+        logger.info("msg_producer reset")
 
     def stop(self):
         pass
@@ -119,6 +153,8 @@ class AsyncLLMEngineLlumnixMixin:
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
+                 src_worker_ip_address: List[str],
+                 request_barriers: queue.Queue,
                  ) -> None:
         self.instance_id = instance_id
 
@@ -128,21 +164,64 @@ class AsyncLLMEngineLlumnixMixin:
         self.placement_group = placement_group
         self.request_output_queue_type = request_output_queue_type
 
+        self._worker_processes = launch_worker(self._args, instance_id, migration_config)
+        self.src_worker_ip_address = src_worker_ip_address
+
+        self._migration_semaphore = asyncio.Semaphore(0)
+        self.request_barriers: queue.Queue = request_barriers
+
+        self.migrated_request = set()
+
     @property
     def instance_info(self) -> InstanceInfo:
         return self._scheduler.llumnix_metrics.to_instance_info()
 
-    def start(self, loop: asyncio.AbstractEventLoop):
-        super().start(loop)
+    async def start(self, loop: asyncio.AbstractEventLoop):
+        await super().start(loop)
         self._client = self.init_client_from_engine()
-        self.trans_wrapper: AsyncBackQueueWrapper = AsyncBackQueueWrapper(self.placement_group,
+        self.msg_producer: AsyncBackQueueWrapper = AsyncBackQueueWrapper(self.placement_group,
                                                                           self.instance_id,
                                                                           self.request_output_queue_type)
+        self._scheduler.request_server_map = self.msg_producer.request_server_map
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
+
+        self.worker_channels = [grpc.aio.insecure_channel(worker) for worker in self.src_worker_ip_address]
+        self.worker_stubs = [migration_worker_pb2_grpc.MigrationWorkerStub(channel) for channel in self.worker_channels]
+
+    def inject_request_barriers(self):
+        async def finish_callback(resp_list, request_barriers: List[RequestBarrier]):
+            for request_barrier in request_barriers:
+                request_barrier.notify()
+
+        barrier_size = self.request_barriers.qsize()
+        if barrier_size > 0:
+            all_request_barriers = []
+            running_filter_request_ids = set()
+            for _ in range(barrier_size):
+                request_barrier = self.request_barriers.get()
+                all_request_barriers.append(request_barrier)
+                running_filter_request_ids.add(request_barrier.request_id)
+            self._scheduler.running_filter_request_ids.update(running_filter_request_ids)
+            self._workers.barrier(
+                request_group_ids=list(running_filter_request_ids),
+                callback=partial(finish_callback, request_barriers=all_request_barriers))
+
+    # TODO(KuilongCui): As a barrier is always used when a request is determined to be migrated, a request
+    # can be identified as decode at the time it is scheduled by the scheduler, without having to wait until
+    # the update_callback.
+    def _update_request_inference_type(self, resp_list: List[WorkerStepResponse]):
+        request_groups = resp_list[0].generation_groups.generation_group
+        for gen_group in request_groups:
+            request_group_id = gen_group.request_group_id
+            if request_group_id in self.scheduler.id2group:
+                num_out_token = gen_group.generations[0].num_out_token
+                self._scheduler.id2group[request_group_id]._inference_type = \
+                    RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
     async def update_callback(self, resp_list, step_requests):
         await super().update_callback(resp_list, step_requests)
-        self._scheduler.llumnix_metrics.engine_step_metrics(self._scheduler)
+        self._update_request_inference_type(resp_list)
+        self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
 
     async def _loop(self):
         previous_state = self.state
@@ -164,26 +243,66 @@ class AsyncLLMEngineLlumnixMixin:
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
+        for channel in self.worker_channels:
+            await channel.close()
+
     async def _handle_dropped_request(self):
-        if self._dropped_req:
-            for req_id in self._dropped_req:
-                self.trans_wrapper.drop_request(req_id)
+        if self._dropped_req.qsize() > 0:
+            for _ in range(self._dropped_req.qsize()):
+                req_id = self._dropped_req.get_nowait()
+                self._scheduler.id2group[req_id]._status = RequestStatus.FINISHED
+                self.msg_producer.drop_request(req_id)
         await super()._handle_dropped_request()
 
     async def _handle_abort(self, abort: Optional[List[Tuple[int, int, str]]] = None):
+        await super()._handle_abort(abort)
         if abort is not None and len(abort) > 0:
             for req_id, _, _ in abort:
-                self.trans_wrapper.drop_request(req_id)
-        await super()._handle_abort(abort)
+                self._scheduler.id2group[req_id]._status = RequestStatus.FINISHED
+                self.msg_producer.drop_request(req_id)
+
+    async def _handle_reset(self):
+        await super()._handle_reset()
+        self.msg_producer.clear()
 
     async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
         logger.debug("engine {} add request {}".format(self.instance_id, server_request))
-        self.trans_wrapper.add_request(server_request.id, server_info)
+        self.msg_producer.add_request(server_request.id, server_info)
         # pylint: disable=protected-access
         await self._client._add_request(server_request)
 
     async def drop_request(self, req_id: int):
-        await self._client.drop_request(req_id)
+        logger.debug("engine {} drop request {}".format(self.instance_id, req_id))
+        await self._client.drop_request(int(req_id))
+
+    async def run_workers(self, worker_method, *args, **kwargs):
+        coros = []
+        for stub in self.worker_stubs:
+            method = getattr(stub, worker_method)
+            coros.append(method(*args, **kwargs))
+        result = await asyncio.gather(*coros, return_exceptions=True)
+        return result
+
+    async def wake_engine(self):
+        completed, pending = await asyncio.wait(
+            [
+                self._req_buffer.get(),
+                self._stop_event.wait(),
+                self._migration_semaphore.acquire(),
+            ],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        return completed, pending
+
+    # metrics
+    def get_num_msg_producer_cached_request(self):
+        return len(self.msg_producer.request_server_map)
+
+    def get_all_request_ids(self) -> List[int]:
+        return list(self._scheduler.get_all_request_ids())
+
+    def get_num_wait_update_request_ids(self) -> int:
+        return self.request_barriers.qsize()
 
 class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
     def __init__(self,
@@ -191,10 +310,13 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                 placement_group: PlacementGroup,
                 request_output_queue_type: QueueType,
                 migration_config: MigrationConfig,
+                src_worker_ip_address: List[str],
+                request_barriers: queue.Queue,
                 *args, **kwargs,
                 ) -> None:
         AsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type, migration_config)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
+                                            migration_config, src_worker_ip_address, request_barriers)
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,
@@ -202,10 +324,13 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             placement_group: PlacementGroup,
             request_output_queue_type: QueueType,
             migration_config: MigrationConfig,
+            src_worker_ip_address: List[str],
+            request_barriers: queue.Queue,
             *args, **kwargs,
             ) -> None:
         PrefillAsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type, migration_config)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
+                                            migration_config, src_worker_ip_address, request_barriers)
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
@@ -213,10 +338,13 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
             placement_group: PlacementGroup,
             request_output_queue_type: QueueType,
             migration_config: MigrationConfig,
+            src_worker_ip_address: List[str],
+            request_barriers: queue.Queue,
             *args, **kwargs,
             ) -> None:
         DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type, migration_config)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
+                                            migration_config, src_worker_ip_address, request_barriers)
 
 class BackendBladeLLM(BackendInterface):
     def __init__(
@@ -227,20 +355,46 @@ class BackendBladeLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: ServingArgs
     ) -> None:
+        self._config_inner_engine_logger(engine_args)
+
+        engine_args.worker_socket_path = engine_args.worker_socket_path + "_" + str(instance_id)
         self.instance_id = instance_id
         self.engine_args = engine_args
         engine_cls = self._get_engine_cls()
-        self.engine = engine_cls(instance_id,
-                                 placement_group,
-                                 request_output_queue_type,
-                                 migration_config,
-                                 engine_args)
+        self.migration_config: MigrationConfig = migration_config
 
-        self._loop = asyncio.new_event_loop()
-        self._engine_ready = threading.Event()
-        self._thread = threading.Thread(target=self._start_loop, args=(self._loop,), daemon=True, name="async_engine")
-        self._thread.start()
-        self._engine_ready.wait()
+        ip_addr = get_ip_address()
+        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
+        src_worker_start_port = self.migration_config.grpc_migration_backend_server_port
+        src_ports = range(src_worker_start_port, src_worker_start_port+world_size)
+        self.src_worker_ip_address = [ip_addr+":"+str(port) for port in src_ports]
+        self.worker_infos = []
+        for index, ip_addr in enumerate(self.src_worker_ip_address):
+            self.worker_infos.append(WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id, worker_id=index))
+
+        self.request_barriers: queue.Queue = queue.Queue()
+        engine_cls = self._get_engine_cls()
+        self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, migration_config,
+                                self.src_worker_ip_address, self.request_barriers, engine_args)
+
+        self._engine_ready_event = asyncio.Event()
+        asyncio.create_task(self._start_engine())
+
+    def _config_inner_engine_logger(self, engine_args: ServingArgs):
+        loguru_logger.remove()
+        loguru_logger.add(
+            sys.stderr,
+            level=engine_args.log_level,
+            format=LOGGER_FORMAT,
+        )
+
+    async def _start_engine(self):
+        await self.engine.start(asyncio.get_event_loop())
+        self._engine_ready_event.set()
+
+    async def is_ready(self) -> bool:
+        await self._engine_ready_event.wait()
+        return True
 
     @property
     def _stop_event(self):
@@ -262,73 +416,122 @@ class BackendBladeLLM(BackendInterface):
                 engine_cls = DecodeAsyncLLMEngineLlumnix
         return engine_cls
 
-    def _start_loop(self, loop):
-        asyncio.set_event_loop(loop)
-        self.engine.start(loop)
-        self._engine_ready.set()
-        loop.run_forever()
+    # -------------- dispatch related method --------------
 
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
         server_request = ServerRequest(**json.loads(kwargs["server_request"]))
-        asyncio.run_coroutine_threadsafe(self.engine.add_request(server_info, server_request), self._loop)
+        await self.engine.add_request(server_info, server_request)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids = set(request_id)
         for req_id in request_ids:
-            self.engine.drop_request(int(req_id))
+            self.engine.drop_request(req_id)
 
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
-        pass
+    def get_all_request_ids(self) -> List[int]:
+        return self.engine.scheduler.get_all_request_ids()
 
-    def get_running_queue(self) -> Deque[LlumnixRequest]:
-        pass
+    # -------------- migration related method --------------
 
-    def get_waiting_queue(self) -> Deque[LlumnixRequest]:
-        pass
+    async def _run_workers(self, *args, **kwargs):
+        return await self.engine.run_workers(*args, **kwargs)
 
-    def remove_running_request(self, request_id: str) -> bool:
-        pass
+    def get_running_queue(self):
+        return self.engine.scheduler.get_running_queue()
 
-    def remove_waiting_request(self, request_id: str) -> bool:
-        pass
+    def get_waiting_queue(self):
+        return self.engine.scheduler.get_waiting_queue()
 
-    def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
-        pass
+    async def get_request_incremental_blocks(self, backend_request: GenerationGroupStateLlumnix,
+                                             pre_stage_num_blocks: int) -> List[int]:
+        if backend_request.should_abort_migration():
+            return [], [], False
 
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
-        pass
+        incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
+        is_last_stage = (len(incremental_blocks) <= self.migration_config.migration_last_stage_max_blocks) \
+            or backend_request.blocking_migration
+        if is_last_stage:
+            request_barrier = RequestBarrier(backend_request.request_id)
+            self.request_barriers.put_nowait(request_barrier)
+            self.engine.inject_request_barriers()
+            await request_barrier.wait()
 
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
-        pass
+            if backend_request.should_abort_migration() or self.engine.scheduler.is_hunger():
+                # If there are currently no requests that can be scheduled, and the request migration process is aborted,
+                # wake the engine to start the next round of scheduling.
+                if self.engine.scheduler.is_hunger():
+                    self.engine.scheduler.running_filter_request_ids.remove(backend_request.request_id)
+                    if self.engine._migration_semaphore.locked():
+                        self.engine._migration_semaphore.release()
+                return [], [], False
 
-    def pre_alloc(self,
-                  request_id: str,
-                  request_status: RequestStatus,
-                  request_arrival_time: float,
-                  block_num: int,
-                  token_ids: List[int]) -> List[int]:
-        pass
+            if not backend_request.should_abort_migration():
+                incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
+                backend_request.detokenizer_state = self.engine.scheduler._detokenizer.get_state(backend_request.request_id)
+            else:
+                self.engine.scheduler.running_filter_request_ids.remove(backend_request.request_id)
 
-    def add_running_request(self, backend_request: LlumnixRequest) -> None:
-        pass
+        return incremental_blocks, [], is_last_stage
 
-    def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
-        pass
+    def remove_waiting_request(self, *args, **kwargs) -> bool:
+        return self.engine.scheduler.remove_waiting_request(*args, **kwargs)
 
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
-        pass
+    def add_waiting_request(self, *args, **kwargs) -> None:
+        self.engine.scheduler.add_waiting_request(*args, **kwargs)
+
+    def remove_running_request(self, request_id: int) -> bool:
+        ret = self.engine.scheduler.remove_running_request(request_id)
+        self.engine.scheduler.running_filter_request_ids.remove(request_id)
+        return ret
+
+    def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
+        return self.engine.scheduler.add_migrating_out_request_last_stage(*args, **kwargs)
+
+    def remove_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
+        return self.engine.scheduler.remove_migrating_out_request_last_stage(*args, **kwargs)
+
+    def pop_migrating_out_requests_last_stage(self, *args, **kwargs) -> List[Any]:
+        return self.engine.scheduler.pop_migrating_out_requests_last_stage(*args, **kwargs)
+
+    def pre_alloc(self, *args, **kwargs) -> List[int]:
+        return self.engine.scheduler.pre_alloc(*args, **kwargs)
+
+    def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
+        self.engine.msg_producer.add_request(backend_request.request_id, backend_request.server_info)
+        return self.engine.scheduler.add_running_request(backend_request)
+
+    def free_dst_pre_alloc_cache(self, *args, **kwargs) -> None:
+        return self.engine.scheduler.free_dst_pre_alloc_cache(*args, **kwargs)
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
-        pass
+        self.engine.msg_producer.drop_request(backend_request.request_id)
+        return self.engine.scheduler.free_src_request(backend_request)
 
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
-        pass
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
+                          src_blocks: List[int], dst_blocks: List[int], is_last_stage: bool):
+        request = MigrateCacheRequest(
+            src_handlers=self.worker_infos,
+            request_id=request_id,
+            is_last_stage=is_last_stage,
+            src_blocks=src_blocks,
+            dst_blocks=dst_blocks,
+        )
+        await dst_ray_actor.execute_async_engine_method.remote("_run_workers", "migrate_cache", request)
 
     def commit_dst_request(self, backend_request: LlumnixRequest) -> None:
-        pass
+        assert len(backend_request.paged_reqs) == 1, "currently llumnix doesn't support multi-paged-req migration."
 
-    def get_all_request_ids(self) -> List[str]:
-        pass
+        seq = backend_request.paged_reqs[0]
+        seq.block_table_id = next(self.engine.scheduler.block_manager.block_table_counter)
+        pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
+        self.engine.scheduler.add_block_table(pre_alloc_blocks, seq.block_table_id)
+
+        backend_request.reset_migration_args_dst()
+        self.engine._back_queue[backend_request.request_id] = None
+        self.add_running_request(backend_request)
+
+        self.engine.scheduler.llumnix_metrics.scheduler_step_metrics(self.engine.scheduler)
+        if self.engine._migration_semaphore.locked():
+            self.engine._migration_semaphore.release()

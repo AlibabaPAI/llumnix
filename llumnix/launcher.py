@@ -67,8 +67,10 @@ class Launcher:
             # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
+            seperate_gpu_groups = backend_type != BackendType.BLADELLM
             placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
-                                                         num_gpus=world_size, detached=True, block=block)
+                                                         num_gpus=world_size, detached=True, block=block,
+                                                         seperate_gpu_groups=seperate_gpu_groups)
         else:
             # num_cpus=1, for Llumlet + AsyncPutQueueActor
             placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),

@@ -13,13 +13,27 @@
 
 from enum import Enum
 import math
-
 from llumnix.server_info import ServerInfo
 
 
 class RequestInferenceType(str, Enum):
+    UNKNOWN = "unknown"
     PREFILL = "prefill"
     DECODE = "decode"
+    PREFILL_AND_DECODE = "prefill_and_decode"
+
+    @classmethod
+    def generate_inference_type(cls, exist_prefill: bool, exist_decode: bool):
+        if exist_prefill and exist_decode:
+            inference_type = RequestInferenceType.PREFILL_AND_DECODE
+        elif exist_prefill:
+            inference_type = RequestInferenceType.PREFILL
+        elif exist_decode:
+            inference_type = RequestInferenceType.DECODE
+        else:
+            inference_type = RequestInferenceType.UNKNOWN
+
+        return RequestInferenceType(inference_type)
 
 class RequestStatus(str, Enum):
     RUNNING = "running"
@@ -33,7 +47,7 @@ class RequestStatus(str, Enum):
         return status in [RequestStatus.RUNNING_MIGRATING, RequestStatus.WAITING_MIGRATING]
 
 class LlumnixRequest:
-    def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
+    def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int = math.inf) -> None:
         self.request_id = request_id
         self.server_info = server_info
 
@@ -108,17 +122,17 @@ class LlumnixRequest:
     def prefill_num_blocks(self) -> int:
         raise NotImplementedError
 
-    @property
-    def n_blocks(self) -> int:
-        raise NotImplementedError
+    # @property
+    # def n_blocks(self) -> int:
+    #     raise NotImplementedError
 
-    @property
-    def token_ids(self) -> int:
-        raise NotImplementedError
+    # @property
+    # def token_ids(self) -> int:
+    #     raise NotImplementedError
 
-    @property
-    def block_size(self) -> int:
-        raise NotImplementedError
+    # @property
+    # def block_size(self) -> int:
+    #     raise NotImplementedError
 
     # Whether the migration of request is completed within one stage. For requests that have already reached
     # the expected steps, blocking_migration is True.

@@ -69,7 +69,8 @@ def test_llm_engine_from_engine_args_sim(ray_env):
                                              placement_group=placement_group)
     assert llm_engine.executor_class == SimGPUExecutor
 
-def test_llm_engine_add_requset(ray_env):
+@pytest.mark.asyncio
+async def test_llm_engine_add_requset(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     latency_data = LatencyMemData({},{},{})
     placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=1, num_gpus=0, detached=True)
@@ -81,7 +82,7 @@ def test_llm_engine_add_requset(ray_env):
                                                    migration_config=None)
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     server_info = ServerInfo(None, None, None, None, None)
-    llm_engine.add_request("0", server_info, math.inf, "prompt", sampling_params)
+    await llm_engine.add_request("0", server_info, math.inf, "prompt", sampling_params)
     assert len(llm_engine.scheduler[0].waiting) == 1
     assert llm_engine.scheduler[0].waiting[-1].request_id == "0"
     assert llm_engine.scheduler[0].waiting[-1].expected_steps == math.inf

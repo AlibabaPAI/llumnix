@@ -23,18 +23,14 @@ import uvicorn
 from vllm.sampling_params import SamplingParams
 
 from llumnix.arg_utils import LlumnixArgumentParser
-from llumnix.entrypoints.utils import (setup_ray_cluster,
+from llumnix.entrypoints.setup import (setup_ray_cluster,
                                        setup_llumnix,
                                        is_gpu_available,
-                                       LlumnixEntrypointsContext,
-                                       _background_process_outputs,
                                        init_per_token_latency_breakdown_dict,
                                        record_per_token_latency_breakdown)
-from llumnix.entrypoints.vllm.utils import (add_cli_args,
-                                            get_args,
-                                            manager_generate,
-                                            manager_abort,
-                                            manager_is_ready)
+from llumnix.entrypoints.vllm.arg_utils import (add_cli_args,
+                                                get_args)
+from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config, LlumnixConfig
@@ -44,16 +40,16 @@ logger = init_logger("llumnix.entrypoints.vllm.api_server")
 
 TIMEOUT_KEEP_ALIVE = 5  # seconds.
 
-llumnix_context: LlumnixEntrypointsContext = None
+llumnix_client: LlumnixClientVLLM = None
 
 
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
-    asyncio.create_task(llumnix_context.request_output_queue.run_server_loop())
-    asyncio.create_task(_background_process_outputs(llumnix_context))
+    asyncio.create_task(llumnix_client.request_output_queue.run_server_loop())
+    asyncio.create_task(llumnix_client.get_request_outputs_loop())
     yield
-    llumnix_context.request_output_queue.cleanup()
+    llumnix_client.request_output_queue.cleanup()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -79,8 +75,8 @@ async def generate(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
-    # Use manager_generate and manager_abort to replace with vllm async engine generate and abort api.
-    results_generator = await manager_generate(prompt, sampling_params, request_id, llumnix_context)
+    # Use LlumnixClientVLLM's generate and abort api to replace with vLLM AsyncLLMEngine's generate and abort api.
+    results_generator = await llumnix_client.generate(prompt, sampling_params, request_id)
 
     # Streaming case
     async def stream_results() -> AsyncGenerator[bytes, None]:
@@ -100,7 +96,7 @@ async def generate(request: Request) -> Response:
     async for request_output in results_generator.generator():
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
-            await manager_abort(request_id, llumnix_context)
+            await llumnix_client.abort(request_id)
             return Response(status_code=499)
         final_output = request_output
 
@@ -128,7 +124,7 @@ async def generate_benchmark(request: Request) -> Response:
 
     start = time.time()
 
-    results_generator = await manager_generate(prompt, sampling_params, request_id, llumnix_context)
+    results_generator = await llumnix_client.generate(prompt, sampling_params, request_id)
 
     # Non-streaming case
     final_output = None
@@ -137,7 +133,7 @@ async def generate_benchmark(request: Request) -> Response:
     async for request_output in results_generator.generator():
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
-            await manager_abort(request_id, llumnix_context)
+            await llumnix_client.abort(request_id)
             return Response(status_code=499)
         now = time.time()
         per_token_latency.append([now, (now - start)*1000])
@@ -148,10 +144,10 @@ async def generate_benchmark(request: Request) -> Response:
             record_per_token_latency_breakdown(per_token_latency_breakdown_dict, request_output.request_timestamps)
     assert final_output is not None
 
-    if llumnix_context.log_requests:
-        llumnix_context.num_finished_requests += 1
+    if llumnix_client.log_requests:
+        llumnix_client.num_finished_requests += 1
         logger.info("entrypoints finished request {}.".format(request_id))
-        logger.info("num_finished_requests {}.".format(llumnix_context.num_finished_requests))
+        logger.info("num_finished_requests {}.".format(llumnix_client.num_finished_requests))
 
     generation = final_output.outputs[0].text
     num_output_tokens = len(final_output.outputs[0].token_ids)
@@ -172,7 +168,7 @@ async def generate_benchmark(request: Request) -> Response:
 
 @app.get("/is_ready")
 async def is_ready():
-    return await manager_is_ready(llumnix_context)
+    return await llumnix_client.is_ready()
 
 
 if __name__ == "__main__":
@@ -192,7 +188,8 @@ if __name__ == "__main__":
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():
-        llumnix_context = setup_llumnix(engine_manager_args, engine_args, cfg)
+        llumnix_entrypoints_context = setup_llumnix(engine_manager_args, engine_args, cfg)
+        llumnix_client = LlumnixClientVLLM(llumnix_entrypoints_context)
         # Start the api server after all the components of llumnix are ready.
         logger.info("Start Api Server on '{}:{}'".format(cfg.SERVER.HOST, cfg.SERVER.PORT))
         uvicorn.run(app,

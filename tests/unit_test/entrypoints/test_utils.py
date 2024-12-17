@@ -16,7 +16,7 @@ import pytest
 import ray
 
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.entrypoints.utils import (get_ip_address,
+from llumnix.entrypoints.setup import (get_ip_address,
                                        launch_ray_cluster,
                                        init_manager,
                                        retry_manager_method_sync,

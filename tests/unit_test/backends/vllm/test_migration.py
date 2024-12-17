@@ -58,7 +58,7 @@ class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop
-        self.backend_engine.engine.scheduler.schedule = MagicMock()
+        self.backend_engine.engine.scheduler[0].schedule = MagicMock()
 
         # For some reason, if MockScheduelrOutputs is defined outside, the constructor would raise error.
         class MockScheduelrOutputs:
@@ -66,18 +66,19 @@ class MockLlumletDoNotSchedule(Llumlet):
                 self.scheduled_seq_groups = []
                 self.ignored_seq_groups = []
                 self.num_batched_tokens = 0
+                self.preempted = False
 
             def is_empty(self) -> bool:
                 return not self.scheduled_seq_groups
 
         scheduler_outputs = MockScheduelrOutputs()
-        self.backend_engine.engine.scheduler.schedule.return_value = ([], scheduler_outputs)
+        self.backend_engine.engine.scheduler[0].schedule.return_value = ([], scheduler_outputs, False)
 
         self.step_async = self.backend_engine.engine.step_async
 
         async def step_async_try_schedule():
             request_outputs, server_infos = await self.step_async()
-            for seq_group in self.backend_engine.engine.scheduler.waiting:
+            for seq_group in self.backend_engine.engine.scheduler[0].waiting:
                 seq_group.try_schedule_times += 1
             return request_outputs, server_infos
 

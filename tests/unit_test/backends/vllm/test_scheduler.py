@@ -213,8 +213,8 @@ def test_schedule_running():
 def test_try_schedule_times():
     # total 8 blocks
     scheduler = initialize_scheduler()
-    _, seq_group_1 = create_dummy_prompt("1", prompt_length=8, block_size=1)
-    _, seq_group_2 = create_dummy_prompt("2", prompt_length=8, block_size=1)
+    _, seq_group_1 = create_dummy_prompt("1", prompt_length=32, block_size=4)
+    _, seq_group_2 = create_dummy_prompt("2", prompt_length=32, block_size=4)
     scheduler.add_seq_group(seq_group_1)
     scheduler.add_seq_group(seq_group_2)
     waiting_queue = scheduler.get_waiting_queue()
@@ -225,6 +225,7 @@ def test_try_schedule_times():
     # seq_group_2 cannot be scheduled due to lack of blocks
     assert seq_group_1.try_schedule_times == 0
     assert seq_group_2.try_schedule_times == 1
+    append_new_token_seq_group(1, seq_group_1, 1)
     scheduler.schedule()
     # seq_group_1 is preempted to waiting queue
     assert seq_group_1.try_schedule_times == 1

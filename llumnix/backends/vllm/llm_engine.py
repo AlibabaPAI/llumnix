@@ -375,16 +375,16 @@ class BackendVLLM(BackendInterface):
         return self.engine.scheduler[0].get_running_queue()
 
     def get_waiting_queue(self) -> Deque[SequenceGroupLlumnix]:
-        return self.engine.scheduler.get_waiting_queue()
+        return self.engine.scheduler[0].get_waiting_queue()
 
-    def get_request_incremental_blocks(self, *args, **kwargs) -> List[int]:
+    def get_request_incremental_blocks(self, *args, **kwargs) -> Tuple[List[int], List[int]]:
         return self.engine.scheduler[0].get_request_incremental_blocks(*args, **kwargs)
 
     def remove_running_request(self, *args, **kwargs) -> None:
         return self.engine.scheduler[0].remove_running_request(*args, **kwargs)
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler.remove_waiting_request(*args, **kwargs)
+        return self.engine.scheduler[0].remove_waiting_request(*args, **kwargs)
 
     def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
         return self.engine.scheduler[0].add_migrating_out_request_last_stage(*args, **kwargs)
@@ -403,6 +403,9 @@ class BackendVLLM(BackendInterface):
 
     def add_running_request(self, *args, **kwargs) -> None:
         return self.engine.scheduler[0].add_running_request(*args, **kwargs)
+
+    def add_waiting_request(self, *args, **kwargs) -> None:
+        return self.engine.scheduler[0].add_waiting_request(*args, **kwargs)
 
     def is_request_running(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].is_request_running(*args, **kwargs)

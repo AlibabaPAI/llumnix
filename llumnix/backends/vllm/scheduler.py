@@ -97,16 +97,20 @@ class SchedulerLlumnix(Scheduler):
                 request_ids.append(seq_group.request_id)
         return request_ids
 
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
+    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         seq = backend_request.get_seqs()[0]
         blocks = self.block_manager.get_block_table(seq)
-        return blocks[pre_stage_num_blocks:]
+        block_table = self.block_manager.block_tables[seq.seq_id]
+        token_ids = backend_request.token_ids
+        return blocks[pre_stage_num_blocks:], token_ids[pre_stage_num_blocks * self.block_manager.block_size:block_table.num_full_slots]
 
     def remove_running_request(self, request_id: str) -> bool:
-        for seq_group in self.running:
+        for seq_group in reversed(self.running):
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
                 seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
+                logger.info(f"remove running req {request_id}")
+                logger.info(f"len:{len(self.running)}")
                 return True
         return False
 
@@ -138,8 +142,7 @@ class SchedulerLlumnix(Scheduler):
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
-            if (self.waiting and request_arrival_time > self.waiting[0].arrival_time) \
-                or block_num * self.cache_config.block_size > self.prompt_limit:
+            if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
                 return []
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
         if not block_table:

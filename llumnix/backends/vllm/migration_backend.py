@@ -61,12 +61,12 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
         self.cache_device = "cpu"
-        self.num_migration_cache_blocks = self.migration_config.migration_cache_blocks
+        self.num_migration_buffer_blocks = self.migration_config.migration_buffer_blocks
         self.num_layers = self.cache_engine[0].num_attention_layers
         self.migration_cache_size = self.cache_engine[0].block_size * self.cache_engine[0].num_kv_heads * self.cache_engine[0].head_size
 
         self.dummy_cache = torch.empty(
-            size=(self.num_migration_cache_blocks, self.num_layers, 2, self.migration_cache_size),
+            size=(self.num_migration_buffer_blocks, self.num_layers, 2, self.migration_cache_size),
             dtype=self.cache_engine[0].dtype,
             device=self.cache_device,
             pin_memory=True
@@ -162,7 +162,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.cache_engine = cache_engine
         self.backend = migration_config.migration_backend
         self.migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine[0].num_attention_layers)
-        self.num_migration_cache_blocks = migration_config.migration_cache_blocks
+        self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
 
         self.backend = migration_config.migration_backend
         self.global_world_size = -1
@@ -184,7 +184,7 @@ class RayColMigrationBackend(MigrationBackendBase):
 
         pin_memory = (self.backend == 'gloo')
         self.dummy_cache = torch.empty(
-            size=(self.num_migration_cache_blocks, self.migration_num_layers, 2, self.migration_cache_size),
+            size=(self.num_migration_buffer_blocks, self.migration_num_layers, 2, self.migration_cache_size),
             dtype=self.cache_engine[0].dtype,
             device=self.cache_device,
             pin_memory=pin_memory
@@ -297,10 +297,10 @@ class RayColMigrationBackend(MigrationBackendBase):
 
 def get_migration_backend(migration_config: MigrationConfig, cache_engine: List[CacheEngine], worker_handle_list, scheduling_strategy,
                         is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
-    if cache_engine[0].num_gpu_blocks < migration_config.migration_cache_blocks:
+    if cache_engine[0].num_gpu_blocks < migration_config.migration_buffer_blocks:
         logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
-                       .format(migration_config.migration_cache_blocks, cache_engine.num_gpu_blocks))
-        migration_config.migration_cache_blocks = cache_engine[0].num_gpu_blocks
+                       .format(migration_config.migration_buffer_blocks, cache_engine[0].num_gpu_blocks))
+        migration_config.migration_buffer_blocks = cache_engine[0].num_gpu_blocks
 
     target_migration_backend = None
     backend = migration_config.migration_backend

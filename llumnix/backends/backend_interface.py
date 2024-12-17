@@ -13,7 +13,7 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Iterable, List, Union, Deque
+from typing import Iterable, List, Union, Deque, Tuple
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
@@ -75,7 +75,7 @@ class BackendInterface(ABC):
 
     # Methods for migration
     @abstractmethod
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
+    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         """Retrieves the incremental block table for a given request.
 
         This method is used to fetch a list of block numbers that represent the incremental
@@ -92,7 +92,7 @@ class BackendInterface(ABC):
                                    need to be fetched in the current stage.
 
         Returns:
-            A list of integers, where each integer represents a block number that indicates
+            A list of integers and its token ids, where each integer represents a block number that indicates
             physical index of kv cache block tensor. These block numbers can then be used
             to transfer to dstination instance.
         """

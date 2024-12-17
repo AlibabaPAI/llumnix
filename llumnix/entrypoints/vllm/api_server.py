@@ -168,7 +168,7 @@ async def generate_benchmark(request: Request) -> Response:
 
 
 @app.get("/is_ready")
-async def is_ready():
+async def is_ready() -> bool:
     return await llumnix_client.is_ready()
 
 

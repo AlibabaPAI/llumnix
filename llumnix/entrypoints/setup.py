@@ -140,6 +140,12 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
             logger.error("Exception traceback: {}".format(traceback.format_exc()))
             retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
 
+    if len(available_instance_ids) > 0:
+        retry_manager_method_sync(manager.scale_up.remote, 'scale_up',
+                                  available_instance_ids, available_instances, [instance_args]*len(available_instance_ids))
+        logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
+                    .format(len(available_instance_ids), available_instance_ids))
+
     ip = get_ip_address()
     request_output_queue_port: str = entrypoints_args.request_output_queue_port
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)

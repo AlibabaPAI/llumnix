@@ -23,15 +23,26 @@ class LlumnixMetrics(ABC):
     def __init__(self):
         self.instance_id = Status("instance_id")
 
-        # used for dispatch
+        # used for dispatch and migration
         self.num_total_gpu_blocks = Status("num_total_gpu_blocks")
-        self.num_watermark_blocks = Status("num_watermark_blocks")
         self.num_used_gpu_blocks = Status("num_used_gpu_blocks")
-        self.num_blocks_all_waiting_requests = Status("num_blocks_all_waiting_requests")
         self.num_running_requests = Status("num_running_requests")
         self.num_waiting_requests = Status("num_waiting_requests")
 
-        self.dumper: Dumper = self._init_dumper()
+        # used for dispatch
+        self.num_blocks_all_waiting_requests = Status("num_blocks_all_waiting_requests")
+
+        # used for migration
+        self.num_blocks_last_running_request = Status("num_blocks_last_running_request")
+        self.num_blocks_first_waiting_request = Status("num_blocks_first_waiting_request")
+
+        # stastics
+        self.num_watermark_blocks = Status("num_watermark_blocks")
+        self.num_killed_requests = Status("num_killed_requests")
+        self.all_request_ids = Status("all_request_ids")
+
+        self.dumper: Dumper = None
+        self._init_dumper()
 
     def dump(self):
         self.dumper.dump(_REGISTRY.describe_all())
@@ -39,9 +50,8 @@ class LlumnixMetrics(ABC):
     def to_instance_info(self) -> InstanceInfo:
         return InstanceInfo(**(_REGISTRY.describe_all()))
 
-    def _init_dumper(self,):
-        dumper = DummyDumper()
-        return dumper
+    def _init_dumper(self):
+        self.dumper = DummyDumper()
 
     @abstractmethod
     def block_manager_init_metrics(self, block_manager):
@@ -49,6 +59,10 @@ class LlumnixMetrics(ABC):
 
     @abstractmethod
     def engine_init_metrics(self, engine):
+        ...
+
+    @abstractmethod
+    def scheduler_init_metrics(self, scheduler):
         ...
 
     @abstractmethod

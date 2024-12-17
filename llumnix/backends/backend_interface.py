@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Iterable, List, Union, Deque, Tuple
 
+import ray
+
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 
@@ -38,7 +40,12 @@ class BackendType(str, Enum):
 
 class BackendInterface(ABC):
     @abstractmethod
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
+    async def is_ready(self):
+        raise NotImplementedError
+
+    # Methods for inference
+    @abstractmethod
+    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
                     *args, **kwargs) -> None:
         """Add a new inference request to the backend.
 
@@ -69,9 +76,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     # Methods for migration
-    @abstractmethod
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) \
-        -> Tuple[List[int], List[int]]:
+    async def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         """Get the incremental blocks and token ids for a given request.
 
         This method is used to fetch a list of block numbers and a list of token ids that represent the
@@ -257,7 +262,8 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
+                          src_blocks: List[int], dst_blocks: List[int], is_last_stage: bool):
         """
         Send cache blocks from the source instance to the destination instance.
 
@@ -266,13 +272,15 @@ class BackendInterface(ABC):
         the destination instance, where they are mapped according to the destination block table.
 
         Args:
-            dst_ray_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
-                           to be sent. This handle is used to reference the destination's execution context and manage
-                           the block transfer.
-            src_blocks: A list of integers representing the block indexs in the source instance's cache that need to be
-                        sent to the destination.
-            dst_blocks: A list of integers representing the block indexs in the destination instance's cache where the
-                        incoming blocks should be stored.
+            dst_ray_actor: A handle to the Ray actor representing the destination instance where the cache
+                           blocks are to be sent. This handle is used to reference the destination's
+                           execution context and manage the block transfer.
+            request_id: the request id of the request that triggered the migration.
+            src_blocks: A list of integers representing the block indexs in the source instance's
+                             cache that need to be sent to the destination.
+            dst_blocks: A list of integers representing the block indexs in the destination instance's
+                             cache where the incoming blocks should be stored.
+            is_last_stage: A boolean indicating whether there are more blocks to be migrated or not.
         """
         raise NotImplementedError
 

@@ -24,4 +24,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Run offline inference example
-      run: ./tools/run_test.sh offline_test
+      run: ./tools/run_test.sh vllm_offline_test

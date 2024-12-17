@@ -24,11 +24,11 @@ from llumnix.entrypoints.utils import get_ip_address
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
-from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
+from .utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service,
-                    generate_serve_command)
+                    generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception)
 
-BENCH_TEST_TIMEOUT_MINS = 30
+BENCH_TEST_TIMEOUT_MINS = 60
 
 
 def parse_log_file(title: str):
@@ -71,67 +71,78 @@ def parse_log_file(title: str):
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
+@pytest.mark.parametrize("enable_pd_disagg", [True, False])
 @pytest.mark.parametrize("enable_simulator", [False, True])
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
 @pytest.mark.parametrize("output_queue_type", ["rayqueue","zmq"])
-async def test_simple_benchmark(
-    ray_env,
-    shutdown_llumnix_service,
-    model,
-    launch_mode,
-    enable_pd_disagg,
-    enable_simulator,
-    output_queue_type,
-):
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
+                                model, launch_mode, enable_pd_disagg, engine, output_queue_type):
+    engine = engine.split("_")[1]
+
+    if "bladeLLM" in engine and launch_mode == "global":
+        pytest.skip("Global launch model for bladeLLM is not supported yet.")
+
+    if "bladeLLM" in engine and enable_simulator:
+        pytest.skip("Simulator for bladeLLM is not supported yet.")
+
+    if output_queue_type == "zmq" and not (
+        launch_mode == "local" and not enable_simulator and not enable_pd_disagg):
+        pytest.skip("Only test zmq queue type when simulator is disabled and prefill-decode "
+                    "disaggregation is disabled.")
+
     if enable_simulator and enable_pd_disagg:
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
 
-    if output_queue_type == "zmq" and not (
-        launch_mode == "local" and not enable_simulator and not enable_pd_disagg
-    ):
-        pytest.skip(
-            "Only test zmq queue type when simulator is disabled and prefill-decode disaggregation is disabled."
-        )
-
-    if launch_mode == 'local':
-        num_prompts = 500 if not enable_pd_disagg else 50
+    if launch_mode == 'local' and not enable_simulator:
+        num_prompts = 500 if engine == 'vLLM' else 300
+        num_prompts = num_prompts if not enable_pd_disagg else 50
     else:
-        num_prompts = 50 if not enable_pd_disagg else 50
-
-    if enable_simulator:
         num_prompts = 50
 
     ip = get_ip_address()
     base_port = 37037
     ip_ports = []
+    device_count = torch.cuda.device_count()
+
+    if "vLLM" in engine:
+        generate_launch_command = generate_vllm_launch_command
+        enable_migration = True
+    elif "bladeLLM" in engine:
+        generate_launch_command = generate_bladellm_launch_command
+        enable_migration = not enable_pd_disagg
+    else:
+        raise ValueError(f"Unknown engine: {engine}")
+
     if launch_mode == 'local':
-        device_count = torch.cuda.device_count()
         if enable_pd_disagg:
             for i in range(device_count//2):
-                port = base_port+i
+                port = base_port+i*100
                 ip_port = f"{ip}:{port}"
                 ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_pd_disagg=enable_pd_disagg,
-                                                         instance_type="prefill",
-                                                         output_queue_type=output_queue_type)
+                launch_command = generate_launch_command(result_filename=str(port)+".out",
+                                                        launch_ray_cluster=False,
+                                                        ip=ip,
+                                                        port=port,
+                                                        model=model,
+                                                        enable_pd_disagg=enable_pd_disagg,
+                                                        enable_migration=enable_migration,
+                                                        instance_type="prefill",
+                                                        output_queue_type=output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
             for i in range(device_count//2):
-                port = base_port+i+device_count//2
+                port = base_port+i*100+(device_count//2)*100
                 ip_port = f"{ip}:{port}"
-                ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_pd_disagg=enable_pd_disagg,
-                                                         instance_type="decode",
-                                                         output_queue_type=output_queue_type)
+                if engine == "vLLM":
+                    ip_ports.append(ip_port)
+                launch_command = generate_launch_command(result_filename=str(port)+".out",
+                                                        launch_ray_cluster=False,
+                                                        ip=ip,
+                                                        port=port,
+                                                        model=model,
+                                                        enable_pd_disagg=enable_pd_disagg,
+                                                        enable_migration=enable_migration,
+                                                        instance_type="decode",
+                                                        output_queue_type=output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
         else:
             for i in range(device_count):
@@ -152,7 +163,7 @@ async def test_simple_benchmark(
             port = base_port+i
             ip_port = f"{ip}:{port}"
             ip_ports.append(ip_port)
-        serve_command = generate_serve_command(result_filename=str(base_port)+".out",
+        serve_command = generate_vllm_serve_command(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,
                                                model=model,
@@ -168,15 +179,17 @@ async def test_simple_benchmark(
         return process
 
     tasks = []
-    for i in range(device_count):
+    for ip_port in ip_ports:
+        port = ip_port.split(":")[1]
         bench_command = generate_bench_command(
-            ip_ports=f"{ip}:{base_port + i}",
+            backend=engine,
+            ip_ports=f"{ip}:{port}",
             model=model,
             num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=5,
-            results_filename=f"{base_port + i}.out"
+            results_filename=f"{port}.out"
         )
         tasks.append(bench_command)
 
@@ -187,15 +200,16 @@ async def test_simple_benchmark(
             try:
                 process = future.result()
                 process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
-
                 assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
             # pylint: disable=broad-except
             except subprocess.TimeoutExpired:
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    if num_prompts >= 500:
-        with open("performance.txt", "a", encoding="utf-8") as f:
+    if launch_mode == 'local' and not enable_pd_disagg and engine == 'vLLM':
+        with open("performance.txt", "w", encoding="utf-8") as f:
             f.write(parse_log_file(title=output_queue_type))
 
     await asyncio.sleep(3)
+
+    check_log_exception()

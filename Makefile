@@ -19,6 +19,10 @@ init:
 vllm_install:
 	@pip install -e .[vllm]
 
+.PHONY: bladellm_install
+bladellm_install:
+	@pip install -e .[bladellm]
+
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed
 	@pylint --rcfile=.pylintrc -s n --jobs=128 ./llumnix
@@ -51,33 +55,49 @@ proto-clean:
 
 ###################################### test begin #######################################
 
-.PHONY: test
-test: check_pytest_installed
-	@pytest -v --ignore=third_party --ignore=tests/e2e_test --disable-warnings
-	@python examlpes/offline_inference.py
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_correctness.py
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_bench.py
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_migration.py
+.PHONY: vllm_test
+vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctness_test vllm_bench_test vllm_migration_test
 
-.PHONY: unit_test
-unit_test: check_pytest_installed
+.PHONY: bladellm_test
+bladellm_test: check_pytest_installed bladellm_unit_test bladellm_correctness_test bladellm_bench_test bladellm_migration_test
+
+.PHONY: vllm_unit_test
+vllm_unit_test: check_pytest_installed
 	@pytest -v --ignore=third_party --ignore=tests/e2e_test --disable-warnings
 
-.PHONY: offline_test
-offline_test:
+.PHONY: bladellm_unit_test
+bladellm_unit_test: check_pytest_installed
+	@pytest -v -k 'engine_bladeLLM or not engine_' --ignore=third_party --ignore=tests/e2e_test --disable-warnings
+
+.PHONY: vllm_offline_test
+vllm_offline_test:
 	@python examlpes/offline_inference.py
 
-.PHONY: correctness_test
-correctness_test:
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_correctness.py
+# TODO(KuilongCui): add bladellm offine inference example
 
-.PHONY: bench_test
-bench_test:
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_bench.py
+.PHONY: vllm_correctness_test
+vllm_correctness_test:
+	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
 
-.PHONY: migration_test
-migration_test:
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_migration.py
+.PHONY: bladellm_correctness_test
+bladellm_correctness_test:
+	@pytest -v -k 'engine_bladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_correctness.py
+
+.PHONY: vllm_bench_test
+vllm_bench_test:
+	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_bench.py
+
+.PHONY: bladellm_bench_test
+bladellm_bench_test:
+	@pytest -v -k 'engine_bladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_bench.py
+
+.PHONY: vllm_migration_test
+vllm_migration_test:
+	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_migration.py
+
+.PHONY: bladellm_migration_test
+bladellm_migration_test:
+	@pytest -v -k 'engine_bladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_migration.py
 
 .PHONY: config_test
 config_test:

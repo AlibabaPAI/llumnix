@@ -21,6 +21,7 @@ from vllm.worker.cache_engine import CacheEngine
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logging.logger import init_logger
+from llumnix.constants import NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION
 from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
@@ -31,7 +32,7 @@ class ProxyActor:
     def exec_method(self, is_driver_worker, handle, *args, **kwargs):
         try:
             if is_driver_worker:
-                ret = ray.get(handle.execute_engine_method_async.remote("execute_worker_method_async", *args, **kwargs))
+                ret = ray.get(handle.execute_async_engine_method.remote("execute_worker_method_async", *args, **kwargs))
             else:
                 ret = ray.get(handle.execute_method.remote(*args, **kwargs))
         # pylint: disable=try-except-raise
@@ -39,8 +40,6 @@ class ProxyActor:
             raise
 
         return ret
-
-NUMPY_SUPPORTED_DTYPES = [torch.float32, torch.float16]
 
 
 class RayRpcMigrationBackend(MigrationBackendBase):
@@ -57,7 +56,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
                                         name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote()
 
-        if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES:
+        if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION:
             self.rpc_dtype = self.cache_engine[0].dtype
         else:
             self.rpc_dtype = torch.float32
@@ -101,14 +100,15 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
             offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
             send_blocks = src_blocks[start_idx:start_idx+offset]
-            ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", None, send_blocks)
+            ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", send_blocks)
             if rpc_numpy_cache is not None:
                 self.do_recv(rpc_numpy_cache, recv_blocks)
             rpc_numpy_cache = ray.get(ray_obj)
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
         self.do_recv(rpc_numpy_cache, recv_blocks)
 
-    def do_send(self, dst_handle, blocks: List[int], virtuel_engine: int=0):
+    # pylint: disable=arguments-differ
+    def do_send(self, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         # src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
@@ -125,6 +125,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         torch.cuda.Stream.synchronize(self.migration_stream)
         return send_cache.to(self.rpc_dtype).numpy()
 
+    # pylint: disable=arguments-differ
     def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         # src_to_dst = dict(enumerate(blocks))
@@ -269,6 +270,7 @@ class RayColMigrationBackend(MigrationBackendBase):
             self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", self.global_rank, send_blocks)
             self.do_recv(src_rank, recv_blocks)
 
+    # pylint: disable=unused-argument,arguments-differ
     def do_send(self, dst_handle, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
@@ -288,6 +290,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                     col.send(send_cache, dst_handle, self.group_name)
         self.migration_stream.synchronize()
 
+    # pylint: disable=unused-argument,arguments-differ
     def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         src_to_dst: List[Tuple[int, int]] = []

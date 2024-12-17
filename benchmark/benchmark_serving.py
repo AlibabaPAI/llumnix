@@ -12,6 +12,7 @@
 # limitations under the License.
 
 #!/usr/bin/env python3
+from functools import partial
 import aiohttp
 import argparse
 import asyncio
@@ -68,11 +69,49 @@ async def async_request_gen(generator, qps: float, distribution="uniform", coeff
 
 class GenerationBackend(str, Enum):
     vLLM = "vLLM"
+    bladeLLM = "bladeLLM"
     NaiveHfPipeline = "NaiveHfPipeline"
     RayGen = "RayGen"
     FasterTransformer = "FasterTransformer"
 
-async def query_model_vllm(prompt, verbose, ip_ports):
+def vllm_server_req_func(prompt, output_len):
+    request_dict = {
+        "prompt": prompt,
+        "n": 1,
+        "best_of": 1,
+        "temperature": 0.0,
+        "top_k": 1,
+        "max_tokens": max(output_len, 1),
+        "ignore_eos": True,
+        "stream": False,
+    }
+    return request_dict
+
+def bladellm_server_req_func(prompt, output_len):
+    request_dict = {
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "n": 1,
+        "best_of": 1,
+        "temperature": 0.5,
+        "stream": "false",
+        "presence_penalty": 1.1,
+        "repetition_penalty": 1.1,
+        "max_tokens": output_len,
+        "ignore_eos": "true",
+    }
+
+    return request_dict
+
+async def inner_query_model(prompt, verbose, ip_ports, server_req_func):
     prompt, prompt_len, expected_response_len = prompt
 
     # Evenly dispatch request to the given api servers.
@@ -83,25 +122,13 @@ async def query_model_vllm(prompt, verbose, ip_ports):
     global num_finished_requests
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        best_of = 1
-        output_len = expected_response_len
-        request_dict = {
-            "prompt": prompt,
-            "n": 1,
-            "best_of": best_of,
-            "temperature": 1.0,
-            "top_k": 1,
-            "max_tokens": max(output_len, 1),
-            "ignore_eos": True,
-            "stream": False,
-        }
+        request = server_req_func(prompt, expected_response_len)
         if verbose:
             print('Querying model')
         try:
-            async with session.post(f'http://{ip_ports[server_id]}/generate_benchmark', json=request_dict) as resp:
+            async with session.post(f'http://{ip_ports[server_id]}/generate_benchmark', json=request) as resp:
                 if verbose:
                     print('Done')
-
                 output = await resp.json()
                 # necessary for latency calc
                 output['response_len'] = expected_response_len
@@ -189,7 +216,11 @@ def calculate_throughput(queries,
     all_prompt_lens = prompt_lens
     all_response_lens = response_lens
     all_total_tokens = [all_prompt_lens[i] + all_response_lens[i] for i in range(len(all_prompt_lens))]
-    all_waiting_latencies = [all_e2e_latencies[i] - all_inference_latencies[i] for i in range(len(all_e2e_latencies))]
+
+    if len(all_inference_latencies) == len(all_e2e_latencies):
+        all_waiting_latencies = [all_e2e_latencies[i] - all_inference_latencies[i] for i in range(len(all_e2e_latencies))]
+    else:
+        all_waiting_latencies = []
 
     if naive_hf_lens:
         # Manually count naive hf tok len
@@ -427,7 +458,9 @@ async def benchmark(
 ):
 
     if backend == GenerationBackend.vLLM:
-        query_model = query_model_vllm
+        query_model = partial(inner_query_model, server_req_func=vllm_server_req_func)
+    elif backend == GenerationBackend.bladeLLM:
+        query_model = partial(inner_query_model, server_req_func=bladellm_server_req_func)
     else:
         raise ValueError(f'unknown backend {backend}')
 
@@ -718,7 +751,6 @@ def main():
 
     backend = GenerationBackend[args.backend]
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, trust_remote_code=args.trust_remote_code)
-    print(tokenizer)
 
     if args.dataset_type:
         random.seed(0xCADE)

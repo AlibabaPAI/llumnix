@@ -29,6 +29,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import initialize_placement_group
+from llumnix.arg_utils import InstanceArgs
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -102,7 +103,8 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
-async def test_migration_correctness(ray_env, migration_backend, migration_request_status):
+async def test_migration_correctness(setup_ray_env, migration_backend, migration_request_status):
+    instance_args = InstanceArgs(instance_type="no_constraints")
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0": 0, "1": 1, "2": 2}
     if migration_request_status == 'running':
@@ -123,6 +125,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         name='instance_2',
         namespace='llumnix',
         scheduling_strategy=scheduling_strategy).remote(
+            instance_args=instance_args,
             instance_id="2",
             request_output_queue_type=request_output_queue_type,
             backend_type=BackendType.VLLM,
@@ -200,7 +203,8 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
 
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
-async def test_pd_diaggregation_correctness(ray_env, migration_backend):
+async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
+    instance_args = InstanceArgs(instance_type="no_constraints")
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)

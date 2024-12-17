@@ -29,6 +29,7 @@ from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
+from llumnix.arg_utils import InstanceArgs
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -54,8 +55,8 @@ class MockLlumlet:
     def get_instance_info(self):
         return self.instance_info
 
-    def is_ready(self) -> bool:
-        return True
+    def is_ready(self) -> InstanceArgs:
+        return InstanceArgs(instance_type="no_constraints")
 
     def get_all_request_ids(self):
         return list(self.request_id_set)
@@ -163,6 +164,7 @@ def test_init_llumlets_sim(ray_env, manager):
     # pylint: disable=import-outside-toplevel
     import llumnix.backends.vllm.simulator
     llumnix.backends.vllm.simulator.BackendSimVLLM = MockBackendSim
+    instance_args = [InstanceArgs(instance_type="no_constraints")]
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM, 1))
     num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
@@ -187,6 +189,7 @@ def test_scale_up_and_down(ray_env, manager):
 def test_connect_to_instances(ray_env):
     initial_instances = 4
     instance_ids, llumlets = init_llumlets(initial_instances)
+    instance_args = [InstanceArgs(instance_type="no_constraints")]*initial_instances
     ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
     manager = init_manager()
     instance_ids_1, llumlets_1 = init_llumlets(initial_instances)
@@ -253,6 +256,7 @@ def get_instance_info_migrate_out(instance_id):
 
 def test_update_instance_info_loop_and_migrate(ray_env, manager):
     num_llumlets = 5
+    instance_args = [InstanceArgs(instance_type="no_constraints")]*num_llumlets
     instance_ids, llumlets = init_llumlets(num_llumlets)
 
     for i in range(num_llumlets):

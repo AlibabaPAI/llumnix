@@ -14,7 +14,6 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-
 class MigrationBackendBase(ABC):
     @abstractmethod
     def init_backend(self, group_name, world_size, rank) -> bool:
@@ -33,9 +32,9 @@ class MigrationBackendBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def do_send(self, dst_handle, blocks: List[int], virtuel_engine: int):
+    def do_send(self, *args, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
-    def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int):
+    def do_recv(self, *args, **kwargs):
         raise NotImplementedError

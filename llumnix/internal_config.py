@@ -51,17 +51,17 @@ class MigrationConfig:
             migration_last_stage_max_blocks: int,
             migration_max_stages: int,
             migration_backend_init_timeout: float,
-            migration_backend_transfer_type: str = "",
-            grpc_migration_backend_server_address: str = "",
+            kvtransfer_migration_backend_transfer_type: str = "",
+            grpc_migration_backend_server_port: int = 50051,
             kvtransfer_migration_backend_naming_url: str = "",
             ) -> None:
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
-        self.migration_backend_transfer_type = migration_backend_transfer_type
+        self.kvtransfer_migration_backend_transfer_type = kvtransfer_migration_backend_transfer_type
         self.migration_num_layers = migration_num_layers
         self.migration_buffer_blocks = migration_buffer_blocks
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages
         self.migration_backend_init_timeout = migration_backend_init_timeout
-        self.grpc_migration_backend_server_address = grpc_migration_backend_server_address
+        self.grpc_migration_backend_server_port = grpc_migration_backend_server_port
         self.kvtransfer_migration_backend_naming_url = kvtransfer_migration_backend_naming_url

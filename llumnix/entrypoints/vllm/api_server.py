@@ -18,6 +18,7 @@ import asyncio
 import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+import ray
 import uvicorn
 
 from vllm.sampling_params import SamplingParams
@@ -47,6 +48,12 @@ async def lifespan(fastapi_app: FastAPI):
     asyncio.create_task(llumnix_client.get_request_outputs_loop())
     yield
     llumnix_client.request_output_queue.cleanup()
+    for instance in llumnix_client.instances.values():
+        try:
+            ray.kill(instance)
+        # pylint: disable=bare-except
+        except:
+            pass
 
 app = FastAPI(lifespan=lifespan)
 

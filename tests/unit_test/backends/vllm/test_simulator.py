@@ -22,7 +22,6 @@ from .utils import create_dummy_prompt, initialize_scheduler
 
 
 class MockBackendSim(BackendSimVLLM):
-
     def _get_lantecy_mem(self, *args, **kwargs):
         latency_mem = LatencyMemData({}, {}, {})
         latency_mem.prefill_model_params = (0,0)
@@ -100,7 +99,7 @@ async def test_backend(ray_env):
 
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     request_id0 = random_uuid()
-    sim_backend.add_request(request_id0, server_info, math.inf, "hello world", sampling_params)
+    await sim_backend.add_request(request_id0, server_info, math.inf, "hello world", sampling_params)
 
     async def check_output_len():
         request_output_queue = que

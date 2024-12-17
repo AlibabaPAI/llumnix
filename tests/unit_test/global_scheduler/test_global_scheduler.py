@@ -25,7 +25,7 @@ from .test_llm_engine_manager import get_instance_info_migrate_in, get_instance_
 def init_global_scheduler():
     global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', math.inf,
                                                     'defrag_constrained', 3.0, True, 'avg_load',
-                                                    10, 60, False, 'rpc')
+                                                    10, 60, False, 'rayrpc')
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler
 

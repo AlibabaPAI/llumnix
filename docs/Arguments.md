@@ -32,7 +32,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
             [--polling-interval POLLING_INTERVAL]
-            [--migration-backend {gloo,nccl,rpc,grpc,kvtransfer}]
+            [--migration-backend {gloo,nccl,rayrpc,grpc,kvtransfer}]
             [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
             [--migration-backend-transfer-type {cuda_ipc,rdma,}]
             [--migration-backend-kvtransfer-naming-url MIGRATION_BACKEND_KVTRANSFER_NAMING_URL]
@@ -147,8 +147,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--migration-backend`
 - Communication backend of migration.
-- Possible choices: gloo, rpc, grpc, kvtransfer. [gloo, rpc] are available for vllm and [grpc, kvtransfer] are available for bladellm.
-- Default: "rpc"
+- Possible choices: gloo, rayrpc, grpc, kvtransfer. [gloo, rayrpc] are available for vllm and [grpc, kvtransfer] are available for bladellm.
+- Default: "rayrpc"
 
 `--migration-backend-transfer-type`
 - Transfer type for migration backend grpc and kvTransfer.

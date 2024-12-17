@@ -83,7 +83,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 
         self.backend_engine.engine.step_async = step_async_try_schedule
 
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
 async def test_migration_correctness(setup_ray_env, migration_backend, migration_request_status):
@@ -203,7 +203,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
         await test_correctness(prompt)
     que.cleanup()
 
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)

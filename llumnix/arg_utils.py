@@ -317,8 +317,8 @@ class EngineManagerArgs:
                             help='profiling result file path')
         parser.add_argument('--migration-backend',
                             type=str,
-                            choices=['gloo','nccl','rpc','grpc','kvtransfer'],
-                            help='communication backend of migration, [gloo, rpc] are available for vllm \
+                            choices=['gloo','nccl','rayrpc','grpc','kvtransfer'],
+                            help='communication backend of migration, [gloo, rayrpc] are available for vllm \
                                 and [grpc, kvtransfer] are available for bladellm')
         parser.add_argument('--migration-backend-transfer-type',
                             type=str,

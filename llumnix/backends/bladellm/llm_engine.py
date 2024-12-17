@@ -39,7 +39,7 @@ from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 
-class AsyncBackQueue(APIWrapper):
+class AsyncBackQueueWrapper(APIWrapper):
     def __init__(self, placement_group, node_id, instance_id, output_queue_type) -> None:
         super().__init__(args=None, resp_queue=None)
         if placement_group:
@@ -144,7 +144,7 @@ class AsyncLLMEngineLlumnixMixin:
     def start(self, loop: asyncio.AbstractEventLoop):
         super().start(loop)
         self._client = self.init_client_from_engine()
-        self.trans_wrapper: AsyncBackQueue = AsyncBackQueue(self.placement_group,
+        self.trans_wrapper: AsyncBackQueueWrapper = AsyncBackQueueWrapper(self.placement_group,
                               self.node_id, self.instance_id, self.output_queue_type)
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
@@ -202,11 +202,9 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                 node_id: Optional[str],
                 *args, **kwargs,
                 ) -> None:
-        logger.info("aaa")
         AsyncLLMEngine.__init__(self, *args, **kwargs)
-        logger.info("bbb")
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group, node_id)
-        logger.info("ccc")
+
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,
             instance_id: str,

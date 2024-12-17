@@ -62,7 +62,7 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for e2e test")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rpc', 'gloo'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
 async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':

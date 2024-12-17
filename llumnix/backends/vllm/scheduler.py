@@ -98,6 +98,8 @@ class SchedulerLlumnix(Scheduler):
 
     def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         seq = backend_request.get_seqs()[0]
+        if seq.seq_id not in self.block_manager.block_tables:
+            return []
         blocks = self.block_manager.get_block_table(seq)
         block_table = self.block_manager.block_tables[seq.seq_id]
         token_ids = backend_request.token_ids

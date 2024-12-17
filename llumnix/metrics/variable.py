@@ -71,3 +71,14 @@ class Status(Variable):
 
     def observe(self, value: Any) -> None:
         self._value = value
+
+class PassiveStatus(Variable):
+    def __init__(self, name):
+        super().__init__(name)
+        self.get_func = None
+
+    def collect(self) -> Any:
+        return self.get_func() if self.get_func else None
+
+    def observe(self, value) -> None:
+        self.get_func = value

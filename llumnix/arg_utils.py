@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import dataclasses
 from dataclasses import dataclass
-import argparse
 from typing import List, Tuple, Union
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
@@ -62,6 +62,11 @@ class EntrypointsArgs:
     disable_keep_serve_process_alive: bool = None
 
     def __post_init__(self):
+        # Check if all fields default to None
+        for field_info in dataclasses.fields(self):
+            if field_info.default is not None:
+                raise ValueError(f"The default value of '{field_info.name}' should be None")
+            
         for attr in dataclasses.fields(self):
             if getattr(self, attr.name) is None:
                 setattr(self, attr.name, getattr(_C.SERVER, attr.name.upper()))
@@ -85,6 +90,8 @@ class EntrypointsArgs:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        # TODO(KuilongCui): add a checker to ensure that for arguments configured with store_true has its default value 
+        # set to False in the configuration settings, otherwise, it cannot be set to False.
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
                             help='if launch ray cluster')
@@ -171,7 +178,6 @@ class ManagerArgs:
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
 
     def create_global_scheduler_config(self, is_group_kind_migration_backend) -> Tuple[GlobalSchedulerConfig]:
-        # Create the GlobalScheduler Configuration.
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.dispatch_policy,
                                                         self.pair_migration_policy,
@@ -312,7 +318,7 @@ class InstanceArgs:
     migration_num_layers: int = None
     migration_backend_init_timeout: float = None
     migration_backend_transfer_type: str = None
-    grpc_migration_backend_server_address: str = None
+    grpc_migration_backend_server_port: int = None
     kvtransfer_migration_backend_naming_url: str = None
     migration_last_stage_max_blocks: int = None
     migration_max_stages: int = None
@@ -376,7 +382,7 @@ class InstanceArgs:
                                            self.migration_max_stages,
                                            self.migration_backend_init_timeout,
                                            self.migration_backend_transfer_type,
-                                           self.grpc_migration_backend_server_address,
+                                           self.grpc_migration_backend_server_port,
                                            self.kvtransfer_migration_backend_naming_url)
         return migration_config
 
@@ -439,9 +445,9 @@ class InstanceArgs:
                             type=str,
                             choices=['cuda_ipc','rdma'],
                             help='transfer type for migration backend grpc and kvTransfer')
-        parser.add_argument('--grpc-migration-backend-server-address',
-                            type=str,
-                            help='address of grpc server for migration backend')
+        parser.add_argument('--grpc-migration-backend-server-port',
+                            type=int,
+                            help='port of grpc server for migration backend')
         parser.add_argument('--kvtransfer-migration-backend-naming-url',
                             type=str,
                             help='url of naming server for kvtransfer migration backend')

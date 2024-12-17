@@ -15,9 +15,13 @@
 init:
 	@git submodule update --init --recursive
 
-.PHONY: install
-install:
+.PHONY: vllm_install
+vllm_install:
 	@pip install -e .[vllm]
+
+.PHONY: bladellm_install
+bladellm_install:
+	@pip install -e .[bladellm]
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed

@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Iterable, List, Union, Deque, Tuple
 
+import ray
+
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 
@@ -39,7 +41,7 @@ class BackendType(str, Enum):
 class BackendInterface(ABC):
     # Methods for inference
     @abstractmethod
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
+    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
                     *args, **kwargs) -> None:
         """Adds a new inference request to the backend's processing queue.
 
@@ -71,7 +73,7 @@ class BackendInterface(ABC):
 
     # Methods for migration
     @abstractmethod
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
+    async def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         """Retrieves the incremental block table for a given request.
 
         This method is used to fetch a list of block numbers that represent the incremental
@@ -273,7 +275,8 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
+                          src_blocks: List[int], dst_blocks: List[int], has_more: bool):
         """
         Sends cache blocks from the source instance to the destination instance.
 
@@ -285,10 +288,12 @@ class BackendInterface(ABC):
             dst_ray_actor: A handle to the Ray actor representing the destination instance where the cache
                            blocks are to be sent. This handle is used to reference the destination's
                            execution context and manage the block transfer.
+            request_id: the request id of the request that triggered the migration.
             src_blocks: A list of integers representing the block indexs in the source instance's
                              cache that need to be sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's
                              cache where the incoming blocks should be stored.
+            has_more: A boolean indicating whether there are more blocks to be migrated in the future.
         """
         raise NotImplementedError
 

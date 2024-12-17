@@ -38,6 +38,7 @@ class InstanceInfo:
     num_batched_tokens: int = None
     num_seqs = None
     running_seq_lens: List[int] = field(default_factory=list)
+    all_request_ids: List[int] = field(default_factory=list)
     last_inference_latency: float = None
     inference_type: RequestInferenceType = None
 
@@ -53,6 +54,11 @@ class InstanceInfo:
     waiting_time_first_waiting_request: int = 0
     num_blocks_all_waiting_requests: int = 0
     num_blocks_last_running_request: int = 0
+
+    # cache state
+    num_cached_request_ids: int = 0
+    num_wait_update_request_ids: int = 0
+    num_msg_producer_cached_request: int = 0
 
     # on-demand init infos
     dispatch_load_metric: float = -np.inf

@@ -142,5 +142,5 @@ _C.MANAGER.ENABLE_PD_DISAGG = False
 # INSTANCE CONFIGURATION
 # -----------------------------------------------------------------------------
 _C.INSTANCE = LC()
-# Engine types: PREFILL, DECODE, NO_CONSTRAINTS
-_C.INSTANCE.INSTANCE_TYPE = ""
+# Engine types: prefill, decode, no_constraints
+_C.INSTANCE.INSTANCE_TYPE = "no_constraints"

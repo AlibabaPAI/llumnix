@@ -22,7 +22,7 @@ def get_args(cfg, parser, cli_args):
     LlumnixEntrypointsArgs.check_args(llumnix_entrypoints_args, parser)
     engine_manager_args = EngineManagerArgs.from_llumnix_config(cfg)
     EngineManagerArgs.check_args(engine_manager_args, parser)
-    instance_args = InstanceArgs.from_llumnix_config(cli_args)
+    instance_args = InstanceArgs.from_llumnix_config(cfg)
     InstanceArgs.check_args(instance_args, engine_manager_args, parser)
     engine_args = AsyncEngineArgs.from_cli_args(cli_args)
     check_engine_args(engine_args, engine_manager_args)

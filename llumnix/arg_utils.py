@@ -318,7 +318,7 @@ class EngineManagerArgs:
         parser.add_argument('--migration-backend',
                             type=str,
                             choices=['gloo','nccl','rayrpc','grpc','kvtransfer'],
-                            help='communication backend of migration, [gloo, rayrpc] are available for vllm \
+                            help='communication backend of migration, [gloo, rayrpc, nccl] are available for vllm \
                                 and [grpc, kvtransfer] are available for bladellm')
         parser.add_argument('--migration-backend-transfer-type',
                             type=str,

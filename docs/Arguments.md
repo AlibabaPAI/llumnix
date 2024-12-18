@@ -147,13 +147,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--migration-backend`
 - Communication backend of migration.
-- Possible choices: gloo, rayrpc, grpc, kvtransfer. [gloo, rayrpc] are available for vllm and [grpc, kvtransfer] are available for bladellm.
-- Default: "rayrpc"
+- Possible choices: gloo, rayrpc, nccl, grpc, kvtransfer. [gloo, rayrpc, nccl] are available for vllm and [grpc, kvtransfer] are available for bladellm.
+- Default: "gloo"
 
 `--migration-backend-transfer-type`
-- Transfer type for migration backend grpc and kvTransfer.
-- Possible choices: cuda_ipc, rdma, ""
-- Default: ""
+- Transfer type for migration backend kvTransfer.
+- Possible choices: cuda_ipc, rdma
+- Default: "rdma"
 
 `--migration-backend-server-address`
 - Address of grpc server for migration backend
@@ -161,7 +161,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--migration-backend-kvtransfer-naming-url`
 - URL of naming server for kvtransfer migration backend
-- Default: ""
+- Default: "file:/tmp/llumnix/naming/"
 
 `--migration-buffer-blocks`
 - Number of buffer blocks in migration.

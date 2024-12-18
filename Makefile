@@ -21,15 +21,15 @@ install:
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed
-	@pylint --rcfile=.pylintrc -s n  --jobs=128 ./llumnix
-	
+	@pylint --rcfile=.pylintrc -s n --jobs=128 ./llumnix
+
 	@pylint --rcfile=.pylintrc \
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
 			-s n --jobs=128 ./tests
 
 .PHONY: test
 test: check_pytest_installed
-	@pytest -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
+	@pytest -v --ignore=third_party --ignore=tests/e2e_test --disable-warnings
 	@python examlpes/offline_inference.py
 	@pytest -v -x -s --tb=long ./tests/e2e_test/test_e2e.py
 	@pytest -v -x -s --tb=long ./tests/e2e_test/test_bench.py
@@ -37,7 +37,7 @@ test: check_pytest_installed
 
 .PHONY: unit_test
 unit_test: check_pytest_installed
-	@pytest -v --ignore=third_party/ --ignore=tests/e2e_test --disable-warnings
+	@pytest -v --ignore=third_party --ignore=tests/e2e_test --disable-warnings
 	
 .PHONY: offline_test
 offline_test:

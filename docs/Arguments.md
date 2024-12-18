@@ -42,7 +42,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
             [--enable-pd-disagg]
-            [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
+            [--instance-type INSTANCE_TYPE]
             [--log-request-timestamps]
 
 ```
@@ -189,8 +189,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-pd-disagg`
 - Enable prefill decoding disaggregation.
 
-`--num-dispatch-instances`
-- Number of available instances for dispatch.
+`--instance-type`
+- Instance types for the engine.
+- Possible choices: prefill, decode, no_constraints
 
 # Unsupported vLLM feature options
 

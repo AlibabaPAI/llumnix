@@ -101,18 +101,14 @@ class LLMEngineManager:
             self.instance_last_logged_empty = {}
 
         # When manager starts, it automatically connects to all existing instances.
-        self._connect_to_instances()
+        asyncio.run_coroutine_threadsafe(self._connect_to_instances(), asyncio.get_event_loop())
 
-    async def generate(
-            self,
-            request_id: str,
-            server_info: ServerInfo,
-            *args,
-            **kwargs,) -> None:
+    async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
             logger.info("No instance available temporarily, sleep {}s, "
                         "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
             await asyncio.sleep(RETRIES_INTERVALS)
+
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:
             if hasattr(server_info, 'request_timestamps'):
@@ -178,6 +174,9 @@ class LLMEngineManager:
                     self.global_scheduler.update_instance_infos([ret])
             else:
                 dead_instance_ids.append(instance_id)
+                logger.info("[_update_instance_info_loop] dead instances: {}.".format(ret))
+                logger.info("[_update_instance_info_loop] dead instances: {}.".format(self.instances))
+
         while True:
             try:
                 await asyncio.sleep(interval)
@@ -191,7 +190,6 @@ class LLMEngineManager:
                     tasks.append(task)
                 await asyncio.gather(*tasks, return_exceptions=True)
                 if len(dead_instance_ids) > 0:
-                    logger.info("[_update_instance_info_loop] dead instances: {}.".format(dead_instance_ids))
                     self.scale_down(dead_instance_ids)
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
@@ -211,6 +209,7 @@ class LLMEngineManager:
         while True:
             await asyncio.sleep(interval)
             self.request_instance = {}
+
     async def _push_migrations(self) -> None:
         # Push migrate when the instance_info have updated a certain number of times.
         if self.enable_pd_disagg:
@@ -366,7 +365,7 @@ class LLMEngineManager:
         # a coroutine is already handling the changes in the number of instances in the cluster and it will account for the changes
         # caused by this scale-up (see rebuild_migrate_backend for details). Therefore, we simply return in this case. Specifically,
         # for RPC, the Ray actor handle is used for the migration cache, so there is no need to rebuild the group.
-        if self.enable_migration and self.engine_manager_args.migration_backend != 'rpc' \
+        if self.enable_migration and self.engine_manager_args.migration_backend in ['gloo', 'nccl'] \
             and indeed_update and no_pending_instance:
             asyncio.create_task(self.rebuild_migrate_backend())
 
@@ -391,7 +390,7 @@ class LLMEngineManager:
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
 
-        if self.enable_migration and self.engine_manager_args.migration_backend != 'rpc':
+        if self.enable_migration and self.engine_manager_args.migration_backend in ['gloo', 'nccl']:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
 
@@ -402,7 +401,7 @@ class LLMEngineManager:
 
         return self.num_instances
 
-    def _connect_to_instances(self):
+    async def _connect_to_instances(self):
         actor_names_dict = ray.util.list_named_actors(True)
         instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'] != MANAGER_ACTOR_NAME]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
@@ -412,7 +411,7 @@ class LLMEngineManager:
             instance_id = instance_actor_name[len('instance_'):]
             if instance_id not in self.instances:
                 try:
-                    ray.get(instance_actor_handle.is_ready.remote())
+                    await instance_actor_handle.is_ready.remote()
                 # pylint: disable=W0703
                 except Exception as e:
                     logger.info("connect to instance {} abort, which may be not ready or alive, err: {}".format(instance_id, e))
@@ -454,13 +453,14 @@ class LLMEngineManager:
                                               profiling_database=profiling_database)
         return engine_manager
 
-    # TODO(s5u13b): Significant duplication with llumlet_utils.init_llumlets. Consider reducing duplicate codes.
-    def init_llumlets(self, engine_args, node_id: str, request_output_queue_type: QueueType) -> Tuple[List[str], List[Llumlet]]:
+    # TODO(s5u13b): Fix the logger when enabling init instance by manager.
+    def init_llumlets(self, engine_args, node_id: str, request_output_queue_type: QueueType,
+                  backend_type: BackendType, world_size: int, *args, **kwargs) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
-        engine_config = engine_args.create_engine_config()
-        parallel_config = engine_config.parallel_config
         instance_ids: List[str] = []
         llumlets: List[Llumlet] = []
+        if 'instance_ids' in kwargs and kwargs['instance_ids'][0]:
+            instance_ids = kwargs['instance_ids']
         for _ in range(engine_manager_args.initial_instances):
             instance_id = random_uuid()
             if not engine_manager_args.profiling_result_file_path:
@@ -470,12 +470,15 @@ class LLMEngineManager:
                     True,
                     node_id,
                     instance_id,
-                    BackendType.VLLM,
-                    parallel_config.world_size,
+                    backend_type,
+                    world_size,
                     engine_manager_args.create_migration_config(),
                     engine_args,
+                    *args,
+                    **kwargs
                 )
             else:
+                assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
                     engine_manager_args.disable_fixed_node_init_instance,
@@ -483,10 +486,11 @@ class LLMEngineManager:
                     node_id,
                     instance_id,
                     BackendType.SIM_VLLM,
-                    parallel_config.world_size,
+                    world_size,
                     engine_manager_args.create_migration_config(),
                     engine_manager_args.profiling_result_file_path,
-                    engine_args,
+                    *args,
+                    **kwargs
                 )
             instance_ids.append(instance_id)
             llumlets.append(llumlet)

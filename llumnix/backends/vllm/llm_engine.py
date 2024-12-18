@@ -37,8 +37,8 @@ from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
-from llumnix.queue.queue_client_base import QueueClientBase
-from llumnix.queue.utils import init_request_output_queue_client, QueueType
+from llumnix.queue.utils import QueueType
+from llumnix.backends.utils import AsyncPutQueueActor
 
 logger = init_logger(__name__)
 

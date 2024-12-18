@@ -33,8 +33,8 @@ class MigrationScheduler:
         # to prevent instances of migration backends that have not been initialized from participating in migration.
         migration_backend_init_filter = CustomFilter()
         migration_backend_init_filter.set_filter_condtition(
-            src_filter=lambda _: migration_backend == 'rpc',
-            dst_filter=lambda _: migration_backend == 'rpc')
+            src_filter=lambda _: migration_backend not in ['gloo', 'nccl'],
+            dst_filter=lambda _: migration_backend not in ['gloo', 'nccl'])
         self.migration_filter.register_filter("migration_backend_init_filter",
                                               migration_backend_init_filter)
 

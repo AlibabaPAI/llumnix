@@ -27,6 +27,7 @@ class EngineState(str, Enum):
 class BackendType(str, Enum):
     VLLM = "VLLM"
     SIM_VLLM = "SIM_VLLM"
+    BLADELLM = "BLADELLM"
 
     @staticmethod
     def is_sim_backend(status: "BackendType") -> bool:
@@ -34,6 +35,7 @@ class BackendType(str, Enum):
             BackendType.SIM_VLLM,
         ]
 
+# TODO(KuilongCui): separate backend interface into two parts: DispatchBackendInterface and MigrationBackendInterface
 class BackendInterface(ABC):
     # Methods for inference
     @abstractmethod
@@ -64,12 +66,6 @@ class BackendInterface(ABC):
 
         Args:
             request_id: A single request ID or an iterable of request IDs to abort.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    async def _start_engine_step_loop(self) -> None:
-        """Start step loop of backend engine.
         """
         raise NotImplementedError
 

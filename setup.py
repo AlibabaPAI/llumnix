@@ -18,11 +18,11 @@ from typing import List
 ROOT_DIR = os.path.dirname(__file__)
 
 def get_path(*filepath) -> str:
-    return os.path.join(ROOT_DIR, *filepath)
+    return os.path.join(ROOT_DIR, 'requirements', *filepath)
 
-def get_requirements() -> List[str]:
+def get_requirements(engine: str) -> List[str]:
     """Get Python package dependencies from requirements.txt."""
-    with open(get_path("requirements.txt")) as f:
+    with open(get_path(f"requirements_{engine}.txt")) as f:
         requirements = f.read().strip().split("\n")
     return requirements
 
@@ -42,7 +42,10 @@ setup(
     url='https://github.com/AlibabaPAI/llumnix',
     license="Apache 2.0",
     packages=find_packages(),
-    install_requires=get_requirements(),
+    extras_require={
+        'vllm': get_requirements('vllm'),
+        'bladellm': get_requirements('bladellm'),
+    },
     platforms=["all"],
     classifiers=[
           'Programming Language :: Python',

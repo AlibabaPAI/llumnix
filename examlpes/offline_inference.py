@@ -6,7 +6,7 @@ import ray
 
 from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager, init_llumlets
 from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
-                     EngineArgs, QueueType)
+                     EngineArgs, QueueType, BackendType)
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
 
@@ -40,7 +40,7 @@ llumlet_ids: List[str] = None
 llumlets: List[Llumlet] = None
 llumlet_ids, llumlets = init_llumlets(
     manager_args, engine_args, ray.get_runtime_context().get_node_id(),
-    QueueType("rayqueue")
+    QueueType("rayqueue"), BackendType.VLLM, 1,
 )
 
 

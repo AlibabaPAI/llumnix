@@ -36,7 +36,8 @@ class InstanceInfo:
                  num_blocks_all_waiting_requests: int = 0,
                  inference_type: RequestInferenceType = RequestInferenceType.PREFILL,
                  instance_type: str = "",
-                 num_batched_tokens: int = 0) -> None:
+                 num_batched_tokens: int = 0,
+                 instance_id: str = "",) -> None:
         self.num_total_gpu_blocks = num_total_gpu_blocks
         self.num_watermark_blocks = num_watermark_blocks
         self.num_used_gpu_blocks = num_used_gpu_blocks
@@ -67,7 +68,7 @@ class InstanceInfo:
         self.finished_request_ids = None
 
         # For record statistics, assigned in backend engine.
-        self.instance_id = None
+        self.instance_id = instance_id
         self.step_id = None
         self.timestamp = None
         self.profiling_data = ()

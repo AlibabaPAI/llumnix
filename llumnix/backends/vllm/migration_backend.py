@@ -75,7 +75,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.migration_stream = torch.cuda.Stream()
 
     def init_backend(self, group_name, world_size, rank) -> bool:
-        logger.info("create rpc migration backend successfully.")
+        logger.info("create rayrpc migration backend successfully.")
         return True
 
     def destory_backend(self) -> None:
@@ -85,7 +85,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
     def warmup(self) -> bool:
         self.actor.exec_method.remote(self.is_driver_worker, "do_send", [0])
-        logger.info("rpc migration backend warmup successfully.")
+        logger.info("rayrpc migration backend warmup successfully.")
         return True
 
     # The src actor will pack the kv-cache data layer by layer. Specifically, NumPy is used for the transfer
@@ -285,7 +285,7 @@ def get_migration_backend(migration_config: MigrationConfig, cache_engine: Cache
     target_migration_backend = None
     backend = migration_config.migration_backend
 
-    assert backend in ['nccl', 'gloo', 'rpc'], "Unsupported migration backend: {} for llumnix".format(backend)
+    assert backend in ['nccl', 'gloo', 'rayrpc'], "Unsupported migration backend: {} for llumnix".format(backend)
 
     if backend in ['nccl', 'gloo']:
         target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,

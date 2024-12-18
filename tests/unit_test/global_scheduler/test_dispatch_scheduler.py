@@ -21,7 +21,7 @@ INSTANCE_NUM = 4
 
 def init_dispatch_scheduler(policy='load'):
     instance_load_calculator = InstanceLoadCalculator('remaining_steps', True)
-    dispatch_scheduler = DispatchScheduler(policy, instance_load_calculator, 1)
+    dispatch_scheduler = DispatchScheduler(policy, instance_load_calculator, 2)
     return dispatch_scheduler
 
 @pytest.fixture

@@ -32,7 +32,7 @@ def test_launch_ray_cluster():
     ip_address = get_ip_address()
     os.environ['HEAD_NODE'] = '1'
     os.environ['HEAD_NODE_IP'] = ip_address
-    result = launch_ray_cluster(6379)
+    result = launch_ray_cluster(6383)
     assert result.returncode == 0
 
 def test_init_manager(setup_ray_env):

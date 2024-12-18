@@ -90,8 +90,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  request_output_queue_type: QueueType,
                  placement_group: Optional[PlacementGroup],
                  node_id: Optional[str],
-                 *arg, **kwargs) -> None:
-        super().__init__(*arg, **kwargs)
+                 *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
@@ -237,7 +237,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
         if request_outputs:
             self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
-
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
@@ -420,7 +419,8 @@ class BackendVLLM(BackendInterface):
 
     def pre_alloc(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.pre_alloc(*args, **kwargs)
-
+    
+    # TODO[xinyi]: need this function any more?
     def should_abort_migration(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.should_abort_migration(*args, **kwargs)
 

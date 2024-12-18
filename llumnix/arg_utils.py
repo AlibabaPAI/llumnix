@@ -15,15 +15,15 @@
 
 import dataclasses
 from dataclasses import dataclass
-import argparse
-from typing import Tuple
+from simple_parsing import ArgumentParser
+from typing import Tuple, Optional
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 
 
-class LlumnixArgumentParser(argparse.ArgumentParser):
+class LlumnixArgumentParser(ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -51,7 +51,7 @@ class LlumnixEntrypointsArgs:
     request_output_queue_port: int = None
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
-    config_file: bool = None
+    config_file: str = None
 
     def __post_init__(self):
         for attr in dataclasses.fields(self):
@@ -68,14 +68,15 @@ class LlumnixEntrypointsArgs:
         return llumnix_entrypoints_args
 
     @classmethod
-    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
                 assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
+    # TODO(KuilongCui): check this, inplace-update, no-need to return
     @staticmethod
-    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def add_cli_args(parser: ArgumentParser) -> ArgumentParser:
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
                             help='if launch ray cluster in api server')
@@ -132,9 +133,12 @@ class EngineManagerArgs:
     log_instance_info: bool = None
     profiling_result_file_path: str = None
 
+    migration_backend_kvtransfer_naming_url: str = None
+    migration_backend_server_address: str = None
     migration_backend_init_timeout: float = None
     migration_backend: str = None
     migration_buffer_blocks: int = None
+    migration_backend_transfer_type: str = None
     migration_num_layers: int = None
     last_stage_max_blocks: int = None
     max_stages: int = None
@@ -173,11 +177,14 @@ class EngineManagerArgs:
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
+                                           self.migration_backend_transfer_type,
                                            self.migration_buffer_blocks,
                                            self.migration_num_layers,
                                            self.last_stage_max_blocks,
                                            self.max_stages,
-                                           self.migration_backend_init_timeout)
+                                           self.migration_backend_init_timeout,
+                                           self.migration_backend_server_address,
+                                           self.migration_backend_kvtransfer_naming_url)
         return migration_config
 
     @classmethod
@@ -190,7 +197,7 @@ class EngineManagerArgs:
         return engine_manager_args
 
     @classmethod
-    def check_args(cls, args: 'EngineManagerArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'EngineManagerArgs', parser: ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -201,9 +208,15 @@ class EngineManagerArgs:
             ("When using gloo as migration backend, "
              "do not set --disable-init-instance-by-manager and --disable-fixed-node-init-instance.")
 
+        # TODO[xinyi, kuilong]: grpc and kvtransfer can be used for vllm.
+        assert args.migration_backend not in ['kvtransfer'] or (args.migration_backend == 'kvtransfer' \
+            and args.migration_backend_transfer_type), \
+            ("When using kvTransfer as migration backend, "
+             "do not set --migration-backend-transfer-type as empty.")
+
     @staticmethod
     def add_cli_args(
-            parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+            parser: ArgumentParser) -> ArgumentParser:
         parser.add_argument('--disable-fixed-node-init-instance',
                             action='store_true',
                             help='disable fixing the placement of instance to current node')
@@ -302,17 +315,30 @@ class EngineManagerArgs:
         parser.add_argument('--profiling-result-file-path',
                             type=str,
                             help='profiling result file path')
-
         parser.add_argument('--migration-backend',
                             type=str,
+<<<<<<< HEAD
                             choices=['gloo', 'nccl', 'rpc'],
+=======
+                            choices=['gloo','nccl','rpc','grpc','kvtransfer'],
+>>>>>>> 7e56177 ([WIP] adata tp bladellm)
                             help='communication backend of migration')
+        parser.add_argument('--migration-backend-transfer-type',
+                            type=str,
+                            choices=['cuda_ipc','rdma', ''],
+                            help='transfer type for migration backend grpc and kvTransfer')
+        parser.add_argument('--grpc-migration-backend-address',
+                            type=str,
+                            help='address of grpc server for migration backend')
+        parser.add_argument('--migration-backend-kvtransfer-naming-url',
+                            type=str,
+                            help='url of naming server for kvtransfer migration backend')
         parser.add_argument('--migration-backend-init-timeout',
                             type=float,
                             help='timeout(s) for initializing migration backend')
         parser.add_argument('--migration-buffer-blocks',
                             type=int,
-                            help='number of cache blocks in migration')
+                            help='number of buffer blocks in migration')
         parser.add_argument('--migration-num-layers',
                             type=int,
                             help='number of kv-cache layers to transfer in each round during migration')

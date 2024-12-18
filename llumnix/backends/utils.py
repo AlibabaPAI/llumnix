@@ -88,10 +88,7 @@ def initialize_placement_group(
     """Initialize the distributed cluster probably with Ray.
 
     Args:
-        parallel_config: The configurations for parallel execution.
-        engine_use_ray: Whether to use Ray for async engine.
-        ray_address: The address of the Ray cluster. If None, uses
-            the default Ray cluster address.
+        world_size: The number of workers in Llumlet.
 
     Returns:
         A tuple of (`distributed_init_method`, `placement_group`). The

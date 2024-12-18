@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import argparse
+import time
 import uvicorn
 import ray
 from ray.util.queue import Queue as RayQueue
@@ -32,7 +33,6 @@ app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
 MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 ENTRYPOINTS_ACTOR_NAME = "entrypoints"
-request_output_queue = RayQueue()
 
 
 @ray.remote(num_cpus=0, lifetime="detached")
@@ -110,8 +110,11 @@ if __name__ == "__main__":
     parser = EngineManagerArgs.add_cli_args(parser)
     args = parser.parse_args()
 
+    # magic actor, without this actor, FastAPIServer cannot initialize correctly.
+    # If this actor is placed globally, pylint will hangs if testing api_server_manager and api_server_service concurrently (--jobs > 1).
+    request_output_queue = RayQueue()
+
     request_output_queue_type = QueueType(args.request_output_queue_type)
     engine_manager = init_manager_service(request_output_queue_type, args)
-    
-    import time
-    time.sleep(5)
+
+    time.sleep(2)

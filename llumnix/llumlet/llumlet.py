@@ -84,11 +84,11 @@ class Llumlet:
                 # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
                 placement_group = initialize_placement_group(world_size, detached=detached)
                 kwargs["placement_group"] = placement_group
-                engine_class = ray.remote(num_cpus=1,
-                                          name=actor_name,
-                                          namespace='llumnix',
-                                          max_concurrency=4,
-                                          lifetime=lifetime)(cls).options(
+                llumlet_class = ray.remote(num_cpus=1,
+                                           name=actor_name,
+                                           namespace='llumnix',
+                                           max_concurrency=4,
+                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,
                                                     placement_group_bundle_index=0,
@@ -96,11 +96,11 @@ class Llumlet:
                                             )
             else:
                 kwargs["node_id"] = node_id
-                engine_class = ray.remote(num_cpus=1,
-                                          name=actor_name,
-                                          namespace='llumnix',
-                                          max_concurrency=4,
-                                          lifetime=lifetime)(cls).options(
+                llumlet_class = ray.remote(num_cpus=1,
+                                           name=actor_name,
+                                           namespace='llumnix',
+                                           max_concurrency=4,
+                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                     node_id=node_id,
                                                     soft=False,
@@ -108,17 +108,17 @@ class Llumlet:
                                             )
         else: # backend_type == backend_type.SIM_VLLM:
             kwargs["node_id"] = node_id
-            engine_class = ray.remote(num_cpus=1,
-                                      name=actor_name,
-                                      namespace='llumnix',
-                                      max_concurrency=4,
-                                      lifetime=lifetime)(cls).options(
+            llumlet_class = ray.remote(num_cpus=1,
+                                       name=actor_name,
+                                       namespace='llumnix',
+                                       max_concurrency=4,
+                                       lifetime=lifetime)(cls).options(
                                             scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                 node_id=node_id,
                                                 soft=False,
                                             )
                                         )
-        llumlet = engine_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
+        llumlet = llumlet_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
         return llumlet
 
     async def _check_engine_state_loop(self):

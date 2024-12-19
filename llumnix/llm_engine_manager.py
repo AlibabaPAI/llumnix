@@ -190,6 +190,7 @@ class LLMEngineManager:
                     task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
                     tasks.append(task)
                 await asyncio.gather(*tasks, return_exceptions=True)
+                # TODO(s5u13b): scale down in callback
                 if len(dead_instance_ids) > 0:
                     logger.info("[_update_instance_info_loop] dead instances: {}.".format(dead_instance_ids))
                     self.scale_down(dead_instance_ids)

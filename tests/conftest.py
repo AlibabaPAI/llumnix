@@ -21,6 +21,8 @@ import pytest
 from llumnix.utils import random_uuid
 
 
+# TODO(s5u13b): remove pytest session start and finish.
+
 def pytest_sessionstart(session):
     subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,

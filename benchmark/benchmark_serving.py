@@ -102,7 +102,7 @@ async def query_model_vllm(prompt, verbose, ip_ports):
                 if verbose:
                     print('Done')
 
-                output = await resp.json(content_type='text/plain')
+                output = await resp.json()
                 # necessary for latency calc
                 output['response_len'] = expected_response_len
                 if verbose and 'generated_text' in output:

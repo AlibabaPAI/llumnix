@@ -36,7 +36,7 @@ async def get_llumnix_response(prompt, sampling_params, ip_ports):
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(f'http://{ip_ports}/generate', json=request) as resp:
-            output = await resp.json('text/plain')
+            output = await resp.json()
             return output
 
 prompts = [

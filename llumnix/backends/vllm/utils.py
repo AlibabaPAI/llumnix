@@ -17,7 +17,6 @@ import torch
 
 from vllm.config import ModelConfig, ParallelConfig
 from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
-from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.sampling_params import SamplingType
 from vllm.model_executor.layers.sampler import SamplingMetadata, SamplingTensors, SampleResultArgsType, SampleReturnType, \
                                                 SampleResultsDictType, SampleMetadataType, MultinomialSamplesType, \

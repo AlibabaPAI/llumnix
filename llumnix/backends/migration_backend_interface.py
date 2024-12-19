@@ -33,9 +33,9 @@ class MigrationBackendBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def do_send(self, dst_handle, blocks: List[int]):
+    def do_send(self, dst_handle, blocks: List[int], virtuel_engine: int):
         raise NotImplementedError
 
     @abstractmethod
-    def do_recv(self, src_handle, blocks: List[int]):
+    def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int):
         raise NotImplementedError

@@ -115,7 +115,8 @@ class RayRpcMigrationBackend(MigrationBackendBase):
                                         device="cpu", pin_memory=True).view(-1, 2)
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
-                self.cache_engine[virtuel_engine].attn_backend.swap_blocks(self.gpu_cache[virtuel_engine][layer_idx], send_cache[layer_idx], block_mapping_tensor)
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(self.gpu_cache[virtuel_engine][layer_idx], send_cache[layer_idx], block_mapping_tensor)
         torch.cuda.Stream.synchronize(self.migration_stream)
         return send_cache.to(self.rpc_dtype).numpy()
 
@@ -134,7 +135,8 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
-                self.cache_engine[virtuel_engine].attn_backend.swap_blocks(recv_cache[layer_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(recv_cache[layer_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         torch.cuda.Stream.synchronize(self.migration_stream)
 
 def try_import_gloo():
@@ -271,7 +273,8 @@ class RayColMigrationBackend(MigrationBackendBase):
         with self.migration_stream:
             for layer_idx in range(self.cache_engine[0].num_attention_layers):
                 cache_idx = layer_idx % self.migration_num_layers
-                self.cache_engine[virtuel_engine].attn_backend.swap_blocks(self.gpu_cache[virtuel_engine][layer_idx], send_cache[cache_idx], block_mapping_tensor)
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(self.gpu_cache[virtuel_engine][layer_idx], send_cache[cache_idx], block_mapping_tensor)
                 if cache_idx + 1 == self.migration_num_layers or layer_idx + 1 == self.cache_engine[0].num_attention_layers:
                     # TODO(KuilongCui): check the error code if peer is dead
                     col.send(send_cache, dst_handle, self.group_name)
@@ -292,7 +295,8 @@ class RayColMigrationBackend(MigrationBackendBase):
                 cache_idx = layer_idx % self.migration_num_layers
                 if cache_idx == 0:
                     col.recv(recv_cache, src_handle, self.group_name)
-                self.cache_engine[virtuel_engine].attn_backend.swap_blocks(recv_cache[cache_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(recv_cache[cache_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         self.migration_stream.synchronize()
 
 def get_migration_backend(migration_config: MigrationConfig, cache_engine: List[CacheEngine], worker_handle_list, scheduling_strategy,

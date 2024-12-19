@@ -13,7 +13,7 @@
 
 import time
 import traceback
-from typing import Any, List, Optional, Dict, Union, Iterable, Deque, Tuple
+from typing import Any, List, Optional, Union, Iterable, Deque, Tuple
 from collections import defaultdict
 import threading
 import asyncio
@@ -62,6 +62,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  placement_group: Optional[PlacementGroup],
                  node_id: Optional[str],
                  *arg, **kwargs) -> None:
+        # pylint: disable=import-outside-toplevel
         import vllm.outputs
         vllm.outputs.RequestOutputFactory.create = LlumnixOutput.create
         super().__init__(*arg, **kwargs)

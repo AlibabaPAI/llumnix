@@ -109,8 +109,6 @@ class SchedulerLlumnix(Scheduler):
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
                 seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
-                logger.info(f"remove running req {request_id}")
-                logger.info(f"len:{len(self.running)}")
                 return True
         return False
 

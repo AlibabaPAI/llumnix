@@ -117,7 +117,7 @@ class Llumlet:
             else: # backend_type == backend_type.SIM_VLLM:
                 kwargs["node_id"] = node_id
                 engine_class = ray.remote(num_cpus=1,
-                                        num_gpu=num_gpu,
+                                        num_gpus=num_gpu,
                                         name=actor_name,
                                         namespace='llumnix',
                                         max_concurrency=4,

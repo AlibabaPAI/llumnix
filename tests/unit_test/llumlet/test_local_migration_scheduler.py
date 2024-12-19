@@ -46,7 +46,7 @@ class MockRequest(LlumnixRequest):
         return self.length
 
     @property
-    def arrival_time(self) -> float:
+    def request_arrival_time(self) -> float:
         pass
 
     @property

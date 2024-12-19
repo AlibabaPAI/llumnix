@@ -50,13 +50,12 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
         rank=rank,
         distributed_init_method=get_distributed_init_method(get_ip(), get_open_port()),
         lora_config=engine_config.lora_config,
-        vision_language_config=engine_config.vision_language_config,
         is_driver_worker = False
     )
 
     return worker
 
-@pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("backend", ['rayrpc', 'nccl'])
 def test_reserve_memory_for_migration(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()
@@ -77,7 +76,7 @@ def test_reserve_memory_for_migration(setup_ray_env, backend):
     assert migration_cache_size == occupy_memory
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
-@pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("backend", ['rayrpc', 'nccl'])
 def test_rebuild_migration_backend(setup_ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()

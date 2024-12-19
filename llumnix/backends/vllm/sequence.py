@@ -22,6 +22,10 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         LlumnixRequest.__init__(self, request_id, server_info, expected_steps)
 
     @property
+    def block_size(self) -> int:
+        return self.get_seqs()[0].block_size
+
+    @property
     def prompt_len(self) -> int:
         return self.get_seqs()[0].get_prompt_len()
 
@@ -37,6 +41,13 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         return self.get_seqs()[0].get_output_len()
 
     @property
+    def n_blocks(self) -> int:
+        return self.get_seqs()[0].n_blocks
+    @property
+    def token_ids(self) -> int:
+        return self.get_seqs()[0].get_token_ids()
+
+    @property
     def inference_type(self) -> RequestInferenceType:
         if self.is_prefill():
             return RequestInferenceType.PREFILL
@@ -47,8 +58,8 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         return self.get_seqs()[0].is_finished()
 
     @property
-    def arrival_time(self) -> float:
-        return self.metrics.arrival_time
+    def request_arrival_time(self) -> float:
+        return self.arrival_time
 
     @property
     def status(self) -> RequestStatus:
@@ -66,4 +77,4 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
     @property
     def prefill_num_blocks(self) -> int:
         # Get the prefill len of the waiting request.
-        return len(self.get_seqs()[0].logical_token_blocks)
+        return self.get_seqs()[0].n_blocks

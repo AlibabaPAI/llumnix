@@ -74,10 +74,10 @@ async def main():
     for request in prompts:
         request_id = random_uuid()
         await manager.generate.remote(request_id=request_id,
-                                      server_info=server_info, 
+                                      server_info=server_info,
                                       prompt=request,
-                                      sampling_params=sampling_params,)
-    
+                                      params=sampling_params,)
+
     await output_task
 
 asyncio.run(main())

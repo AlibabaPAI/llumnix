@@ -71,7 +71,6 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
     sampling_params = {
         "n": 1,
         "best_of": 1,
-        "use_beam_search": False,
         "temperature": 0.0,
         "top_k": 1,
         "ignore_eos": False,

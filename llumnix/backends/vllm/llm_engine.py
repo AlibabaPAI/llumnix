@@ -55,44 +55,6 @@ class LlumnixOutput(RequestOutputFactory):
         else:
             return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
-class AsyncPutQueueActor:
-    def __init__(self, instance_id, request_output_queue_type: QueueType):
-        self.instance_id = instance_id
-        self.request_output_queue_type = request_output_queue_type
-        self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
-        self.engine_actor_handle = None
-
-    async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, List[RequestOutput]],
-                                    server_info_dict: Dict[str, ServerInfo]) -> None:
-        try:
-            if self.engine_actor_handle is None:
-                self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
-            tasks = []
-            for server_id, req_outputs in server_request_outputs.items():
-                server_info = server_info_dict[server_id]
-                for req_output in req_outputs:
-                    if hasattr(req_output, 'request_timestamps'):
-                        req_output.request_timestamps.engine_actor_put_queue_timestamp = time.time()
-                tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
-            rets = await asyncio.gather(*tasks, return_exceptions=True)
-            for idx, ret in enumerate(rets):
-                if isinstance(ret, Exception):
-                    server_id = list(server_request_outputs.keys())[idx]
-                    server_info = server_info_dict[server_id]
-                    logger.info("server {} is dead".format(server_id))
-                    if self.request_output_queue_type == QueueType.ZMQ:
-                        logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                                   server_info.request_output_queue_port))
-                    req_outputs = list(server_request_outputs.values())[idx]
-                    request_ids = [req_output.request_id for req_output in req_outputs]
-                    self.engine_actor_handle.abort_request.remote(request_ids)
-        # pylint: disable=W0703
-        except Exception as e:
-            logger.error("Error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
-
-
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,

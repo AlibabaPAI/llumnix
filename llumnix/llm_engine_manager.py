@@ -489,6 +489,7 @@ class LLMEngineManager:
                     world_size,
                     engine_manager_args.create_migration_config(),
                     engine_manager_args.profiling_result_file_path,
+                    engine_args,
                     *args,
                     **kwargs
                 )

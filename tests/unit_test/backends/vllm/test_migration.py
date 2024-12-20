@@ -88,7 +88,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
 async def test_migration_correctness(setup_ray_env, migration_backend, migration_request_status):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.2)
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.9)
     id_rank_map = {"0": 0, "1": 1, "2": 2}
     if migration_request_status == 'running':
         request_migration_policy = "SR"
@@ -207,7 +207,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'nccl'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.2)
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.9)
     id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
 

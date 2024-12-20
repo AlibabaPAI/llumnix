@@ -139,15 +139,26 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         )
         return engine
 
-    async def step_async(self) -> None:
-        step_begin_time = time.time()
+    def _process_request_outputs(
+            self,
+            outputs: List[Tuple[RequestOutput,ServerInfo]],
+            step_begin_time: float
+    ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         request_outputs = []
         server_infos = []
-        outputs = await super().step_async(0)
         if outputs:
             request_outputs, server_infos = zip(*outputs)
             request_outputs = list(request_outputs)
             server_infos = list(server_infos)
+        for request_output, server_info in zip(request_outputs, server_infos):
+            if hasattr(server_info, 'request_timestamps'):
+                request_output.request_timestamps = server_info.request_timestamps
+                request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+            if request_output.finished:
+                logger.info("engine finished request {}".format(request_output.request_id))
+        for server_info in server_infos:
+            if hasattr(server_info, 'request_timestamps'):
+                server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
@@ -180,6 +191,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
 
         return request_outputs, server_infos
+
+    async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
+        step_begin_time = time.time()
+        outputs = await super().step_async(0)
+        return self._process_request_outputs(outputs, step_begin_time)
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.

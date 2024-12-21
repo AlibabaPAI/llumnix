@@ -174,7 +174,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 " network configuration. If you set `VLLM_HOST_IP` or "
                 "`HOST_IP` environment variable, make sure it is unique for"
                 " each node.")
-
+        # pylint: disable=invalid-name
         VLLM_INSTANCE_ID = get_vllm_instance_id()
 
         # Set environment variables for the driver and workers.

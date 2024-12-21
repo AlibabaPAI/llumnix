@@ -17,6 +17,10 @@ import os
 import subprocess
 import ray
 import pytest
+import uuid
+
+def random_uuid() -> str:
+    return str(uuid.uuid4().hex)
 
 from llumnix.utils import random_uuid
 

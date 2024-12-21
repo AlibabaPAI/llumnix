@@ -92,7 +92,7 @@ class LlumnixRequest:
         raise NotImplementedError
 
     @property
-    def arrival_time(self) -> float:
+    def request_arrival_time(self) -> float:
         raise NotImplementedError
 
     @property
@@ -101,6 +101,18 @@ class LlumnixRequest:
 
     @property
     def prefill_num_blocks(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def n_blocks(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def token_ids(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def block_size(self) -> int:
         raise NotImplementedError
 
     # Whether the migration of request is completed within one stage. For requests that have already reached

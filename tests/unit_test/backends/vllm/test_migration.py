@@ -58,7 +58,7 @@ class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop
-        self.backend_engine.engine.scheduler.schedule = MagicMock()
+        self.backend_engine.engine.scheduler[0].schedule = MagicMock()
 
         # For some reason, if MockScheduelrOutputs is defined outside, the constructor would raise error.
         class MockScheduelrOutputs:
@@ -66,18 +66,19 @@ class MockLlumletDoNotSchedule(Llumlet):
                 self.scheduled_seq_groups = []
                 self.ignored_seq_groups = []
                 self.num_batched_tokens = 0
+                self.preempted = False
 
             def is_empty(self) -> bool:
                 return not self.scheduled_seq_groups
 
         scheduler_outputs = MockScheduelrOutputs()
-        self.backend_engine.engine.scheduler.schedule.return_value = ([], scheduler_outputs)
+        self.backend_engine.engine.scheduler[0].schedule.return_value = ([], scheduler_outputs, False)
 
         self.step_async = self.backend_engine.engine.step_async
 
         async def step_async_try_schedule():
             request_outputs, server_infos = await self.step_async()
-            for seq_group in self.backend_engine.engine.scheduler.waiting:
+            for seq_group in self.backend_engine.engine.scheduler[0].waiting:
                 seq_group.try_schedule_times += 1
             return request_outputs, server_infos
 
@@ -87,7 +88,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
 async def test_migration_correctness(setup_ray_env, migration_backend, migration_request_status):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.9)
     id_rank_map = {"0": 0, "1": 1, "2": 2}
     if migration_request_status == 'running':
         request_migration_policy = "SR"
@@ -206,7 +207,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
 async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.9)
     id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
 
@@ -288,13 +289,13 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     que.cleanup()
 
 def test_clear_migration_states():
-    llumlet = MockLlumlet()
-    llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, 1)
     num_gpu_blocks = 8
     block_size = 4
+    llumlet = MockLlumlet()
+    llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, 1, range(4))
 
     llumlet.clear_migration_states(is_migrate_in=True)
-    assert len(llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks)) == num_gpu_blocks
+    assert len(llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks, range(4*num_gpu_blocks))) == num_gpu_blocks
     _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.RUNNING)
     seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)

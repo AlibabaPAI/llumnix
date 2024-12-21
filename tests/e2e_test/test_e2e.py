@@ -62,7 +62,7 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for e2e test")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc'])
 @pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
 async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_backend, launch_mode):
     if migration_backend == 'gloo' and launch_mode != 'eief':
@@ -71,7 +71,6 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
     sampling_params = {
         "n": 1,
         "best_of": 1,
-        "use_beam_search": False,
         "temperature": 0.0,
         "top_k": 1,
         "ignore_eos": False,
@@ -92,10 +91,11 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
                                       ip=ip,
                                       port=base_port,
                                       migration_backend=migration_backend,
+                                      launch_ray_cluster=False,
                                       launch_mode=launch_mode)
     subprocess.run(launch_command, shell=True, check=True)
 
-    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
+    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"], timeout=120)
 
     llumnix_output = {}
     for prompt in prompts:

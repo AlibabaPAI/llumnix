@@ -82,11 +82,10 @@ HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
                 --initial-instances $INITIAL_INSTANCES \
                 --launch-ray-cluster \
                 --model $MODEL_PATH \
-                --engine-use-ray \
                 --worker-use-ray \
                 --max-model-len 4096
 ```
-`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node, 
+`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node,
 
 Second, you can run the benchmark to evaluate the serving performance:
 

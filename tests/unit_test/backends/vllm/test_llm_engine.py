@@ -34,7 +34,8 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 
 from .utils import create_dummy_prompt, initialize_scheduler
-
+# pylint: disable=unused-import
+from tests.conftest import setup_ray_env
 
 class MockEngine(LLMEngineLlumnix):
     def __init__(self, *args, executor_class=None, **kwargs):
@@ -50,47 +51,8 @@ class MockEngine(LLMEngineLlumnix):
     def update_instance_info(self, instance_info):
         pass
 
-
-# def test_llm_engine_process_model_outputs():
-#     llm_engine = MockEngine()
-#     _, seq_group_0 = create_dummy_prompt(
-#         "0", prompt_length=7, block_size=4
-#     )
-#     _, seq_group_1 = create_dummy_prompt(
-#         "1", prompt_length=7, block_size=4
-#     )
-#     llm_engine.scheduler.add_seq_group(seq_group_0)
-#     llm_engine.scheduler.add_seq_group(seq_group_1)
-#     metas, out, _ = llm_engine.scheduler.schedule()
-
-#     seqs = [seq_group_0.get_seqs()[0], seq_group_1.get_seqs()[0]]
-
-#     outputs = [
-#         SequenceGroupOutput(
-#             samples=[
-#                 SequenceOutput(
-#                     parent_seq_id=seq.seq_id,
-#                     output_token=1,
-    #                 logprobs={1: Logprob(0.0)},
-    #             )
-    #         ],
-    #         prompt_logprobs=None,
-    #     ) for seq in seqs
-    # ]
-    # sampler_outputs = [SamplerOutput(outputs=outputs)]
-
-    # scheduled_seq_groups = out.scheduled_seq_groups
-    # # normal case, all requests be processed
-    # ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
-    # assert len(ret) == 2
-    # metas, out, _ = llm_engine.scheduler.schedule()
-    # scheduled_seq_groups = out.scheduled_seq_groups
-    # seqs[0].status=SequenceStatus.WAITING
-    # # migration case , requests stopping during last stage migration, stop process
-    # ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
-    # assert len(ret) == 1
-
-def test_llm_engine_from_engine_args():
+@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
+def test_llm_engine_from_engine_args(setup_ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     llm_engine = MockEngine.from_engine_args(engine_args, request_output_queue_type=QueueType.RAYQUEUE,
                                              instance_id="0", migration_config=None)
@@ -101,13 +63,14 @@ def test_llm_engine_from_engine_args():
                                              instance_id="0", migration_config=None, latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
 
-@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
-def test_llm_engine_add_requset():
+def test_llm_engine_add_requset(setup_ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    latency_data = LatencyMemData({},{},{})
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
                                                    placement_group=None,
+                                                   latency_mem = latency_data,
                                                    node_id=ray.get_runtime_context().get_node_id(),
                                                    migration_config=None)
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)

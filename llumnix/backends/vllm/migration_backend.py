@@ -142,6 +142,8 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 def try_import_gloo():
     try:
         # pylint: disable=C0415
+        import numpy
+        numpy.float=numpy.float32
         from ray.util.collective.collective_group import gloo_util
         import pygloo
 
@@ -309,9 +311,9 @@ def get_migration_backend(migration_config: MigrationConfig, cache_engine: List[
     target_migration_backend = None
     backend = migration_config.migration_backend
 
-    assert backend in ['nccl', 'rayrpc'], "Unsupported migration backend: {} for llumnix".format(backend)
+    assert backend in ['nccl', 'rayrpc', 'gloo'], "Unsupported migration backend: {} for llumnix".format(backend)
 
-    if backend in ['nccl']:
+    if backend in ['nccl', 'gloo']:
         target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
                                             is_driver_worker, gpu_cache)
     else:

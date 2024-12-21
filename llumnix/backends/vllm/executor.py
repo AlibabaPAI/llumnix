@@ -260,10 +260,10 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         worker_class_fn = None
         if self.scheduler_config.is_multi_step or self.speculative_config:
             raise NotImplementedError
-        else:
-            worker_module_name = "llumnix.backends.vllm.worker"
-            worker_class_name = "MigrationWorker"
+        worker_module_name = "llumnix.backends.vllm.worker"
+        worker_class_name = "MigrationWorker"
         return (worker_module_name, worker_class_name, worker_class_fn)
+
     async def execute_model_async(self, *args, **kwargs):
         t0 = time.time()
         outputs = await super().execute_model_async(*args, **kwargs)

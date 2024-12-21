@@ -196,13 +196,13 @@ def _sample_with_torch(
         # Return Pythonized sampler result & sampled token ids
         return get_pythonized_sample_results(
             maybe_deferred_args), sampled_token_ids_tensor
-    else:
-        # Defer sampler result Pythonization; return deferred
-        # Pythonization args & sampled token ids
-        return (
-            maybe_deferred_args,
-            sampled_token_ids_tensor,
-        )
+
+    # Defer sampler result Pythonization; return deferred
+    # Pythonization args & sampled token ids
+    return (
+        maybe_deferred_args,
+        sampled_token_ids_tensor,
+    )
 
 
 def scheduler_lock(func):

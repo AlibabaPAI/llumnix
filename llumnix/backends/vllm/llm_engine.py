@@ -52,8 +52,8 @@ class LlumnixOutput(RequestOutputFactory):
         if hasattr(seq_group,
                    'embeddings') and seq_group.embeddings is not None:
             return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
-        else:
-            return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
+        # pylint: disable=too-many-function-args
+        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
@@ -194,6 +194,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
     async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         step_begin_time = time.time()
+        # pylint: disable=too-many-function-args
         outputs = await super().step_async(0)
         return self._process_request_outputs(outputs, step_begin_time)
 

@@ -104,7 +104,7 @@ _C.MANAGER.MAX_STAGES = 3
 _C.MANAGER.LAST_STAGE_MAX_BLOCKS = 16
 
 # Communication backend of migration
-_C.MANAGER.MIGRATION_BACKEND = "rayrpc"
+_C.MANAGER.MIGRATION_BACKEND = "gloo"
 # Transfer type for migration backend kvTransfer
 _C.MANAGER.MIGRATION_BACKEND_TRANSFER_TYPE = "rdma"
 # Address of grpc server for migration backend

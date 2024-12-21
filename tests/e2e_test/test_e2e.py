@@ -91,10 +91,11 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
                                       ip=ip,
                                       port=base_port,
                                       migration_backend=migration_backend,
+                                      launch_ray_cluster=False,
                                       launch_mode=launch_mode)
     subprocess.run(launch_command, shell=True, check=True)
 
-    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
+    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"], timeout=120)
 
     llumnix_output = {}
     for prompt in prompts:

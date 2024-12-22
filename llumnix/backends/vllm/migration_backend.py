@@ -142,8 +142,6 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 def try_import_gloo():
     try:
         # pylint: disable=C0415
-        import numpy
-        numpy.float=numpy.float32
         from ray.util.collective.collective_group import gloo_util
         import pygloo
 

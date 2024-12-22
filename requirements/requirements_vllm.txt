@@ -1,5 +1,5 @@
 vllm == 0.6.3.post1
-ray @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp310-cp310-manylinux2014_x86_64.whl
+ray >= 2.9.0
 pyarrow  # Required for Ray data.
 aiohttp
 scipy
@@ -8,6 +8,5 @@ matplotlib
 func_timeout
 pyyaml
 yacs
-# numpy < 1.24.0 # for gloo migration backend's compatibility with numpy.float
 pyzmq
 loguru

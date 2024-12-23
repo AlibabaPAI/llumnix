@@ -11,7 +11,7 @@ from ray.util.queue import Queue as RayQueue
 app = FastAPI()
 # @@@
 # request_output_queue = RayQueueServer()
-request_output_queue = RayQueue()
+request_output_queue = None
 
 
 class FastAPIServer:
@@ -35,9 +35,11 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default='localhost')
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    
+
     ray.init(namespace="llumnix")
-    
-    fastapi_server = FastAPIServer.from_args(args.host, args.port)
+
+    request_output_queue = RayQueue()
+
+    server = FastAPIServer.from_args(args.host, args.port)
 
     time.sleep(5)

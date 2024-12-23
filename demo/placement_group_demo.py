@@ -1,13 +1,11 @@
 import time
 import asyncio
-import subprocess
 import ray
 from ray.util import placement_group_table
 from ray.util.state import (list_actors,
                             list_placement_groups)
 
 from manager_service_demo import (initialize_placement_group,
-                                  FastAPIServer,
                                   Llumlet)
 
 
@@ -15,7 +13,7 @@ def test_actor_if_pg_died(life_time_pg, lifetime_llumlet):
     print(f"### placement group lifetime: {life_time_pg}, llumlet lifetime: {lifetime_llumlet}")
     print("### create placement group and llumlet")
     placement_group = initialize_placement_group(lifetime=life_time_pg)
-    llumlet = Llumlet.from_args("0", placement_group, lifetime=lifetime_llumlet)
+    _ = Llumlet.from_args("0", placement_group, lifetime=lifetime_llumlet)
     print(f"placement group state: {placement_group_table(placement_group)}")
     print(f"llumlet state: {list_actors()}")
     print("### sleep 1s")
@@ -89,7 +87,7 @@ async def test_pg_ready():
         print("placement group 2 ready")
     except asyncio.TimeoutError:
         print("wait placement group 2 timeout")
-    
+
 def test_pg_api():
     placement_group1 = initialize_placement_group()
     placement_group2 = initialize_placement_group()
@@ -119,7 +117,7 @@ if __name__ == "__main__":
     # test_pg_if_actor_died(life_time_pg=None, lifetime_llumlet="detached")
 
     # test_pending(life_time_pg=None, lifetime_llumlet=None)
-    
+
     # asyncio.run(test_pg_ready())
 
     test_pg_api()

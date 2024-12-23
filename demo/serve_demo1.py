@@ -1,14 +1,12 @@
 import asyncio
 import time
-import uvicorn
-from uvicorn import Config, Server
 import argparse
+from contextlib import asynccontextmanager
+import uvicorn
 import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from contextlib import asynccontextmanager
 import ray
-from ray import serve
 
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.zmq_client import ZmqClient
@@ -19,6 +17,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.queue.ray_queue_server import RayQueueServer
 
 
+# pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
     # @@@
@@ -31,7 +30,7 @@ async def lifespan(fastapi_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 # @@@
-request_output_queue = RayQueueServer()
+request_output_queue = None
 request_output_queue_server = None
 
 
@@ -39,6 +38,7 @@ request_output_queue_server = None
 async def is_ready() -> bool:
     return True
 
+# pylint: disable=unused-argument
 @app.post("/generate")
 async def generate(request: Request) -> Response:
     ret = {"text": ""}
@@ -49,6 +49,7 @@ async def health() -> Response:
     """Health check."""
     return Response(status_code=200)
 
+# pylint: disable=unused-argument
 @app.post("/generate_stream")
 async def generate_stream(request: Request) -> StreamingResponse:
     async def number_generator():
@@ -82,10 +83,11 @@ class FastAPIServer:
     @classmethod
     def from_args(cls, host: str, port: int):
         fastapi_server_class = ray.remote(num_cpus=1, name="entrypoints")(cls)
-        fastapi_server = fastapi_server_class.remote(host, port)
+        server = fastapi_server_class.remote(host, port)
 
-        return fastapi_server
+        return server
 
+# pylint: disable=redefined-outer-name
 async def wait_request_output_queue_server_ready(request_output_queue_client: ZmqClient,
                                                  server_info: ServerInfo):
     time.sleep(5)
@@ -99,8 +101,10 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default='172.23.75.202')
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    
+
     ray.init(namespace="llumnix")
+
+    request_output_queue = RayQueueServer()
 
     # rpc_path = get_open_zmq_ipc_path(args.host, 8002)
     # request_output_queue_server = ZmqServer(rpc_path)
@@ -110,7 +114,7 @@ if __name__ == "__main__":
 
     fastapi_server = FastAPIServer.from_args(args.host, args.port)
     fastapi_server.run.remote()
-    
+
     time.sleep(5)
 
     ip_address = f"{args.host}:{args.port}"

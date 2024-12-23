@@ -1,16 +1,17 @@
 import asyncio
 import time
-import uvicorn
 import argparse
+from contextlib import asynccontextmanager
+import uvicorn
 import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from contextlib import asynccontextmanager
 import ray
 
 from llumnix.queue.ray_queue_server import RayQueueServer
 
 
+# pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
     asyncio.create_task(request_output_queue.run_server_loop())
@@ -18,12 +19,13 @@ async def lifespan(fastapi_app: FastAPI):
     request_output_queue.cleanup()
 
 app = FastAPI(lifespan=lifespan)
-request_output_queue = RayQueueServer()
+request_output_queue = None
 
 @app.get("/is_ready")
 async def is_ready() -> bool:
     return True
 
+# pylint: disable=unused-argument
 @app.post("/generate")
 async def generate(request: Request) -> Response:
     ret = {"text": ""}
@@ -34,6 +36,7 @@ async def health() -> Response:
     """Health check."""
     return Response(status_code=200)
 
+# pylint: disable=unused-argument
 @app.post("/generate_stream")
 async def generate_stream(request: Request) -> StreamingResponse:
     async def number_generator():
@@ -47,7 +50,7 @@ class FastAPIServer:
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
-    
+
     def run(self):
         uvicorn.run(app, host=self.host, port=self.port)
 
@@ -65,9 +68,11 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
-    fastapi_server = FastAPIServer.from_args(args.host, args.port)
-    fastapi_server.run.remote()
-    
+    request_output_queue = RayQueueServer()
+
+    server = FastAPIServer.from_args(args.host, args.port)
+    server.run.remote()
+
     time.sleep(5)
 
     ip_address = f"{args.host}:{args.port}"

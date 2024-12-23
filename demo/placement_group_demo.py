@@ -87,6 +87,9 @@ async def test_pg_ready():
         print("placement group 2 ready")
     except asyncio.TimeoutError:
         print("wait placement group 2 timeout")
+    placement_group3 = initialize_placement_group()
+    ray.util.remove_placement_group(placement_group3)
+    await placement_group3.ready()
 
 def test_pg_api():
     placement_group1 = initialize_placement_group()
@@ -104,7 +107,6 @@ def test_pg_api():
     print(f"placement group 1 state: {placement_group_table(placement_group1)}")
     print(f"placement group 2 state: {placement_group_table(placement_group2)}")
 
-
 if __name__ == "__main__":
     # test_actor_if_pg_died(life_time_pg=None, lifetime_llumlet=None)
     # test_actor_if_pg_died(life_time_pg=None, lifetime_llumlet="detached")
@@ -118,6 +120,6 @@ if __name__ == "__main__":
 
     # test_pending(life_time_pg=None, lifetime_llumlet=None)
 
-    # asyncio.run(test_pg_ready())
+    asyncio.run(test_pg_ready())
 
-    test_pg_api()
+    # test_pg_api()

@@ -57,7 +57,7 @@ class FastAPIServer:
 
     def _run_loop(self):
         uvicorn.run(app, host=self.host, port=self.port)
-    
+
     def run(self):
         self.run_loop_thread.start()
 

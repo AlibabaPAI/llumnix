@@ -9,7 +9,6 @@ import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.queue import Queue as RayQueue
-from ray.util import placement_group_table
 
 from llumnix.utils import random_uuid
 from llumnix.logger import init_logger
@@ -56,7 +55,7 @@ def remove_placement_group(instance_id: str = None) -> bool:
 
 def kill_server(instance_id: str = None) -> bool:
     try:
-        server = ray.get_actor(get_server_name(instance_id))
+        server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
     except ValueError:
         return False
     try:
@@ -69,7 +68,7 @@ def kill_server(instance_id: str = None) -> bool:
 
 def kill_instance(instance_id: str = None) -> bool:
     try:
-        instance = ray.get_actor(get_instance_name(instance_id))
+        instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
     except ValueError:
         return False
     try:
@@ -82,7 +81,7 @@ def kill_instance(instance_id: str = None) -> bool:
 
 def actor_exists(actor_name: str) -> bool:
     try:
-        ray.get_actor(actor_name)
+        ray.get_actor(actor_name, namespace="llumnix")
         return True
     except ValueError:
         return False
@@ -100,7 +99,7 @@ class FastAPIServer:
 
     def _run_loop(self):
         uvicorn.run(app, host=self.host, port=self.port)
-    
+
     def run(self):
         self.run_loop_thread.start()
 
@@ -236,10 +235,10 @@ class LLMEngineManager:
                 for alive_actor_state in alive_actor_states:
                     if alive_actor_state["name"].startswith(SERVER_NAME_PREFIX):
                         instance_id = alive_actor_state["name"].split("_")[-1]
-                        curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"])
+                        curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
                     elif alive_actor_state["name"].startswith(INSTANCE_NAME_PREFIX):
                         instance_id = alive_actor_state["name"].split("_")[-1]
-                        curr_instances[instance_id] = ray.get_actor(alive_actor_state["name"])
+                        curr_instances[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
 
                 assert len(curr_pgs) > max(len(curr_servers), len(curr_instances))
 
@@ -328,4 +327,5 @@ if __name__ == "__main__":
                                         })
     manager = LLMEngineManager.from_args()
 
-    time.sleep(1000)
+    while True:
+        time.sleep(100)

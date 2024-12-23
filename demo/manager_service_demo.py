@@ -212,7 +212,7 @@ class LLMEngineManager:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT_SECONDS)
                 except asyncio.TimeoutError:
                     print("Get new placement group ready timeout")
-                    ayncio.sleep(AUTO_DEPLOYMENT_INTERVAL_SECONDS)
+                    await ayncio.sleep(AUTO_DEPLOYMENT_INTERVAL_SECONDS)
                     continue
                 print("Get new placement group ready done")
                 self._initialize_server_and_instance(instance_id, new_pg)
@@ -253,6 +253,7 @@ class LLMEngineManager:
                         if instance_id in curr_instances:
                             curr_instances.pop(instance_id)
 
+                # (TODO: s5u13b): double check
                 self.pgs = curr_pgs
                 self.servers = curr_servers
                 self.instance = curr_instances

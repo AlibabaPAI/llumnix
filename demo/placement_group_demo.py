@@ -3,7 +3,8 @@ import asyncio
 import subprocess
 import ray
 from ray.util import placement_group_table
-from ray.util.state import list_actors
+from ray.util.state import (list_actors,
+                            list_placement_groups)
 
 from manager_service_demo import (initialize_placement_group,
                                   FastAPIServer,
@@ -88,6 +89,22 @@ async def test_pg_ready():
         print("placement group 2 ready")
     except asyncio.TimeoutError:
         print("wait placement group 2 timeout")
+    
+def test_pg_api():
+    placement_group1 = initialize_placement_group()
+    placement_group2 = initialize_placement_group()
+    time.sleep(3)
+    all_pgs = list_placement_groups()
+    print(f"all placement groups: {all_pgs}")
+    all_pgs_detail = list_placement_groups(detail=True)
+    print(f"all placement groups (detail): {all_pgs_detail}")
+    pending_pgs = list_placement_groups(filters=[("state", "=", "PENDING")])
+    print(f"pending placement groups: {pending_pgs}")
+    created_pgs = list_placement_groups(filters=[("state", "=", "CREATED")])
+    print(f"created placement groups: {created_pgs}")
+
+    print(f"placement group 1 state: {placement_group_table(placement_group1)}")
+    print(f"placement group 2 state: {placement_group_table(placement_group2)}")
 
 
 if __name__ == "__main__":
@@ -103,4 +120,6 @@ if __name__ == "__main__":
 
     # test_pending(life_time_pg=None, lifetime_llumlet=None)
     
-    asyncio.run(test_pg_ready())
+    # asyncio.run(test_pg_ready())
+
+    test_pg_api()

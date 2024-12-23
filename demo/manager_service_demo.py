@@ -9,6 +9,7 @@ import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.queue import Queue as RayQueue
+from ray.util import placement_group_table
 
 from llumnix.utils import random_uuid
 from llumnix.logger import init_logger
@@ -33,6 +34,8 @@ def get_instance_name(instance_id: str) -> str:
 
 def initialize_placement_group(instance_id: str = None, lifetime: str = None) -> PlacementGroup:
     placement_group_specs = ([{"CPU": 1}, {"CPU": 1, "GPU": 4}])
+    if instance_id is None:
+        instance_id = random_uuid()
     placement_group_name = get_placement_group_name(instance_id)
     placement_group = ray.util.placement_group(
         placement_group_specs, "STRICT_PACK", lifetime=lifetime, name=placement_group_name)
@@ -43,7 +46,9 @@ def remove_placement_group(instance_id: str = None) -> bool:
     if not placement_group:
         return False
     try:
+        # asynchronous
         ray.util.remove_placement_group(placement_group)
+        print(f"remove placement group {instance_id}")
     # pylint: disable=broad-except
     except Exception:
         return False
@@ -56,6 +61,7 @@ def kill_server(instance_id: str = None) -> bool:
         return False
     try:
         ray.kill(server)
+        print(f"kill server {instance_id}")
     # pylint: disable=broad-except
     except Exception:
         return False
@@ -68,6 +74,7 @@ def kill_instance(instance_id: str = None) -> bool:
         return False
     try:
         ray.kill(instance)
+        print(f"kill instance {instance_id}")
         return True
     # pylint: disable=broad-except
     except Exception:
@@ -87,9 +94,15 @@ class FastAPIServer:
         self.port = port
         self.server_name = get_server_name(instance_id)
         print("FastAPIServer created")
+        self.run_loop_thread = threading.Thread(
+            target=self._run_loop, args=(), daemon=True, name="run_loop"
+        )
 
-    def run(self) -> None:
+    def _run_loop(self):
         uvicorn.run(app, host=self.host, port=self.port)
+    
+    def run(self):
+        self.run_loop_thread.start()
 
     @classmethod
     def from_args(cls,
@@ -110,6 +123,9 @@ class FastAPIServer:
                                             )
         fastapi_server = fastapi_server_class.remote(instance_id, host, port)
         return fastapi_server
+
+    def ready(self) -> bool:
+        return True
 
 
 class Llumlet:
@@ -158,7 +174,7 @@ class LLMEngineManager:
         def instance_ready_callback(instance_id: str, fut):
             ret = fut.result()[0]
             if isinstance(ret, ray.exceptions.RayActorError):
-                print(f"instance {instance_id} died, scale down")
+                print(f"server/instance {instance_id} died, scale down")
                 self._scale_down(instance_id)
 
         while True:
@@ -166,6 +182,13 @@ class LLMEngineManager:
                 tasks = []
                 for instance_id, instance in self.instances.items():
                     task = asyncio.gather(instance.ready.remote(), return_exceptions=True)
+                    task.add_done_callback(partial(instance_ready_callback, instance_id))
+                    tasks.append(task)
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+                tasks = []
+                for instance_id, server in self.servers.items():
+                    task = asyncio.gather(server.ready.remote(), return_exceptions=True)
                     task.add_done_callback(partial(instance_ready_callback, instance_id))
                     tasks.append(task)
                 await asyncio.gather(*tasks, return_exceptions=True)
@@ -185,7 +208,12 @@ class LLMEngineManager:
                     self._scale_down(instance_id)
                 instance_id = random_uuid()
                 new_pg = initialize_placement_group(instance_id, lifetime="detached")
-                await new_pg.ready()
+                try:
+                    await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT_SECONDS)
+                except asyncio.TimeoutError:
+                    print("Get new placement group ready timeout")
+                    ayncio.sleep(AUTO_DEPLOYMENT_INTERVAL_SECONDS)
+                    continue
                 print("Get new placement group ready done")
                 self._initialize_server_and_instance(instance_id, new_pg)
                 print("Deploy server and instance to new placement group done")
@@ -240,12 +268,11 @@ class LLMEngineManager:
             ret = fut.result()[0]
             if not isinstance(ret, ray.exceptions.RayActorError):
                 print(f"instance {instance_id} ready, scale up")
-                self._scale_up(instance_id, placement_group, new_server, new_instance)
                 new_server.run.remote()
+                self._scale_up(instance_id, placement_group, new_server, new_instance)
             else:
                 print(f"instance {instance_id} died, abort scale up")
-                remove_placement_group(instance_id)
-                kill_server(instance_id)
+                self._scale_down(instance_id)
 
         new_server = FastAPIServer.from_args(instance_id, self.host, self.port, placement_group, lifetime="detached")
         new_instance = Llumlet.from_args(instance_id, placement_group, lifetime="detached")

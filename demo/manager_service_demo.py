@@ -252,7 +252,7 @@ class LLMEngineManager:
                         if instance_id in curr_instances:
                             curr_instances.pop(instance_id)
 
-                # (TODO: s5u13b): double check
+                # TODO(s5u13b): double check
                 self.pgs = curr_pgs
                 self.servers = curr_servers
                 self.instance = curr_instances

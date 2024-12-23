@@ -1,5 +1,6 @@
 import asyncio
 import time
+import threading
 import argparse
 from contextlib import asynccontextmanager
 import uvicorn
@@ -50,9 +51,15 @@ class FastAPIServer:
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
+        self.run_loop_thread = threading.Thread(
+            target=self._run_loop, args=(), daemon=True, name="run_loop"
+        )
 
-    def run(self):
+    def _run_loop(self):
         uvicorn.run(app, host=self.host, port=self.port)
+    
+    def run(self):
+        self.run_loop_thread.start()
 
     @classmethod
     def from_args(cls, host: str, port: int):

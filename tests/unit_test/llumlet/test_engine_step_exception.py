@@ -62,7 +62,6 @@ def test_engine_step_exception(ray_env):
     origin_free_memory, _ = torch.cuda.mem_get_info()
 
     actor_name = "instance_0"
-    placement_group = initialize_placement_group(instance_id="0", world_size=1, detached=True)
     llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
                                   scheduling_strategy=scheduling_strategy).remote(
         instance_id="0",

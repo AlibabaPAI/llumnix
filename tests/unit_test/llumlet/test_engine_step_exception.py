@@ -69,7 +69,6 @@ def test_engine_step_exception(ray_env):
         backend_type=BackendType.VLLM,
         migration_config=migration_config,
         engine_args=engine_args,
-        placement_group=placement_group,
     )
     ray.get(llumlet.is_ready.remote())
 

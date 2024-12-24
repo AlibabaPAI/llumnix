@@ -33,6 +33,9 @@ from tests.conftest import setup_ray_env
 @ray.remote(num_cpus=1, max_concurrency=4)
 class MockLlumlet(Llumlet):
     def __init__(self, *args, **kwargs) -> None:
+        instance_id = kwargs["instance_id"]
+        placement_group = initialize_placement_group(instance_id=instance_id, world_size=1, detached=True)
+        kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         self.origin_step = self.backend_engine.engine.step_async
 
@@ -59,7 +62,6 @@ def test_engine_step_exception(setup_ray_env):
     origin_free_memory, _ = torch.cuda.mem_get_info()
 
     actor_name = "instance_0"
-    placement_group = initialize_placement_group(instance_id="0", world_size=1, detached=True)
     llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
                                   scheduling_strategy=scheduling_strategy).remote(
         instance_id="0",

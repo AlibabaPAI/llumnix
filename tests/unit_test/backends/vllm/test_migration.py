@@ -28,6 +28,7 @@ from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
+from llumnix.backends.utils import initialize_placement_group
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -56,6 +57,9 @@ class MockLlumlet(Llumlet):
 @ray.remote(num_cpus=1, max_concurrency=4)
 class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, **kwargs):
+        instance_id = kwargs["instance_id"]
+        placement_group = initialize_placement_group(instance_id=instance_id, world_size=1, detached=True)
+        kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop
         self.backend_engine.engine.scheduler.schedule = MagicMock()
@@ -106,7 +110,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
                             BackendType.VLLM,
                             1,
                             migration_config,
-                            engine_args)
+                            engine_args,)
 
     llumlet_1: Llumlet = Llumlet.from_args(
                             request_output_queue_type,
@@ -114,7 +118,7 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
                             BackendType.VLLM,
                             1,
                             migration_config,
-                            engine_args)
+                            engine_args,)
 
     llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
         name='instance_2',
@@ -206,7 +210,7 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
-    llumlet_0:Llumlet = Llumlet.from_args(
+    llumlet_0: Llumlet = Llumlet.from_args(
                             request_output_queue_type,
                             "0",
                             BackendType.VLLM,
@@ -214,14 +218,13 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
                             migration_config,
                             engine_args,)
 
-    llumlet_1:Llumlet = Llumlet.from_args(
+    llumlet_1: Llumlet = Llumlet.from_args(
                             request_output_queue_type,
                             "1",
                             BackendType.VLLM,
                             1,
                             migration_config,
-                            engine_args,
-                     )
+                            engine_args,)
 
     while True:
         res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])

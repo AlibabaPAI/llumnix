@@ -114,7 +114,7 @@ class Llumlet:
             logger.error("Failed to initialize llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
-        return llumlet_class
+        return llumlet
 
     async def _check_engine_state_loop(self):
         while True:

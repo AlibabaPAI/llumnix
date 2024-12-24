@@ -17,13 +17,7 @@ import os
 import subprocess
 import ray
 from ray.util.state import list_placement_groups
-from ray._raylet import PlacementGroupID
-from ray._private.utils import hex_to_binary
-from ray.util.placement_group import (
-    PlacementGroup,
-    placement_group_table,
-    remove_placement_group,
-)
+
 import pytest
 
 from llumnix.utils import random_uuid
@@ -35,14 +29,17 @@ def pytest_sessionstart(session):
 # TODO(s5u13b): Kill detached actors in e2e test.
 def cleanup_ray_env_func():
     try:
-        for placement_group_info in placement_group_table().values():
-            pg = PlacementGroup(
-                PlacementGroupID(hex_to_binary(placement_group_info["placement_group_id"]))
-            )
-            remove_placement_group(pg)
+        pg_states = list_placement_groups()
+        for pg_state in pg_states:
+            try:
+                ray.util.remove_placement_group(ray.util.get_placement_group(pg_state["name"]))
+            # pylint: disable=bare-except
+            except:
+                pass
     # pylint: disable=bare-except
     except:
         pass
+
     try:
         named_actors = ray.util.list_named_actors(True)
         for actor in named_actors:
@@ -55,6 +52,7 @@ def cleanup_ray_env_func():
     # pylint: disable=bare-except
     except:
         pass
+
     try:
         # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
         ray.shutdown()

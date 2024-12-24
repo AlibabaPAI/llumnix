@@ -21,9 +21,9 @@ import torch
 from vllm import LLM, SamplingParams
 
 # pylint: disable=unused-import
+from tests.conftest import ray_env
 from .utils import (generate_launch_command, wait_for_llumnix_service_ready,
                     shutdown_llumnix_service)
-from tests.conftest import ray_env
 
 
 async def get_llumnix_response(prompt, sampling_params, ip_ports):

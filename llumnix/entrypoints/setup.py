@@ -15,14 +15,13 @@ import subprocess
 import sys
 import os
 import time
-from typing import List, Tuple, Dict
+from typing import Dict
 import asyncio
 import socket
 import ray
 
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.backends.backend_interface import BackendType
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import EngineManagerArgs

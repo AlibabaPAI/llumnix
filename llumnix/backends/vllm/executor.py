@@ -17,7 +17,7 @@ import asyncio
 from collections import defaultdict
 from typing import List, Optional, Tuple
 import ray
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 # pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
 
@@ -39,7 +39,7 @@ logger = init_logger(__name__)
 class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     migration_config: MigrationConfig = None
 
-    def _init_workers_ray(self, placement_group: "PlacementGroup",
+    def _init_workers_ray(self, placement_group: PlacementGroup,
                           **ray_remote_kwargs):
         self.last_inference_latency = 0
         if self.parallel_config.tensor_parallel_size == 1:

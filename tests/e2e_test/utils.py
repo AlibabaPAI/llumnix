@@ -14,7 +14,6 @@
 import time
 import subprocess
 import pytest
-import ray
 import requests
 
 

@@ -13,7 +13,6 @@
 
 import math
 from unittest.mock import MagicMock
-import ray
 
 from vllm.sequence import (Logprob, SequenceGroupOutput, SequenceOutput,
                            SequenceStatus,SamplerOutput)

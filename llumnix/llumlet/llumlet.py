@@ -18,17 +18,19 @@ import time
 
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.placement_group import PlacementGroup
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
-from llumnix.backends.utils import init_backend_engine, initialize_placement_group
+from llumnix.backends.utils import init_backend_engine
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
+from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 
@@ -72,6 +74,7 @@ class Llumlet:
                   backend_type: BackendType,
                   world_size: int,
                   migration_config: MigrationConfig,
+                  placement_group: PlacementGroup,
                   *args,
                   **kwargs):
         try:
@@ -80,14 +83,11 @@ class Llumlet:
             num_gpu = 0
             if backend_type == backend_type.BLADELLM:
                 num_gpu = world_size
-            actor_name = f"instance_{instance_id}"
+            instance_name = get_instance_name(instance_id)
             if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
-                # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
-                placement_group = initialize_placement_group(instance_id, world_size, detached=True)
-                kwargs["placement_group"] = placement_group
                 llumlet_class = ray.remote(num_cpus=1,
                                            num_gpus=num_gpu,
-                                           name=actor_name,
+                                           name=instance_name,
                                            namespace='llumnix',
                                            max_concurrency=4,
                                            lifetime="detached")(cls).options(
@@ -99,7 +99,7 @@ class Llumlet:
             else: # backend_type == backend_type.SIM_VLLM:
                 llumlet_class = ray.remote(num_cpus=1,
                                            num_gpu=num_gpu,
-                                           name=actor_name,
+                                           name=instance_name,
                                            namespace='llumnix',
                                            max_concurrency=4,
                                            lifetime=lifetime)(cls).options(
@@ -108,7 +108,12 @@ class Llumlet:
                                                     soft=False,
                                                 )
                                             )
-            llumlet = llumlet_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
+            llumlet = llumlet_class.remote(instance_id,
+                                           request_output_queue_type,
+                                           backend_type, migration_config,
+                                           placement_group,
+                                           *args,
+                                           **kwargs)
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))

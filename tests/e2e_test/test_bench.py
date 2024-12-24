@@ -21,9 +21,9 @@ import torch
 import numpy as np
 
 # pylint: disable=unused-import
+from tests.conftest import ray_env
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service)
-from tests.conftest import ray_env
 
 BENCH_TEST_TIMEOUT_MINS = 30
 

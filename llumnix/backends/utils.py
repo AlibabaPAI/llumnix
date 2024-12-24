@@ -24,6 +24,7 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logger import init_logger
+from llumnix.utils import get_placement_group_name
 
 logger = init_logger(__name__)
 
@@ -131,7 +132,7 @@ def initialize_placement_group(
         placement_group_specs = ([{"CPU": 1}] + [{"GPU": 1}] * world_size)
         # TODO(s5u13b): Add get_placement_group_name, get_server_name, get_instance_name
         current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", name=f"pg_{instance_id}", lifetime=lifetime)
+            placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
         # Wait until PG is ready - this will block until all
         # requested resources are available, and will timeout
         # if they cannot be provisioned.

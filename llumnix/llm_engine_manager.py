@@ -32,7 +32,9 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import random_uuid, clear_gloo_backend_state
+from llumnix.utils import (random_uuid,
+                           clear_gloo_backend_state,
+                           remove_placement_group)
 from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
@@ -139,7 +141,7 @@ class LLMEngineManager:
                     logger.info("abort requests: {}.".format(request_ids))
                     for req_id in request_ids:
                         if req_id in self.request_instance:
-                            del self.request_instance[req_id]
+                            self.request_instance.pop(req_id)
             except (ray.exceptions.RayActorError, KeyError):
                 logger.info("[abort] instance {} is dead".format(instance_id))
                 self.scale_down(instance_id)
@@ -382,10 +384,11 @@ class LLMEngineManager:
         for ins_id in instance_ids:
             if ins_id in self.instances:
                 indeed_update = True
-                del self.instances[ins_id]
-                del self.instance_migrating[ins_id]
+                self.instances.pop(ins_id)
+                self.instance_migrating.pop(ins_id)
+                remove_placement_group(ins_id)
                 if self.log_instance_info:
-                    del self.instance_last_logged_empty[ins_id]
+                    self.instance_last_logged_empty.pop(ins_id)
                 self.pending_rebuild_migration_instances += 1
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
@@ -468,6 +471,7 @@ class LLMEngineManager:
         for _ in range(engine_manager_args.initial_instances):
             instance_id = random_uuid()
             if not engine_manager_args.profiling_result_file_path:
+                placement_group = initialize_placement_group(instance_id, world_size, detached=True)
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
                     instance_id,
@@ -475,6 +479,7 @@ class LLMEngineManager:
                     world_size,
                     engine_manager_args.create_migration_config(),
                     engine_args,
+                    placement_group,
                     *args,
                     **kwargs
                 )

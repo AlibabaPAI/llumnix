@@ -17,14 +17,16 @@ import time
 
 import ray
 from ray.util.placement_group import PlacementGroup
-# TODO(KuilongCui): Fix it.
-from loguru import logger
 
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
+from llumnix.logger import init_logger
+
+logger = init_logger(__name__)
+
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id, request_output_queue_type: QueueType):

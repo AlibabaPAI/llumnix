@@ -58,7 +58,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.step_counter = Counter()
         self.instance_info = None
         # Place the async put queue actor together with the instance.
-        # TODO(s5u13b): Refine the codes here.
+        # TODO(s5u13b): Refine the PlacementGroupSchedulingStrategy codes.
         if placement_group:
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,

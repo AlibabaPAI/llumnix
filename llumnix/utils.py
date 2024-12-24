@@ -51,10 +51,10 @@ def get_instance_name(instance_id: str) -> str:
     return f"{INSTANCE_NAME_PREFIX}{instance_id}"
 
 def remove_placement_group(instance_id: str) -> bool:
-    placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
-    if not placement_group:
-        return False
     try:
+        placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
+        if not placement_group:
+            return False
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
     # pylint: disable=broad-except

@@ -85,6 +85,7 @@ class Llumlet:
                 num_gpu = world_size
             instance_name = get_instance_name(instance_id)
             if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
+                kwargs["placement_group"] = placement_group
                 llumlet_class = ray.remote(num_cpus=1,
                                            num_gpus=num_gpu,
                                            name=instance_name,
@@ -110,8 +111,8 @@ class Llumlet:
                                             )
             llumlet = llumlet_class.remote(instance_id,
                                            request_output_queue_type,
-                                           backend_type, migration_config,
-                                           placement_group,
+                                           backend_type,
+                                           migration_config,
                                            *args,
                                            **kwargs)
         # pylint: disable=broad-except

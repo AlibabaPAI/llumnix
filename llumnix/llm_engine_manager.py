@@ -39,7 +39,7 @@ logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
 CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
-RETRIES_INTERVALS = 5.0
+NO_INSTANCE_RETRY_INTERVAL = 5.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
@@ -106,8 +106,8 @@ class LLMEngineManager:
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
             logger.info("No instance available temporarily, sleep {}s, "
-                        "and retry generate request {} again....".format(RETRIES_INTERVALS, request_id))
-            await asyncio.sleep(RETRIES_INTERVALS)
+                        "and retry generate request {} again....".format(NO_INSTANCE_RETRY_INTERVAL, request_id))
+            await asyncio.sleep(NO_INSTANCE_RETRY_INTERVAL)
 
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:

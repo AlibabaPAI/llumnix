@@ -35,18 +35,16 @@ manager_args = EngineManagerArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370)
 
-# Create llumlets.
-llumlet_ids: List[str] = None
-llumlets: List[Llumlet] = None
-llumlet_ids, llumlets = init_llumlets(
-    manager_args, engine_args, ray.get_runtime_context().get_node_id(),
-    QueueType("rayqueue"), BackendType.VLLM, 1,
-)
-
-
 # Create a manager. If the manager is created first, and then the llumlets are created, manager.scale_up
 # need to be called to add the newly created llumlets to the management of the manager.
 manager: LLMEngineManager = init_manager(manager_args)
+
+# Create llumlets.
+llumlet_ids: List[str] = None
+llumlets: List[Llumlet] = None
+llumlet_ids, llumlets = ray.get(engine_manager.init_llumlets.remote(
+    engine_args, QueueType("rayqueue"), BackendType.VLLM, 1,
+))
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()

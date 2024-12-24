@@ -62,16 +62,14 @@ def test_migrate_cache(setup_ray_env, backend):
         'init_migration',
         instance_id=worker0_id,
         migration_config=migraiton_config,
-        src_worker_handle_list=[worker0],
-        node_id=ray.get_runtime_context().get_node_id()))
+        src_worker_handle_list=[worker0]))
 
     worker1_id = random_uuid()
     ray.get(worker1.execute_method.remote(
         'init_migration',
         instance_id=worker1_id,
         migration_config=migraiton_config,
-        src_worker_handle_list=[worker1],
-        node_id=ray.get_runtime_context().get_node_id()))
+        src_worker_handle_list=[worker1]))
 
     instance_rank = {worker0_id: 0, worker1_id: 1}
     group_name = random_uuid()

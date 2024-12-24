@@ -50,7 +50,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  instance_id: str,
                  request_output_queue_type: QueueType,
                  placement_group: Optional[PlacementGroup],
-                 node_id: Optional[str],
                  *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.instance_id = instance_id
@@ -62,12 +61,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 placement_group=placement_group,
                 placement_group_capture_child_tasks=True,
             )
-        elif node_id:
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=node_id,
-                soft=False,
-            )
-        else: # When use simulator, placement_group and node_id are both None.
+        else: # When use simulator, placement_group is None.
             scheduling_strategy = NodeAffinitySchedulingStrategy(
                 node_id=ray.get_runtime_context().get_node_id(),
                 soft=False,
@@ -92,7 +86,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
         placement_group: Optional[PlacementGroup] = None,
-        node_id: Optional[str] = None,
         latency_mem: Optional[LatencyMemData] = None
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
@@ -111,14 +104,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             executor_class.migration_config = migration_config
         else:
             raise ValueError('Unsupported executor backend')
-        # Hack to pass node_id to _init_workers_ray function.
-        executor_class.node_id = node_id
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
             request_output_queue_type=request_output_queue_type,
             placement_group=placement_group,
-            node_id=node_id,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -253,14 +243,12 @@ class BackendVLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
         placement_group: PlacementGroup = None,
-        node_id: str = None
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
-                                                                          placement_group=placement_group,
-                                                                          node_id=node_id)
+                                                                          placement_group=placement_group)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
@@ -271,8 +259,7 @@ class BackendVLLM(BackendInterface):
         self._run_workers("init_migration", instance_id=instance_id,
                                             migration_config=migration_config,
                                             src_worker_handle_list=self.worker_handle_list,
-                                            placement_group=placement_group,
-                                            node_id=node_id)
+                                            placement_group=placement_group)
 
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))

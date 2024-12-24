@@ -98,14 +98,10 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
     request_output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
-    node_id = ray.get_runtime_context().get_node_id()
-    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
+    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
     llumlet_0: Llumlet = Llumlet.from_args(
                             request_output_queue_type,
-                            False,
-                            False,
-                            node_id,
                             "0",
                             BackendType.VLLM,
                             1,
@@ -114,9 +110,6 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
 
     llumlet_1: Llumlet = Llumlet.from_args(
                             request_output_queue_type,
-                            False,
-                            False,
-                            node_id,
                             "1",
                             BackendType.VLLM,
                             1,
@@ -132,7 +125,6 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
             backend_type=BackendType.VLLM,
             migration_config=migration_config,
             engine_args=engine_args,
-            node_id=node_id
         )
 
     while True:
@@ -216,9 +208,6 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
 
     llumlet_0:Llumlet = Llumlet.from_args(
                             request_output_queue_type,
-                            False,
-                            True,
-                            ray.get_runtime_context().get_node_id(),
                             "0",
                             BackendType.VLLM,
                             1,
@@ -227,9 +216,6 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
 
     llumlet_1:Llumlet = Llumlet.from_args(
                             request_output_queue_type,
-                            False,
-                            True,
-                            ray.get_runtime_context().get_node_id(),
                             "1",
                             BackendType.VLLM,
                             1,

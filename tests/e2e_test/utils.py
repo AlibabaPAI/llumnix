@@ -18,22 +18,6 @@ import ray
 import requests
 
 
-def parse_launch_mode(launch_mode: str):
-    # 'eief' means that enable init instance by manager and enable fixed node init instance, and so on.
-    if launch_mode == 'eief':
-        disable_init_instance_by_manager = False
-        disable_fixed_node_init_instance = False
-    elif launch_mode == 'eidf':
-        disable_init_instance_by_manager = False
-        disable_fixed_node_init_instance = True
-    elif launch_mode == 'dief':
-        disable_init_instance_by_manager = True
-        disable_fixed_node_init_instance = False
-    else:
-        disable_init_instance_by_manager = True
-        disable_fixed_node_init_instance = True
-    return disable_init_instance_by_manager, disable_fixed_node_init_instance
-
 def generate_launch_command(result_filename: str = "",
                             launch_ray_cluster: bool = True,
                             HEAD_NODE_IP: str = "127.0.0.1",
@@ -48,14 +32,11 @@ def generate_launch_command(result_filename: str = "",
                             log_instance_info: bool = False,
                             request_migration_policy: str = 'SR',
                             max_num_batched_tokens: int = 16000):
-    disable_init_instance_by_manager, disable_fixed_node_init_instance = parse_launch_mode(launch_mode)
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
         f"--host {ip} "
         f"--port {port} "
-        f"{'--disable-init-instance-by-manager ' if disable_init_instance_by_manager else ''}"
-        f"{'--disable-fixed-node-init-instance ' if disable_fixed_node_init_instance else ''}"
         f"--initial-instances {instances_num} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"

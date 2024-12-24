@@ -37,7 +37,6 @@ from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_pre
 logger = init_logger(__name__)
 
 class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
-    node_id: str = None
     migration_config: MigrationConfig = None
 
     def _init_workers_ray(self, placement_group: "PlacementGroup",
@@ -62,21 +61,14 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
 
         # Create the workers.
         driver_ip = get_ip()
-        node_id = self.node_id
         for rank in range(self.parallel_config.world_size):
-            if placement_group:
-                bundle = placement_group.bundle_specs[rank+1]
-                if not bundle.get("GPU", 0):
-                    raise Exception("GPU resource cannot be 0.")
-                scheduling_strategy = PlacementGroupSchedulingStrategy(
-                    placement_group=placement_group,
-                    placement_group_capture_child_tasks=True,
-                )
-            else:
-                scheduling_strategy = NodeAffinitySchedulingStrategy(
-                    node_id=node_id,
-                    soft=False,
-                )
+            bundle = placement_group.bundle_specs[rank+1]
+            if not bundle.get("GPU", 0):
+                raise Exception("GPU resource cannot be 0.")
+            scheduling_strategy = PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_capture_child_tasks=True,
+            )
             worker = ray.remote(
                 num_cpus=0,
                 num_gpus=num_gpus,

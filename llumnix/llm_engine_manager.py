@@ -439,7 +439,6 @@ class LLMEngineManager:
                   engine_manager_args: EngineManagerArgs,
                   profiling_database: ProfilingDatabase=None) -> "LLMEngineManager":
         global_scheduler_config = engine_manager_args.create_global_scheduler_configs()
-        # Init manager actor in 'llumnix' namespace to ensure that only one manager can be created.
         manager_class = ray.remote(num_cpus=0,
                                    max_restarts=-1,
                                    name=MANAGER_ACTOR_NAME,
@@ -454,8 +453,13 @@ class LLMEngineManager:
         return engine_manager
 
     # TODO(s5u13b): Fix the logger when enabling init instance by manager.
-    def init_llumlets(self, engine_args, node_id: str, request_output_queue_type: QueueType,
-                  backend_type: BackendType, world_size: int, *args, **kwargs) -> Tuple[List[str], List[Llumlet]]:
+    def init_llumlets(self,
+                      engine_args,
+                      request_output_queue_type: QueueType,
+                      backend_type: BackendType,
+                      world_size: int,
+                      *args,
+                      **kwargs) -> Tuple[List[str], List[Llumlet]]:
         engine_manager_args = self.engine_manager_args
         instance_ids: List[str] = []
         llumlets: List[Llumlet] = []
@@ -466,9 +470,6 @@ class LLMEngineManager:
             if not engine_manager_args.profiling_result_file_path:
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
-                    engine_manager_args.disable_fixed_node_init_instance,
-                    True,
-                    node_id,
                     instance_id,
                     backend_type,
                     world_size,
@@ -481,9 +482,6 @@ class LLMEngineManager:
                 assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
-                    engine_manager_args.disable_fixed_node_init_instance,
-                    True,
-                    node_id,
                     instance_id,
                     BackendType.SIM_VLLM,
                     world_size,

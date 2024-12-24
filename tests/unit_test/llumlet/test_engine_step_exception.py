@@ -52,8 +52,7 @@ class MockLlumlet(Llumlet):
 def test_engine_step_exception(setup_ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
     migration_config = MigrationConfig("SR", "rayrpc", 16, 1, 4, 5, 20)
-    node_id = ray.get_runtime_context().get_node_id()
-    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
+    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
     origin_free_memory, _ = torch.cuda.mem_get_info()
 
@@ -64,8 +63,7 @@ def test_engine_step_exception(setup_ray_env):
         instance_id="0",
         backend_type=BackendType.VLLM,
         migration_config=migration_config,
-        engine_args=engine_args,
-        node_id=node_id
+        engine_args=engine_args
     )
     ray.get(llumlet.is_ready.remote())
 

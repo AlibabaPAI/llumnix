@@ -104,7 +104,6 @@ def test_llm_engine_add_requset():
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
                                                    placement_group=None,
-                                                   node_id=ray.get_runtime_context().get_node_id(),
                                                    migration_config=None,
                                                    latency_mem=MagicMock(sepc=LatencyMemData))
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)

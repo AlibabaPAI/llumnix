@@ -74,17 +74,11 @@ class MigrationWorker(Worker):
         return dummy_cache_size
 
     def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list,
-                       placement_group=None, node_id=None) -> None:
-        if placement_group:
-            scheduling_strategy = PlacementGroupSchedulingStrategy(
-                placement_group=placement_group,
-                placement_group_capture_child_tasks=True,
-            )
-        else:
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=node_id,
-                soft=False,
-            )
+                       placement_group=None) -> None:
+        scheduling_strategy = PlacementGroupSchedulingStrategy(
+            placement_group=placement_group,
+            placement_group_capture_child_tasks=True,
+        )
 
         pin_memory = is_pin_memory_available()
         if not pin_memory:

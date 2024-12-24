@@ -91,8 +91,7 @@ def test_rebuild_migration_backend(setup_ray_env, backend):
         'init_migration',
         instance_id=worker0_id,
         migration_config=migration_config,
-        src_worker_handle_list=[worker0],
-        node_id=ray.get_runtime_context().get_node_id()))
+        src_worker_handle_list=[worker0]))
     instance_rank = {worker0_id: 0}
     assert ray.get(worker0.execute_method.remote('rebuild_migration_backend', instance_rank=instance_rank,
                                                  group_name=random_uuid()))
@@ -106,8 +105,7 @@ def test_rebuild_migration_backend(setup_ray_env, backend):
         'init_migration',
         instance_id=worker1_id,
         migration_config=migration_config,
-        src_worker_handle_list=[worker1],
-        node_id=ray.get_runtime_context().get_node_id()))
+        src_worker_handle_list=[worker1]))
 
     instance_rank = {worker1_id: 1, worker0_id: 0}
     group_name = random_uuid()

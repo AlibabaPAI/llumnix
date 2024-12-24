@@ -102,9 +102,7 @@ class LlumnixEntrypointsArgs:
 
 @dataclass
 class EngineManagerArgs:
-    disable_init_instance_by_manager: bool = None
     initial_instances: int = None
-    disable_fixed_node_init_instance: bool = None
 
     load_metric: str = None
     polling_interval: float = None
@@ -203,12 +201,6 @@ class EngineManagerArgs:
                 cur_arg = getattr(args, action.dest)
                 assert cur_arg in action.choices, f"{action.dest} should be one of {action.choices}, but {cur_arg} is set."
 
-        # vllm only
-        assert args.migration_backend != 'gloo' or (args.migration_backend == 'gloo' \
-            and not args.disable_init_instance_by_manager and not args.disable_fixed_node_init_instance), \
-            ("When using gloo as migration backend, "
-             "do not set --disable-init-instance-by-manager and --disable-fixed-node-init-instance.")
-
         # bladellm only
         assert args.migration_backend not in ['kvtransfer'] or (args.migration_backend == 'kvtransfer' \
             and args.migration_backend_transfer_type), \
@@ -217,12 +209,6 @@ class EngineManagerArgs:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        parser.add_argument('--disable-fixed-node-init-instance',
-                            action='store_true',
-                            help='disable fixing the placement of instance to current node')
-        parser.add_argument('--disable-init-instance-by-manager',
-                            action='store_true',
-                            help='disable initializing instance by manager')
         parser.add_argument('--initial-instances',
                             type=int,
                             help='number of instances created at initialzation')

@@ -47,7 +47,7 @@ class Llumlet:
                  **kwargs) -> None:
         try:
             self.instance_id = instance_id
-            self.actor_name = f"instance_{instance_id}"
+            self.instance_name = get_instance_name(instance_id)
             self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
                                                                         request_output_queue_type,
                                                                         backend_type,
@@ -130,7 +130,7 @@ class Llumlet:
                 # pylint: disable=protected-access
                 self.backend_engine._stop_event.set()
                 await asyncio.sleep(0)
-                self_actor = ray.get_actor(self.actor_name)
+                self_actor = ray.get_actor(self.instance_name)
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:

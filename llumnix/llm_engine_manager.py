@@ -37,6 +37,7 @@ from llumnix.utils import (random_uuid,
                            remove_placement_group)
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 
@@ -46,6 +47,8 @@ NO_INSTANCE_RETRY_INTERVAL = 5.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
+# TODO(s5u13b): Refactor manager codes to be more modular.
+# TODO(s5u13b): Handle exception of ray.get_actor().
 
 
 class LLMEngineManager:
@@ -261,7 +264,7 @@ class LLMEngineManager:
                     continue
                 self.instance_migrating[migrate_out_instance_id] = True
                 self.instance_migrating[migrate_in_instance_id] = True
-                migrate_in_instance_name = "instance_{}".format(migrate_in_instance_id)
+                migrate_in_instance_name = get_instance_name(migrate_in_instance_id)
                 # Use asyncio.gather to wrap ray remote call to add done callback.
                 task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name),
                                       return_exceptions=True)
@@ -403,6 +406,7 @@ class LLMEngineManager:
         return self.num_instances
 
     async def _connect_to_instances(self):
+        # TODO(s5u13b): Refine the codes.
         actor_names_dict = ray.util.list_named_actors(True)
         instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'] != MANAGER_ACTOR_NAME]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]

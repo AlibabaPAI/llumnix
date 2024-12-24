@@ -40,10 +40,12 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
+from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 
 NO_OUTPUTS_STEP_INTERVAL = 0.01
+
 
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
@@ -56,6 +58,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.step_counter = Counter()
         self.instance_info = None
         # Place the async put queue actor together with the instance.
+        # TODO(s5u13b): Refine the codes here.
         if placement_group:
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
@@ -256,7 +259,7 @@ class BackendVLLM(BackendInterface):
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
-            self.worker_handle_list.insert(0, ray.get_actor(f"instance_{self.instance_id}", namespace="llumnix"))
+            self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix"))
         self._run_workers("init_migration", instance_id=instance_id,
                                             migration_config=migration_config,
                                             src_worker_handle_list=self.worker_handle_list,

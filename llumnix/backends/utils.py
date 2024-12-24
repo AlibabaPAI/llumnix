@@ -25,6 +25,7 @@ from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logger import init_logger
 from llumnix.utils import get_placement_group_name
+from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 
@@ -40,7 +41,7 @@ class AsyncPutQueueActor:
                                     server_request_outputs: Dict[str, List],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
-            self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
+            self.engine_actor_handle = ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix")
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]

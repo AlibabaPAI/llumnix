@@ -511,6 +511,7 @@ class LLMEngineManager:
                     placement_group,
                     engine_args,
                     placement_group,
+                    engine_args,
                     *args,
                     **kwargs
                 )

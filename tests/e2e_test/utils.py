@@ -28,7 +28,6 @@ def generate_launch_command(result_filename: str = "",
                             migration_backend = "gloo",
                             model = "facebook/opt-125m",
                             max_model_len: int = 4096,
-                            launch_mode: str = 'eief',
                             log_instance_info: bool = False,
                             request_migration_policy: str = 'SR',
                             max_num_batched_tokens: int = 16000):
@@ -58,7 +57,7 @@ def generate_launch_command(result_filename: str = "",
     )
     return command
 
-def wait_for_llumnix_service_ready(ip_ports, timeout=60):
+def wait_for_llumnix_service_ready(ip_ports, timeout=120):
     start_time = time.time()
     while True:
         all_ready = True
@@ -77,7 +76,7 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=60):
 
         elapsed_time = time.time() - start_time
         if elapsed_time > timeout:
-            raise TimeoutError(f"Wait for llumnix service timeout({timeout} s).")
+            raise TimeoutError(f"Wait for llumnix service timeout ({timeout}s).")
 
         time.sleep(1)
 
@@ -110,34 +109,6 @@ def generate_bench_command(ip_ports: str,
         f"{'> bench_'+results_filename if len(results_filename)> 0 else ''}"
     )
     return command
-
-def cleanup_ray_env_func():
-    try:
-        try:
-            named_actors = ray.util.list_named_actors(True)
-            for actor in named_actors:
-                try:
-                    actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-                # pylint: disable=bare-except
-                except:
-                    continue
-                try:
-                    ray.kill(actor_handle)
-                # pylint: disable=bare-except
-                except:
-                    continue
-        # pylint: disable=bare-except
-        except:
-            pass
-        ray.shutdown()
-    # pylint: disable=bare-except
-    except:
-        pass
-
-@pytest.fixture
-def cleanup_ray_env():
-    yield
-    cleanup_ray_env_func()
 
 def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)

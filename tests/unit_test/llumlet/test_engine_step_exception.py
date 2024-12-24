@@ -28,7 +28,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import initialize_placement_group
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 
 @ray.remote(num_cpus=1, max_concurrency=4)
 class MockLlumlet(Llumlet):
@@ -54,7 +54,7 @@ class MockLlumlet(Llumlet):
         asyncio.create_task(self.backend_engine._start_engine_step_loop())
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
-def test_engine_step_exception(setup_ray_env):
+def test_engine_step_exception(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
     migration_config = MigrationConfig("SR", "rayrpc", 16, 1, 4, 5, 20)
     scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)

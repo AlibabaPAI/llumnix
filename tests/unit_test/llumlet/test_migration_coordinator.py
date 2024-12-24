@@ -22,7 +22,7 @@ from llumnix.backends.backend_interface import BackendInterface
 from llumnix.llumlet.llumlet import MigrationStatus
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 
 from .test_local_migration_scheduler import MockRequest
 
@@ -31,7 +31,7 @@ def ray_remote_call(ret):
     return ret
 
 @pytest.mark.asyncio
-async def test_migrate_out_onestage(setup_ray_env):
+async def test_migrate_out_onestage(ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
@@ -84,10 +84,10 @@ async def test_migrate_out_onestage(setup_ray_env):
     status = await coordinator._migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
     assert status == MigrationStatus.ABORTED_SRC
 
-# setup_ray_env should be passed after _migrate_out_onestage
+# ray_env should be passed after _migrate_out_onestage
 @patch.object(MigrationCoordinator, '_migrate_out_onestage')
 @pytest.mark.asyncio
-async def test_migrate_out_running_request(_, setup_ray_env):
+async def test_migrate_out_running_request(_, ray_env):
     # Create mock objects
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()

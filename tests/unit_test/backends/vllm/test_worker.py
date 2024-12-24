@@ -25,7 +25,7 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.utils import random_uuid
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 
 def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
                   worker_module_name="llumnix.backends.vllm.worker",
@@ -57,7 +57,7 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
     return worker
 
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
-def test_reserve_memory_for_migration(setup_ray_env, backend):
+def test_reserve_memory_for_migration(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()
     migration_config.migration_backend = backend
@@ -78,7 +78,7 @@ def test_reserve_memory_for_migration(setup_ray_env, backend):
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
-def test_rebuild_migration_backend(setup_ray_env, backend):
+def test_rebuild_migration_backend(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()
     migration_config.migration_backend = backend

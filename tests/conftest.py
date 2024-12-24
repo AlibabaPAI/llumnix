@@ -25,10 +25,8 @@ def pytest_sessionstart(session):
     subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-@pytest.fixture
-def setup_ray_env():
-    ray.init(namespace="llumnix", ignore_reinit_error=True)
-    yield
+# TODO(s5u13b): Kill detached actors in e2e test.
+def cleanup_ray_env_func():
     try:
         named_actors = ray.util.list_named_actors(True)
         for actor in named_actors:
@@ -38,19 +36,17 @@ def setup_ray_env():
             # pylint: disable=bare-except
             except:
                 continue
-        pg_states = list_placement_groups()
-        for pg_state in pg_states:
-            try:
-                placement_group = ray.util.get_placement_group(pg_state["name"])
-                ray.util.remove_placement_group(placement_group)
-            # pylint: disable=bare-except
-            except:
-                continue
         # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
         ray.shutdown()
     # pylint: disable=bare-except
     except:
         pass
+
+@pytest.fixture
+def ray_env():
+    ray.init(namespace="llumnix", ignore_reinit_error=True)
+    yield
+    cleanup_ray_env_func()
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

@@ -14,7 +14,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 from tests.unit_test.queue.utils import request_output_queue_server
 
 from .utils import create_dummy_prompt, initialize_scheduler
@@ -68,7 +68,7 @@ async def test_executor():
     assert len(outputs[0].outputs) == 2
 
 @pytest.mark.asyncio
-async def test_backend(setup_ray_env):
+async def test_backend(ray_env):
     # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)

@@ -31,7 +31,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 
 
 @ray.remote(num_cpus=1, max_concurrency=4)
@@ -141,24 +141,24 @@ def llumlet():
     ray.get(llumlet.is_ready.remote())
     return llumlet
 
-def test_init_manager(setup_ray_env, manager):
+def test_init_manager(ray_env, manager):
     assert manager is not None
     manager_actor_handle = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 
-def test_init_llumlet(setup_ray_env, llumlet):
+def test_init_llumlet(ray_env, llumlet):
     assert llumlet is not None
     ray.get(llumlet.is_ready.remote())
 
-def test_init_llumlets(setup_ray_env, manager):
+def test_init_llumlets(ray_env, manager):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM, 1))
     num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
     engine_manager_args = EngineManagerArgs()
     assert num_instances == engine_manager_args.initial_instances
 
-def test_init_llumlets_sim(setup_ray_env, manager):
+def test_init_llumlets_sim(ray_env, manager):
     manager.profiling_result_file_path="//"
     # pylint: disable=import-outside-toplevel
     import llumnix.backends.vllm.simulator
@@ -169,7 +169,7 @@ def test_init_llumlets_sim(setup_ray_env, manager):
     engine_manager_args = EngineManagerArgs()
     assert num_instances == engine_manager_args.initial_instances
 
-def test_scale_up_and_down(setup_ray_env, manager):
+def test_scale_up_and_down(ray_env, manager):
     initial_instances = 4
     instance_ids, llumlets = init_llumlets(initial_instances)
     num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
@@ -184,7 +184,7 @@ def test_scale_up_and_down(setup_ray_env, manager):
     num_instances = ray.get(manager.scale_down.remote(instance_ids_1))
     assert num_instances == 0
 
-def test_connect_to_instances(setup_ray_env):
+def test_connect_to_instances(ray_env):
     initial_instances = 4
     instance_ids, llumlets = init_llumlets(initial_instances)
     ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
@@ -195,7 +195,7 @@ def test_connect_to_instances(setup_ray_env):
     num_instances = ray.get(manager.scale_down.remote(instance_ids))
     assert num_instances == initial_instances
 
-def test_generate_and_abort(setup_ray_env, manager, llumlet):
+def test_generate_and_abort(ray_env, manager, llumlet):
     instance_id = ray.get(llumlet.get_instance_id.remote())
     ray.get(manager.scale_up.remote(instance_id, [llumlet]))
     request_id = random_uuid()
@@ -215,7 +215,7 @@ def test_generate_and_abort(setup_ray_env, manager, llumlet):
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
 
-def test_get_request_instance(setup_ray_env):
+def test_get_request_instance(ray_env):
     _, llumlets = init_llumlets(2)
     llumlet, llumlet_1 = llumlets[0], llumlets[1]
     manager = init_manager()
@@ -251,7 +251,7 @@ def get_instance_info_migrate_out(instance_id):
     instance_info.instance_type = InstanceType.NO_CONSTRAINTS
     return instance_info
 
-def test_update_instance_info_loop_and_migrate(setup_ray_env, manager):
+def test_update_instance_info_loop_and_migrate(ray_env, manager):
     num_llumlets = 5
     instance_ids, llumlets = init_llumlets(num_llumlets)
 
@@ -288,5 +288,5 @@ def test_update_instance_info_loop_and_migrate(setup_ray_env, manager):
             assert num_migrate_in == 0 and num_migrate_out == 0
 
 @pytest.mark.skip("Not implemented yet")
-def test_concurrent_migrate(setup_ray_env):
+def test_concurrent_migrate(ray_env):
     pass

@@ -23,7 +23,7 @@ from llumnix.arg_utils import EngineManagerArgs
 from llumnix.utils import random_uuid
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 from .test_worker import create_worker
 
 class MockMigrationWorker(MigrationWorker):
@@ -38,7 +38,7 @@ class MockMigrationWorker(MigrationWorker):
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
-def test_migrate_cache(setup_ray_env, backend):
+def test_migrate_cache(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = EngineManagerArgs(migration_buffer_blocks=3, migration_num_layers=5).create_migration_config()
     migraiton_config.migration_backend = backend

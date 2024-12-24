@@ -28,7 +28,7 @@ from llumnix.entrypoints.setup import LlumnixEntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 
 app = llumnix.entrypoints.vllm.api_server.app
-engine_manager = None
+manager = None
 MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 
 
@@ -54,14 +54,14 @@ class MockLLMEngineManager:
 
 
 def init_manager(request_output_queue_type: QueueType):
-    engine_manager = MockLLMEngineManager.options(name=MANAGER_ACTOR_NAME,
-                                                  namespace='llumnix').remote(request_output_queue_type)
-    return engine_manager
+    manager = MockLLMEngineManager.options(name=MANAGER_ACTOR_NAME,
+                                           namespace='llumnix').remote(request_output_queue_type)
+    return manager
 
 @app.get("/stats")
 def stats() -> Response:
     """Get the statistics of the engine."""
-    return JSONResponse(ray.get(engine_manager.testing_stats.remote()))
+    return JSONResponse(ray.get(manager.testing_stats.remote()))
 
 
 if __name__ == "__main__":
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     request_output_queue_type = QueueType(args.request_output_queue_type)
-    engine_manager = init_manager(request_output_queue_type)
+    manager = init_manager(request_output_queue_type)
     ip = '127.0.0.1'
     port = 1234
     request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     if request_output_queue_type == QueueType.RAYQUEUE:
         ray_queue_server = request_output_queue
     server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
-    llumnix_context = LlumnixEntrypointsContext(engine_manager,
+    llumnix_context = LlumnixEntrypointsContext(manager,
                                                 {'0': None},
                                                 request_output_queue,
                                                 server_info,

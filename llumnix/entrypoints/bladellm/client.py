@@ -87,7 +87,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 server_info_copy.request_timestamps = RequestTimestamps()
                 server_info_copy.request_timestamps.api_server_manager_generate_timestamp = time.time()
             # await to catch exception
-            await self.llumnix_context.engine_manager.generate.remote(str(request_id), server_info_copy, server_request=request)
+            await self.llumnix_context.manager.generate.remote(str(request_id), server_info_copy, server_request=request)
             self.llumnix_context.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
@@ -121,7 +121,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         if llumnix_id:
             try:
                 logger.info("abort request: {}.".format(req_id))
-                await self.llumnix_context.engine_manager.abort.remote(str(req_id))
+                await self.llumnix_context.manager.abort.remote(str(req_id))
                 self.entrypoint_id2llumnix_id.pop(req_id, None)
             except ray.exceptions.RayActorError:
                 logger.info("Manager is unavailable")

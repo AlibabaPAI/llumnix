@@ -445,12 +445,12 @@ class LLMEngineManager:
                                    namespace='llumnix',
                                    lifetime="detached"
                                    )(cls)
-        engine_manager = manager_class.remote(engine_manager_args,
-                                              global_scheduler_config,
-                                              os.getcwd(),
-                                              log_requests=not engine_manager_args.disable_log_requests_manager,
-                                              profiling_database=profiling_database)
-        return engine_manager
+        manager = manager_class.remote(engine_manager_args,
+                                       global_scheduler_config,
+                                       os.getcwd(),
+                                       log_requests=not engine_manager_args.disable_log_requests_manager,
+                                       profiling_database=profiling_database)
+        return manager
 
     # TODO(s5u13b): Fix the logger when enabling init instance by manager.
     def init_llumlets(self,

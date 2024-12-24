@@ -4,7 +4,7 @@ import asyncio
 
 import ray
 
-from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager, init_llumlets
+from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager
 from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
                      EngineArgs, QueueType, BackendType)
 from llumnix.utils import random_uuid
@@ -42,7 +42,7 @@ manager: LLMEngineManager = init_manager(manager_args)
 # Create llumlets.
 llumlet_ids: List[str] = None
 llumlets: List[Llumlet] = None
-llumlet_ids, llumlets = ray.get(engine_manager.init_llumlets.remote(
+llumlet_ids, llumlets = ray.get(manager.init_llumlets.remote(
     engine_args, QueueType("rayqueue"), BackendType.VLLM, 1,
 ))
 

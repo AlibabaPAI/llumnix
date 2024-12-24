@@ -85,36 +85,36 @@ class Llumlet:
                 # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
                 placement_group = initialize_placement_group(world_size, detached=True)
                 kwargs["placement_group"] = placement_group
-                engine_class = ray.remote(num_cpus=1,
-                                        num_gpus=num_gpu,
-                                        name=actor_name,
-                                        namespace='llumnix',
-                                        max_concurrency=4,
-                                        lifetime="detached")(cls).options(
+                llumlet_class = ray.remote(num_cpus=1,
+                                           num_gpus=num_gpu,
+                                           name=actor_name,
+                                           namespace='llumnix',
+                                           max_concurrency=4,
+                                           lifetime="detached")(cls).options(
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,
                                                     placement_group_bundle_index=0,
                                                 )
                                             )
             else: # backend_type == backend_type.SIM_VLLM:
-                engine_class = ray.remote(num_cpus=1,
-                                        num_gpu=num_gpu,
-                                        name=actor_name,
-                                        namespace='llumnix',
-                                        max_concurrency=4,
-                                        lifetime=lifetime)(cls).options(
+                llumlet_class = ray.remote(num_cpus=1,
+                                           num_gpu=num_gpu,
+                                           name=actor_name,
+                                           namespace='llumnix',
+                                           max_concurrency=4,
+                                           lifetime=lifetime)(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                     node_id=ray.get_runtime_context().get_node_id(),
                                                     soft=False,
                                                 )
                                             )
-            llumlet = engine_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
+            llumlet = llumlet_class.remote(instance_id, request_output_queue_type, backend_type, migration_config, *args, **kwargs)
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
-        return llumlet
+        return llumlet_class
 
     async def _check_engine_state_loop(self):
         while True:

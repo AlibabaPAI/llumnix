@@ -37,11 +37,11 @@ def test_launch_ray_cluster():
 
 def test_init_manager(setup_ray_env):
     engine_manager_args = EngineManagerArgs()
-    engine_manager = init_manager(engine_manager_args)
-    assert engine_manager is not None
-    engine_manager_actor_handle = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
-    assert engine_manager_actor_handle is not None
-    assert engine_manager == engine_manager_actor_handle
+    manager = init_manager(engine_manager_args)
+    assert manager is not None
+    manager_actor_handle = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
+    assert manager_actor_handle is not None
+    assert manager == manager_actor_handle
 
 def test_init_zmq(setup_ray_env):
     ip = '127.0.0.1'
@@ -51,13 +51,13 @@ def test_init_zmq(setup_ray_env):
 
 def test_retry_manager_method_sync(setup_ray_env):
     engine_manager_args = EngineManagerArgs()
-    engine_manager = init_manager(engine_manager_args)
-    ret = retry_manager_method_sync(engine_manager.is_ready.remote, 'is_ready')
+    manager = init_manager(engine_manager_args)
+    ret = retry_manager_method_sync(manager.is_ready.remote, 'is_ready')
     assert ret is True
 
 @pytest.mark.asyncio
 async def test_retry_manager_method_async(setup_ray_env):
     engine_manager_args = EngineManagerArgs()
-    engine_manager = init_manager(engine_manager_args)
-    ret = await retry_manager_method_async(engine_manager.is_ready.remote, 'is_ready')
+    manager = init_manager(engine_manager_args)
+    ret = await retry_manager_method_async(manager.is_ready.remote, 'is_ready')
     assert ret is True

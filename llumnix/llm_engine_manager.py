@@ -176,7 +176,7 @@ class LLMEngineManager:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
             else:
-                dead_instance_ids.append(instance_id)
+                self.scale_down(instance_id)
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(ret))
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(self.instances))
 
@@ -185,15 +185,12 @@ class LLMEngineManager:
                 await asyncio.sleep(interval)
                 tasks = []
                 instance_infos = []
-                dead_instance_ids = []
                 for instance_id, instance in self.instances.items():
                     # Use asyncio.gather to wrap ray remote call to add done callback.
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
                     task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
                     tasks.append(task)
                 await asyncio.gather(*tasks, return_exceptions=True)
-                if len(dead_instance_ids) > 0:
-                    self.scale_down(dead_instance_ids)
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \

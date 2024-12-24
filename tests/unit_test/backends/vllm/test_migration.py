@@ -104,12 +104,18 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     asyncio.create_task(que.run_server_loop())
     scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
+    # TODO(s5u13b): Simplify unit test with llumlet initialization.
+
+    placement_group_0 = initialize_placement_group(instance_id="0", world_size=1, detached=True)
+    placement_group_1 = initialize_placement_group(instance_id="1", world_size=1, detached=True)
+
     llumlet_0: Llumlet = Llumlet.from_args(
                             request_output_queue_type,
                             "0",
                             BackendType.VLLM,
                             1,
                             migration_config,
+                            placement_group_0,
                             engine_args,)
 
     llumlet_1: Llumlet = Llumlet.from_args(
@@ -118,6 +124,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
                             BackendType.VLLM,
                             1,
                             migration_config,
+                            placement_group_1,
                             engine_args,)
 
     llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
@@ -209,6 +216,9 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend):
     request_output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
+    
+    placement_group_0 = initialize_placement_group(instance_id="0", world_size=1, detached=True)
+    placement_group_1 = initialize_placement_group(instance_id="1", world_size=1, detached=True)
 
     llumlet_0: Llumlet = Llumlet.from_args(
                             request_output_queue_type,
@@ -216,6 +226,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend):
                             BackendType.VLLM,
                             1,
                             migration_config,
+                            placement_group_0,
                             engine_args,)
 
     llumlet_1: Llumlet = Llumlet.from_args(
@@ -224,6 +235,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend):
                             BackendType.VLLM,
                             1,
                             migration_config,
+                            placement_group_1,
                             engine_args,)
 
     while True:

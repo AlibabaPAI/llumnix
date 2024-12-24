@@ -15,13 +15,13 @@ from ray.util.state import (list_actors,
 
 
 from llumnix.utils import random_uuid
-from llumnix.logger import init_logger
 
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
 WAIT_PLACEMENT_GROUP_TIMEOUT_SECONDS = 1.0
 AUTO_DEPLOYMENT_INTERVAL_SECONDS = 1.0
+CHECK_DEPLOYMENT_CORRECTNESS_INTERVAL_SECONDS = 5.0
 
 app = FastAPI()
 
@@ -167,8 +167,8 @@ class LLMEngineManager:
         self.servers: Dict[str, FastAPIServer] = {}
         self.instances: Dict[str, Llumlet] = {}
         asyncio.create_task(self._auto_scale_up_loop())
-        asyncio.create_task(self._auto_scale_down_loop())
-        # asyncio.create_task(self._check_deployment_correctness_loop())
+        # asyncio.create_task(self._auto_scale_down_loop())
+        asyncio.create_task(self._check_deployment_correctness_loop())
         print("LLMEngineManager created")
 
     async def _auto_scale_down_loop(self) -> None:
@@ -225,6 +225,11 @@ class LLMEngineManager:
                 print("exception traceback: {}".format(traceback.format_exc()))
 
     async def _check_deployment_correctness_loop(self) -> None:
+        async def detect_correctness_task(instance_id: str):
+            await asyncio.sleep(CHECK_DEPLOYMENT_CORRECTNESS_INTERVAL_SECONDS)
+            if instance_id in self.pgs and (instance_id not in self.servers or instance_id not in self.instances):
+                self._scale_down(instance_id)
+
         while True:
             try:
                 curr_pgs: Dict[str, PlacementGroup] = {}
@@ -245,20 +250,11 @@ class LLMEngineManager:
 
                 assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
 
+                tasks = []
                 for instance_id in curr_pgs:
                     if instance_id not in curr_servers or instance_id not in curr_instances:
-                        self._scale_down(instance_id)
-                        if instance_id in curr_pgs:
-                            curr_pgs.pop(instance_id)
-                        if instance_id in curr_servers:
-                            curr_servers.pop(instance_id)
-                        if instance_id in curr_instances:
-                            curr_instances.pop(instance_id)
-
-                # TODO(s5u13b): double check
-                self.pgs = curr_pgs
-                self.servers = curr_servers
-                self.instance = curr_instances
+                        tasks.append(asyncio.create_task(detect_correctness_task(instance_id)))
+                await asyncio.gather(*tasks, return_exceptions=True)
 
                 await asyncio.sleep(AUTO_DEPLOYMENT_INTERVAL_SECONDS)
             # pylint: disable=broad-except
@@ -305,7 +301,7 @@ class LLMEngineManager:
             print(f"pop server {instance_id}")
             self.servers.pop(instance_id)
         if instance_id in self.instances:
-            print(f"del instance {instance_id}")
+            print(f"pop instance {instance_id}")
             self.instances.pop(instance_id)
 
     @classmethod

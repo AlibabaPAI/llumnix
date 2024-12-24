@@ -52,11 +52,13 @@ instance_ids, llumlets = ray.get(manager.init_llumlets.remote(
 ray.get(manager.scale_up.remote(instance_ids, llumlets))
 
 # Create llumlets.
-llumlet_ids: List[str] = None
+instance_ids: List[str] = None
 llumlets: List[Llumlet] = None
-llumlet_ids, llumlets = ray.get(manager.init_llumlets.remote(
+instance_ids, llumlets = ray.get(manager.init_llumlets.remote(
     engine_args, QueueType("rayqueue"), BackendType.VLLM, 1,
 ))
+
+ray.get(manager.scale_up.remote(instance_ids, llumlets))
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()

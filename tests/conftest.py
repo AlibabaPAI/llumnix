@@ -16,7 +16,13 @@ import shutil
 import os
 import subprocess
 import ray
-from ray.util.state import list_placement_groups
+from ray._raylet import PlacementGroupID
+from ray._private.utils import hex_to_binary
+from ray.util.placement_group import (
+    PlacementGroup,
+    placement_group_table,
+    remove_placement_group,
+)
 
 import pytest
 
@@ -26,13 +32,15 @@ def pytest_sessionstart(session):
     subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-# TODO(s5u13b): Kill detached actors in e2e test.
 def cleanup_ray_env_func():
     try:
-        pg_states = list_placement_groups()
-        for pg_state in pg_states:
+        # list_placement_groups cannot take effects.
+        for placement_group_info in placement_group_table().values():
             try:
-                ray.util.remove_placement_group(ray.util.get_placement_group(pg_state["name"]))
+                pg = PlacementGroup(
+                    PlacementGroupID(hex_to_binary(placement_group_info["placement_group_id"]))
+                )
+                remove_placement_group(pg)
             # pylint: disable=bare-except
             except:
                 pass

@@ -10,6 +10,8 @@ from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineMan
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
 
+from tests.conftest import cleanup_ray_env_func
+
 # Sample prompts.
 prompts = [
     "Hello, my name is",
@@ -91,6 +93,8 @@ for actor in named_actors:
         ray.kill(actor_handle)
     except:
         continue
+    
+cleanup_ray_env_func()
 
 # Shutdown ray cluster.
 ray.shutdown()

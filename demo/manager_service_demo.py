@@ -2,7 +2,7 @@ import asyncio
 import time
 import traceback
 import threading
-from typing import Dict
+from typing import Dict, Tuple
 from functools import partial
 import uvicorn
 from fastapi import FastAPI
@@ -157,6 +157,28 @@ class Llumlet:
         return True
 
 
+def get_curr_deployment_states() -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServer], Dict[str, Llumlet]]:
+    curr_pgs: Dict[str, PlacementGroup] = {}
+    curr_servers: Dict[str, PlacementGroup] = {}
+    curr_instances: Dict[str, Llumlet] = {}
+
+    created_pg_states = list_placement_groups(filters=[("state", "=", "CREATED")])
+    for created_pg_state in created_pg_states:
+        instance_id = created_pg_state["name"].split("_")[-1]
+        curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_state["name"])
+
+    alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")])
+    for alive_actor_state in alive_actor_states:
+        if alive_actor_state["name"].startswith(SERVER_NAME_PREFIX):
+            instance_id = alive_actor_state["name"].split("_")[-1]
+            curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
+        elif alive_actor_state["name"].startswith(INSTANCE_NAME_PREFIX):
+            instance_id = alive_actor_state["name"].split("_")[-1]
+            curr_instances[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
+
+    return curr_pgs, curr_servers, curr_instances
+
+
 class LLMEngineManager:
     def __init__(self):
         print("create LLMEngineManager")
@@ -168,7 +190,7 @@ class LLMEngineManager:
         self.instances: Dict[str, Llumlet] = {}
         asyncio.create_task(self._auto_scale_up_loop())
         # asyncio.create_task(self._auto_scale_down_loop())
-        asyncio.create_task(self._check_deployment_correctness_loop())
+        asyncio.create_task(self._check_deployment_states_correctness_loop())
         print("LLMEngineManager created")
 
     async def _auto_scale_down_loop(self) -> None:
@@ -214,6 +236,7 @@ class LLMEngineManager:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT_SECONDS)
                 except asyncio.TimeoutError:
                     print("Get new placement group ready timeout")
+                    ray.util.remove_placement_group(new_pg)
                     await asyncio.sleep(AUTO_DEPLOYMENT_INTERVAL_SECONDS)
                     continue
                 print("Get new placement group ready done")
@@ -224,29 +247,17 @@ class LLMEngineManager:
                 print("unexpected exception occurs: {}".format(e))
                 print("exception traceback: {}".format(traceback.format_exc()))
 
-    async def _check_deployment_correctness_loop(self) -> None:
+    async def _check_deployment_states_correctness_loop(self) -> None:
         async def detect_correctness_task(instance_id: str):
+            print(f"detect instance {instance_id}")
             await asyncio.sleep(CHECK_DEPLOYMENT_CORRECTNESS_INTERVAL_SECONDS)
-            if instance_id in self.pgs and (instance_id not in self.servers or instance_id not in self.instances):
+            curr_pgs, curr_servers, curr_instances = get_curr_deployment_states()
+            if instance_id in curr_pgs and (instance_id not in curr_servers or instance_id not in curr_instances):
                 self._scale_down(instance_id)
 
         while True:
             try:
-                curr_pgs: Dict[str, PlacementGroup] = {}
-                curr_servers: Dict[str, PlacementGroup] = {}
-                curr_instances: Dict[str, Llumlet] = {}
-                created_pg_states = list_placement_groups(filters=[("state", "=", "CREATED")])
-                for created_pg_state in created_pg_states:
-                    instance_id = created_pg_state["name"].split("_")[-1]
-                    curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_state["name"])
-                alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")])
-                for alive_actor_state in alive_actor_states:
-                    if alive_actor_state["name"].startswith(SERVER_NAME_PREFIX):
-                        instance_id = alive_actor_state["name"].split("_")[-1]
-                        curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
-                    elif alive_actor_state["name"].startswith(INSTANCE_NAME_PREFIX):
-                        instance_id = alive_actor_state["name"].split("_")[-1]
-                        curr_instances[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
+                curr_pgs, curr_servers, curr_instances = get_curr_deployment_states()
 
                 assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
 

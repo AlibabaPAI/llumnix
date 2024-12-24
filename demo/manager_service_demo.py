@@ -157,7 +157,7 @@ class Llumlet:
         return True
 
 
-def get_curr_deployment_states() -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServer], Dict[str, Llumlet]]:
+def get_curr_deployment() -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServer], Dict[str, Llumlet]]:
     curr_pgs: Dict[str, PlacementGroup] = {}
     curr_servers: Dict[str, PlacementGroup] = {}
     curr_instances: Dict[str, Llumlet] = {}
@@ -188,9 +188,10 @@ class LLMEngineManager:
         self.pgs: Dict[str, PlacementGroup] = {}
         self.servers: Dict[str, FastAPIServer] = {}
         self.instances: Dict[str, Llumlet] = {}
+        self._connect_to_existing_deployment()
         asyncio.create_task(self._auto_scale_up_loop())
-        # asyncio.create_task(self._auto_scale_down_loop())
-        asyncio.create_task(self._check_deployment_states_correctness_loop())
+        asyncio.create_task(self._auto_scale_down_loop())
+        asyncio.create_task(self._check_deployment_states_loop())
         print("LLMEngineManager created")
 
     async def _auto_scale_down_loop(self) -> None:
@@ -247,17 +248,17 @@ class LLMEngineManager:
                 print("unexpected exception occurs: {}".format(e))
                 print("exception traceback: {}".format(traceback.format_exc()))
 
-    async def _check_deployment_states_correctness_loop(self) -> None:
+    async def _check_deployment_states_loop(self) -> None:
         async def detect_correctness_task(instance_id: str):
             print(f"detect instance {instance_id}")
             await asyncio.sleep(CHECK_DEPLOYMENT_CORRECTNESS_INTERVAL_SECONDS)
-            curr_pgs, curr_servers, curr_instances = get_curr_deployment_states()
+            curr_pgs, curr_servers, curr_instances = get_curr_deployment()
             if instance_id in curr_pgs and (instance_id not in curr_servers or instance_id not in curr_instances):
                 self._scale_down(instance_id)
 
         while True:
             try:
-                curr_pgs, curr_servers, curr_instances = get_curr_deployment_states()
+                curr_pgs, curr_servers, curr_instances = get_curr_deployment()
 
                 assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
 
@@ -287,6 +288,13 @@ class LLMEngineManager:
         new_server = FastAPIServer.from_args(instance_id, self.host, self.port, placement_group, lifetime="detached")
         new_instance = Llumlet.from_args(instance_id, placement_group, lifetime="detached")
         asyncio.create_task(wait_instance_ready(instance_id))
+
+    def _connect_to_existing_deployment(self):
+        self.pgs, self.servers, self.instances = get_curr_deployment()
+        correct_instance_id_set = set(self.pgs.keys()).intersection(self.servers.keys(), self.instances.keys())
+        print(f"connect to instances: {correct_instance_id_set}")
+        for instance_id in correct_instance_id_set:
+            self._scale_up(instance_id, self.pgs[instance_id], self.servers[instance_id], self.instances[instance_id])
 
     def _scale_up(self,
                   instance_id: str,

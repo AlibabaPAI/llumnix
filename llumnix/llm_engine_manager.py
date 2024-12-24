@@ -39,6 +39,7 @@ from llumnix.utils import (random_uuid,
                            INSTANCE_NAME_PREFIX)
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 

@@ -83,8 +83,6 @@ async def test_e2e(ray_env, shutdown_llumnix_service, model, migration_backend):
     ray.shutdown()
 
     await asyncio.sleep(5)
-    
-    # TODO(s5u13b): Fix ray autoscaler failure.
 
     # generate llumnix outputs
     ip = "127.0.0.1"

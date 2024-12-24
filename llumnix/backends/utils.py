@@ -79,6 +79,7 @@ def init_backend_engine(instance_id: str, request_output_queue_type: QueueType,
     return backend_engine
 
 def initialize_placement_group(
+    instance_id: str,
     world_size: int = 1,
     detached: bool = False
 ) -> Tuple[str, Optional[PlacementGroup]]:
@@ -128,8 +129,9 @@ def initialize_placement_group(
                 "available GPUs in the cluster.")
         # Create a new placement group
         placement_group_specs = ([{"CPU": 1}] + [{"GPU": 1}] * world_size)
+        # TODO(s5u13b): Add get_placement_group_name, get_server_name, get_instance_name
         current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", lifetime=lifetime)
+            placement_group_specs, "STRICT_PACK", name=f"pg_{instance_id}", lifetime=lifetime)
         # Wait until PG is ready - this will block until all
         # requested resources are available, and will timeout
         # if they cannot be provisioned.

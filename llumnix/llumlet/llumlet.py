@@ -83,7 +83,7 @@ class Llumlet:
             actor_name = f"instance_{instance_id}"
             if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
                 # TODO(s5u13b): Support placement_group lifetime management when the migration backend is gloo.
-                placement_group = initialize_placement_group(world_size, detached=True)
+                placement_group = initialize_placement_group(instance_id, world_size, detached=True)
                 kwargs["placement_group"] = placement_group
                 llumlet_class = ray.remote(num_cpus=1,
                                            num_gpus=num_gpu,

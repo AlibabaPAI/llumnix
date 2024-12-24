@@ -25,6 +25,8 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.backends.utils import initialize_placement_group
+
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
 
@@ -57,13 +59,15 @@ def test_engine_step_exception(setup_ray_env):
     origin_free_memory, _ = torch.cuda.mem_get_info()
 
     actor_name = "instance_0"
+    placement_group = initialize_placement_group(instance_id="0", world_size=1, detached=True)
     llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
                                   scheduling_strategy=scheduling_strategy).remote(
-        request_output_queue_type=QueueType.RAYQUEUE,
         instance_id="0",
+        request_output_queue_type=QueueType.RAYQUEUE,
         backend_type=BackendType.VLLM,
         migration_config=migration_config,
-        engine_args=engine_args
+        engine_args=engine_args,
+        placement_group=placement_group,
     )
     ray.get(llumlet.is_ready.remote())
 

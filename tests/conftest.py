@@ -16,6 +16,7 @@ import shutil
 import os
 import subprocess
 import ray
+from ray.util.state import list_placement_groups
 import pytest
 
 from llumnix.utils import random_uuid
@@ -33,12 +34,15 @@ def setup_ray_env():
         for actor in named_actors:
             try:
                 actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+                ray.kill(actor_handle)
             # pylint: disable=bare-except
             except:
                 continue
-
+        pg_states = list_placement_groups()
+        for pg_state in pg_states:
             try:
-                ray.kill(actor_handle)
+                placement_group = ray.util.get_placement_group(pg_state["name"])
+                ray.util.remove_placement_group(placement_group)
             # pylint: disable=bare-except
             except:
                 continue

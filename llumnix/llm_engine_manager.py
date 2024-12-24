@@ -510,6 +510,7 @@ class LLMEngineManager:
                     engine_manager_args.create_migration_config(),
                     placement_group,
                     engine_args,
+                    placement_group,
                     *args,
                     **kwargs
                 )

@@ -80,18 +80,18 @@ async def test_e2e(ray_env, shutdown_llumnix_service, model, migration_backend):
     if len(vllm_output) == 0:
         vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
 
+    ray.shutdown()
+
     await asyncio.sleep(5)
-    
-    # TODO(s5u13b): Fix ray autoscaler failure.
 
     # generate llumnix outputs
     ip = "127.0.0.1"
     base_port = 37037
     launch_command = generate_launch_command(model=model,
-                                      max_model_len=max_model_len,
-                                      ip=ip,
-                                      port=base_port,
-                                      migration_backend=migration_backend)
+                                             max_model_len=max_model_len,
+                                             ip=ip,
+                                             port=base_port,
+                                             migration_backend=migration_backend)
     subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])

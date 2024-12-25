@@ -45,6 +45,18 @@ TEST_PROMPTS = [
     "Swahili: 'The early bird catches the worm.'\n"
 ]
 
+def init_llumlet(request_output_queue_type, instance_id, migration_config, engine_args):
+    placement_group = initialize_placement_group(instance_id=instance_id, world_size=1, detached=True)
+    llumlet = Llumlet.from_args(
+                request_output_queue_type,
+                instance_id,
+                BackendType.VLLM,
+                1,
+                migration_config,
+                placement_group,
+                engine_args,)
+    return llumlet
+
 class MockBackendVLLM(BackendVLLM):
     def __init__(self):
         self.engine = MockEngine()
@@ -104,28 +116,8 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     asyncio.create_task(que.run_server_loop())
     scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
-    # TODO(s5u13b): Simplify unit test with llumlet initialization.
-
-    placement_group_0 = initialize_placement_group(instance_id="0", world_size=1, detached=True)
-    placement_group_1 = initialize_placement_group(instance_id="1", world_size=1, detached=True)
-
-    llumlet_0: Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            "0",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            placement_group_0,
-                            engine_args,)
-
-    llumlet_1: Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            "1",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            placement_group_1,
-                            engine_args,)
+    llumlet_0 = init_llumlet(request_output_queue_type, "0", migration_config, engine_args)
+    llumlet_1 = init_llumlet(request_output_queue_type, "1", migration_config, engine_args)
 
     llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
         name='instance_2',
@@ -217,26 +209,8 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend):
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
-    placement_group_0 = initialize_placement_group(instance_id="0", world_size=1, detached=True)
-    placement_group_1 = initialize_placement_group(instance_id="1", world_size=1, detached=True)
-
-    llumlet_0: Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            "0",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            placement_group_0,
-                            engine_args,)
-
-    llumlet_1: Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            "1",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            placement_group_1,
-                            engine_args,)
+    llumlet_0 = init_llumlet(request_output_queue_type, "0", migration_config, engine_args)
+    llumlet_1 = init_llumlet(request_output_queue_type, "1", migration_config, engine_args)
 
     while True:
         res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])

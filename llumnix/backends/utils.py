@@ -131,7 +131,6 @@ def initialize_placement_group(
                 "available GPUs in the cluster.")
         # Create a new placement group
         placement_group_specs = ([{"CPU": 1}] + [{"GPU": 1}] * world_size)
-        # TODO(s5u13b): Add get_placement_group_name, get_server_name, get_instance_name
         current_placement_group = ray.util.placement_group(
             placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
         # Wait until PG is ready - this will block until all

@@ -100,7 +100,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 if self.llumnix_context.instance_num_requests:
                     instance_id = min(self.llumnix_context.instance_num_requests, key=self.llumnix_context.instance_num_requests.get)
                     self.llumnix_context.instance_num_requests[instance_id] += 1
-                    # TODO[xinyi]: set expected step here
+                    # TODO(Xinyi): set expected step here
                     await self.llumnix_context.instances[instance_id].generate.remote(request_id, server_info_copy, -1, request)
                     logger.info("Manager is unavailable, directly pass request {} to instance {}".format(request_id, instance_id))
                 else:

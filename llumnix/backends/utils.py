@@ -24,8 +24,7 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logger import init_logger
-from llumnix.utils import get_placement_group_name
-from llumnix.utils import get_instance_name
+from llumnix.utils import get_placement_group_name, get_instance_name
 
 logger = init_logger(__name__)
 

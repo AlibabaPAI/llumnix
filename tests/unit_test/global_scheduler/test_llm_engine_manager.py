@@ -19,7 +19,7 @@ import numpy as np
 
 from vllm import EngineArgs
 
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, get_instance_name
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.instance_info import InstanceInfo
@@ -38,7 +38,7 @@ from tests.conftest import ray_env
 class MockLlumlet:
     def __init__(self, instance_id):
         self.instance_id = instance_id
-        self.actor_name = f"instance_{instance_id}"
+        self.actor_name = get_instance_name(instance_id)
         self.num_requests = 0
         self.request_id_set = set()
         self.instance_info = None
@@ -118,7 +118,7 @@ def init_llumlets(initial_instances):
     llumlets = []
     for _ in range(initial_instances):
         instance_id = random_uuid()
-        instance_name = 'instance_{}'.format(instance_id)
+        instance_name = get_instance_name(instance_id)
         llumlet = MockLlumlet.options(name=instance_name,
                                       namespace='llumnix').remote(instance_id)
         instance_ids.append(instance_id)
@@ -135,7 +135,7 @@ def manager():
 @pytest.fixture
 def llumlet():
     instance_id = random_uuid()
-    instance_name = 'instance_{}'.format(instance_id)
+    instance_name = get_instance_name(instance_id)
     llumlet = MockLlumlet.options(name=instance_name,
                                   namespace='llumnix').remote(instance_id)
     ray.get(llumlet.is_ready.remote())

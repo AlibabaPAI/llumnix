@@ -34,10 +34,11 @@ from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (random_uuid,
                            clear_gloo_backend_state,
-                           remove_placement_group)
+                           remove_placement_group,
+                           get_instance_name,
+                           INSTANCE_NAME_PREFIX)
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import initialize_placement_group
-from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 
@@ -427,8 +428,9 @@ class LLMEngineManager:
                 logger.info("[_connect_to_instances] connect to instance {} abort, "
                             "which may be not ready or alive, err: {}".format(instance_id, e))
 
-        actor_names_dict = ray.util.list_named_actors()
-        instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'] != MANAGER_ACTOR_NAME]
+        # Must set True despite set namespance to llumnix.
+        actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
+        instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []
         scale_up_instance_actor_handles = []

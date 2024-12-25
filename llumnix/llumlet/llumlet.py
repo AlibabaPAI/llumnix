@@ -105,7 +105,7 @@ class Llumlet:
                                            name=instance_name,
                                            namespace='llumnix',
                                            max_concurrency=4,
-                                           lifetime=lifetime)(cls).options(
+                                           lifetime="detached")(cls).options(
                                                 scheduling_strategy=NodeAffinitySchedulingStrategy(
                                                     node_id=ray.get_runtime_context().get_node_id(),
                                                     soft=False,

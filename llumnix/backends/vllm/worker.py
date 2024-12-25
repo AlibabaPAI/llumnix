@@ -74,7 +74,7 @@ class MigrationWorker(Worker):
         return dummy_cache_size
 
     def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list,
-                       placement_group=None) -> None:
+                       placement_group) -> None:
         # for proxy actor
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,

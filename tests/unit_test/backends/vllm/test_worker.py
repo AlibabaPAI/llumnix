@@ -23,6 +23,7 @@ from vllm.executor.ray_gpu_executor import RayWorkerWrapper
 
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.utils import random_uuid
+from llumnix.backends.utils import initialize_placement_group
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -85,13 +86,15 @@ def test_rebuild_migration_backend(ray_env, backend):
 
     worker0 = create_worker(rank=0, local_rank=0, engine_config=engine_config)
     worker0_id = random_uuid()
+    placement_group0 = initialize_placement_group(instance_id=worker0_id, world_size=1, detached=True)
     ray.get(worker0.execute_method.remote('init_device'))
     ray.get(worker0.execute_method.remote('initialize_cache', num_gpu_blocks=8, num_cpu_blocks=0))
     ray.get(worker0.execute_method.remote(
         'init_migration',
         instance_id=worker0_id,
         migration_config=migration_config,
-        src_worker_handle_list=[worker0]))
+        src_worker_handle_list=[worker0],
+        placement_group=placement_group0))
     instance_rank = {worker0_id: 0}
     assert ray.get(worker0.execute_method.remote('rebuild_migration_backend', instance_rank=instance_rank,
                                                  group_name=random_uuid()))
@@ -99,13 +102,15 @@ def test_rebuild_migration_backend(ray_env, backend):
 
     worker1 = create_worker(rank=0, local_rank=0, engine_config=engine_config)
     worker1_id = random_uuid()
+    placement_group1 = initialize_placement_group(instance_id=worker1_id, world_size=1, detached=True)
     ray.get(worker1.execute_method.remote('init_device'))
     ray.get(worker1.execute_method.remote('initialize_cache', num_gpu_blocks=8, num_cpu_blocks=0))
     ray.get(worker1.execute_method.remote(
         'init_migration',
         instance_id=worker1_id,
         migration_config=migration_config,
-        src_worker_handle_list=[worker1]))
+        src_worker_handle_list=[worker1],
+        placement_group=placement_group1))
 
     instance_rank = {worker1_id: 1, worker0_id: 0}
     group_name = random_uuid()

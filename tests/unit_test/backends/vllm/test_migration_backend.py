@@ -58,18 +58,22 @@ def test_migrate_cache(ray_env, backend):
     ray.get(worker1.execute_method.remote('initialize_cache', num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=0))
 
     worker0_id = random_uuid()
+    placement_group0 = initialize_placement_group(instance_id=worker0_id, world_size=1, detached=True)
     ray.get(worker0.execute_method.remote(
         'init_migration',
         instance_id=worker0_id,
         migration_config=migraiton_config,
-        src_worker_handle_list=[worker0]))
+        src_worker_handle_list=[worker0],
+        placement_group=placement_group0))
 
     worker1_id = random_uuid()
+    placement_group1 = initialize_placement_group(instance_id=worker1_id, world_size=1, detached=True)
     ray.get(worker1.execute_method.remote(
         'init_migration',
         instance_id=worker1_id,
         migration_config=migraiton_config,
-        src_worker_handle_list=[worker1]))
+        src_worker_handle_list=[worker1],
+        placement_group=placement_group1))
 
     instance_rank = {worker0_id: 0, worker1_id: 1}
     group_name = random_uuid()

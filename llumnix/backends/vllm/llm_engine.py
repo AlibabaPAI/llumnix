@@ -58,17 +58,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.step_counter = Counter()
         self.instance_info = None
         # Place the async put queue actor together with the instance.
-        if placement_group:
-            scheduling_strategy = PlacementGroupSchedulingStrategy(
-                placement_group=placement_group,
-                placement_group_bundle_index=0,
-                placement_group_capture_child_tasks=True,
-            )
-        else: # When use simulator, placement_group is None.
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
-                soft=False,
-            )
+        scheduling_strategy = PlacementGroupSchedulingStrategy(
+            placement_group=placement_group,
+            placement_group_bundle_index=0,
+            placement_group_capture_child_tasks=True,
+        )
         self.put_queue_args_queue = queue.Queue()
         self.put_queue_loop_thread = threading.Thread(
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
@@ -245,8 +239,8 @@ class BackendVLLM(BackendInterface):
         instance_id: str,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
+        placement_group: PlacementGroup,
         engine_args: EngineArgs,
-        placement_group: PlacementGroup = None,
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,

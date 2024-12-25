@@ -82,7 +82,8 @@ def init_backend_engine(instance_id: str, request_output_queue_type: QueueType,
 
 def initialize_placement_group(
     instance_id: str,
-    world_size: int = 1,
+    num_cpus: int = 1,
+    num_gpus: int = 1,
     detached: bool = False
 ) -> Tuple[str, Optional[PlacementGroup]]:
     """Initialize the distributed cluster probably with Ray.
@@ -119,19 +120,19 @@ def initialize_placement_group(
                     "Placement group bundle cannot have more than 1 GPU.")
             if bundle_gpus:
                 gpu_bundles += 1
-        if world_size > gpu_bundles:
+        if num_gpus > gpu_bundles:
             raise ValueError(
                 "The number of required GPUs exceeds the total number of "
                 "available GPUs in the placement group.")
     else:
         num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
-        if world_size > num_gpus_in_cluster:
+        if num_gpus > num_gpus_in_cluster:
             raise ValueError(
                 "The number of required GPUs exceeds the total number of "
                 "available GPUs in the cluster.")
         # Create a new placement group
-        # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Worker
-        placement_group_specs = ([{"CPU": 3}] + [{"GPU": 1}] * world_size)
+        # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Workers
+        placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
         current_placement_group = ray.util.placement_group(
             placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
         # Wait until PG is ready - this will block until all

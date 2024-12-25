@@ -34,7 +34,7 @@ from tests.conftest import ray_env
 class MockLlumlet(Llumlet):
     def __init__(self, *args, **kwargs) -> None:
         instance_id = kwargs["instance_id"]
-        placement_group = initialize_placement_group(instance_id=instance_id, world_size=1, detached=True)
+        placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
         kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         self.origin_step = self.backend_engine.engine.step_async

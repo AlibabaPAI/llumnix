@@ -497,11 +497,12 @@ class LLMEngineManager:
         for _ in range(engine_manager_args.initial_instances):
             instance_id = random_uuid()
             if not engine_manager_args.profiling_result_file_path:
-                placement_group = initialize_placement_group(instance_id, world_size, detached=True)
+                # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor, num_gpus=world_size, for Workers
+                placement_group = initialize_placement_group(instance_id, num_cpus=3, num_gpus=world_size, detached=True)
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
                     instance_id,
-                    backend_type,
+                    BackendType.SIM_VLLM,
                     world_size,
                     engine_manager_args.create_migration_config(),
                     placement_group,
@@ -511,12 +512,16 @@ class LLMEngineManager:
                 )
             else:
                 assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
+                # num_cpus=1, for Llumlet + AsyncPutQueueActor
+                placement_group = initialize_placement_group(instance_id, num_cpus=2, num_gpus=0, detached=True)
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
                     instance_id,
                     BackendType.SIM_VLLM,
                     world_size,
                     engine_manager_args.create_migration_config(),
+                    placement_group,
+                    engine_args,
                     engine_manager_args.profiling_result_file_path,
                     *args,
                     **kwargs

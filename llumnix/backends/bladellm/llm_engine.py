@@ -42,17 +42,11 @@ from llumnix.queue.queue_type import QueueType
 class AsyncBackQueueWrapper(APIWrapper):
     def __init__(self, placement_group, instance_id, output_queue_type) -> None:
         super().__init__(args=None, resp_queue=None)
-        if placement_group:
-            scheduling_strategy = PlacementGroupSchedulingStrategy(
-                placement_group=placement_group,
-                placement_group_bundle_index=0,
-                placement_group_capture_child_tasks=True,
-            )
-        else: # When use simulator, placement_group is None.
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
-                soft=False,
-            )
+        scheduling_strategy = PlacementGroupSchedulingStrategy(
+            placement_group=placement_group,
+            placement_group_bundle_index=0,
+            placement_group_capture_child_tasks=True,
+        )
         self.put_queue_args_queue = queue.Queue()
         self.put_queue_loop_thread = threading.Thread(
             target=self._put_request_outputs_loop, args=(), daemon=True, name="put_queue_loop"
@@ -322,7 +316,7 @@ class BackendBladeLLM(BackendInterface):
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         pass
 
-    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, src_blocks: List[int], dst_blocks: List[int]):
+    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
         pass
 
     def commit_dst_request(self, backend_request: LlumnixRequest) -> None:

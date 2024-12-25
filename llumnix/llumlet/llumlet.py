@@ -43,6 +43,7 @@ class Llumlet:
                  request_output_queue_type: QueueType,
                  backend_type: BackendType,
                  migration_config: MigrationConfig,
+                 placement_group: PlacementGroup,
                  *args,
                  **kwargs) -> None:
         try:
@@ -52,13 +53,14 @@ class Llumlet:
                                                                         request_output_queue_type,
                                                                         backend_type,
                                                                         migration_config,
+                                                                        placement_group,
                                                                         *args,
                                                                         **kwargs)
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                            migration_config.last_stage_max_blocks,
-                                                            migration_config.max_stages)
+                                                              migration_config.last_stage_max_blocks,
+                                                              migration_config.max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
-                                                            self.backend_engine)
+                                                               self.backend_engine)
             self.log_requests = True
 
             asyncio.create_task(self._check_engine_state_loop())
@@ -80,14 +82,13 @@ class Llumlet:
         try:
             assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], \
                 f'unimplemented backend {backend_type}'
-            num_gpu = 0
+            num_gpus = 0
             if backend_type == backend_type.BLADELLM:
-                num_gpu = world_size
+                num_gpus = world_size
             instance_name = get_instance_name(instance_id)
             if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
-                kwargs["placement_group"] = placement_group
                 llumlet_class = ray.remote(num_cpus=1,
-                                           num_gpus=num_gpu,
+                                           num_gpus=num_gpus,
                                            name=instance_name,
                                            namespace='llumnix',
                                            max_concurrency=4,
@@ -100,7 +101,7 @@ class Llumlet:
                                             )
             else: # backend_type == backend_type.SIM_VLLM:
                 llumlet_class = ray.remote(num_cpus=1,
-                                           num_gpu=num_gpu,
+                                           num_gpus=num_gpus,
                                            name=instance_name,
                                            namespace='llumnix',
                                            max_concurrency=4,
@@ -114,6 +115,7 @@ class Llumlet:
                                            request_output_queue_type,
                                            backend_type,
                                            migration_config,
+                                           placement_group,
                                            *args,
                                            **kwargs)
         # pylint: disable=broad-except

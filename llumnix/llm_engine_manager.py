@@ -505,7 +505,7 @@ class LLMEngineManager:
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
                     instance_id,
-                    BackendType.SIM_VLLM,
+                    backend_type,
                     world_size,
                     engine_manager_args.create_migration_config(),
                     placement_group,

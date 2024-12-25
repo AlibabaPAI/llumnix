@@ -504,7 +504,7 @@ class LLMEngineManager:
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
                     instance_id,
-                    BackendType.SIM_VLLM,
+                    backend_type,
                     world_size,
                     engine_manager_args.create_migration_config(),
                     placement_group,
@@ -515,6 +515,7 @@ class LLMEngineManager:
             else:
                 assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
                 # num_cpus=1, for Llumlet + AsyncPutQueueActor
+                logger.info("[init_llumlets] use simulator backend")
                 placement_group = initialize_placement_group(instance_id, num_cpus=2, num_gpus=0, detached=True)
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,

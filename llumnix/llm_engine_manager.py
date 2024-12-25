@@ -418,38 +418,50 @@ class LLMEngineManager:
         return self.num_instances
 
     async def _connect_to_instances(self):
-        # TODO(s5u13b): Refine the codes.
+        def connect_to_instances_done_callback(instance_id: str, instance_actor_handle, fut):
+            ret = fut.result()[0]
+            if not isinstance(ret, Exception):
+                scale_up_instance_ids.append(instance_id)
+                scale_up_instance_actor_handles.append(instance_actor_handle)
+                logger.info("[_connect_to_instances] connect to instance {}.".format(instance_id))
+            else:
+                logger.info("[_connect_to_instances] connect to instance {} abort, "
+                            "which may be not ready or alive, err: {}".format(instance_id, e))
+
         actor_names_dict = ray.util.list_named_actors(True)
         instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'] != MANAGER_ACTOR_NAME]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []
         scale_up_instance_actor_handles = []
+        tasks = []
         for instance_actor_name, instance_actor_handle in zip(instance_actor_names, instance_actor_handles):
             instance_id = instance_actor_name[len('instance_'):]
             if instance_id not in self.instances:
-                try:
-                    await instance_actor_handle.is_ready.remote()
-                # pylint: disable=W0703
-                except Exception as e:
-                    logger.info("[_connect_to_instances] connect to instance {} abort, "
-                                "which may be not ready or alive, err: {}".format(instance_id, e))
-                    continue
-                logger.info("[_connect_to_instances] connect to instance {}.".format(instance_id))
-                scale_up_instance_ids.append(instance_id)
-                scale_up_instance_actor_handles.append(instance_actor_handle)
+                task = asyncio.gather(instance_actor_handle.is_ready.remote(), return_exceptions=True)
+                task.add_done_callback(partial(connect_to_instances_done_callback, instance_id, instance_actor_handle))
+                tasks.append(task)
+        await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
         self.scale_up(scale_up_instance_ids, scale_up_instance_actor_handles)
 
     async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
-        results = [None, None]
-        for idx, instance_id in enumerate(migrate_instance_pairs):
-            try:
-                await self.instances[instance_id].is_ready.remote()
+        def check_instance_error_done_callback(idx: int, instance_id: str, fut):
+            ret = fut.result()[0]
+            if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
                 logger.info("[_check_instance_error] instance {} is alive".format(instance_id))
                 results[idx] = False
-            except (ray.exceptions.RayActorError, KeyError):
+            else:
                 logger.info("[_check_instance_error] instance {} is dead".format(instance_id))
                 results[idx] = True
+
+        results = [None, None]
+        tasks = []
+        for idx, instance_id in enumerate(migrate_instance_pairs):
+            task = asyncio.gather(self.instances[instance_id].is_ready.remote(), return_exceptions=True)
+            task.add_done_callback(partial(check_instance_error_done_callback, idx, instance_id))
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
         return results
 
     @classmethod
@@ -468,6 +480,7 @@ class LLMEngineManager:
                                        os.getcwd(),
                                        log_requests=not engine_manager_args.disable_log_requests_manager,
                                        profiling_database=profiling_database)
+
         return manager
 
     def init_llumlets(self,

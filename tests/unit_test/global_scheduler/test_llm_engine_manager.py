@@ -286,7 +286,3 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
             assert num_migrate_in == 0 and num_migrate_out > 1
         else:
             assert num_migrate_in == 0 and num_migrate_out == 0
-
-@pytest.mark.skip("Not implemented yet")
-def test_concurrent_migrate(ray_env):
-    pass

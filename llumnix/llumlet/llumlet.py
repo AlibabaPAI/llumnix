@@ -87,7 +87,6 @@ class Llumlet:
                 num_gpus = world_size
             instance_name = get_instance_name(instance_id)
             if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
-                kwargs["placement_group"] = placement_group
                 llumlet_class = ray.remote(num_cpus=1,
                                            num_gpus=num_gpus,
                                            name=instance_name,

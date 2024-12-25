@@ -20,7 +20,7 @@ import asyncio
 import queue
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup

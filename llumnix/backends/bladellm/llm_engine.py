@@ -22,7 +22,7 @@ import queue
 import ray
 from loguru import logger
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs

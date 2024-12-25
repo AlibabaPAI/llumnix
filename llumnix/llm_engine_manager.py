@@ -430,7 +430,8 @@ class LLMEngineManager:
 
         # Must set True despite set namespance to llumnix.
         actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
-        instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
+        instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict
+                                if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []
         scale_up_instance_actor_handles = []

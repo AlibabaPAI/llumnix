@@ -130,7 +130,8 @@ def initialize_placement_group(
                 "The number of required GPUs exceeds the total number of "
                 "available GPUs in the cluster.")
         # Create a new placement group
-        placement_group_specs = ([{"CPU": 1}] + [{"GPU": 1}] * world_size)
+        # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Worker
+        placement_group_specs = ([{"CPU": 3}] + [{"GPU": 1}] * world_size)
         current_placement_group = ray.util.placement_group(
             placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
         # Wait until PG is ready - this will block until all

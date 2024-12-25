@@ -95,6 +95,7 @@ class Llumlet:
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,
                                                     placement_group_bundle_index=0,
+                                                    placement_group_capture_child_tasks=True,
                                                 )
                                             )
             else: # backend_type == backend_type.SIM_VLLM:

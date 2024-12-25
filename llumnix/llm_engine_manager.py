@@ -47,8 +47,7 @@ NO_INSTANCE_RETRY_INTERVAL = 5.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
-# TODO(s5u13b): Refactor manager codes to be more modular.
-# TODO(s5u13b): Handle exception of ray.get_actor().
+# TODO(s5u13b): Handle exception of ray operations.
 
 
 class LLMEngineManager:
@@ -418,7 +417,7 @@ class LLMEngineManager:
         return self.num_instances
 
     async def _connect_to_instances(self):
-        def connect_to_instances_done_callback(instance_id: str, instance_actor_handle, fut):
+        def connect_to_instances_done_callback(instance_id: str, instance_actor_handle: "ray.actor.ActorHandle", fut):
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
                 scale_up_instance_ids.append(instance_id)
@@ -428,7 +427,7 @@ class LLMEngineManager:
                 logger.info("[_connect_to_instances] connect to instance {} abort, "
                             "which may be not ready or alive, err: {}".format(instance_id, e))
 
-        actor_names_dict = ray.util.list_named_actors(True)
+        actor_names_dict = ray.util.list_named_actors()
         instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict if actor_name_dict['name'] != MANAGER_ACTOR_NAME]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []

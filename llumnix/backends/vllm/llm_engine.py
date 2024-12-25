@@ -58,10 +58,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.step_counter = Counter()
         self.instance_info = None
         # Place the async put queue actor together with the instance.
-        # TODO(s5u13b): Refine the PlacementGroupSchedulingStrategy codes.
         if placement_group:
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
+                placement_group_bundle_index=0,
                 placement_group_capture_child_tasks=True,
             )
         else: # When use simulator, placement_group is None.
@@ -74,7 +74,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
         )
         self.async_put_queue_actor = ray.remote(
-            num_cpus=0,
+            num_cpus=1,
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()

@@ -45,6 +45,7 @@ class AsyncBackQueueWrapper(APIWrapper):
         if placement_group:
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
+                placement_group_bundle_index=0,
                 placement_group_capture_child_tasks=True,
             )
         else: # When use simulator, placement_group is None.

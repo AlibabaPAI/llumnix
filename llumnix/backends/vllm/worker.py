@@ -75,8 +75,10 @@ class MigrationWorker(Worker):
 
     def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list,
                        placement_group=None) -> None:
+        # for proxy actor
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
+            placement_group_bundle_index=0,
             placement_group_capture_child_tasks=True,
         )
 

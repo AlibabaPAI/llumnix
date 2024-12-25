@@ -95,8 +95,14 @@ class LlumnixClientVLLM:
         except (ray.exceptions.RayActorError, KeyError):
             if instance_id in self.instances:
                 logger.info("[manager_generate] instance {} is dead".format(instance_id))
-                del self.instances[instance_id]
-                del self.instance_num_requests[instance_id]
+                if instance_id in self.instances:
+                    del self.instances[instance_id]
+                else:
+                    logger.warning("instance {} is not in self.instances".format(instance_id))
+                if instance_id in self.instance_num_requests:
+                    del self.instance_num_requests[instance_id]
+                else:
+                    logger.warning("instance {} is not in self.instance_num_requests".format(instance_id))
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
 
     async def abort(self, request_id: str) -> None:

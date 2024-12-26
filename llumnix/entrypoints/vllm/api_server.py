@@ -147,8 +147,8 @@ async def generate_benchmark(request: Request) -> Response:
 
     if llumnix_client.log_requests:
         llumnix_client.num_finished_requests += 1
-        logger.info("entrypoints finished request {}.".format(request_id))
-        logger.info("num_finished_requests {}.".format(llumnix_client.num_finished_requests))
+        logger.info("entrypoints finished request {}".format(request_id))
+        logger.info("num_finished_requests {}".format(llumnix_client.num_finished_requests))
 
     generation = final_output.outputs[0].text
     num_output_tokens = len(final_output.outputs[0].token_ids)
@@ -195,7 +195,7 @@ if __name__ == "__main__":
         llumnix_client = LlumnixClientVLLM(llumnix_entrypoints_context)
 
         # Start the api server after all the components of llumnix are ready.
-        logger.info("Start Api Server on '{}:{}'".format(cfg.SERVER.HOST, cfg.SERVER.PORT))
+        logger.info("Start api server on '{}:{}'.".format(cfg.SERVER.HOST, cfg.SERVER.PORT))
         uvicorn.run(app,
                     host=cfg.SERVER.HOST,
                     port=cfg.SERVER.PORT,

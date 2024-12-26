@@ -60,16 +60,16 @@ class MigrationWorker(Worker):
         if migration_config.migration_backend == "nccl" and parallel_config.world_size == 1:
             device = torch.device(f"cuda:{self.local_rank}")
             _, total_memory = torch.cuda.mem_get_info(device)
-            migrate_ratio = math.ceil(dummy_cache_size / total_memory * 10000) / 10000
-            cache_config.gpu_memory_utilization -= migrate_ratio
+            migration_memory_ratio = math.ceil(dummy_cache_size / total_memory * 10000) / 10000
+            cache_config.gpu_memory_utilization -= migration_memory_ratio
 
             if cache_config.gpu_memory_utilization <= 0:
                 raise ValueError("Nccl migration backend take {:.4f} gpu memory, which is greater than gpu_memory_utilization {:.4f}. "
                                  "try to increase gpu-memory-utilization or reduce migration-cache-blocks."
-                                 .format(migrate_ratio, cache_config.gpu_memory_utilization))
+                                 .format(migration_memory_ratio, cache_config.gpu_memory_utilization))
 
             logger.info("nccl migration backend take {:.4f} gpu memory, left gpu_memory_utilization {:.4f} for kv cache."
-                        .format(migrate_ratio, cache_config.gpu_memory_utilization))
+                        .format(migration_memory_ratio, cache_config.gpu_memory_utilization))
 
         return dummy_cache_size
 

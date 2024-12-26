@@ -57,7 +57,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             self.rpc_dtype = self.cache_engine.dtype
         else:
             self.rpc_dtype = torch.float32
-            logger.warning("Detect numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine.dtype))
+            logger.warning("Detect numpy unsupported dtype: {}, using torch.float32.".format(self.cache_engine.dtype))
 
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
@@ -189,7 +189,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         try:
             init_group(world_size, rank, self.backend, group_name)
         except FunctionTimedOut:
-            logger.info("create migration backend fail (group_name: {}, world_size: {}, rank: {}, backbend: {})."
+            logger.info("create migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {})."
                 .format(group_name, world_size, rank, self.backend))
             return False
 
@@ -227,7 +227,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                 col.allreduce(self.dummy_cache[0], self.group_name)
             # pylint: disable=W0703
             except Exception as e:
-                logger.info("warmup migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
+                logger.error("warmup migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend, e))
                 return False
 
@@ -276,7 +276,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.migration_stream.synchronize()
 
 def get_migration_backend(migration_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy,
-                        is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
+                          is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
     if cache_engine.num_gpu_blocks < migration_config.migration_buffer_blocks:
         logger.warning("migration_buffer_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
                        .format(migration_config.migration_buffer_blocks, cache_engine.num_gpu_blocks))

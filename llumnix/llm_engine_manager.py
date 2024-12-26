@@ -44,7 +44,7 @@ logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
 CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
-NO_INSTANCE_RETRY_INTERVAL = 5.0
+NO_INSTANCE_RETRY_INTERVAL = 1.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
@@ -111,8 +111,8 @@ class LLMEngineManager:
 
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
-            logger.info("[generate] no instance available temporarily, sleep {}s, "
-                        "and retry generate request {} again".format(NO_INSTANCE_RETRY_INTERVAL, request_id))
+            logger.warning("[generate] no instance available temporarily, sleep {}s, "
+                           "and regenerate request {}".format(NO_INSTANCE_RETRY_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_INTERVAL)
 
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
@@ -121,7 +121,7 @@ class LLMEngineManager:
                 server_info.request_timestamps.manager_generate_timestamp = time.time()
             await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
             if self.log_requests:
-                logger.info("[generate] received request {}.".format(request_id))
+                logger.info("[generate] manager received request {}".format(request_id))
                 logger.info("[generate] dispath request {} to instance {}".format(request_id, instance_id))
                 self.request_instance[request_id] = instance_id
         except (ray.exceptions.RayActorError, KeyError):
@@ -159,30 +159,6 @@ class LLMEngineManager:
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _get_request_instance(self) -> None:
-        def get_request_instance_done_callback(instance_id: str, fut):
-            ret = fut.result()[0]
-            if not isinstance(ret, ray.exceptions.RayActorError):
-                instance_requests.append(ret)
-                instance_ids.append(instance_id)
-            else:
-                logger.info("[_get_request_instance] instance {} is dead".format(instance_id))
-                self.scale_down(instance_id)
-
-        instance_requests = []
-        instance_ids = []
-        tasks = []
-        for instance_id, instance_actor_handle in self.instances.items():
-            task = asyncio.gather(instance_actor_handle.get_instance_info.remote(), return_exceptions=True)
-            task.add_done_callback(partial(get_request_instance_done_callback, instance_id))
-            tasks.append(task)
-        await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info("[_get_request_instance] instance_ids: {}".format(instance_ids))
-        logger.info("[_get_request_instance] instance_requests: {}".format(instance_requests))
-        for (instance_id, requests) in zip(instance_ids, instance_requests):
-            for request_id in requests:
-                self.request_instance[request_id] = instance_id
-
     async def _update_instance_info_loop(self, interval: float) -> None:
         def update_instance_info_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
@@ -191,6 +167,7 @@ class LLMEngineManager:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
             else:
+                logger.info("[_update_instance_info_loop] instance {} is dead".format(instance_id))
                 self.scale_down(instance_id)
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(ret))
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(self.instances))
@@ -217,13 +194,6 @@ class LLMEngineManager:
             except Exception as e:
                 logger.error("[_update_instance_info_loop] unexpected exception occurs: {}".format(e))
                 logger.error("[_update_instance_info_loop] exception traceback: {}".format(traceback.format_exc()))
-
-    async def _clear_request_instance_loop(self, interval: float):
-        await self._get_request_instance()
-        # Clear the request_instance at a certain interval to prevent memory leaking.
-        while True:
-            await asyncio.sleep(interval)
-            self.request_instance = {}
 
     async def _push_migrations(self) -> None:
         if self.enable_pd_disagg:
@@ -287,7 +257,7 @@ class LLMEngineManager:
             logger.error("[_migrate] unexpected exception occurs: {}".format(e))
             logger.error("[_migrate] exception traceback: {}".format(traceback.format_exc()))
 
-    async def rebuild_migrate_backend(self) -> None:
+    async def _rebuild_migrate_backend(self) -> None:
         # Wait for all instances to finish migration
         while any(self.instance_migrating.values()):
             await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
@@ -342,7 +312,7 @@ class LLMEngineManager:
             src_filter=lambda instance_info: instance_info.instance_id in alive_instances,
             dst_filter=lambda instance_info: instance_info.instance_id in alive_instances)
 
-        logger.info("[rebuild_migrate_backend] rebuild {} migrate backend done, group_name: {}, alive instance ({}): {}"
+        logger.info("[rebuild_migrate_backend] rebuild {} migration backend done, group_name: {}, alive instance ({}): {}"
             .format(self.engine_manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
 
         # Restore migrate config
@@ -373,7 +343,7 @@ class LLMEngineManager:
         # for RPC, the Ray actor handle is used for the migration cache, so there is no need to rebuild the group.
         if self.enable_migration and self.engine_manager_args.migration_backend in ['gloo', 'nccl'] \
             and indeed_update and no_pending_instance:
-            asyncio.create_task(self.rebuild_migrate_backend())
+            asyncio.create_task(self._rebuild_migrate_backend())
 
         return self.num_instances
 
@@ -413,7 +383,7 @@ class LLMEngineManager:
                 if self.engine_manager_args.migration_backend == 'gloo':
                     clear_gloo_backend_state()
             elif indeed_update and no_pending_instance and rebuild_migrate_backend:
-                asyncio.create_task(self.rebuild_migrate_backend())
+                asyncio.create_task(self._rebuild_migrate_backend())
 
         return self.num_instances
 
@@ -425,8 +395,7 @@ class LLMEngineManager:
                 scale_up_instance_actor_handles.append(instance_actor_handle)
                 logger.info("[_connect_to_instances] connect to instance {}.".format(instance_id))
             else:
-                logger.info("[_connect_to_instances] connect to instance {} abort, "
-                            "which may be not ready or alive, err: {}".format(instance_id, e))
+                logger.warning("[_connect_to_instances] connect to instance {} failed, exception: {}".format(instance_id, ret))
 
         # Must set True despite set namespance to llumnix.
         actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
@@ -445,26 +414,6 @@ class LLMEngineManager:
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
         self.scale_up(scale_up_instance_ids, scale_up_instance_actor_handles)
-
-    async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
-        def check_instance_error_done_callback(idx: int, instance_id: str, fut):
-            ret = fut.result()[0]
-            if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
-                logger.info("[_check_instance_error] instance {} is alive".format(instance_id))
-                results[idx] = False
-            else:
-                logger.info("[_check_instance_error] instance {} is dead".format(instance_id))
-                results[idx] = True
-
-        results = [None, None]
-        tasks = []
-        for idx, instance_id in enumerate(migrate_instance_pairs):
-            task = asyncio.gather(self.instances[instance_id].is_ready.remote(), return_exceptions=True)
-            task.add_done_callback(partial(check_instance_error_done_callback, idx, instance_id))
-            tasks.append(task)
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        return results
 
     @classmethod
     def from_args(cls,
@@ -518,7 +467,6 @@ class LLMEngineManager:
             else:
                 assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
                 # num_cpus=1, for Llumlet + AsyncPutQueueActor
-                logger.info("[init_llumlets] use simulator backend")
                 placement_group = initialize_placement_group(instance_id, num_cpus=2, num_gpus=0, detached=True)
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
@@ -537,14 +485,62 @@ class LLMEngineManager:
 
         return instance_ids, llumlets
 
-    def get_actor_name(self) -> str:
-        return self.actor_name
-
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""
         tasks = [llumlet.is_ready.remote() for llumlet in self.instances.values()]
         is_ready_list = await asyncio.gather(*tasks)
         return all(is_ready_list)
+
+    async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
+        def check_instance_error_done_callback(idx: int, instance_id: str, fut):
+            ret = fut.result()[0]
+            if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
+                logger.info("[_check_instance_error] instance {} is alive".format(instance_id))
+                results[idx] = False
+            else:
+                logger.info("[_check_instance_error] instance {} is dead".format(instance_id))
+                results[idx] = True
+
+        results = [None, None]
+        tasks = []
+        for idx, instance_id in enumerate(migrate_instance_pairs):
+            task = asyncio.gather(self.instances[instance_id].is_ready.remote(), return_exceptions=True)
+            task.add_done_callback(partial(check_instance_error_done_callback, idx, instance_id))
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        return results
+
+    async def _get_request_instance(self) -> None:
+        def get_request_instance_done_callback(instance_id: str, fut):
+            ret = fut.result()[0]
+            if not isinstance(ret, ray.exceptions.RayActorError):
+                instance_requests.append(ret)
+                instance_ids.append(instance_id)
+            else:
+                logger.info("[_get_request_instance] instance {} is dead".format(instance_id))
+                self.scale_down(instance_id)
+
+        instance_requests = []
+        instance_ids = []
+        tasks = []
+        for instance_id, instance_actor_handle in self.instances.items():
+            task = asyncio.gather(instance_actor_handle.get_instance_info.remote(), return_exceptions=True)
+            task.add_done_callback(partial(get_request_instance_done_callback, instance_id))
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.debug("[_get_request_instance] instance_ids: {}".format(instance_ids))
+        logger.debug("[_get_request_instance] instance_requests: {}".format(instance_requests))
+        for (instance_id, requests) in zip(instance_ids, instance_requests):
+            for request_id in requests:
+                self.request_instance[request_id] = instance_id
+
+    async def _clear_request_instance_loop(self, interval: float):
+        await self._get_request_instance()
+        # Clear the request_instance at a certain interval to prevent memory leaking.
+        while True:
+            await asyncio.sleep(interval)
+            self.request_instance = {}
 
     def _init_instance_info_csv(self, engine_manager_args: EngineManagerArgs) -> None:
         # pylint: disable=consider-using-with

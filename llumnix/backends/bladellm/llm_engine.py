@@ -150,7 +150,7 @@ class AsyncLLMEngineLlumnixMixin:
             await super()._loop()
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Error in engine loop: {}".format(e))
+            logger.error("error in engine loop: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
             previous_state = self.state

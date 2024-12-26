@@ -42,6 +42,8 @@ class LlumnixClientVLLM:
                        **kwargs) -> AsyncStream:
         if sampling_params.n > 1 or sampling_params.use_beam_search:
             raise ValueError("Unsupported feature: multiple sequence decoding")
+        
+        logger.info("[generate] entrypoints received request {}".format(request_id))
 
         results_generator = AsyncStream(request_id)
         self.request_streams[request_id] = results_generator
@@ -85,10 +87,10 @@ class LlumnixClientVLLM:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 await self.instances[instance_id].generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
-                logger.info("LLMEngineManager is unavailable temporarily, dispatch request {} to instance {}".format(
+                logger.warning("LLMEngineManager is unavailable temporarily, dispatch request {} to instance {}".format(
                     request_id, instance_id))
             else:
-                logger.info("LLMEngineManager is unavailable temporarily, but there is no instance behind this api server, "
+                logger.warning("LLMEngineManager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
                 await asyncio.sleep(WAIT_MANAGER_INTERVAL)
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
@@ -110,7 +112,7 @@ class LlumnixClientVLLM:
             logger.info("abort request: {}.".format(request_id))
             await self.manager.abort.remote(request_id)
         except ray.exceptions.RayActorError:
-            logger.info("manager is unavailable")
+            logger.warning("manager is unavailable")
 
     async def is_ready(self) -> bool:
         ready_status = await self.manager.is_ready.remote()

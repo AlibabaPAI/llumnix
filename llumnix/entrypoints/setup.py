@@ -66,11 +66,11 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         # Stop the existing ray processes on the node first.
         subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        logger.info("'ray stop' failed with: \n{}".format(e.stderr))
+        logger.error("'ray stop' failed with: \n{}".format(e.stderr))
         sys.exit(1)
     # Need to specify the head node ip through environment variable currently.
     if head_node_ip is None:
-        logger.info("Environment variable 'HEAD_NODE_IP' should be set for ray cluster launch.")
+        logger.error("Environment variable 'HEAD_NODE_IP' should be set for ray cluster launch.")
         sys.exit(1)
     ray_start_command = None
     if 'HEAD_NODE' in os.environ:
@@ -78,7 +78,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         try:
             result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
         except subprocess.CalledProcessError as e:
-            logger.info("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
+            logger.error("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
             sys.exit(1)
     else:
         ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
@@ -89,10 +89,10 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
                 break
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RESTARTS:
-                    print("Execute '{}' repeatedly until the head node starts...".format(ray_start_command))
+                    logger.warning("execute '{}' repeatedly until the head node starts".format(ray_start_command))
                     time.sleep(RESTART_INTERVALS)
                 else:
-                    logger.info("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
+                    logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
                     sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
     return result
@@ -120,10 +120,10 @@ def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
             break
         except ray.exceptions.RayActorError:
             if attempt < MAX_TASK_RETRIES - 1:
-                logger.info("Manager is unavailable, sleep {}s, and retry {} again...".format(RETRIES_INTERVALS, method_name))
+                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVALS, method_name))
                 time.sleep(RETRIES_INTERVALS)
             else:
-                logger.info("After {} times retries, manager is still unavailable".format(MAX_TASK_RETRIES))
+                logger.error("manager is still unavailable after {} times retries".format(MAX_TASK_RETRIES))
                 raise
     return ret
 
@@ -134,10 +134,10 @@ async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
             break
         except ray.exceptions.RayActorError:
             if attempt < MAX_TASK_RETRIES - 1:
-                logger.info("Manager is unavailable, sleep {}s, and retry {} again...".format(RETRIES_INTERVALS, method_name))
+                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVALS, method_name))
                 await asyncio.sleep(RETRIES_INTERVALS)
             else:
-                logger.info("After {} times retries, manager is still unavailable".format(MAX_TASK_RETRIES))
+                logger.error("manager is still unavailable after {} times retries".format(MAX_TASK_RETRIES))
                 raise
     return ret
 
@@ -145,10 +145,10 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:
         manager = LLMEngineManager.from_args(engine_manager_args, None)
-        logger.info("Init LLMEngineManager on current node")
+        logger.info("Init LLMEngineManager on current node.")
     except ValueError:
         manager = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
-        logger.info("Get existing LLMEngineManager")
+        logger.info("Get existing LLMEngineManager.")
     return manager
 
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,

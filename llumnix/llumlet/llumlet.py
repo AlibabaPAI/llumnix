@@ -47,6 +47,7 @@ class Llumlet:
                  *args,
                  **kwargs) -> None:
         try:
+            logger.info("Llumlet backend type: {}".format(backend_type))
             self.instance_id = instance_id
             self.instance_name = get_instance_name(instance_id)
             self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
@@ -66,7 +67,7 @@ class Llumlet:
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize llumlet: {}".format(e))
+            logger.error("failed to initialize Llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
     @classmethod
@@ -120,7 +121,7 @@ class Llumlet:
                                            **kwargs)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize llumlet: {}".format(e))
+            logger.error("failed to initialize Llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
 
         return llumlet
@@ -129,7 +130,7 @@ class Llumlet:
         while True:
             await asyncio.sleep(CHECK_ENGINE_STATE_INTERVAL)
             if self.backend_engine.state == EngineState.CRASHED:
-                logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
+                logger.error("Llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
                 # pylint: disable=protected-access
                 self.backend_engine._stop_event.set()
                 await asyncio.sleep(0)

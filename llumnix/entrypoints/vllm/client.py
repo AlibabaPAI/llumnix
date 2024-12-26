@@ -42,7 +42,7 @@ class LlumnixClientVLLM:
                        **kwargs) -> AsyncStream:
         if sampling_params.n > 1 or sampling_params.use_beam_search:
             raise ValueError("Unsupported feature: multiple sequence decoding")
-        
+
         logger.info("[generate] entrypoints received request {}".format(request_id))
 
         results_generator = AsyncStream(request_id)

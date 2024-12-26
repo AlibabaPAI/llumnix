@@ -28,10 +28,10 @@ from llumnix.utils import random_uuid
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.setup import LlumnixEntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
+from llumnix.utils import MANAGER_NAME
 
 app = llumnix.entrypoints.vllm.api_server.app
 engine_manager = None
-MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 ENTRYPOINTS_ACTOR_NAME = "entrypoints"
 
 
@@ -69,7 +69,7 @@ class FastAPIServer:
         ip = '127.0.0.1'
         port = 1234
         global engine_manager
-        engine_manager = ray.get_actor(MANAGER_ACTOR_NAME, namespace="llumnix")
+        engine_manager = ray.get_actor(MANAGER_NAME, namespace="llumnix")
         request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
         ray_queue_server = None
         if request_output_queue_type == QueueType.RAYQUEUE:
@@ -92,7 +92,7 @@ class FastAPIServer:
             timeout_keep_alive=llumnix.entrypoints.vllm.api_server.TIMEOUT_KEEP_ALIVE)
 
 def init_manager_service(request_output_queue_type: QueueType, args: 'Namespace'):
-    engine_manager = MockLLMEngineManagerService.options(name=MANAGER_ACTOR_NAME,
+    engine_manager = MockLLMEngineManagerService.options(name=MANAGER_NAME,
                                                          namespace='llumnix').remote(request_output_queue_type, args)
     return engine_manager
 

@@ -19,9 +19,9 @@ import numpy as np
 
 from vllm import EngineArgs
 
-from llumnix.utils import random_uuid, get_instance_name
+from llumnix.utils import random_uuid, get_instance_name, MANAGER_NAME
 from llumnix.arg_utils import EngineManagerArgs
-from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
+from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.instance_info import InstanceInfo
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
@@ -109,7 +109,7 @@ def init_manager():
         engine_manager_args.log_instance_info = False
         manager = LLMEngineManager.from_args(engine_manager_args, None)
     except ValueError:
-        manager = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
+        manager = ray.get_actor(MANAGER_NAME, namespace='llumnix')
     ray.get(manager.is_ready.remote())
     return manager
 
@@ -143,7 +143,7 @@ def llumlet():
 
 def test_init_manager(ray_env, manager):
     assert manager is not None
-    manager_actor_handle = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
+    manager_actor_handle = ray.get_actor(MANAGER_NAME, namespace='llumnix')
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 

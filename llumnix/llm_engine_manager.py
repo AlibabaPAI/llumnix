@@ -36,13 +36,13 @@ from llumnix.utils import (random_uuid,
                            clear_gloo_backend_state,
                            remove_placement_group,
                            get_instance_name,
-                           INSTANCE_NAME_PREFIX)
+                           INSTANCE_NAME_PREFIX,
+                           MANAGER_NAME)
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import initialize_placement_group
 
 logger = init_logger(__name__)
 
-MANAGER_ACTOR_NAME = 'manager'
 CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
 NO_INSTANCE_RETRY_INTERVAL = 1.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
@@ -59,7 +59,7 @@ class LLMEngineManager:
                  log_requests: bool = True,
                  profiling_database: ProfilingDatabase = None) -> None:
         os.chdir(work_dir)
-        self.actor_name = MANAGER_ACTOR_NAME
+        self.actor_name = MANAGER_NAME
         self.engine_manager_args = engine_manager_args
         self.profiling_database = profiling_database
 
@@ -422,7 +422,7 @@ class LLMEngineManager:
         global_scheduler_config = engine_manager_args.create_global_scheduler_configs()
         manager_class = ray.remote(num_cpus=0,
                                    max_restarts=-1,
-                                   name=MANAGER_ACTOR_NAME,
+                                   name=MANAGER_NAME,
                                    namespace='llumnix',
                                    lifetime="detached"
                                    )(cls)

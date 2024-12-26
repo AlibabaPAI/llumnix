@@ -22,14 +22,13 @@ import llumnix.entrypoints.vllm.api_server
 import llumnix.llm_engine_manager
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.server_info import ServerInfo, RequestTimestamps
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, MANAGER_NAME
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.setup import LlumnixEntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 
 app = llumnix.entrypoints.vllm.api_server.app
 manager = None
-MANAGER_ACTOR_NAME = llumnix.llm_engine_manager.MANAGER_ACTOR_NAME
 
 
 @ray.remote(num_cpus=0)
@@ -54,7 +53,7 @@ class MockLLMEngineManager:
 
 
 def init_manager(request_output_queue_type: QueueType):
-    manager = MockLLMEngineManager.options(name=MANAGER_ACTOR_NAME,
+    manager = MockLLMEngineManager.options(name=MANAGER_NAME,
                                            namespace='llumnix').remote(request_output_queue_type)
     return manager
 

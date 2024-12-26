@@ -21,8 +21,8 @@ from llumnix.entrypoints.setup import (get_ip_address,
                                        init_manager,
                                        retry_manager_method_sync,
                                        retry_manager_method_async)
-from llumnix.llm_engine_manager import MANAGER_ACTOR_NAME
 from llumnix.queue.utils import init_request_output_queue_server
+from llumnix.utils import MANAGER_NAME
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -39,7 +39,7 @@ def test_init_manager(ray_env):
     engine_manager_args = EngineManagerArgs()
     manager = init_manager(engine_manager_args)
     assert manager is not None
-    manager_actor_handle = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
+    manager_actor_handle = ray.get_actor(MANAGER_NAME, namespace='llumnix')
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 

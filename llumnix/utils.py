@@ -14,6 +14,7 @@
 import uuid
 import ray
 
+MANAGER_NAME = "manager"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"

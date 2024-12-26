@@ -20,10 +20,10 @@ import asyncio
 import socket
 import ray
 
-from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
+from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logger import init_logger
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, MANAGER_NAME
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo, RequestTimestamps
@@ -147,7 +147,7 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
         manager = LLMEngineManager.from_args(engine_manager_args, None)
         logger.info("Init LLMEngineManager on current node.")
     except ValueError:
-        manager = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
+        manager = ray.get_actor(MANAGER_NAME, namespace='llumnix')
         logger.info("Get existing LLMEngineManager.")
     return manager
 

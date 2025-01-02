@@ -62,7 +62,7 @@ export HEAD_NODE=1
 
 During the execution of serving deployment, Llumnix will:
 - Initiate the Ray cluster for distributed execution.
-- Start Llumnix actor components, including LLMEngineManager, Llumlet, among others.
+- Start Llumnix actor components, including Manager, Llumlet, among others.
 - Launch the vLLM engine instances.
 
 Following these steps, Llumnix acts as the request scheduling layer situated behind the multiple frontend API servers and above the multiple backend vLLM engine instances. This positioning allows Llumnix to significantly enhance serving performance through its dynamic, fine-grained, and KV-cache-aware request scheduling and rescheduling across instances.

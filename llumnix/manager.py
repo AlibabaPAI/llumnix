@@ -27,70 +27,83 @@ from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
 from llumnix.instance_info import InstanceInfo
-from llumnix.internal_config import GlobalSchedulerConfig
-from llumnix.arg_utils import EngineManagerArgs
-from llumnix.backends.profiling import ProfilingDatabase
+from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, DeploymentArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import (random_uuid,
-                           clear_gloo_backend_state,
-                           remove_placement_group,
-                           get_instance_name,
-                           INSTANCE_NAME_PREFIX,
-                           MANAGER_NAME)
+from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placement_group,
+                           get_instance_name, INSTANCE_NAME_PREFIX, MANAGER_NAME)
+from llumnix.entrypoints.utils import DeploymentMode
+from llumnix.utils import initialize_placement_group
+from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.utils import initialize_placement_group
 
 logger = init_logger(__name__)
 
 CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
 NO_INSTANCE_RETRY_INTERVAL = 1.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 1.0
+WAIT_PLACEMENT_GROUP_TIMEOUT_SECONDS = 1.0
+AUTO_DEPLOYMENT_INTERVAL = 1.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
 # TODO(s5u13b): Handle exception of ray operations.
+# TODO(s5u13b): Update the documents of global deployment.
+# TODO(s5u13b): Change add_done_callback method.
 
 
-class LLMEngineManager:
+class Manager:
     def __init__(self,
-                 engine_manager_args: EngineManagerArgs,
-                 global_scheduler_config: GlobalSchedulerConfig,
+                 manager_args: ManagerArgs,
                  work_dir: str,
-                 log_requests: bool = True,
-                 profiling_database: ProfilingDatabase = None) -> None:
+                 entrypoints_args: EntrypointsArgs = None,
+                 engine_args = None,
+                 deployment_args: DeploymentArgs = None
+                 ) -> None:
         os.chdir(work_dir)
         self.actor_name = MANAGER_NAME
-        self.engine_manager_args = engine_manager_args
-        self.profiling_database = profiling_database
+        self.manager_args = manager_args
+        # engine_args and entrypoints_args are used in global deployment.
+        self.entrypoints_args = entrypoints_args
+        self.engine_args = engine_args
+        self.deployment_args = deployment_args
 
-        self.log_requests = log_requests
+        assert deployment_args is None or (deployment_args is not None and entrypoints_args is not None and engine_args is not None)
 
+        # deployment args
+        if deployment_args is not None:
+            self.deployment_mode: DeploymentMode = deployment_args.deployment_mode
+            self.backend_type: BackendType = deployment_args.backend_type
+        self.max_instances = manager_args.max_instances
+        self.min_instances = manager_args.min_instances
+
+        # scheduling args
+        self.enable_migration = manager_args.enable_migration
+        self.enable_scaling = manager_args.enable_scaling
+        self.enable_pd_disagg = manager_args.enable_pd_disagg
+        self.polling_interval = manager_args.polling_interval
+        self.pair_migration_frequency = manager_args.pair_migration_frequency
+        self.scaling_interval = manager_args.scaling_interval
+
+        global_scheduler_config = manager_args.create_global_scheduler_config()
+        self.global_scheduler = GlobalScheduler(global_scheduler_config)
+
+        # log args
+        self.log_requests = not manager_args.disable_log_requests_manager
+        self.log_instance_info = manager_args.log_instance_info
+        if self.log_instance_info:
+            self._init_instance_info_csv(manager_args)
+            self.instance_last_logged_empty = {}
+
+        # instance states
         self.num_instances = 0
-        self.enable_migration = engine_manager_args.enable_migration
-        self.enable_scaling = engine_manager_args.enable_scaling
-        self.max_instances = engine_manager_args.max_instances
-        self.min_instances = engine_manager_args.min_instances
-
-        self.enable_pd_disagg = global_scheduler_config.enable_pd_disagg
-
         self.instances: Dict[str, Llumlet] = {}
         self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
-        self.global_scheduler = GlobalScheduler(global_scheduler_config)
-
-        self.polling_interval = engine_manager_args.polling_interval
-        asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
-
-        # args
-        self.pair_migration_frequency = engine_manager_args.pair_migration_frequency
-        self.scaling_interval = engine_manager_args.scaling_interval
 
         # request states
         self.request_instance: Dict[str, str] = {}
-        self.clear_request_intance_interval = CLEAR_REQUEST_INSTANCE_INTERVAL
-        asyncio.create_task(self._clear_request_instance_loop(self.clear_request_intance_interval))
 
-        # migrate states
+        # migration states
         self.num_instance_info_updates = 0
         self.migrating = False
 
@@ -99,15 +112,14 @@ class LLMEngineManager:
         self.scale_down_time = -1
         self.scaling_up = False
         self.scaling_down = False
-        self.last_check_scale_time = time.time() + 100
+        self.last_check_scale_time = time.time()
 
-        self.log_instance_info = engine_manager_args.log_instance_info
-        if self.log_instance_info:
-            self._init_instance_info_csv(engine_manager_args)
-            self.instance_last_logged_empty = {}
-
+        # tasks
         # When manager starts, it automatically connects to all existing instances.
+        # TODO(s5u13b): Check if this is a sync call.
         asyncio.run_coroutine_threadsafe(self._connect_to_instances(), asyncio.get_event_loop())
+        asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
+        asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
@@ -278,7 +290,7 @@ class LLMEngineManager:
                     dead_instances.add(instance_name)
             if len(dead_instances) > 0:
                 self.scale_down(dead_instances, rebuild_migrate_backend=False)
-                if self.engine_manager_args.migration_backend == 'gloo':
+                if self.manager_args.migration_backend == 'gloo':
                     clear_gloo_backend_state()
             return dead_instances
 
@@ -286,7 +298,7 @@ class LLMEngineManager:
         pending_task = self.pending_rebuild_migration_instances
         group_name = None
 
-        if self.engine_manager_args.migration_backend == 'gloo':
+        if self.manager_args.migration_backend == 'gloo':
             clear_gloo_backend_state()
 
         while len(alive_instances) > 0 and self.pending_rebuild_migration_instances > 0:
@@ -313,7 +325,7 @@ class LLMEngineManager:
             dst_filter=lambda instance_info: instance_info.instance_id in alive_instances)
 
         logger.info("[rebuild_migrate_backend] rebuild {} migration backend done, group_name: {}, alive instance ({}): {}"
-            .format(self.engine_manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
+            .format(self.manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
 
         # Restore migrate config
         self.enable_migration = origin_config
@@ -341,7 +353,7 @@ class LLMEngineManager:
         # a coroutine is already handling the changes in the number of instances in the cluster and it will account for the changes
         # caused by this scale-up (see rebuild_migrate_backend for details). Therefore, we simply return in this case. Specifically,
         # for RPC, the Ray actor handle is used for the migration cache, so there is no need to rebuild the group.
-        if self.enable_migration and self.engine_manager_args.migration_backend in ['gloo', 'nccl'] \
+        if self.enable_migration and self.manager_args.migration_backend in ['gloo', 'nccl'] \
             and indeed_update and no_pending_instance:
             asyncio.create_task(self._rebuild_migrate_backend())
 
@@ -377,10 +389,10 @@ class LLMEngineManager:
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
 
-        if self.enable_migration and self.engine_manager_args.migration_backend in ['gloo', 'nccl']:
+        if self.enable_migration and self.manager_args.migration_backend in ['gloo', 'nccl']:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
-                if self.engine_manager_args.migration_backend == 'gloo':
+                if self.manager_args.migration_backend == 'gloo':
                     clear_gloo_backend_state()
             elif indeed_update and no_pending_instance and rebuild_migrate_backend:
                 asyncio.create_task(self._rebuild_migrate_backend())
@@ -417,20 +429,21 @@ class LLMEngineManager:
 
     @classmethod
     def from_args(cls,
-                  engine_manager_args: EngineManagerArgs,
-                  profiling_database: ProfilingDatabase=None) -> "LLMEngineManager":
-        global_scheduler_config = engine_manager_args.create_global_scheduler_configs()
+                  manager_args: ManagerArgs,
+                  entrypoints_args: EntrypointsArgs = None,
+                  engine_args = None,
+                  deployment_args: DeploymentArgs = None,
+                  ) -> "Manager":
         manager_class = ray.remote(num_cpus=0,
                                    max_restarts=-1,
                                    name=MANAGER_NAME,
                                    namespace='llumnix',
-                                   lifetime="detached"
-                                   )(cls)
-        manager = manager_class.remote(engine_manager_args,
-                                       global_scheduler_config,
+                                   lifetime="detached")(cls)
+        manager = manager_class.remote(manager_args,
                                        os.getcwd(),
-                                       log_requests=not engine_manager_args.disable_log_requests_manager,
-                                       profiling_database=profiling_database)
+                                       entrypoints_args,
+                                       engine_args,
+                                       deployment_args)
 
         return manager
 
@@ -438,19 +451,22 @@ class LLMEngineManager:
                       engine_args,
                       request_output_queue_type: QueueType,
                       backend_type: BackendType,
-                      world_size: int,
                       *args,
                       **kwargs) -> Tuple[List[str], List[Llumlet]]:
-        engine_manager_args = self.engine_manager_args
+        manager_args = self.manager_args
+        world_size = get_engine_world_size(engine_args, backend_type)
+
         instance_ids: List[str] = []
         llumlets: List[Llumlet] = []
+        # for pd disaggregation
         if 'instance_ids' in kwargs and kwargs['instance_ids'][0]:
             instance_ids = kwargs['instance_ids']
-        for _ in range(engine_manager_args.initial_instances):
+        for _ in range(manager_args.initial_instances):
             instance_id = random_uuid()
-            if not engine_manager_args.profiling_result_file_path:
+            if not manager_args.profiling_result_file_path:
                 # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor, num_gpus=world_size, for Workers
                 placement_group = initialize_placement_group(instance_id, num_cpus=3, num_gpus=world_size, detached=True)
+                # TODO(s5u13b): Refine the order of arguments.
                 llumlet = Llumlet.from_args(
                     request_output_queue_type,
                     instance_id,
@@ -465,21 +481,19 @@ class LLMEngineManager:
                     **kwargs
                 )
             else:
-                assert backend_type == backend_type.VLLM, f'unimplemented backend SIM_{backend_type}'
+                assert backend_type == backend_type.VLLM, 'Only support the simulator backend for vLLM.'
                 # num_cpus=1, for Llumlet + AsyncPutQueueActor
                 placement_group = initialize_placement_group(instance_id, num_cpus=2, num_gpus=0, detached=True)
                 llumlet = Llumlet.from_args(
-                    request_output_queue_type,
-                    instance_id,
-                    BackendType.SIM_VLLM,
-                    world_size,
-                    engine_manager_args.create_migration_config(),
-                    placement_group,
-                    engine_args,
-                    engine_manager_args.profiling_result_file_path,
-                    *args,
-                    **kwargs
-                )
+                                request_output_queue_type,
+                                instance_id,
+                                BackendType.SIM_VLLM,
+                                manager_args.create_migration_config(),
+                                placement_group,
+                                engine_args,
+                                manager_args.profiling_result_file_path,
+                                *args,
+                                **kwargs)
             instance_ids.append(instance_id)
             llumlets.append(llumlet)
 
@@ -542,9 +556,9 @@ class LLMEngineManager:
             await asyncio.sleep(interval)
             self.request_instance = {}
 
-    def _init_instance_info_csv(self, engine_manager_args: EngineManagerArgs) -> None:
+    def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:
         # pylint: disable=consider-using-with
-        self.instance_info_file = open(engine_manager_args.log_filename + '_instance.csv', 'w', encoding='utf-8')
+        self.instance_info_file = open(manager_args.log_filename + '_instance.csv', 'w', encoding='utf-8')
         self.instance_info_csv = csv.writer(self.instance_info_file)
         self.instance_info_csv.writerow([
             'timestamp',

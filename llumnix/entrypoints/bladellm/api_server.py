@@ -14,35 +14,39 @@
 import asyncio
 from blade_llm.service.args import ServingArgs
 
-from llumnix.config import get_llumnix_config, LlumnixConfig
+# TODO(s5u13b): Refine multiple import codes.
+from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import LlumnixEntrypointsArgs, EngineManagerArgs, LlumnixArgumentParser
-from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix, is_gpu_available
+from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
+                               DeploymentArgs)
+from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
-from llumnix.entrypoints.setup import LlumnixEntrypointsContext
 from llumnix.entrypoints.bladellm.utils import get_args
+from llumnix.entrypoints.utils import EntrypointsContext, DeploymentMode, is_gpu_available
+
 
 def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     # generate llumnix_parser for checking parameters with choices
-    llumnix_parser: LlumnixArgumentParser = LlumnixArgumentParser()
-    llumnix_parser = LlumnixEntrypointsArgs.add_cli_args(llumnix_parser)
-    llumnix_parser = EngineManagerArgs.add_cli_args(llumnix_parser)
-    llumnix_config: LlumnixConfig = get_llumnix_config(bladellm_args.llumnix_config)
-    _, engine_manager_args, engine_args = get_args(llumnix_config, llumnix_parser, bladellm_args)
+    # TODO(s5u13b): Add add_cli_args function.
+    llumnix_parser = LlumnixArgumentParser()
+    llumnix_parser = EntrypointsArgs.add_cli_args(llumnix_parser)
+    llumnix_parser = ManagerArgs.add_cli_args(llumnix_parser)
+    llumnix_config = get_llumnix_config(bladellm_args.llumnix_config)
+    entrypoints_args, manager_args, engine_args = get_args(llumnix_config, llumnix_parser, bladellm_args)
 
-    setup_ray_cluster(llumnix_config)
+    deployment_args = DeploymentArgs(deployment_mode=DeploymentMode.LOCAL, backend_type=BackendType.VLLM)
 
-    llm_client = None
+    setup_ray_cluster(entrypoints_args)
+
+    llumnix_client = None
     # if gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():
-        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         instance_ids = None
         if engine_args.enable_disagg:
             instance_ids = [engine_args.disagg_options.inst_id]
 
-        llumnix_context: LlumnixEntrypointsContext = \
-            setup_llumnix(engine_manager_args, engine_args, llumnix_config, BackendType.BLADELLM,
-                          world_size, instance_ids=instance_ids)
-        llm_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
+        llumnix_context: EntrypointsContext = \
+            setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args, instance_ids=instance_ids)
+        llumnix_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
 
-    return llm_client
+    return llumnix_client

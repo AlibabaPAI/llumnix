@@ -21,6 +21,8 @@ from typing import Tuple
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
+from llumnix.backends.backend_interface import BackendType
+from llumnix.entrypoints.utils import DeploymentMode
 
 
 class LlumnixArgumentParser(argparse.ArgumentParser):
@@ -44,7 +46,12 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
 # All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None.
 
 @dataclass
-class LlumnixEntrypointsArgs:
+class EntrypointsArgs:
+    host: str = None
+    port: int = None
+    ssl_keyfile: str = None
+    ssl_certfile: str = None
+    log_level: str = None
     launch_ray_cluster: bool = None
     ray_cluster_port: int = None
     request_output_queue_type: str = None
@@ -59,16 +66,16 @@ class LlumnixEntrypointsArgs:
                 setattr(self, attr.name, getattr(_C.SERVER, attr.name.upper()))
 
     @classmethod
-    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'LlumnixEntrypointsArgs':
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'EntrypointsArgs':
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
         # The defalut values of attributes are defined in default.py.
-        llumnix_entrypoints_args = cls(**{attr: getattr(cfg.SERVER, attr.upper()) for attr in attrs})
-        return llumnix_entrypoints_args
+        entrypoints_args = cls(**{attr: getattr(cfg.SERVER, attr.upper()) for attr in attrs})
+        return entrypoints_args
 
     @classmethod
-    def check_args(cls, args: 'LlumnixEntrypointsArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'EntrypointsArgs', parser: argparse.ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -78,7 +85,7 @@ class LlumnixEntrypointsArgs:
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
-                            help='if launch ray cluster in api server')
+                            help='if launch ray cluster in server')
         parser.add_argument("--ray-cluster-port",
                             type=int,
                             help='ray cluster port')
@@ -98,10 +105,11 @@ class LlumnixEntrypointsArgs:
         parser.add_argument("--config-file",
                             type=str,
                             help="path to config file")
+
         return parser
 
 @dataclass
-class EngineManagerArgs:
+class ManagerArgs:
     initial_instances: int = None
 
     load_metric: str = None
@@ -152,7 +160,7 @@ class EngineManagerArgs:
             if getattr(self, attr.name) is None:
                 setattr(self, attr.name, getattr(_C.MANAGER, attr.name.upper()))
 
-    def create_global_scheduler_configs(
+    def create_global_scheduler_config(
         self,
     ) -> Tuple[GlobalSchedulerConfig]:
 
@@ -168,7 +176,7 @@ class EngineManagerArgs:
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
-                                                        self.migration_backend,)
+                                                        self.migration_backend)
         return global_scheduler_config
 
     def create_migration_config(self) -> MigrationConfig:
@@ -185,16 +193,16 @@ class EngineManagerArgs:
         return migration_config
 
     @classmethod
-    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'EngineManagerArgs':
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'ManagerArgs':
         # Get the list of attributes of this dataclass.
         attrs = [attr.name for attr in dataclasses.fields(cls)]
         # Set the attributes from the parsed arguments.
         # The defalut values of attributes are defined in default.py.
-        engine_manager_args = cls(**{attr: getattr(cfg.MANAGER, attr.upper()) for attr in attrs})
-        return engine_manager_args
+        manager_args = cls(**{attr: getattr(cfg.MANAGER, attr.upper()) for attr in attrs})
+        return manager_args
 
     @classmethod
-    def check_args(cls, args: 'EngineManagerArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'ManagerArgs', parser: argparse.ArgumentParser):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -331,10 +339,17 @@ class EngineManagerArgs:
         parser.add_argument('--max-stages',
                             type=int,
                             help='drop migration if the number of stages > max_stages')
+
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',
                             help='enable prefill decoding disaggregation')
         parser.add_argument('--num-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatch')
+
         return parser
+
+@dataclass
+class DeploymentArgs:
+    deployment_mode: DeploymentMode = None
+    backend_type: BackendType = None

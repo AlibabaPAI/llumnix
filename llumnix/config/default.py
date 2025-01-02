@@ -32,6 +32,8 @@ _C.SERVER.PORT = 8000
 _C.SERVER.SSL_KEYFILE = None
 # Path to SSL certificate file for secure connections
 _C.SERVER.SSL_CERTFILE = None
+# Log level for the server
+_C.SERVER.LOG_LEVEL = "debug"
 # Queue type for request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "rayqueue"
 # Port number for the request output queue

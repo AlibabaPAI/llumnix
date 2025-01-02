@@ -28,7 +28,7 @@ from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -51,7 +51,6 @@ def init_llumlet(request_output_queue_type, instance_id, migration_config, engin
                 request_output_queue_type,
                 instance_id,
                 BackendType.VLLM,
-                1,
                 migration_config,
                 placement_group,
                 engine_args,)

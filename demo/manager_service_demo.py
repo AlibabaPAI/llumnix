@@ -179,9 +179,9 @@ def get_curr_deployment() -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIS
     return curr_pgs, curr_servers, curr_instances
 
 
-class LLMEngineManager:
+class Manager:
     def __init__(self):
-        print("create LLMEngineManager")
+        print("create Manager")
         self.host = "localhost"
         self.port = 8000
         self.last_pending_pg: PlacementGroup = None
@@ -192,7 +192,7 @@ class LLMEngineManager:
         asyncio.create_task(self._auto_scale_up_loop())
         asyncio.create_task(self._auto_scale_down_loop())
         asyncio.create_task(self._check_deployment_states_loop())
-        print("LLMEngineManager created")
+        print("Manager created")
 
     async def _auto_scale_down_loop(self) -> None:
         def instance_ready_callback(instance_id: str, fut):
@@ -325,24 +325,24 @@ class LLMEngineManager:
 
     @classmethod
     def from_args(cls):
-        engine_manager_class = ray.remote(num_cpus=1,
-                                          max_restarts=-1,
-                                          name="manager",
-                                          namespace="llumnix",
-                                          lifetime="detached")(cls)
-        engine_manager = engine_manager_class.remote()
-        return engine_manager
+        manager_class = ray.remote(num_cpus=1,
+                                   max_restarts=-1,
+                                   name="manager",
+                                   namespace="llumnix",
+                                   lifetime="detached")(cls)
+        manager = manager_class.remote()
+        return manager
 
 
 if __name__ == "__main__":
     ray.init()
 
-    # magic actor
+    # magic actor to avoid fast api server actor initialization error
     request_output_queue = RayQueue(actor_options={
                                             "namespace": "llumnix",
                                             "name": "magic_queue"
                                         })
-    manager = LLMEngineManager.from_args()
+    manager = Manager.from_args()
 
     while True:
         time.sleep(100)

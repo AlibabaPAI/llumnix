@@ -12,7 +12,7 @@ from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

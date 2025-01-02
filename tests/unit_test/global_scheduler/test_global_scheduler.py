@@ -19,7 +19,7 @@ from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo
 from llumnix.utils import random_uuid
 
-from .test_llm_engine_manager import get_instance_info_migrate_in, get_instance_info_migrate_out
+from .test_manager import get_instance_info_migrate_in, get_instance_info_migrate_out
 
 
 def init_global_scheduler():

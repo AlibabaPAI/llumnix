@@ -5,8 +5,9 @@ import asyncio
 import ray
 
 from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager
-from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
-                     EngineArgs, QueueType, BackendType)
+from llumnix import (ManagerArgs, EngineArgs, Manager,
+                     Llumlet, ServerInfo, QueueType, BackendType,
+                     SamplingParams)
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
 
@@ -33,21 +34,19 @@ launch_ray_cluster(port=ray_cluster_port)
 connect_to_ray_cluster(port=ray_cluster_port)
 
 # Set manager args and engine args.
-manager_args = EngineManagerArgs()
+manager_args = ManagerArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370)
 
 # Create a manager. If the manager is created first, and then the llumlets are created, manager.scale_up
 # need to be called to add the newly created llumlets to the management of the manager.
-manager: LLMEngineManager = init_manager(manager_args)
+manager: Manager = init_manager(manager_args)
 ray.get(manager.is_ready.remote())
 
 # Create llumlets.
 instance_ids: List[str] = None
 llumlets: List[Llumlet] = None
-instance_ids, llumlets = ray.get(manager.init_llumlets.remote(
-    engine_args, QueueType("rayqueue"), BackendType.VLLM, 1,
-))
+instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM))
 
 ray.get(manager.scale_up.remote(instance_ids, llumlets))
 

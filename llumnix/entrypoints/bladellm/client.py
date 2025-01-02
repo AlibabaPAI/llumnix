@@ -28,7 +28,7 @@ from blade_llm.protocol import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.server_info import RequestTimestamps
-from llumnix.entrypoints.setup import LlumnixEntrypointsContext
+from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
@@ -39,7 +39,7 @@ WAIT_MANAGER_INTERVAL = 5
 
 
 class LlumnixClientBladeLLM(MultiProcessingLLMClient):
-    def __init__(self, args: ServingArgs, llumnix_context: LlumnixEntrypointsContext, loop: asyncio.AbstractEventLoop):
+    def __init__(self, args: ServingArgs, llumnix_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
         super().__init__(args, -1)
         self.entrypoint_id2llumnix_id = {}
         self.llumnix_id2entrypoint_id = {}

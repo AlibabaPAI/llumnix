@@ -21,9 +21,9 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 
 logger = init_logger(__name__)
 
+
 class InstanceType(str, Enum):
     NO_CONSTRAINTS = "NO_CONSTRAINTS"
-
     # Specific to Prefill-Decoding disaggregation.
     PREFILL = "PREFILL"
     DECODE = "DECODE"

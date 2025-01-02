@@ -19,9 +19,8 @@ import ray
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.backends.vllm.worker import MigrationWorker
-from llumnix.arg_utils import EngineManagerArgs
-from llumnix.utils import random_uuid
-from llumnix.backends.utils import initialize_placement_group
+from llumnix.arg_utils import ManagerArgs
+from llumnix.utils import random_uuid, initialize_placement_group
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -41,7 +40,7 @@ class MockMigrationWorker(MigrationWorker):
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
 def test_migrate_cache(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
-    migraiton_config = EngineManagerArgs(migration_buffer_blocks=3, migration_num_layers=5).create_migration_config()
+    migraiton_config = ManagerArgs(migration_buffer_blocks=3, migration_num_layers=5).create_migration_config()
     migraiton_config.migration_backend = backend
 
     worker0 = create_worker(rank=0, local_rank=0, engine_config=engine_config,

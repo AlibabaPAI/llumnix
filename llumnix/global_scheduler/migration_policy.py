@@ -22,10 +22,10 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 
 logger = init_logger(__name__)
 
+
 class PairMigrationConstraints(str, Enum):
     """Target of Migration."""
     NO_CONSTRAINTS = "NO_CONSTRAINTS"
-
     # Enable the prefill-decoding disaggregration.
     DECODING_2_DECODING = "DECODING_2_DECODING"
     PREFILL_2_DECODING = "PREFILL_2_DECODING"

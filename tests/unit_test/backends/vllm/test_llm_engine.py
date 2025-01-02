@@ -28,7 +28,7 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
-from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group
 
 from tests.conftest import ray_env
 from .utils import create_dummy_prompt, initialize_scheduler

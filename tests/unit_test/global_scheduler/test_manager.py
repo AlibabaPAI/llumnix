@@ -20,8 +20,8 @@ import numpy as np
 from vllm import EngineArgs
 
 from llumnix.utils import random_uuid, get_instance_name, MANAGER_NAME
-from llumnix.arg_utils import EngineManagerArgs
-from llumnix.llm_engine_manager import LLMEngineManager
+from llumnix.arg_utils import ManagerArgs
+from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
@@ -105,9 +105,9 @@ class MockBackendSim(BackendSimVLLM):
 
 def init_manager():
     try:
-        engine_manager_args = EngineManagerArgs(migration_backend="rayrpc", enable_migration=True)
-        engine_manager_args.log_instance_info = False
-        manager = LLMEngineManager.from_args(engine_manager_args, None)
+        manager_args = ManagerArgs(migration_backend="rayrpc", enable_migration=True)
+        manager_args.log_instance_info = False
+        manager = Manager.from_args(manager_args)
     except ValueError:
         manager = ray.get_actor(MANAGER_NAME, namespace='llumnix')
     ray.get(manager.is_ready.remote())
@@ -153,10 +153,10 @@ def test_init_llumlet(ray_env, llumlet):
 
 def test_init_llumlets(ray_env, manager):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM, 1))
+    instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM))
     num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
-    engine_manager_args = EngineManagerArgs()
-    assert num_instances == engine_manager_args.initial_instances
+    manager_args = ManagerArgs()
+    assert num_instances == manager_args.initial_instances
 
 def test_init_llumlets_sim(ray_env, manager):
     manager.profiling_result_file_path="//"
@@ -164,10 +164,10 @@ def test_init_llumlets_sim(ray_env, manager):
     import llumnix.backends.vllm.simulator
     llumnix.backends.vllm.simulator.BackendSimVLLM = MockBackendSim
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM, 1))
+    instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM))
     num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
-    engine_manager_args = EngineManagerArgs()
-    assert num_instances == engine_manager_args.initial_instances
+    manager_args = ManagerArgs()
+    assert num_instances == manager_args.initial_instances
 
 def test_scale_up_and_down(ray_env, manager):
     initial_instances = 4

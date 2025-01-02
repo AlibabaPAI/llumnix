@@ -35,7 +35,6 @@ class BackendType(str, Enum):
             BackendType.SIM_VLLM,
         ]
 
-# TODO(KuilongCui): separate backend interface into two parts: DispatchBackendInterface and MigrationBackendInterface
 class BackendInterface(ABC):
     # Methods for inference
     @abstractmethod

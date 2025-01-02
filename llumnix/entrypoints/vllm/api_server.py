@@ -22,19 +22,16 @@ import uvicorn
 
 from vllm.sampling_params import SamplingParams
 
-from llumnix.arg_utils import LlumnixArgumentParser
-from llumnix.entrypoints.setup import (setup_ray_cluster,
-                                       setup_llumnix,
-                                       is_gpu_available,
-                                       init_per_token_latency_breakdown_dict,
-                                       record_per_token_latency_breakdown)
-from llumnix.entrypoints.vllm.arg_utils import (add_cli_args,
-                                                get_args)
+from llumnix.arg_utils import LlumnixArgumentParser, DeploymentArgs
+from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
+from llumnix.entrypoints.utils import init_per_token_latency_breakdown_dict, record_per_token_latency_breakdown
+from llumnix.entrypoints.vllm.arg_utils import add_cli_args, get_args
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
-from llumnix.config import get_llumnix_config, LlumnixConfig
+from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
+from llumnix.entrypoints.utils import DeploymentMode, is_gpu_available
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm.api_server")
@@ -47,6 +44,7 @@ llumnix_client: LlumnixClientVLLM = None
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
+    # TODO(s5u13b): Do not run request output queue in event loop of api server.
     asyncio.create_task(llumnix_client.request_output_queue.run_server_loop())
     asyncio.create_task(llumnix_client.get_request_outputs_loop())
     yield
@@ -179,27 +177,28 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int)
     parser.add_argument("--ssl-keyfile", type=str)
     parser.add_argument("--ssl-certfile", type=str)
+    parser.add_argument("--log-level", type=str)
 
     cli_args = add_cli_args(parser)
-    cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
-    _, engine_manager_args, engine_args = get_args(cfg, parser, cli_args)
+    cfg = get_llumnix_config(cli_args.config_file, cli_args)
+    entrypoints_args, manager_args, engine_args = get_args(cfg, parser, cli_args)
+
+    deployment_args = DeploymentArgs(deployment_mode=DeploymentMode.LOCAL, backend_type=BackendType.VLLM)
 
     # Launch or connect to the ray cluster for multi-node serving.
-    setup_ray_cluster(cfg)
+    setup_ray_cluster(entrypoints_args)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():
-        engine_config = engine_args.create_engine_config()
-        parallel_config = engine_config.parallel_config
-        llumnix_entrypoints_context = setup_llumnix(engine_manager_args, engine_args, cfg, BackendType.VLLM, parallel_config.world_size)
-        llumnix_client = LlumnixClientVLLM(llumnix_entrypoints_context)
+        entrypoints_context = setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args)
+        llumnix_client = LlumnixClientVLLM(entrypoints_context)
 
         # Start the api server after all the components of llumnix are ready.
-        logger.info("Start api server on '{}:{}'.".format(cfg.SERVER.HOST, cfg.SERVER.PORT))
+        logger.info("Start api server on '{}:{}'.".format(entrypoints_args.host, entrypoints_args.port))
         uvicorn.run(app,
-                    host=cfg.SERVER.HOST,
-                    port=cfg.SERVER.PORT,
-                    log_level="debug",
+                    host=entrypoints_args.host,
+                    port=entrypoints_args.port,
+                    log_level="info",
                     timeout_keep_alive=TIMEOUT_KEEP_ALIVE,
-                    ssl_keyfile=cfg.SERVER.SSL_KEYFILE,
-                    ssl_certfile=cfg.SERVER.SSL_CERTFILE)
+                    ssl_keyfile=entrypoints_args.ssl_keyfile,
+                    ssl_certfile=entrypoints_args.ssl_certfile)

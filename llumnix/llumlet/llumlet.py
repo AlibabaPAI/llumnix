@@ -23,7 +23,7 @@ from ray.util.placement_group import PlacementGroup
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
-from llumnix.backends.utils import init_backend_engine
+from llumnix.backends.utils import init_backend_engine, get_engine_world_size
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
@@ -75,7 +75,6 @@ class Llumlet:
                   request_output_queue_type: QueueType,
                   instance_id: str,
                   backend_type: BackendType,
-                  world_size: int,
                   migration_config: MigrationConfig,
                   placement_group: PlacementGroup,
                   *args,
@@ -85,6 +84,8 @@ class Llumlet:
                 f'unimplemented backend {backend_type}'
             num_gpus = 0
             if backend_type == backend_type.BLADELLM:
+                engine_args = kwargs["engine_args"]
+                world_size = get_engine_world_size(engine_args, backend_type)
                 num_gpus = world_size
             instance_name = get_instance_name(instance_id)
             if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:

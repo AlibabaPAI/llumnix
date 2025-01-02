@@ -19,12 +19,12 @@ from fastapi.responses import JSONResponse, Response
 from vllm.outputs import CompletionOutput, RequestOutput
 
 import llumnix.entrypoints.vllm.api_server
-import llumnix.llm_engine_manager
-from llumnix.arg_utils import EngineManagerArgs
+import llumnix.manager
+from llumnix.arg_utils import ManagerArgs
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.utils import random_uuid, MANAGER_NAME
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
-from llumnix.entrypoints.setup import LlumnixEntrypointsContext
+from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 
 app = llumnix.entrypoints.vllm.api_server.app
@@ -32,7 +32,7 @@ manager = None
 
 
 @ray.remote(num_cpus=0)
-class MockLLMEngineManager:
+class MockManager:
     def __init__(self, request_output_queue_type: QueueType):
         self._num_generates = 0
         self._num_aborts = 0
@@ -53,7 +53,7 @@ class MockLLMEngineManager:
 
 
 def init_manager(request_output_queue_type: QueueType):
-    manager = MockLLMEngineManager.options(name=MANAGER_NAME,
+    manager = MockManager.options(name=MANAGER_NAME,
                                            namespace='llumnix').remote(request_output_queue_type)
     return manager
 
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--request-output-queue-type", type=str, choices=["zmq", "rayqueue"])
-    parser = EngineManagerArgs.add_cli_args(parser)
+    parser = ManagerArgs.add_cli_args(parser)
     args = parser.parse_args()
 
     request_output_queue_type = QueueType(args.request_output_queue_type)
@@ -80,12 +80,13 @@ if __name__ == "__main__":
     if request_output_queue_type == QueueType.RAYQUEUE:
         ray_queue_server = request_output_queue
     server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
-    llumnix_context = LlumnixEntrypointsContext(manager,
-                                                {'0': None},
-                                                request_output_queue,
-                                                server_info,
-                                                None,
-                                                None)
+    llumnix_context = EntrypointsContext(manager,
+                                         {'0': None},
+                                         request_output_queue,
+                                         server_info,
+                                         None,
+                                         None,
+                                         None)
     llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(llumnix_context)
 
     uvicorn.run(

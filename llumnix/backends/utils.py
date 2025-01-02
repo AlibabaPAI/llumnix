@@ -11,12 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Dict, List
+from typing import Dict, List
 import asyncio
 import time
 
 import ray
-from ray.util.placement_group import PlacementGroup
 
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
@@ -24,7 +23,7 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logger import init_logger
-from llumnix.utils import get_placement_group_name, get_instance_name
+from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 
@@ -79,61 +78,10 @@ def init_backend_engine(instance_id: str, request_output_queue_type: QueueType,
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine
 
-def initialize_placement_group(
-    instance_id: str,
-    num_cpus: int = 1,
-    num_gpus: int = 1,
-    detached: bool = False
-) -> Tuple[str, Optional[PlacementGroup]]:
-    """Initialize the distributed cluster probably with Ray.
-
-    Args:
-        world_size: The number of workers in Llumlet.
-
-    Returns:
-        A tuple of (`distributed_init_method`, `placement_group`). The
-        `distributed_init_method` is the address for initializing the
-        distributed backend. `placement_group` includes the specification
-        of the resources for each distributed worker.
-    """
-    if ray is None:
-        raise ImportError(
-            "Ray is not installed. Please install Ray to use distributed "
-            "serving.")
-
-    lifetime = "detached" if detached else None
-    # Create placement group for worker processes
-    current_placement_group = ray.util.get_current_placement_group()
-    if current_placement_group:
-        # We are in a placement group
-        bundles = current_placement_group.bundle_specs
-        # Verify that we can use the placement group.
-        gpu_bundles = 0
-        for bundle in bundles:
-            bundle_gpus = bundle.get("GPU", 0)
-            if bundle_gpus > 1:
-                raise ValueError(
-                    "Placement group bundle cannot have more than 1 GPU.")
-            if bundle_gpus:
-                gpu_bundles += 1
-        if num_gpus > gpu_bundles:
-            raise ValueError(
-                "The number of required GPUs exceeds the total number of "
-                "available GPUs in the placement group.")
-    else:
-        num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
-        if num_gpus > num_gpus_in_cluster:
-            raise ValueError(
-                "The number of required GPUs exceeds the total number of "
-                "available GPUs in the cluster.")
-        # Create a new placement group
-        # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Workers
-        placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
-        current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
-        # Wait until PG is ready - this will block until all
-        # requested resources are available, and will timeout
-        # if they cannot be provisioned.
-        ray.get(current_placement_group.ready(), timeout=1800)
-
-    return current_placement_group
+def get_engine_world_size(engine_args, backend_type: BackendType):
+    if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
+        engine_config = engine_args.create_engine_config()
+        world_size = engine_config.parallel_config.world_size
+    else: # BLADE_LLM
+        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
+    return world_size

@@ -31,7 +31,8 @@ from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, DeploymentArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placement_group,
-                           get_instance_name, INSTANCE_NAME_PREFIX, MANAGER_NAME)
+                           get_instance_name, INSTANCE_NAME_PREFIX, MANAGER_NAME,
+                           run_async_func_sync)
 from llumnix.entrypoints.utils import DeploymentMode
 from llumnix.utils import initialize_placement_group
 from llumnix.backends.utils import get_engine_world_size
@@ -117,8 +118,7 @@ class Manager:
 
         # tasks
         # When manager starts, it automatically connects to all existing instances.
-        # TODO(s5u13b): Check if this is a sync call.
-        asyncio.run_coroutine_threadsafe(self._connect_to_instances(), asyncio.get_event_loop())
+        run_async_func_sync(self._connect_to_instances())
         asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 

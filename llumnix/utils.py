@@ -12,6 +12,8 @@
 # limitations under the License.
 
 import uuid
+import asyncio
+import threading
 import ray
 from ray.util.placement_group import PlacementGroup
 
@@ -123,3 +125,14 @@ def remove_placement_group(instance_id: str) -> bool:
     except Exception:
         return False
     return True
+
+def run_async_func_sync(func):
+    def run_task():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        future = loop.create_task(func)
+        loop.run_until_complete(future)
+        loop.close()
+    thread = threading.Thread(target=run_task)
+    thread.start()
+    thread.join()

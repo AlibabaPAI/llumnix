@@ -49,7 +49,6 @@ AUTO_DEPLOYMENT_INTERVAL = 1.0
 # TODO(s5u13b): Fix the logger when manager failover.
 # TODO(s5u13b): Handle exception of ray operations.
 # TODO(s5u13b): Update the documents of global deployment.
-# TODO(s5u13b): Change add_done_callback method.
 
 
 class Manager:
@@ -191,7 +190,7 @@ class Manager:
                 tasks = []
                 instance_infos = []
                 for instance_id, instance in self.instances.items():
-                    # Use asyncio.gather to wrap ray remote call to add done callback.
+                    # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
                     task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
                     tasks.append(task)
@@ -259,7 +258,6 @@ class Manager:
                 self.instance_migrating[migrate_out_instance_id] = True
                 self.instance_migrating[migrate_in_instance_id] = True
                 migrate_in_instance_name = get_instance_name(migrate_in_instance_id)
-                # Use asyncio.gather to wrap ray remote call to add done callback.
                 task = asyncio.gather(self.instances[migrate_out_instance_id].migrate_out.remote(migrate_in_instance_name),
                                       return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))

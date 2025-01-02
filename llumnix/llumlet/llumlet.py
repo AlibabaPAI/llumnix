@@ -17,7 +17,7 @@ from typing import List, Union, Iterable
 import time
 
 import ray
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.logger import init_logger
@@ -40,23 +40,23 @@ CHECK_ENGINE_STATE_INTERVAL = 1.0
 class Llumlet:
     def __init__(self,
                  instance_id: str,
-                 request_output_queue_type: QueueType,
-                 backend_type: BackendType,
-                 migration_config: MigrationConfig,
                  placement_group: PlacementGroup,
-                 *args,
-                 **kwargs) -> None:
+                 request_output_queue_type: QueueType,
+                 migration_config: MigrationConfig,
+                 backend_type: BackendType,
+                 engine_args,
+                 profiling_result_file_path: str = None) -> None:
         try:
             logger.info("Llumlet backend type: {}".format(backend_type))
             self.instance_id = instance_id
             self.instance_name = get_instance_name(instance_id)
-            self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
-                                                                        request_output_queue_type,
-                                                                        backend_type,
-                                                                        migration_config,
+            self.backend_engine: BackendInterface = init_backend_engine(instance_id,
                                                                         placement_group,
-                                                                        *args,
-                                                                        **kwargs)
+                                                                        request_output_queue_type,
+                                                                        migration_config,
+                                                                        backend_type,
+                                                                        engine_args,
+                                                                        profiling_result_file_path)
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
                                                               migration_config.last_stage_max_blocks,
                                                               migration_config.max_stages)
@@ -72,54 +72,40 @@ class Llumlet:
 
     @classmethod
     def from_args(cls,
-                  request_output_queue_type: QueueType,
                   instance_id: str,
-                  backend_type: BackendType,
-                  migration_config: MigrationConfig,
                   placement_group: PlacementGroup,
-                  *args,
-                  **kwargs):
+                  request_output_queue_type: QueueType,
+                  migration_config: MigrationConfig,
+                  backend_type: BackendType,
+                  engine_args,
+                  profiling_result_file_path: str = None):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], \
+            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM], \
                 f'unimplemented backend {backend_type}'
             num_gpus = 0
             if backend_type == backend_type.BLADELLM:
-                engine_args = kwargs["engine_args"]
                 world_size = get_engine_world_size(engine_args, backend_type)
                 num_gpus = world_size
             instance_name = get_instance_name(instance_id)
-            if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
-                llumlet_class = ray.remote(num_cpus=1,
-                                           num_gpus=num_gpus,
-                                           name=instance_name,
-                                           namespace='llumnix',
-                                           max_concurrency=4,
-                                           lifetime="detached")(cls).options(
-                                                scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                                    placement_group=placement_group,
-                                                    placement_group_bundle_index=0,
-                                                    placement_group_capture_child_tasks=True,
-                                                )
+            llumlet_class = ray.remote(num_cpus=1,
+                                        num_gpus=num_gpus,
+                                        name=instance_name,
+                                        namespace='llumnix',
+                                        max_concurrency=4,
+                                        lifetime="detached")(cls).options(
+                                            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                                                placement_group=placement_group,
+                                                placement_group_bundle_index=0,
+                                                placement_group_capture_child_tasks=True,
                                             )
-            else: # backend_type == backend_type.SIM_VLLM:
-                llumlet_class = ray.remote(num_cpus=1,
-                                           num_gpus=num_gpus,
-                                           name=instance_name,
-                                           namespace='llumnix',
-                                           max_concurrency=4,
-                                           lifetime="detached")(cls).options(
-                                                scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                                    node_id=ray.get_runtime_context().get_node_id(),
-                                                    soft=False,
-                                                )
-                                            )
+                                        )
             llumlet = llumlet_class.remote(instance_id,
-                                           request_output_queue_type,
-                                           backend_type,
-                                           migration_config,
                                            placement_group,
-                                           *args,
-                                           **kwargs)
+                                           request_output_queue_type,
+                                           migration_config,
+                                           backend_type,
+                                           engine_args,
+                                           profiling_result_file_path)
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("failed to initialize Llumlet: {}".format(e))

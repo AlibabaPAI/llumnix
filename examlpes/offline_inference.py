@@ -46,7 +46,7 @@ ray.get(manager.is_ready.remote())
 # Create llumlets.
 instance_ids: List[str] = None
 llumlets: List[Llumlet] = None
-instance_ids, llumlets = ray.get(manager.init_llumlets.remote(engine_args, QueueType("rayqueue"), BackendType.VLLM))
+instance_ids, llumlets = ray.get(manager.init_llumlets.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
 
 ray.get(manager.scale_up.remote(instance_ids, llumlets))
 

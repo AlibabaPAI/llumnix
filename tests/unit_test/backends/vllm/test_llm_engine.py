@@ -88,21 +88,26 @@ def test_llm_engine_process_model_outputs():
     ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
     assert len(ret) == 1
 
-def test_llm_engine_from_engine_args():
+def test_llm_engine_from_engine_args(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    llm_engine = MockEngine.from_engine_args(engine_args, request_output_queue_type=QueueType.RAYQUEUE,
-                                             instance_id="0", migration_config=None)
+    placement_group = initialize_placement_group(instance_id="0", num_cpus=3, num_gpus=1, detached=True)
+    llm_engine = MockEngine.from_engine_args(engine_args=engine_args, request_output_queue_type=QueueType.RAYQUEUE,
+                                             instance_id="0", migration_config=None, placement_group=placement_group)
     assert llm_engine.executor_class == LlumnixRayGPUExecutor
 
+def test_llm_engine_from_engine_args_sim(ray_env):
     latency_data = LatencyMemData({},{},{})
-    llm_engine = MockEngine.from_engine_args(engine_args, request_output_queue_type=QueueType.RAYQUEUE,
-                                             instance_id="0", migration_config=None, latency_mem=latency_data)
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    placement_group = initialize_placement_group(instance_id="0", num_cpus=2, num_gpus=1, detached=True)
+    llm_engine = MockEngine.from_engine_args(engine_args=engine_args, request_output_queue_type=QueueType.RAYQUEUE,
+                                             instance_id="0", migration_config=None, latency_mem=latency_data,
+                                             placement_group=placement_group)
     assert llm_engine.executor_class == SimGPUExecutor
 
 def test_llm_engine_add_requset(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     placement_group = initialize_placement_group(instance_id="0", num_cpus=3, num_gpus=1, detached=True)
-    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
+    llm_engine = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
                                                    placement_group=placement_group,

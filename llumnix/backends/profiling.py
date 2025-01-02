@@ -178,8 +178,7 @@ def model_decode(x, a, b, c):
     return a * bs + b * tot_seq_len + c
 
 def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingDatabase, **backend_args):
-    assert BackendType.is_sim_backend(backend_type)
-    if backend_type == BackendType.SIM_VLLM:
+    if backend_type == BackendType.VLLM:
         # TODO(ZeldaHuang): support multi-lora, more device, vision language model
         model_config = backend_args.get("model_config")
         _ = backend_args.get("cache_config")
@@ -196,7 +195,7 @@ def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingData
         assert sim_parallel_config in profiling_result.para_dict.keys(), "sim parallel config not in database"
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
         return latency_mem
-    raise ValueError(f'Unsupported backend: {backend_type}')
+    raise ValueError(f'Unsupported simulator backend: {backend_type}')
 
 if __name__ == "__main__":
     import argparse

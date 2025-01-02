@@ -40,7 +40,7 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 
 class AsyncBackQueueWrapper(APIWrapper):
-    def __init__(self, placement_group, instance_id, output_queue_type) -> None:
+    def __init__(self, placement_group, instance_id, request_output_queue_type) -> None:
         super().__init__(args=None, resp_queue=None)
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
@@ -54,7 +54,7 @@ class AsyncBackQueueWrapper(APIWrapper):
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy
-        )(AsyncPutQueueActor).remote(instance_id, output_queue_type)
+        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
 
         self.request_server_map = {}
@@ -113,9 +113,9 @@ class AsyncLLMEngineLlumnixMixin:
     # pylint: disable=unused-argument
     def __init__(self,
                  instance_id: str,
-                 output_queue_type: QueueType,
+                 placement_group: PlacementGroup,
+                 request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 placement_group: Optional[PlacementGroup],
                  ) -> None:
         self.instance_id = instance_id
 
@@ -123,7 +123,7 @@ class AsyncLLMEngineLlumnixMixin:
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
         self.placement_group = placement_group
-        self.output_queue_type = output_queue_type
+        self.request_output_queue_type = request_output_queue_type
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -134,7 +134,7 @@ class AsyncLLMEngineLlumnixMixin:
         self._client = self.init_client_from_engine()
         self.trans_wrapper: AsyncBackQueueWrapper = AsyncBackQueueWrapper(self.placement_group,
                                                                           self.instance_id,
-                                                                          self.output_queue_type)
+                                                                          self.request_output_queue_type)
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
     async def update_callback(self, resp_list, step_requests):
@@ -185,49 +185,53 @@ class AsyncLLMEngineLlumnixMixin:
 class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
     def __init__(self,
                 instance_id: str,
-                output_queue_type: QueueType,
+                placement_group: PlacementGroup,
+                request_output_queue_type: QueueType,
                 migration_config: MigrationConfig,
-                placement_group: Optional[PlacementGroup],
                 *args, **kwargs,
                 ) -> None:
         AsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type, migration_config)
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,
             instance_id: str,
-            output_queue_type: QueueType,
+            placement_group: PlacementGroup,
+            request_output_queue_type: QueueType,
             migration_config: MigrationConfig,
-            placement_group: Optional[PlacementGroup],
             *args, **kwargs,
             ) -> None:
         PrefillAsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type, migration_config)
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
             instance_id: str,
-            output_queue_type: QueueType,
+            placement_group: PlacementGroup,
+            request_output_queue_type: QueueType,
             migration_config: MigrationConfig,
-            placement_group: Optional[PlacementGroup],
             *args, **kwargs,
             ) -> None:
         DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type, migration_config)
 
 class BackendBladeLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
-        output_queue_type: QueueType,
+        placement_group: PlacementGroup,
+        request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        engine_args: ServingArgs,
-        placement_group: PlacementGroup = None,
+        engine_args: ServingArgs
     ) -> None:
         self.instance_id = instance_id
         self.engine_args = engine_args
         engine_cls = self._get_engine_cls()
-        self.engine = engine_cls(instance_id, output_queue_type, migration_config, placement_group, engine_args)
+        self.engine = engine_cls(instance_id,
+                                 placement_group,
+                                 request_output_queue_type,
+                                 migration_config,
+                                 engine_args)
 
         self._loop = asyncio.new_event_loop()
         self._engine_ready = threading.Event()

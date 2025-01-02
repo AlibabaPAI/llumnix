@@ -14,7 +14,6 @@
 import asyncio
 from blade_llm.service.args import ServingArgs
 
-# TODO(s5u13b): Refine multiple import codes.
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
@@ -27,7 +26,6 @@ from llumnix.entrypoints.utils import EntrypointsContext, DeploymentMode, is_gpu
 
 def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     # generate llumnix_parser for checking parameters with choices
-    # TODO(s5u13b): Add add_cli_args function.
     llumnix_parser = LlumnixArgumentParser()
     llumnix_parser = EntrypointsArgs.add_cli_args(llumnix_parser)
     llumnix_parser = ManagerArgs.add_cli_args(llumnix_parser)
@@ -41,12 +39,8 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
     llumnix_client = None
     # if gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():
-        instance_ids = None
-        if engine_args.enable_disagg:
-            instance_ids = [engine_args.disagg_options.inst_id]
-
         llumnix_context: EntrypointsContext = \
-            setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args, instance_ids=instance_ids)
+            setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args)
         llumnix_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
 
     return llumnix_client

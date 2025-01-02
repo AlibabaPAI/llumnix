@@ -67,7 +67,8 @@ class Manager:
         self.engine_args = engine_args
         self.deployment_args = deployment_args
 
-        assert deployment_args is None or (deployment_args is not None and entrypoints_args is not None and engine_args is not None)
+        assert deployment_args is None or \
+            (deployment_args is not None and entrypoints_args is not None and engine_args is not None)
 
         # deployment args
         if deployment_args is not None:
@@ -448,19 +449,16 @@ class Manager:
         return manager
 
     def init_llumlets(self,
-                      engine_args,
                       request_output_queue_type: QueueType,
                       backend_type: BackendType,
-                      *args,
-                      **kwargs) -> Tuple[List[str], List[Llumlet]]:
+                      engine_args,
+                      instance_ids: List[str] = None
+                      ) -> Tuple[List[str], List[Llumlet]]:
         manager_args = self.manager_args
         world_size = get_engine_world_size(engine_args, backend_type)
 
         instance_ids: List[str] = []
         llumlets: List[Llumlet] = []
-        # for pd disaggregation
-        if 'instance_ids' in kwargs and kwargs['instance_ids'][0]:
-            instance_ids = kwargs['instance_ids']
         for _ in range(manager_args.initial_instances):
             instance_id = random_uuid()
             if not manager_args.profiling_result_file_path:
@@ -484,16 +482,14 @@ class Manager:
                 assert backend_type == backend_type.VLLM, 'Only support the simulator backend for vLLM.'
                 # num_cpus=1, for Llumlet + AsyncPutQueueActor
                 placement_group = initialize_placement_group(instance_id, num_cpus=2, num_gpus=0, detached=True)
-                llumlet = Llumlet.from_args(
-                                request_output_queue_type,
-                                instance_id,
-                                BackendType.SIM_VLLM,
-                                manager_args.create_migration_config(),
-                                placement_group,
-                                engine_args,
-                                manager_args.profiling_result_file_path,
-                                *args,
-                                **kwargs)
+            llumlet = Llumlet.from_args(
+                            instance_id,
+                            placement_group,
+                            request_output_queue_type,
+                            manager_args.create_migration_config(),
+                            backend_type,
+                            engine_args,
+                            manager_args.profiling_result_file_path)
             instance_ids.append(instance_id)
             llumlets.append(llumlet)
 

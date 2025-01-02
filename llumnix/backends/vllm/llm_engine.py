@@ -50,9 +50,10 @@ NO_OUTPUTS_STEP_INTERVAL = 0.01
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
+                 placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 placement_group: Optional[PlacementGroup],
-                 *args, **kwargs) -> None:
+                 *args,
+                 **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
@@ -77,12 +78,12 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
     @classmethod
     def from_engine_args(
         cls,
-        engine_args: EngineArgs,
+        instance_id: str,
+        placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
+        engine_args: EngineArgs,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
-        instance_id: str = None,
-        placement_group: Optional[PlacementGroup] = None,
         latency_mem: Optional[LatencyMemData] = None
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
@@ -105,8 +106,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
-            request_output_queue_type=request_output_queue_type,
             placement_group=placement_group,
+            request_output_queue_type=request_output_queue_type,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -237,16 +238,16 @@ class BackendVLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
+        placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        placement_group: PlacementGroup,
         engine_args: EngineArgs,
     ) -> None:
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          request_output_queue_type=request_output_queue_type,
-                                                                          migration_config=migration_config,
-                                                                          instance_id=instance_id,
-                                                                          placement_group=placement_group)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(instance_id,
+                                                                          placement_group,
+                                                                          request_output_queue_type,
+                                                                          migration_config,
+                                                                          engine_args)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler

@@ -48,12 +48,12 @@ TEST_PROMPTS = [
 def init_llumlet(request_output_queue_type, instance_id, migration_config, engine_args):
     placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
     llumlet = Llumlet.from_args(
-                request_output_queue_type,
-                instance_id,
-                BackendType.VLLM,
-                migration_config,
-                placement_group,
-                engine_args,)
+                instance_id=instance_id,
+                placement_group=placement_group,
+                request_output_queue_type=request_output_queue_type,
+                migration_config=migration_config,
+                backend_type=BackendType.VLLM,
+                engine_args=engine_args)
     return llumlet
 
 class MockBackendVLLM(BackendVLLM):

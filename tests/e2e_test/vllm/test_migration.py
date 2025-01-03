@@ -21,7 +21,7 @@ import torch
 import ray
 
 # pylint: disable=unused-import
-from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
+from ..utils import (generate_launch_command, generate_bench_command, to_markdown_table,
                     cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service)
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')

@@ -182,7 +182,7 @@ if __name__ == "__main__":
 
     cli_args = add_cli_args(parser)
     cfg: LlumnixConfig = get_llumnix_config(cli_args.config_file, cli_args)
-    _, engine_manager_args, engine_args = get_args(cfg, parser, cli_args)
+    _, engine_manager_args, instance_args, engine_args = get_args(cfg, parser, cli_args)
 
     # Launch or connect to the ray cluster for multi-node serving.
     setup_ray_cluster(cfg)
@@ -191,7 +191,8 @@ if __name__ == "__main__":
     if is_gpu_available():
         engine_config = engine_args.create_engine_config()
         parallel_config = engine_config.parallel_config
-        llumnix_entrypoints_context = setup_llumnix(engine_manager_args, engine_args, cfg, BackendType.VLLM, parallel_config.world_size)
+        llumnix_entrypoints_context = setup_llumnix(engine_manager_args, instance_args, engine_args,
+                                                    cfg, BackendType.VLLM, parallel_config.world_size)
         llumnix_client = LlumnixClientVLLM(llumnix_entrypoints_context)
 
         # Start the api server after all the components of llumnix are ready.

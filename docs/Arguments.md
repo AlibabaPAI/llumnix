@@ -36,13 +36,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
             [--migration-backend-transfer-type {cuda_ipc,rdma,}]
             [--migration-backend-kvtransfer-naming-url MIGRATION_BACKEND_KVTRANSFER_NAMING_URL]
-            [--migration-backend-server-address MIGRATION_BACKEND_SERVER_ADDRESS]
+            [--migration-backend-server-port MIGRATION_BACKEND_SERVER_]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--max-stages MAX_STAGES]
             [--enable-pd-disagg]
-            [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
+            [--engine-type ENGINE_TYPE]
             [--log-request-timestamps]
 
 ```
@@ -155,9 +155,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: cuda_ipc, rdma
 - Default: "rdma"
 
-`--migration-backend-server-address`
-- Address of grpc server for migration backend
-- Default: "127.0.0.1:50051"
+`--migration-backend-server-port`
+- Port of grpc server for migration backend
+- Default: 50051
 
 `--migration-backend-kvtransfer-naming-url`
 - URL of naming server for kvtransfer migration backend
@@ -189,8 +189,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-pd-disagg`
 - Enable prefill decoding disaggregation.
 
-`--num-dispatch-instances`
-- Number of available instances for dispatch.
+`--engine-type`
+- Engine types for llumlet.
+- Possible choices: PREFILL, DECODE, NO_CONSTRAINTS
 
 # Unsupported vLLM feature options
 

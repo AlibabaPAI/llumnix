@@ -13,8 +13,6 @@
 
 from enum import Enum
 import math
-import time
-
 from llumnix.server_info import ServerInfo
 
 class RequestInferenceType(str, Enum):
@@ -44,7 +42,7 @@ class RequestStatus(str, Enum):
     WAITING_MIGRATING = "waiting_migrating"
 
 class LlumnixRequest:
-    def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
+    def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int = math.inf) -> None:
         self.request_id = request_id
         self.server_info = server_info
 

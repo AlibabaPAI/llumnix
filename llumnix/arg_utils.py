@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import dataclasses
 from dataclasses import dataclass
+from typing import Tuple
 from simple_parsing import ArgumentParser
-from typing import Tuple, Optional
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
@@ -133,7 +134,7 @@ class EngineManagerArgs:
     profiling_result_file_path: str = None
 
     migration_backend_kvtransfer_naming_url: str = None
-    migration_backend_server_address: str = None
+    migration_backend_server_port: int = None
     migration_backend_init_timeout: float = None
     migration_backend: str = None
     migration_buffer_blocks: int = None
@@ -181,7 +182,7 @@ class EngineManagerArgs:
                                            self.last_stage_max_blocks,
                                            self.max_stages,
                                            self.migration_backend_init_timeout,
-                                           self.migration_backend_server_address,
+                                           self.migration_backend_server_port,
                                            self.migration_backend_kvtransfer_naming_url)
         return migration_config
 
@@ -316,18 +317,9 @@ class EngineManagerArgs:
                             help='profiling result file path')
         parser.add_argument('--migration-backend',
                             type=str,
-<<<<<<< HEAD
                             choices=['gloo','nccl','rayrpc','grpc','kvtransfer'],
                             help='communication backend of migration, [gloo, rayrpc, nccl] are available for vllm \
                                 and [grpc, kvtransfer] are available for bladellm')
-=======
-<<<<<<< HEAD
-                            choices=['gloo', 'nccl', 'rpc'],
-=======
-                            choices=['gloo','nccl','rpc','grpc','kvtransfer'],
->>>>>>> 7e56177 ([WIP] adata tp bladellm)
-                            help='communication backend of migration')
->>>>>>> ad6bcce ([WIP] adata tp bladellm)
         parser.add_argument('--migration-backend-transfer-type',
                             type=str,
                             choices=['cuda_ipc','rdma', ''],

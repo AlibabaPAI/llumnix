@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Iterable, List, Union, Deque
 
+import ray
+
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 
@@ -39,7 +41,7 @@ class BackendType(str, Enum):
 class BackendInterface(ABC):
     # Methods for inference
     @abstractmethod
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
+    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
                     *args, **kwargs) -> None:
         """Adds a new inference request to the backend's processing queue.
 
@@ -272,7 +274,8 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
+                          src_blocks: List[int], dst_blocks: List[int], has_more: bool):
         """
         Sends cache blocks from the source instance to the destination instance.
 
@@ -284,28 +287,12 @@ class BackendInterface(ABC):
             dst_ray_actor: A handle to the Ray actor representing the destination instance where the cache
                            blocks are to be sent. This handle is used to reference the destination's
                            execution context and manage the block transfer.
+            request_id: the request id of the request that triggered the migration.
             src_blocks: A list of integers representing the block indexs in the source instance's
                              cache that need to be sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's
                              cache where the incoming blocks should be stored.
-        """
-        raise NotImplementedError
-    
-    @abstractmethod
-    async def send_request_group(self, dst_ray_actor: "ray.actor.ActorHandle", request_id: int):
-        """
-        Sends request group from the source instance to the destination instance, specific to BladeLLM.
-
-        This method transfers the request group information between instances. It is responsible for ensuring that
-        the request group information corresponding to the specified request ID from the source instance's state
-        manager is sent to and properly received by the destination instance.
-
-        Args:
-            dst_ray_actor: A handle to the Ray actor representing the destination instance where the request group
-                           information is to be sent. This handle is used to reference the destination's
-                           execution context and manage the request group information transfer.
-            request_id :  A string representing the unique identifier of the request for which request group
-                            information is to be freed on the destination instance.
+            has_more: A boolean indicating whether there are more blocks to be migrated in the future.
         """
         raise NotImplementedError
 

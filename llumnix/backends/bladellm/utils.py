@@ -11,12 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-import numpy as np
-
 from blade_llm.service.args import ServingArgs
 
-from llumnix.backends.bladellm.proto import migration_worker_pb2
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.logger import init_logger
 
@@ -41,45 +37,3 @@ def check_engine_args(engine_args: ServingArgs, engine_manager_args: EngineManag
                     change migration backend to gloo.")
         engine_manager_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
-
-def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
-    if tensor is not None:
-        return tensor.numpy().tobytes()
-    return None
-
-def tensor_to_tensor_message(tensor: torch.Tensor) -> migration_worker_pb2.TensorMessage:
-    if tensor is not None:
-        tensor_message = migration_worker_pb2.TensorMessage(
-            data=tensor.cpu().numpy().tobytes(), 
-            shape=list(tensor.shape),            
-            dtype=str(tensor.dtype),          
-            device=str(tensor.device)    
-        )
-        return tensor_message
-    else:
-        return None
-
-def tensor_message_to_tensor(message: migration_worker_pb2.TensorMessage) -> torch.Tensor:
-    # print("crewve",message.data,message.dtype,message.shape)
-    if message is None:
-        return None
-    dtype_str = message.dtype
-    if dtype_str in dtype_mapping:
-        np_dtype = dtype_mapping[dtype_str]
-    np_array = np.frombuffer(message.data, dtype=np_dtype).reshape(tuple(message.shape))
-    tensor = torch.from_numpy(np_array)
-    
-    if message.device.startswith("cuda"):
-        tensor = tensor.to(torch.device(message.device))
-    return tensor
-
-dtype_mapping = {
-    'torch.float32': 'float32',
-    'torch.float64': 'float64',
-    'torch.float16': 'float16',
-    'torch.int8': 'int8',
-    'torch.int16': 'int16',
-    'torch.int32': 'int32',
-    'torch.int64': 'int64',
-    'torch.uint8': 'uint8',
-}

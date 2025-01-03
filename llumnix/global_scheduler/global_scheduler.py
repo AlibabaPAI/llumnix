@@ -14,7 +14,8 @@
 from typing import Dict, List, Tuple, Union, Iterable, Set
 import math
 
-from llumnix.logger import init_logger
+from loguru import logger
+
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
@@ -22,9 +23,6 @@ from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 from llumnix.arg_utils import InstanceArgs
-
-logger = init_logger(__name__)
-
 
 class GlobalScheduler:
     def __init__(self,

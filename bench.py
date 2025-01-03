@@ -1,86 +1,61 @@
-#!/usr/bin/env python
-
 import asyncio
+import os
+import aiohttp
 import json
-import time
-from typing import List
 
-from websockets.sync.client import connect
+# 定义请求的URL
+URL = "http://172.23.75.204:8082/v1/chat/completions"
 
-from blade_llm.protocol import (
-    GenerateRequest,
-    GenerateStreamResponse,
-    SamplingParams,
-    StoppingCriteria,
-)
+# 定义请求的JSON负载
+PAYLOAD = {
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant."
+        },
+        {
+            "role": "user",
+            "content": "write a quick sort in python"
+        }
+    ],
+    "stream": "false",
+    "presence_penalty": 1.1,
+    "max_tokens": 100
+}
 
-port = 8081
+def max_tokens():
+    import random
+    return random.randint(50, 200)
 
-finish = 0
+def gen_content():
+    import random
+    return f"what is the sum of {random.randint(1, 1000000)} and {random.randint(1, 1000000)}?"
+# 定义每次请求的间隔（秒）
+INTERVAL = 0.1
 
-async def hello(max_new_tokens, ignore_eos):
-    headers = {
-        # "Authorization": "<You may need this header for EAS."
-    }
-    url = f"ws://22.3.131.34:{port}/generate_stream"
-    with connect(url, additional_headers=headers) as websocket:
-        import random
-        prompts = [f"what's {random.randint(a=0, b=1000000)} plus {random.randint(a=0, b=1000000)}?"]
-        for p in prompts:
-            print(f"Prompt : {p}")
-            req = GenerateRequest(
-                prompt=p,
-                sampling_params=SamplingParams(
-                    temperature=-0.9,
-                    top_p=0.9,
-                    top_k=0,
-                ),
-                stopping_criterial=StoppingCriteria(max_new_tokens=max_new_tokens, ignore_eos=ignore_eos),
-            )
-            websocket.send(req.model_dump_json())
-            texts = []
-            idx = 0
-            global finish
-            while True:
-                await asyncio.sleep(0)
-                msg = websocket.recv()
-                resp = GenerateStreamResponse(**json.loads(msg))
-                texts.extend([t.text for t in resp.tokens])
-                idx += 1
-                for t in resp.tokens:
-                    print(t.text, end="")
-                if resp.is_finished:
-                    finish += 1
-                    break
-            print(len(texts), idx)
-            print(f"{finish}, Generated text: {''.join(texts)}")
-            print("-" * 40)
-
-
-async def get_range(n):
-    for i in range(n):
-        yield i
+from loguru import logger
+async def fetch(url, payload):
+    try:
+        payload["messages"][1]["content"] = gen_content()
+        payload["max_tokens"] = max_tokens()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                resp_json = await response.json()
+                logger.info(resp_json)
+    except aiohttp.ClientError as e:
+        print(f"请求失败: {e}")
+        os._exit(1)
+    except asyncio.TimeoutError:
+        print("请求超时")
+        os._exit(1)
 
 async def main():
-    tasks: List[asyncio.Task] = []
-    num_requests = 500
-    max_new_tokens = 20
-    ignore_eos = False
-    start = time.time()
-    async for i in get_range(num_requests):
-        await asyncio.sleep(0.001)
-        task = asyncio.create_task(hello(max_new_tokens, ignore_eos))
-        tasks.append(task)
-    await asyncio.gather(*tasks)
-    elapsed = time.time() - start
-    output_tps = max_new_tokens * num_requests / elapsed
-    print(f"Generate {output_tps} tokens/s")
+    while True:
+        asyncio.create_task(fetch(URL, PAYLOAD))
+        await asyncio.sleep(INTERVAL)
 
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument("--port", type=int, help="The port number to use")
-args = parser.parse_args()
-
-port = args.port
-
-asyncio.run(main())
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("脚本已手动停止")

@@ -104,7 +104,7 @@ _C.MANAGER.MIGRATION_BACKEND = "gloo"
 # Transfer type for migration backend kvTransfer
 _C.MANAGER.MIGRATION_BACKEND_TRANSFER_TYPE = "rdma"
 # Address of grpc server for migration backend
-_C.MANAGER.MIGRATION_BACKEND_SERVER_ADDRESS = "127.0.0.1:50051"
+_C.MANAGER.MIGRATION_BACKEND_SERVER_PORT = 50051
 # URL of naming server for kvtransfer migration backend
 _C.MANAGER.MIGRATION_BACKEND_KVTRANSFER_NAMING_URL = "file:/tmp/llumnix/naming/"
 # Timeout(s) for initializing migration backend

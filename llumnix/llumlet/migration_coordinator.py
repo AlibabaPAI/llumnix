@@ -14,15 +14,14 @@
 import time
 import enum
 from typing import List
+import traceback
 
 # pylint: disable=unused-import
 import ray
-
-from llumnix.logger import init_logger
+from loguru import logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface
 
-logger = init_logger(__name__)
 
 class MigrationStatus(enum.Enum):
     """Status of Migration."""
@@ -156,16 +155,16 @@ class MigrationCoordinator:
             migrate_out_request.stage_timestamps.append(time.time())
             migrate_out_request.stage_num_blocks_list.append(stage_block_num)
             # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
-            await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
+            await self.backend_engine.send_blocks(migrate_in_ray_actor, migrate_out_request.request_id,
+                                                  src_blocks, dst_blocks, not is_last_stage)
 
             if not is_last_stage and migrate_out_request.should_abort_migration():
                 # migrate-out request abort by scheduler during send/recv
                 return MigrationStatus.ABORTED_SRC
 
             return migration_status
-        except Exception as e:
-            logger.error("unexpected exception occurs: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+        except Exception:
+            logger.exception("_migrate_out_onestage failed")
             raise
 
     def migrate_in_pre_alloc(self,

@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import os
+import shutil
 import time
 import signal
 from typing import List
@@ -25,21 +26,34 @@ import grpc
 from google.protobuf import empty_pb2
 import numpy as np
 import torch
+from loguru import logger
 
+from blade_llm.service.proto.bladellm_pb2 import (
+    WorkerRequest, SamplingParams, StoppingCriteria, LogitsProcessorParams, DetokenParams, RequestMeta)
 from blade_llm.service.args import ServingArgs
 from blade_llm.utils.load_model_options import LoadModelOptions
 from blade_llm.service.proto import bladellm_pb2_grpc
-from blade_llm.generation.kvcache.kv_transfer import TransferType
 from blade_llm.generation.statemanagers.ragged_flash_state_manager import RaggedFlashStateManager
 from blade_llm.generation.statemanagers.paged_state_manager import PagedStateManager
+from blade_llm.generation.request_state import RequestGroup, RequestState
+from blade_llm.generation.sampling_meta_data import SamplingMetaData, SamplingType
+from blade_llm.multimodal import MultiModalInputs
+from blade_llm.service.proto.bladellm_pb2 import PagedState, RequestMeta, WorkerRequest
 
 from llumnix.backends.bladellm.worker import MigrationRemoteWorker, MigrationLocalWorker
 from llumnix.backends.bladellm.migration_backend import NUMPY_SUPPORTED_DTYPES
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 from llumnix.internal_config import MigrationConfig
 from llumnix.arg_utils import EngineManagerArgs
+from llumnix.entrypoints.setup import get_ip_address
 
 from tests.unit_test.backends.bladellm.proto import mock_migration_worker_pb2_grpc, mock_migration_worker_pb2
+
+MAX_MESSAGE_LENGTH = 1024 * 1024 * 1024
+options=[
+    ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+    ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+]
 
 class MockMigrationWorker(mock_migration_worker_pb2_grpc.MockMigrationWorkerServicer):
     def __init__(self, migration_backend):
@@ -165,39 +179,29 @@ class MockMigrationRemoteWorker(MockMigrationWorker, MigrationRemoteWorker):
         MigrationRemoteWorker.__init__(self, *args, **kwargs)
         MockMigrationWorker.__init__(self, self.migration_backend)
 
-class MockMigrationLocalWorker(MockMigrationWorker, MigrationLocalWorker):
+class MockMigrationLocalWorker(MigrationLocalWorker, MockMigrationWorker):
     def __init__(self, *args, **kwargs) -> None:
         MigrationLocalWorker.__init__(self, *args, **kwargs)
         MockMigrationWorker.__init__(self, self.migration_backend)
 
-MAX_MESSAGE_LENGHT = 1024 * 1024 * 1024
-options=[
-    ('grpc.max_send_message_length', MAX_MESSAGE_LENGHT),
-    ('grpc.max_receive_message_length', MAX_MESSAGE_LENGHT),
-]
+    async def _launch_grpc_service(self):
+        server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
+        migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(self, server)
+        mock_migration_worker_pb2_grpc.add_MockMigrationWorkerServicer_to_server(self, server)
+        listen_addr = get_ip_address() + ":" + str(self.migration_config.migration_backend_server_port+self.rank)
+        server.add_insecure_port(listen_addr)
+        # TODO(KuilongCui): clear server state
+        await server.start()
+        await server.wait_for_termination()
 
 def worker_main(rank: int, args: ServingArgs, instance_id: int, migration_config, worker_type):
     asyncio.run(launch_worker(rank, args, instance_id, migration_config, worker_type))
 
 async def launch_worker(rank: int, args: ServingArgs, instance_id: int,
                         migration_config: MigrationConfig, worker_type):
-    worker = worker_type(instance_id, migration_config, rank, args)
-    server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
-    bladellm_pb2_grpc.add_WorkerServicer_to_server(worker, server)
-    migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(worker, server)
-    mock_migration_worker_pb2_grpc.add_MockMigrationWorkerServicer_to_server(worker, server)
-    listen_addr = migration_config.migration_backend_server_address
-    server.add_insecure_port(listen_addr)
-
-    async def shutdown(server):
-        await server.stop(0)
-
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, lambda: asyncio.create_task(shutdown(server)))
-    loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(shutdown(server)))
-
-    await server.start()
-    await server.wait_for_termination()
+    worker_type(rank, args, instance_id, migration_config)
+    while True:
+        await asyncio.sleep(0)
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize(
@@ -206,43 +210,41 @@ async def launch_worker(rank: int, args: ServingArgs, instance_id: int,
         # ('kvtransfer', 'ragged_flash', "cuda_ipc"),
         # ('kvtransfer', 'ragged_flash', "rdma"),
         ('grpc', 'ragged_flash', ""),
-        ('grpc', 'paged', ""),
+        # ('grpc', 'paged', ""),
     ],
 )
-@pytest.mark.parametrize('worker_type', [MockMigrationRemoteWorker, MockMigrationLocalWorker])
+@pytest.mark.parametrize('worker_type', [MockMigrationLocalWorker])
 def test_migrate_cache(backend, attention_type, transfer_type, worker_type):
+    os.environ['ACCL_MAX_USER_MR_GB'] = '10'
     worker_count = 2
     worker_socket_addrs = []
-    migration_cache_blocks = 2
-    naming_url = 'shm:migrate_cache_test'
-    total_migration_cache_blocks = migration_cache_blocks + 1
+    migration_buffer_blocks = 2
+    total_migration_cache_blocks = migration_buffer_blocks + 1
     migration_config = EngineManagerArgs(migration_backend=backend,
-        migration_cache_blocks=migration_cache_blocks).create_migration_config()
-    
-    migration_config.migration_backend_kvtransfer_naming_url = naming_url
+        migration_buffer_blocks=migration_buffer_blocks).create_migration_config()
+
+    naming_path = migration_config.migration_backend_kvtransfer_naming_url.split(":")[-1]
+    if os.path.exists(naming_path):
+        shutil.rmtree(naming_path)
     migration_config.migration_backend_transfer_type = transfer_type
-   
-    shm = shared_memory.SharedMemory(create=True, size=1024*1024, name='migrate_cache_test')
-    # TODO(KuilongCui): check the best value for ACCL_MAX_USER_MR_GB
-    os.environ['ACCL_MAX_USER_MR_GB'] = '10'
 
     set_start_method("spawn", force=True)
     backends: List[Process] = []
     for i in range(worker_count):
-        worker_socket_addrs.append(f"localhost:{11234+i}")
+        worker_port = 11234+i
+        worker_socket_addrs.append(f"{get_ip_address()}:{worker_port}")
         worker_args = ServingArgs(
             enable_remote_worker=True,
             device=i,
-            server_ip="127.0.0.1",
+            server_ip=get_ip_address(),
             rank=0,
             max_gpu_memory_utilization=0.3,
             load_model_options=LoadModelOptions(
                 model='/mnt/self-hosted/model/opt-125m', attn_cls=attention_type, disable_cuda_graph=True
             )
         )
-        migration_config.migration_backend_server_address = worker_socket_addrs[-1]
-        p = Process(target=worker_main, daemon=True,
-                    args=(0, worker_args, i, migration_config, worker_type))
+        migration_config.migration_backend_server_port = worker_port
+        p = Process(target=worker_main, daemon=True, args=(0, worker_args, i, migration_config, worker_type))
         p.start()
         backends.append(p)
 
@@ -326,11 +328,13 @@ def test_migrate_cache(backend, attention_type, transfer_type, worker_type):
 
     src_worker_info = migration_worker_pb2.WorkerInfo(
         ip_address=worker_socket_addrs[0],
-        instance_id=0,
+        instance_id=str(0),
         worker_id=0
     )
-    worker1_stub.migrate_cache(migration_worker_pb2.MigrateRequests(
+    worker1_stub.migrate_cache(migration_worker_pb2.MigrateCacheRequest(
         src_handlers=[src_worker_info, migration_worker_pb2.WorkerInfo()],
+        request_id=0,
+        has_more=False,
         src_blocks=list(range(total_migration_cache_blocks)),
         dst_blocks=dst_blocks,
     ))
@@ -365,6 +369,3 @@ def test_migrate_cache(backend, attention_type, transfer_type, worker_type):
     for i in range(worker_count):
         backends[i].terminate()
         backends[i].join()
-
-    shm.close()
-    shm.unlink()

@@ -25,14 +25,10 @@ logger = init_logger(__name__)
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id, output_queue_type: QueueType):
-        try:
-            self.instance_id = instance_id
-            self.output_queue_type = output_queue_type
-            self.request_output_queue_client: QueueClientBase = init_output_queue_client(output_queue_type)
-            self.engine_actor_handle = None
-        except Exception as e:
-            logger.error("Error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+        self.instance_id = instance_id
+        self.output_queue_type = output_queue_type
+        self.request_output_queue_client: QueueClientBase = init_output_queue_client(output_queue_type)
+        self.engine_actor_handle = None
 
     async def put_nowait_to_servers(self,
                                     server_request_outputs,

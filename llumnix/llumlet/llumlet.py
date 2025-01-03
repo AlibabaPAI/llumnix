@@ -16,11 +16,10 @@ import traceback
 from typing import List, Union, Iterable
 import time
 
+from loguru import logger
 import ray
-import os
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
 
-from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
 from llumnix.backends.utils import init_backend_engine, initialize_placement_group
@@ -31,8 +30,6 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.arg_utils import InstanceArgs
-
-logger = init_logger(__name__)
 
 CHECK_ENGINE_STATE_INTERVAL = 1.0
 
@@ -76,8 +73,8 @@ class Llumlet:
                   node_id: str,
                   instance_id: str,
                   backend_type: BackendType,
-                  migration_config: MigrationConfig,
                   world_size: int,
+                  migration_config: MigrationConfig,
                   *args,
                   **kwargs):
         try:
@@ -150,19 +147,26 @@ class Llumlet:
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:
-        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
-        if len(migrate_out_requests) == 0:
-            return []
+        try:
+            migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+            logger.info("Migrate out requests: {}".format(len(migrate_out_requests)))
+            if len(migrate_out_requests) == 0:
+                return []
 
-        for migrate_out_request in migrate_out_requests:
-            migrate_out_request.is_migrating = True
+            for migrate_out_request in migrate_out_requests:
+                migrate_out_request.is_migrating = True
 
-        migrated_request_list = []
-        for migrate_out_request in migrate_out_requests:
-            migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
-            migrated_request_list.extend(migrated_request)
-            if len(migrated_request) == 0 and migrate_out_request.eom:
-                break
+            migrated_request_list = []
+            for migrate_out_request in migrate_out_requests:
+                logger.info("Migrate target requests: {}".format(migrate_out_request.request_id))
+                migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
+                migrated_request_list.extend(migrated_request)
+                if len(migrated_request) == 0 and migrate_out_request.eom:
+                    break
+        except Exception as e:
+            logger.exception("Failed to migrate out")
+            raise e
+
         return migrated_request_list
 
     async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
@@ -208,29 +212,20 @@ class Llumlet:
         return migrated_request
 
     def get_instance_info(self) -> InstanceInfo:
-        try:
-            return self.backend_engine.engine.instance_info
-        except Exception as e:
-            logger.error("Error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc())) 
-            return None
+        return self.backend_engine.engine.instance_info
 
-    def is_ready(self) -> InstanceArgs:
+    async def is_ready(self) -> InstanceArgs:
+        await self.backend_engine.is_ready()
         return self.instance_args
 
     def get_all_request_ids(self) -> List[str]:
-        try:
-            return self.backend_engine.get_all_request_ids()
-        except Exception as e:
-            logger.error("Error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc())) 
-            return None
+        return self.backend_engine.get_all_request_ids()
 
-    def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         # This should not be used for logging, as it is monotonic time.
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.llumlet_generate_timestamp = time.time()
-        self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+        await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -265,7 +260,7 @@ class Llumlet:
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
-    
-    def exec_entrypoint_method(self, method, *args, **kwargs):
-        executor = getattr(self.backend_engine, "exec_entrypoint_method")
-        return executor(method, *args, **kwargs)
+
+    async def execute_async_engine_method(self, method, *args, **kwargs):
+        executor = getattr(self.backend_engine, method)
+        return await executor(*args, **kwargs)

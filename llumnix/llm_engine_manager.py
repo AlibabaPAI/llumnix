@@ -20,9 +20,9 @@ from collections import defaultdict
 import traceback
 from functools import partial
 import ray
+from loguru import logger
 
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
@@ -32,8 +32,6 @@ from llumnix.arg_utils import EngineManagerArgs, InstanceArgs
 from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo
 from llumnix.utils import random_uuid, clear_gloo_backend_state
-
-logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
 CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
@@ -113,7 +111,6 @@ class LLMEngineManager:
                 server_info.request_timestamps.manager_generate_timestamp = time.time()
             await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
             if self.log_requests:
-                logger.info("manager received request {}.".format(request_id))
                 logger.info("dispath request {} to instance {}".format(request_id, instance_id))
                 self.request_instance[request_id] = instance_id
         except (ray.exceptions.RayActorError, KeyError):
@@ -238,6 +235,7 @@ class LLMEngineManager:
                         logger.info("[_migrate] instance {} is dead".format(instance_id))
                         self.scale_down(instance_id)
             else:
+                logger.info("[_migrate] migrate done, {}, {}", ret, migrate_instance_pair)
                 migrate_out_request_ids = ret
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
@@ -245,12 +243,14 @@ class LLMEngineManager:
                 logger.info("{}->{} migrate done, migrate request {}".format(
                     migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
-            ret = fut.result()
+            ret = fut.result()[0]
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
 
         try:
             migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
+            if len(migrate_instance_pairs) > 0:
+                logger.info(f"migrate_instance_pairs: {migrate_instance_pairs}")
             migration_tasks = []
             for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
                 migrate_out_instance_id, migrate_in_instance_id = migrate_instance_pair

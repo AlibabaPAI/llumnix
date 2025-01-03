@@ -36,7 +36,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
             [--migration-backend-transfer-type {cuda_ipc,rdma,}]
             [--migration-backend-kvtransfer-naming-url MIGRATION_BACKEND_KVTRANSFER_NAMING_URL]
-            [--migration-backend-server-address MIGRATION_BACKEND_SERVER_ADDRESS]
+            [--migration-backend-server-port MIGRATION_BACKEND_SERVER_]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
@@ -155,26 +155,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: cuda_ipc, rdma
 - Default: "rdma"
 
-`--migration-backend-server-address`
-- Address of grpc server for migration backend
-- Default: "127.0.0.1:50051"
+`--migration-backend-server-port`
+- Port of grpc server for migration backend
+- Default: 50051
 
 `--migration-backend-kvtransfer-naming-url`
 - URL of naming server for kvtransfer migration backend
 - Default: "file:/tmp/llumnix/naming/"
-
-`--migration-backend-transfer-type`
-- Transfer type for migration backend grpc and kvTransfer.
-- Possible choices: cuda_ipc, rdma, ""
-- Default: ""
-
-`--migration-backend-server-address`
-- Address of grpc server for migration backend
-- Default: "127.0.0.1:50051"
-
-`--migration-backend-kvtransfer-naming-url`
-- URL of naming server for kvtransfer migration backend
-- Default: ""
 
 `--migration-buffer-blocks`
 - Number of buffer blocks in migration.

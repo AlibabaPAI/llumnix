@@ -21,6 +21,7 @@ from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix, is_gpu_a
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.setup import LlumnixEntrypointsContext
 from llumnix.entrypoints.bladellm.utils import get_args
+from llumnix.utils import random_uuid
 
 def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     # generate llumnix_parser for checking parameters with choices
@@ -32,6 +33,7 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
 
     setup_ray_cluster(llumnix_config)
 
+    bladellm_args.worker_socket_path = bladellm_args.worker_socket_path + "." + random_uuid()
     llm_client = None
     # if gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():

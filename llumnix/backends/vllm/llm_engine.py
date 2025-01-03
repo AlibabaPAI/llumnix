@@ -214,7 +214,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
+    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler.waiting[-1]
         if hasattr(server_info, 'request_timestamps'):
@@ -306,10 +306,13 @@ class BackendVLLM(BackendInterface):
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
+    async def is_ready(self) -> bool:
+        return True
+
     def execute_worker_method(self, method, *args, **kwargs):
         return self.engine.model_executor.driver_worker.execute_method(method, *args, **kwargs)
 
-    def add_request(self,
+    async def add_request(self,
                     request_id: str,
                     server_info: ServerInfo,
                     expected_steps: int,
@@ -334,7 +337,8 @@ class BackendVLLM(BackendInterface):
             backend_request.reset_status()
             self.add_running_request(backend_request)
 
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
+                          src_blocks: List[int], dst_blocks: List[int], has_more: bool):
         await dst_ray_actor.execute_engine_method.remote("_run_workers",
                                                          "migrate_cache",
                                                          dst_blocks=dst_blocks,
@@ -344,9 +348,6 @@ class BackendVLLM(BackendInterface):
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access
         return self.engine.model_executor._run_workers(*args, **kwargs)
-
-    def is_ready(self):
-        return True
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -380,7 +381,7 @@ class BackendVLLM(BackendInterface):
 
     def pre_alloc(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.pre_alloc(*args, **kwargs)
-    
+
     # TODO[xinyi]: need this function any more?
     def should_abort_migration(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.should_abort_migration(*args, **kwargs)

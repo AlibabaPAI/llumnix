@@ -1,12 +1,18 @@
 import threading
+import traceback
 
+import ray
 from ray.util.placement_group import PlacementGroup
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.utils import get_server_name
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
+from llumnix.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 class FastAPIServer:

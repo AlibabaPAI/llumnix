@@ -20,7 +20,7 @@ import numpy as np
 from vllm import EngineArgs
 
 from llumnix.utils import random_uuid, get_instance_name, get_manager_name
-from llumnix.arg_utils import ManagerArgs
+from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, DeploymentArgs
 from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo
 from llumnix.server_info import ServerInfo
@@ -29,6 +29,8 @@ from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
+from llumnix.entrypoints.utils import DeploymentMode
+from llumnix.utils import get_server_name, get_instance_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -112,6 +114,18 @@ def init_manager():
         manager = ray.get_actor(get_manager_name(), namespace='llumnix')
     ray.get(manager.is_ready.remote())
     return manager
+
+def init_manager_with_deployment_mode(deployment_mode):
+    manager_args = ManagerArgs(migration_backend="rayrpc")
+    entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type="rayqueue")
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    deployment_args = DeploymentArgs(deployment_mode=deployment_mode, backend_type=BackendType.VLLM)
+    manager = Manager.from_args(manager_args=manager_args,
+                                entrypoints_args=entrypoints_args,
+                                engine_args=engine_args,
+                                deployment_args=deployment_args)
+    ray.get(manager.is_ready.remote())
+    return manager, manager_args, entrypoints_args, engine_args, deployment_args
 
 def init_instances(initial_instances):
     instance_ids = []
@@ -286,3 +300,32 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
             assert num_migrate_in == 0 and num_migrate_out > 1
         else:
             assert num_migrate_in == 0 and num_migrate_out == 0
+
+def test_auto_scale_up_loop(ray_env):
+    pass
+
+def test_init_server_and_instance(ray_env):
+    manager, _, _, engine_args, _ = init_manager_with_deployment_mode(DeploymentMode.LOCAL)
+    instance_id = random_uuid()
+    placement_group = ray.get(manager._init_placement_group.remote(instance_id, engine_args, BackendType.VLLM, init_server=True))
+    assert placement_group is not None
+    ray.get(manager._init_server_and_instance.remote(instance_id, placement_group))
+    # wait for scale up
+    time.sleep(5.0)
+    server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+    ray.get(server.is_ready.remote())
+    assert server is not None
+    instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+    ray.get(instance.is_ready.remote())
+    assert instance is not None
+    num_instances = ray.get(manager.scale_up.remote(instance_id, instance))
+    assert num_instances == 1
+
+def test_clear_instance_ray_resources(ray_env):
+    pass
+
+def test_check_deployment_states_loop(ray_env):
+    pass
+
+def test_get_curr_deployment(ray_env):
+    pass

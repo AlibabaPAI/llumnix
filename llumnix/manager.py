@@ -35,9 +35,8 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placement_group,
                            get_instance_name, get_manager_name, INSTANCE_NAME_PREFIX,
                            SERVER_NAME_PREFIX, get_placement_group_name, run_async_func_sync,
-                           kill_server, kill_instance)
+                           kill_server, kill_instance, initialize_placement_group)
 from llumnix.entrypoints.utils import DeploymentMode
-from llumnix.utils import initialize_placement_group
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
 from llumnix.entrypoints.vllm.api_server_actor import FastAPIServer
@@ -595,10 +594,10 @@ class Manager:
         async def done_scale_up():
             try:
                 manager = ray.get_actor(get_manager_name(), namespace="llumnix")
-                await server.is_ready()
-                await server.setup_entrypoints_context(manager, instance_id, instance)
-                await instance.is_ready()
-                await server.run()
+                await server.is_ready.remote()
+                await server.setup_entrypoints_context.remote(manager, instance_id, instance)
+                await instance.is_ready.remote()
+                await server.run.remote()
                 self.scale_up(instance_id, instance)
             # pylint: disable=broad-except
             except Exception as e:

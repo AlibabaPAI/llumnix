@@ -32,7 +32,7 @@ class MockManagerService(MockManager):
         self._num_aborts = 0
         self.request_output_queue = init_request_output_queue_client(
                                         QueueType(entrypoints_args.request_output_queue_type))
-        self.server = self.init_api_server(entrypoints_args)
+        self.server = self.init_server(entrypoints_args)
         ray.get(self.server.setup_entrypoints_context.remote())
         ray.get(self.server.run.remote())
 
@@ -86,3 +86,6 @@ if __name__ == "__main__":
     request_output_queue = RayQueue()
 
     manager = MockManagerService.from_args(entrypoints_args)
+
+    while True:
+        time.sleep(100.0)

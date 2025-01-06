@@ -76,17 +76,10 @@ def kill_instance(instance_id: str = None) -> bool:
     try:
         ray.kill(instance)
         print(f"kill instance {instance_id}")
-        return True
     # pylint: disable=broad-except
     except Exception:
         return False
-
-def actor_exists(actor_name: str) -> bool:
-    try:
-        ray.get_actor(actor_name, namespace="llumnix")
-        return True
-    except ValueError:
-        return False
+    return True
 
 
 class FastAPIServer:
@@ -279,7 +272,7 @@ class Manager:
             try:
                 await new_instance.ready.remote()
                 print(f"instance {instance_id} ready, scale up")
-                new_server.run.remote()
+                await new_server.run.remote()
                 self._scale_up(instance_id, placement_group, new_server, new_instance)
             except ray.exceptions.RayActorError:
                 print(f"instance {instance_id} died, abort scale up")

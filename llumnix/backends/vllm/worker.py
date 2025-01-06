@@ -65,7 +65,7 @@ class MigrationWorker(Worker):
 
             if cache_config.gpu_memory_utilization <= 0:
                 raise ValueError("Nccl migration backend take {:.4f} gpu memory, which is greater than gpu_memory_utilization {:.4f}. "
-                                 "try to increase gpu-memory-utilization or reduce migration-cache-blocks."
+                                 "try to increase gpu-memory-utilization or reduce migration-buffer-blocks."
                                  .format(migration_memory_ratio, cache_config.gpu_memory_utilization))
 
             logger.info("nccl migration backend take {:.4f} gpu memory, left gpu_memory_utilization {:.4f} for kv cache."

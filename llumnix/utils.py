@@ -108,8 +108,14 @@ def clear_gloo_backend_state():
         # gloo_queue may not have been created yet; just ignore this error.
         pass
 
+def get_manager_name() -> str:
+    return MANAGER_NAME
+
 def get_placement_group_name(instance_id: str) -> str:
     return f"{PLACEMENT_GROUP_NAME_PREFIX}{instance_id}"
+
+def get_server_name(instance_id: str) -> str:
+    return f"{SERVER_NAME_PREFIX}{instance_id}"
 
 def get_instance_name(instance_id: str) -> str:
     return f"{INSTANCE_NAME_PREFIX}{instance_id}"
@@ -121,6 +127,33 @@ def remove_placement_group(instance_id: str) -> bool:
             return False
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
+        logger.info("remove placement group {}".format(instance_id))
+    # pylint: disable=broad-except
+    except Exception:
+        return False
+    return True
+
+def kill_server(instance_id: str) -> bool:
+    try:
+        server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+    except ValueError:
+        return False
+    try:
+        ray.kill(server)
+        logger.info("kill server {}".format(instance_id))
+    # pylint: disable=broad-except
+    except Exception:
+        return False
+    return True
+
+def kill_instance(instance_id: str) -> bool:
+    try:
+        instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+    except ValueError:
+        return False
+    try:
+        ray.kill(instance)
+        print("kill instance {}".format(instance_id))
     # pylint: disable=broad-except
     except Exception:
         return False

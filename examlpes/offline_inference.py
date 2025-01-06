@@ -38,17 +38,17 @@ manager_args = ManagerArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370)
 
-# Create a manager. If the manager is created first, and then the llumlets are created, manager.scale_up
-# need to be called to add the newly created llumlets to the management of the manager.
+# Create a manager. If the manager is created first, and then the instances are created, manager.scale_up
+# need to be called to add the newly created instances to the management of the manager.
 manager: Manager = init_manager(manager_args)
 ray.get(manager.is_ready.remote())
 
-# Create llumlets.
+# Create instances.
 instance_ids: List[str] = None
-llumlets: List[Llumlet] = None
-instance_ids, llumlets = ray.get(manager.init_llumlets.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+instances: List[Llumlet] = None
+instance_ids, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
 
-ray.get(manager.scale_up.remote(instance_ids, llumlets))
+ray.get(manager.scale_up.remote(instance_ids, instances))
 
 # Create llumlets.
 instance_ids: List[str] = None

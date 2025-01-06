@@ -11,7 +11,6 @@ from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.server_info import RequestTimestamps
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
-from llumnix.entrypoints.utils import DeploymentMode
 
 logger = init_logger(__name__)
 
@@ -27,7 +26,6 @@ class LlumnixClientVLLM:
         self.server_info: ServerInfo = entrypoints_context.server_info
         self.log_requests = entrypoints_context.log_requests
         self.log_request_timestamps = entrypoints_context.log_request_timestamps
-        self.deployment_mode: DeploymentMode = entrypoints_context.deployment_mode
 
         self.request_streams: Dict[str, AsyncStream] = {}
         self.instance_num_requests: Dict[str, int] = {}

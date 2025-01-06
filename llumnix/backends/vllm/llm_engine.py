@@ -83,8 +83,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
-        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
-        latency_mem: Optional[LatencyMemData] = None
+        latency_mem: Optional[LatencyMemData] = None,
+        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.

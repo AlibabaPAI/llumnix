@@ -1,11 +1,14 @@
 
+import time
 from ray.util.queue import Queue as RayQueue
 
 from llumnix.entrypoints.vllm.arg_utils import add_cli_args, get_args
 from llumnix.entrypoints.setup import connect_to_ray_cluster
 from llumnix.config import get_llumnix_config
-from llumnix.arg_utils import LlumnixArgumentParser
+from llumnix.arg_utils import LlumnixArgumentParser, DeploymentArgs
 from llumnix.entrypoints.utils import DeploymentMode
+from llumnix.backends.backend_interface import BackendType
+from llumnix.entrypoints.setup import setup_llumnix
 
 
 if __name__ == "__main__":
@@ -30,6 +33,8 @@ if __name__ == "__main__":
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})
 
-    engine_config = engine_args.create_engine_config()
-    parallel_config = engine_config.parallel_config
-    entrypoints_context = setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args)
+    setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args)
+
+    # keep the process alive to get the terminal output.
+    while True:
+        time.sleep(100.0)

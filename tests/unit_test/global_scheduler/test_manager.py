@@ -19,7 +19,7 @@ import numpy as np
 
 from vllm import EngineArgs
 
-from llumnix.utils import random_uuid, get_instance_name, MANAGER_NAME
+from llumnix.utils import random_uuid, get_instance_name, get_manager_name
 from llumnix.arg_utils import ManagerArgs
 from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo
@@ -109,22 +109,22 @@ def init_manager():
         manager_args.log_instance_info = False
         manager = Manager.from_args(manager_args=manager_args)
     except ValueError:
-        manager = ray.get_actor(MANAGER_NAME, namespace='llumnix')
+        manager = ray.get_actor(get_manager_name(), namespace='llumnix')
     ray.get(manager.is_ready.remote())
     return manager
 
-def init_llumlets(initial_instances):
+def init_instances(initial_instances):
     instance_ids = []
-    llumlets = []
+    instances = []
     for _ in range(initial_instances):
         instance_id = random_uuid()
         instance_name = get_instance_name(instance_id)
         llumlet = MockLlumlet.options(name=instance_name,
                                       namespace='llumnix').remote(instance_id)
         instance_ids.append(instance_id)
-        llumlets.append(llumlet)
-    ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
-    return instance_ids, llumlets
+        instances.append(llumlet)
+    ray.get([instance.is_ready.remote() for instance in instances])
+    return instance_ids, instances
 
 @pytest.fixture
 def manager():
@@ -143,7 +143,7 @@ def llumlet():
 
 def test_init_manager(ray_env, manager):
     assert manager is not None
-    manager_actor_handle = ray.get_actor(MANAGER_NAME, namespace='llumnix')
+    manager_actor_handle = ray.get_actor(get_manager_name(), namespace='llumnix')
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 
@@ -151,33 +151,33 @@ def test_init_llumlet(ray_env, llumlet):
     assert llumlet is not None
     ray.get(llumlet.is_ready.remote())
 
-def test_init_llumlets(ray_env, manager):
+def test_init_instances(ray_env, manager):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    instance_ids, llumlets = ray.get(manager.init_llumlets.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
-    num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
+    instance_ids, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+    num_instances = ray.get(manager.scale_up.remote(instance_ids, instances))
     manager_args = ManagerArgs()
     assert num_instances == manager_args.initial_instances
 
-def test_init_llumlets_sim(ray_env, manager):
+def test_init_instances_sim(ray_env, manager):
     manager.profiling_result_file_path="//"
     # pylint: disable=import-outside-toplevel
     import llumnix.backends.vllm.simulator
     llumnix.backends.vllm.simulator.BackendSimVLLM = MockBackendSim
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    instance_ids, llumlets = ray.get(manager.init_llumlets.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
-    num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
+    instance_ids, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+    num_instances = ray.get(manager.scale_up.remote(instance_ids, instances))
     manager_args = ManagerArgs()
     assert num_instances == manager_args.initial_instances
 
 def test_scale_up_and_down(ray_env, manager):
     initial_instances = 4
-    instance_ids, llumlets = init_llumlets(initial_instances)
-    num_instances = ray.get(manager.scale_up.remote(instance_ids, llumlets))
+    instance_ids, instances = init_instances(initial_instances)
+    num_instances = ray.get(manager.scale_up.remote(instance_ids, instances))
     assert num_instances == initial_instances
-    instance_ids_1, llumlets_1 = init_llumlets(initial_instances)
+    instance_ids_1, instances_1 = init_instances(initial_instances)
     num_instances = ray.get(manager.scale_down.remote(instance_ids_1))
     assert num_instances == initial_instances
-    num_instances = ray.get(manager.scale_up.remote(instance_ids_1, llumlets_1))
+    num_instances = ray.get(manager.scale_up.remote(instance_ids_1, instances_1))
     assert num_instances == initial_instances * 2
     num_instances = ray.get(manager.scale_down.remote(instance_ids))
     assert num_instances == initial_instances
@@ -186,18 +186,18 @@ def test_scale_up_and_down(ray_env, manager):
 
 def test_connect_to_instances(ray_env):
     initial_instances = 4
-    instance_ids, llumlets = init_llumlets(initial_instances)
-    ray.get([llumlet.is_ready.remote() for llumlet in llumlets])
+    instance_ids, instances = init_instances(initial_instances)
+    ray.get([instance.is_ready.remote() for instance in instances])
     manager = init_manager()
-    instance_ids_1, llumlets_1 = init_llumlets(initial_instances)
-    num_instances = ray.get(manager.scale_up.remote(instance_ids_1, llumlets_1))
+    instance_ids_1, instances_1 = init_instances(initial_instances)
+    num_instances = ray.get(manager.scale_up.remote(instance_ids_1, instances_1))
     assert num_instances == initial_instances * 2
     num_instances = ray.get(manager.scale_down.remote(instance_ids))
     assert num_instances == initial_instances
 
 def test_generate_and_abort(ray_env, manager, llumlet):
     instance_id = ray.get(llumlet.get_instance_id.remote())
-    ray.get(manager.scale_up.remote(instance_id, [llumlet]))
+    ray.get(manager.scale_up.remote(instance_id, llumlet))
     request_id = random_uuid()
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
@@ -216,8 +216,8 @@ def test_generate_and_abort(ray_env, manager, llumlet):
     assert num_requests == 0
 
 def test_get_request_instance(ray_env):
-    _, llumlets = init_llumlets(2)
-    llumlet, llumlet_1 = llumlets[0], llumlets[1]
+    _, instances = init_instances(2)
+    llumlet, llumlet_1 = instances[0], instances[1]
     manager = init_manager()
     request_id = random_uuid()
     request_id_1 = random_uuid()
@@ -252,37 +252,37 @@ def get_instance_info_migrate_out(instance_id):
     return instance_info
 
 def test_update_instance_info_loop_and_migrate(ray_env, manager):
-    num_llumlets = 5
-    instance_ids, llumlets = init_llumlets(num_llumlets)
+    num_instances = 5
+    instance_ids, instances = init_instances(num_instances)
 
-    for i in range(num_llumlets):
+    for i in range(num_instances):
         for _ in range(2*(i+1)):
-            ray.get(llumlets[i].generate.remote(random_uuid(), None, math.inf, None, None))
+            ray.get(instances[i].generate.remote(random_uuid(), None, math.inf, None, None))
 
     instance_info = InstanceInfo()
     instance_info.instance_type = InstanceType.NO_CONSTRAINTS
 
-    for i in range(num_llumlets):
+    for i in range(num_instances):
         instance_info.instance_id = instance_ids[i]
         instance_info.num_available_gpu_blocks = 40 - i * 10
         instance_info.num_running_requests = i
         instance_info.num_blocks_first_waiting_request = i
-        ray.get(llumlets[i].set_instance_info.remote(instance_info))
+        ray.get(instances[i].set_instance_info.remote(instance_info))
 
-    for i in range(num_llumlets):
-        num_migrate_out = ray.get(llumlets[i].get_num_migrate_out.remote())
+    for i in range(num_instances):
+        num_migrate_out = ray.get(instances[i].get_num_migrate_out.remote())
         assert num_migrate_out == 0
 
-    ray.get(manager.scale_up.remote(instance_ids, llumlets))
+    ray.get(manager.scale_up.remote(instance_ids, instances))
     time.sleep(2)
 
-    for i in range(num_llumlets):
-        num_migrate_out = ray.get(llumlets[i].get_num_migrate_out.remote())
-        num_migrate_in = ray.get(llumlets[i].get_num_migrate_in.remote())
+    for i in range(num_instances):
+        num_migrate_out = ray.get(instances[i].get_num_migrate_out.remote())
+        num_migrate_in = ray.get(instances[i].get_num_migrate_in.remote())
 
         if i == 0:
             assert num_migrate_in > 1 and num_migrate_out == 0
-        elif i == num_llumlets - 1:
+        elif i == num_instances - 1:
             assert num_migrate_in == 0 and num_migrate_out > 1
         else:
             assert num_migrate_in == 0 and num_migrate_out == 0

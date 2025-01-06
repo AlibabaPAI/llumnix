@@ -22,7 +22,7 @@ import llumnix.entrypoints.vllm.api_server
 import llumnix.manager
 from llumnix.arg_utils import ManagerArgs
 from llumnix.server_info import ServerInfo, RequestTimestamps
-from llumnix.utils import random_uuid, MANAGER_NAME
+from llumnix.utils import random_uuid, get_manager_name
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
@@ -53,8 +53,8 @@ class MockManager:
 
 
 def init_manager(request_output_queue_type: QueueType):
-    manager = MockManager.options(name=MANAGER_NAME,
-                                           namespace='llumnix').remote(request_output_queue_type)
+    manager = MockManager.options(name=get_manager_name(),
+                                  namespace='llumnix').remote(request_output_queue_type)
     return manager
 
 @app.get("/stats")
@@ -84,7 +84,6 @@ if __name__ == "__main__":
                                          {'0': None},
                                          request_output_queue,
                                          server_info,
-                                         None,
                                          None,
                                          None)
     llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(llumnix_context)

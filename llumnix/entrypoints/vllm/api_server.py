@@ -198,7 +198,7 @@ if __name__ == "__main__":
         uvicorn.run(app,
                     host=entrypoints_args.host,
                     port=entrypoints_args.port,
-                    log_level="info",
+                    log_level=entrypoints_args.log_level,
                     timeout_keep_alive=TIMEOUT_KEEP_ALIVE,
                     ssl_keyfile=entrypoints_args.ssl_keyfile,
                     ssl_certfile=entrypoints_args.ssl_certfile)

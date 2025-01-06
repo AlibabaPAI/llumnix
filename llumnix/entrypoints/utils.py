@@ -25,14 +25,12 @@ class EntrypointsContext:
                  instances: Dict[str, "Llumlet"],
                  request_output_queue: "QueueServerBase",
                  server_info: "ServerInfo",
-                 deployment_mode: str,
                  log_requests: bool,
                  log_request_timestamps: bool):
         self.manager = manager
         self.instances = instances
         self.request_output_queue = request_output_queue
         self.server_info = server_info
-        self.deployment_mode = deployment_mode
         self.log_requests = log_requests
         self.log_request_timestamps = log_request_timestamps
 

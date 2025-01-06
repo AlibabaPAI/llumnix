@@ -82,9 +82,9 @@ async def test_backend(ray_env):
         def __init__(self):
             pass
     dummy_actor = ray.remote(num_cpus=1,
-                                name="instance_0",
-                                namespace='llumnix',
-                                max_concurrency=4)(DummyActor)
+                             name="instance_0",
+                             namespace='llumnix',
+                             max_concurrency=4)(DummyActor)
     dummy_actor = dummy_actor.remote()
     placement_group = initialize_placement_group("0", num_cpus=2, num_gpus=0, detached=True)
     sim_backend = MockBackendSim(instance_id="0",

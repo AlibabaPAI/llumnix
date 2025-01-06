@@ -49,7 +49,7 @@ class Llumlet:
         try:
             logger.info("Llumlet backend type: {}".format(backend_type))
             self.instance_id = instance_id
-            self.instance_name = get_instance_name(instance_id)
+            self.actor_name = get_instance_name(instance_id)
             self.backend_engine: BackendInterface = init_backend_engine(instance_id,
                                                                         placement_group,
                                                                         request_output_queue_type,
@@ -87,16 +87,17 @@ class Llumlet:
                 world_size = get_engine_world_size(engine_args, backend_type)
                 num_gpus = world_size
             instance_name = get_instance_name(instance_id)
+            # TODO(s5u13b): Check the max_concurrency.
             llumlet_class = ray.remote(num_cpus=1,
-                                        num_gpus=num_gpus,
-                                        name=instance_name,
-                                        namespace='llumnix',
-                                        max_concurrency=4,
-                                        lifetime="detached")(cls).options(
+                                       num_gpus=num_gpus,
+                                       name=instance_name,
+                                       namespace='llumnix',
+                                       max_concurrency=4,
+                                       lifetime="detached")(cls).options(
                                             scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                 placement_group=placement_group,
                                                 placement_group_bundle_index=0,
-                                                placement_group_capture_child_tasks=True,
+                                                placement_group_capture_child_tasks=True
                                             )
                                         )
             llumlet = llumlet_class.remote(instance_id,
@@ -121,7 +122,7 @@ class Llumlet:
                 # pylint: disable=protected-access
                 self.backend_engine._stop_event.set()
                 await asyncio.sleep(0)
-                self_actor = ray.get_actor(self.instance_name)
+                self_actor = ray.get_actor(self.actor_name)
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:

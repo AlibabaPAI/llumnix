@@ -28,7 +28,7 @@ from llumnix.utils import random_uuid
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
-from llumnix.utils import MANAGER_NAME
+from llumnix.utils import get_manager_name
 
 app = llumnix.entrypoints.vllm.api_server.app
 manager = None
@@ -69,19 +69,18 @@ class FastAPIServer:
         ip = '127.0.0.1'
         port = 1234
         global manager
-        manager = ray.get_actor(MANAGER_NAME, namespace="llumnix")
+        manager = ray.get_actor(get_manager_name(), namespace="llumnix")
         request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
         ray_queue_server = None
         if request_output_queue_type == QueueType.RAYQUEUE:
             ray_queue_server = request_output_queue
         server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
         llumnix_context = EntrypointsContext(manager,
-                                                    {'0': None},
-                                                    request_output_queue,
-                                                    server_info,
-                                                    None,
-                                                    None,
-                                                    None)
+                                             {'0': None},
+                                             request_output_queue,
+                                             server_info,
+                                             None,
+                                             None)
         llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(llumnix_context)
 
     def run(self):
@@ -93,8 +92,8 @@ class FastAPIServer:
             timeout_keep_alive=llumnix.entrypoints.vllm.api_server.TIMEOUT_KEEP_ALIVE)
 
 def init_manager_service(request_output_queue_type: QueueType, args: 'Namespace'):
-    manager = MockManagerService.options(name=MANAGER_NAME,
-                                                         namespace='llumnix').remote(request_output_queue_type, args)
+    manager = MockManagerService.options(name=get_manager_name(),
+                                         namespace='llumnix').remote(request_output_queue_type, args)
     return manager
 
 @app.get("/stats")

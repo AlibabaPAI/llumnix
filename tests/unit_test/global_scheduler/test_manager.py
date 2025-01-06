@@ -30,7 +30,7 @@ from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.entrypoints.utils import DeploymentMode
-from llumnix.utils import get_server_name, get_instance_name
+from llumnix.utils import get_placement_group_name, get_server_name, get_instance_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -154,6 +154,20 @@ def llumlet():
                                   namespace='llumnix').remote(instance_id)
     ray.get(llumlet.is_ready.remote())
     return llumlet
+
+def is_actor_exists(actor_name):
+    try:
+        ray.get_actor(actor_name, namespace='llumnix')
+        return True
+    except ValueError:
+        return False
+
+def is_placement_group_exists(pg_name):
+    try:
+        ray.util.get_placement_group(pg_name)
+        return True
+    except ValueError:
+        return False
 
 def test_init_manager(ray_env, manager):
     assert manager is not None
@@ -304,25 +318,32 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
 def test_auto_scale_up_loop(ray_env):
     pass
 
-def test_init_server_and_instance(ray_env):
+def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_deployment_mode(DeploymentMode.LOCAL)
     instance_id = random_uuid()
-    placement_group = ray.get(manager._init_placement_group.remote(instance_id, engine_args, BackendType.VLLM, init_server=True))
-    assert placement_group is not None
-    ray.get(manager._init_server_and_instance.remote(instance_id, placement_group))
+    pg = ray.get(manager._init_placement_group.remote(instance_id, engine_args, BackendType.VLLM, init_server=True))
+    pg = ray.util.get_placement_group(get_placement_group_name(instance_id))
+    ray.get(pg.ready())
+    ray.get(manager._init_server_and_instance.remote(instance_id, pg))
     # wait for scale up
     time.sleep(5.0)
     server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
     ray.get(server.is_ready.remote())
-    assert server is not None
     instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
     ray.get(instance.is_ready.remote())
-    assert instance is not None
     num_instances = ray.get(manager.scale_up.remote(instance_id, instance))
     assert num_instances == 1
 
-def test_clear_instance_ray_resources(ray_env):
-    pass
+    # test clear_instance_ray_resources
+    ray.get(manager._clear_instance_ray_resources.remote(instance_id))
+    # wait for remove and kill
+    time.sleep(1.0)
+    pg_exists = is_placement_group_exists(get_placement_group_name(instance_id))
+    assert not pg_exists
+    server_exists = is_actor_exists(get_server_name(instance_id))
+    assert not server_exists
+    instance_exists = is_actor_exists(get_instance_name(instance_id))
+    assert not instance_exists
 
 def test_check_deployment_states_loop(ray_env):
     pass

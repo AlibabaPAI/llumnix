@@ -145,7 +145,7 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
     server_id = random_uuid()
     ip = get_ip_address()
     server_info = ServerInfo(server_id,
-                             entrypoints_args.request_output_queue_type,
+                             QueueType(entrypoints_args.request_output_queue_type),
                              request_output_queue,
                              ip,
                              entrypoints_args.request_output_queue_port)
@@ -166,7 +166,7 @@ def _setup_llumnix_local(manager_args, entrypoints_args, engine_args, deployment
     manager, instance_ids, instances, request_output_queue = \
         init_llumnix_components(manager_args,
                                 engine_args,
-                                entrypoints_args.request_output_queue_type,
+                                QueueType(entrypoints_args.request_output_queue_type),
                                 entrypoints_args.request_output_queue_port,
                                 deployment_args.backend_type)
 

@@ -14,92 +14,63 @@
 import argparse
 import time
 import threading
-import uvicorn
 import ray
 from ray.util.queue import Queue as RayQueue
-from fastapi.responses import JSONResponse, Response
 
-from vllm.outputs import CompletionOutput, RequestOutput
+from llumnix.queue.utils import init_request_output_queue_client, QueueType
+from llumnix.utils import get_manager_name
 
-import llumnix.entrypoints.vllm.api_server
-import llumnix.manager
-from llumnix.arg_utils import ManagerArgs
-from llumnix.server_info import ServerInfo, RequestTimestamps
-from llumnix.utils import random_uuid
-from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
-from llumnix.entrypoints.setup import EntrypointsContext
-from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
-from llumnix.utils import get_manager_name, get_server_name
+from tests.unit_test.entrypoints.vllm.api_server_manager import (MockManager, setup_entrypoints_context,
+                                                                 run_uvicorn_server)
 
-# for stats api
-app = llumnix.entrypoints.vllm.api_server.app
-manager = None
 ENTRYPOINTS_ACTOR_NAME = "entrypoints"
 
 
-@ray.remote(num_cpus=0, lifetime="detached")
-class MockManagerService:
-    def __init__(self, request_output_queue_type: QueueType, args: 'Namespace'):
+class MockManagerService(MockManager):
+    def __init__(self, entrypoints_args):
         self._num_generates = 0
         self._num_aborts = 0
-        self.request_output_queue = init_request_output_queue_client(request_output_queue_type)
-        self.init_api_server(args.host, args.port, request_output_queue_type)
-        self.api_server.run.remote()
+        self.request_output_queue = init_request_output_queue_client(
+                                        QueueType(entrypoints_args.request_output_queue_type))
+        self.server = self.init_api_server(entrypoints_args)
+        ray.get(self.server.setup_entrypoints_context.remote())
+        ray.get(self.server.run.remote())
 
-    def init_api_server(self, host: str, port: int, request_output_queue_type: QueueType):
-        self.api_server = FastAPIServer.options(name=ENTRYPOINTS_ACTOR_NAME,
-                                                namespace='llumnix').remote(args.host, args.port, request_output_queue_type)
+    def init_server(self, entrypoints_args):
+        server = FastAPIServer.options(name=ENTRYPOINTS_ACTOR_NAME,
+                                       namespace='llumnix').remote(entrypoints_args)
+        return server
 
-    async def generate(self, request_id, server_info, *args, **kwargs):
-        self._num_generates += 1
-        completion_output = CompletionOutput(0, "", [], 0.0, None)
-        request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=True)
-        request_output.request_timestamps = RequestTimestamps()
-        await self.request_output_queue.put_nowait([request_output], server_info)
+    # pylint: disable=arguments-renamed
+    @classmethod
+    def from_args(cls, entrypoints_args):
+        manager_class = ray.remote(num_cpus=1,
+                                   name=get_manager_name(),
+                                   namespace='llumnix',
+                                   lifetime='detached')(cls)
+        manager = manager_class.remote(entrypoints_args)
+        return manager
 
-    async def abort(self, request_id):
-        self._num_aborts += 1
-
-    def testing_stats(self):
-        return {"num_aborted_requests": self._num_aborts}
 
 @ray.remote(num_cpus=1, lifetime="detached")
 class FastAPIServer:
-    def __init__(self, host: str, port: int, request_output_queue_type: QueueType):
-        self.host = host
-        self.port = port
-        ip = '127.0.0.1'
-        port = 1234
-        # for app manager
-        global manager
-        manager = ray.get_actor(get_manager_name(), namespace="llumnix")
-        request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
-        server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue, ip, port)
-        llumnix_context = EntrypointsContext(manager,
-                                             {'0': None},
-                                             request_output_queue,
-                                             server_info,
-                                             None,
-                                             None)
-        llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(llumnix_context)
+    def __init__(self, entrypoints_args):
+        self.host = entrypoints_args.host
+        self.port = entrypoints_args.port
+        self.request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
+
+    def setup_entrypoints_context(self):
+        self.entrypoints_context = setup_entrypoints_context(self.request_output_queue_type)
+
+    def _run_uvicorn_server(self):
+        run_uvicorn_server(self.host, self.port, self.entrypoints_context)
 
     def run(self):
-        uvicorn.run(
-            app,
-            host=self.host,
-            port=self.port,
-            log_level="debug",
-            timeout_keep_alive=llumnix.entrypoints.vllm.api_server.TIMEOUT_KEEP_ALIVE)
-
-def init_manager_service(request_output_queue_type: QueueType, args: 'Namespace'):
-    manager = MockManagerService.options(name=get_manager_name(),
-                                         namespace='llumnix').remote(request_output_queue_type, args)
-    return manager
-
-@app.get("/stats")
-def stats() -> Response:
-    """Get the statistics of the engine."""
-    return JSONResponse(ray.get(manager.testing_stats.remote()))
+        self.run_uvicorn_server_thread = threading.Thread(
+            target=self._run_uvicorn_server, args=(),
+            daemon=True, name="run_uvicorn_server"
+        )
+        self.run_uvicorn_server_thread.start()
 
 
 if __name__ == "__main__":
@@ -107,15 +78,11 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--request-output-queue-type", type=str, choices=["zmq", "rayqueue"])
-    parser = ManagerArgs.add_cli_args(parser)
-    args = parser.parse_args()
+    entrypoints_args = parser.parse_args()
 
     # magic actor, without this actor, FastAPIServer cannot initialize correctly.
-    # If this actor is placed globally, pylint will hangs if testing api_server_manager and api_server_service concurrently (--jobs > 1).
+    # If this actor is placed globally,
+    # pylint will hangs if testing api_server_manager and api_server_service concurrently (--jobs > 1).
     request_output_queue = RayQueue()
 
-    request_output_queue_type = QueueType(args.request_output_queue_type)
-    manager = init_manager_service(request_output_queue_type, args)
-
-    # wait initialization done
-    time.sleep(2)
+    manager = MockManagerService.from_args(entrypoints_args)

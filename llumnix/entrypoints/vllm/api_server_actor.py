@@ -6,13 +6,14 @@ from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.utils import get_server_name
+from llumnix.queue.utils import init_request_output_queue_server, QueueType
 
 
 class FastAPIServer:
     def __init__(self, entrypoints_args: EntrypointsArgs):
         self.entrypoints_args = entrypoints_args
         self.request_output_queue_port = self.entrypoints_args.request_output_queue_port
-        self.request_output_queue_type = self.entrypoints_args.request_output_queue_type
+        self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         ip = get_ip_address()
         self.request_output_queue = init_request_output_queue_server(
                                         ip, self.request_output_queue_port, self.request_output_queue_type)

@@ -298,7 +298,7 @@ class Manager:
                     self.scale_down(instance_id)
                 if new_pg is None:
                     new_instance_id = random_uuid()
-                    new_pg = self._init_placement_group(new_instance_id, self.engine_args, self.backend_type, contain_server=True)
+                    new_pg = self._init_placement_group(new_instance_id, self.engine_args, self.backend_type, init_server=True)
                 try:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
                 except asyncio.TimeoutError:
@@ -491,7 +491,7 @@ class Manager:
                   engine_args = None,
                   deployment_args: DeploymentArgs = None,
                   ) -> "Manager":
-        manager_class = ray.remote(num_cpus=0,
+        manager_class = ray.remote(num_cpus=1,
                                    max_restarts=-1,
                                    name=get_manager_name(),
                                    namespace="llumnix",
@@ -606,7 +606,7 @@ class Manager:
                 logger.error("[_init_server_and_instance] exception traceback: {}".format(traceback.format_exc()))
                 self._clear_instance_ray_resources(instance_id)
 
-        request_output_queue_type = self.entrypoints_args.request_output_queue_type
+        request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         instance = self._init_instance(instance_id, placement_group, request_output_queue_type, self.backend_type, self.engine_args)
         server = self._init_server(instance_id, placement_group, self.entrypoints_args)
         asyncio.create_task(done_scale_up())

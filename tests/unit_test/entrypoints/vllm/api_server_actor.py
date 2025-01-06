@@ -20,13 +20,13 @@ from ray.util.queue import Queue as RayQueue
 from llumnix.queue.utils import init_request_output_queue_client, QueueType
 from llumnix.utils import get_manager_name
 
-from tests.unit_test.entrypoints.vllm.api_server_manager import (MockManager, setup_entrypoints_context,
-                                                                 run_uvicorn_server)
+from tests.unit_test.entrypoints.vllm.api_server import (MockManager, setup_entrypoints_context,
+                                                         run_uvicorn_server)
 
 ENTRYPOINTS_ACTOR_NAME = "entrypoints"
 
 
-class MockManagerService(MockManager):
+class MockManagerServer(MockManager):
     def __init__(self, entrypoints_args):
         self._num_generates = 0
         self._num_aborts = 0
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     # pylint will hangs if testing api_server_manager and api_server_service concurrently (--jobs > 1).
     request_output_queue = RayQueue()
 
-    manager = MockManagerService.from_args(entrypoints_args)
+    manager = MockManagerServer.from_args(entrypoints_args)
 
     while True:
         time.sleep(100.0)

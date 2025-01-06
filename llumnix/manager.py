@@ -508,16 +508,16 @@ class Manager:
                               instance_id: str,
                               engine_args,
                               backend_type: BackendType,
-                              contain_server: bool = False) -> PlacementGroup:
+                              init_server: bool = False) -> PlacementGroup:
         if not self.manager_args.profiling_result_file_path:
             # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
-            placement_group = initialize_placement_group(instance_id, num_cpus=3+int(contain_server), num_gpus=world_size, detached=True)
+            placement_group = initialize_placement_group(instance_id, num_cpus=3+int(init_server), num_gpus=world_size, detached=True)
         else:
             assert backend_type == backend_type.VLLM, "Only support the simulator backend for vLLM."
             # num_cpus=1, for Llumlet + AsyncPutQueueActor
-            placement_group = initialize_placement_group(instance_id, num_cpus=2+int(contain_server), num_gpus=0, detached=True)
+            placement_group = initialize_placement_group(instance_id, num_cpus=2+int(init_server), num_gpus=0, detached=True)
 
         return placement_group
 

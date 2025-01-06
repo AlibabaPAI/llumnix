@@ -76,10 +76,7 @@ if __name__ == "__main__":
     ip = '127.0.0.1'
     port = 1234
     request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
-    ray_queue_server = None
-    if request_output_queue_type == QueueType.RAYQUEUE:
-        ray_queue_server = request_output_queue
-    server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
+    server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue, ip, port)
     llumnix_context = EntrypointsContext(manager,
                                          {'0': None},
                                          request_output_queue,

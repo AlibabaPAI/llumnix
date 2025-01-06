@@ -13,6 +13,7 @@
 
 import argparse
 import time
+import threading
 import uvicorn
 import ray
 from ray.util.queue import Queue as RayQueue
@@ -28,8 +29,9 @@ from llumnix.utils import random_uuid
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
-from llumnix.utils import get_manager_name
+from llumnix.utils import get_manager_name, get_server_name
 
+# for stats api
 app = llumnix.entrypoints.vllm.api_server.app
 manager = None
 ENTRYPOINTS_ACTOR_NAME = "entrypoints"
@@ -68,13 +70,11 @@ class FastAPIServer:
         self.port = port
         ip = '127.0.0.1'
         port = 1234
+        # for app manager
         global manager
         manager = ray.get_actor(get_manager_name(), namespace="llumnix")
         request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
-        ray_queue_server = None
-        if request_output_queue_type == QueueType.RAYQUEUE:
-            ray_queue_server = request_output_queue
-        server_info = ServerInfo(random_uuid(), request_output_queue_type, ray_queue_server, ip, port)
+        server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue, ip, port)
         llumnix_context = EntrypointsContext(manager,
                                              {'0': None},
                                              request_output_queue,
@@ -117,4 +117,5 @@ if __name__ == "__main__":
     request_output_queue_type = QueueType(args.request_output_queue_type)
     manager = init_manager_service(request_output_queue_type, args)
 
+    # wait initialization done
     time.sleep(2)

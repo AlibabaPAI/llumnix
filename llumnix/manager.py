@@ -49,8 +49,8 @@ NO_INSTANCE_RETRY_INTERVAL = 0.1
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 0.1
 AUTO_SCALE_UP_INTERVAL = 1.0
 WAIT_PLACEMENT_GROUP_TIMEOUT = 5.0
-CHECK_DEPLOYMENT_STATES_INTERVAL = 60.0
-WATCH_DEPLOYMENT_INTERVAL = 10.0
+CHECK_DEPLOYMENT_STATES_INTERVAL = 30.0
+WATCH_DEPLOYMENT_INTERVAL = 30.0
 
 # TODO(s5u13b): Fix the logger when manager failover.
 # TODO(s5u13b): Handle exception of ray operations.
@@ -626,7 +626,7 @@ class Manager:
             curr_pgs, curr_servers, curr_instances = self.get_curr_deployment()
             if instance_id in curr_pgs and (instance_id not in curr_servers or instance_id not in curr_instances):
                 logger.warning("[_check_deployment_states_loop] instance {} deployment states incorrect".format(instance_id))
-                self._scale_down(instance_id)
+                self.scale_down(instance_id)
 
         while True:
             try:

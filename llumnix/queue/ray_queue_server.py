@@ -54,5 +54,6 @@ class RayQueueServer(QueueServerBase):
     def cleanup(self):
         try:
             ray.kill(self.queue)
+        # pylint: disable=broad-except, unused-variable
         except Exception as e:
             pass

@@ -31,7 +31,9 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.entrypoints.utils import DeploymentMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
-                           initialize_placement_group, remove_placement_group, INSTANCE_NAME_PREFIX)
+                           initialize_placement_group, remove_placement_group, INSTANCE_NAME_PREFIX,
+                           SERVER_NAME_PREFIX, remove_placement_group, kill_server,
+                           kill_instance)
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -315,30 +317,7 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
             assert num_migrate_in == 0 and num_migrate_out > 1
         else:
             assert num_migrate_in == 0 and num_migrate_out == 0
-
-@pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
-def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queue_type):
-    manager, _, _, _, _ = init_manager_with_deployment_mode(DeploymentMode.GLOBAL, request_output_queue_type)
-    time.sleep(30.0)
-    num_instances = ray.get(manager.scale_up.remote([], []))
-    assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
-    assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
-
-    actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
-    instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict
-                            if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
-    instance_ids = [actor_name.split("_")[-1] for actor_name in instance_actor_names]
-    ray.get(manager._clear_instance_ray_resources.remote(instance_ids[0]))
-    time.sleep(5.0)
-    ray.get(manager._clear_instance_ray_resources.remote(instance_ids[1]))
-    # TODO(s5u13b): Get ray queue rpc error or some instances died sometimes.
-    time.sleep(30.0)
-    num_instances = ray.get(manager.scale_up.remote([], []))
-    assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
-    assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
-
+            
 def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_deployment_mode(DeploymentMode.LOCAL)
     instance_id = random_uuid()
@@ -366,5 +345,47 @@ def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     instance_exists = is_actor_exists(get_instance_name(instance_id))
     assert not instance_exists
 
-def test_check_deployment_states_loop(ray_env):
-    pass
+@pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
+def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queue_type):
+    manager, _, _, _, _ = init_manager_with_deployment_mode(DeploymentMode.GLOBAL, request_output_queue_type)
+    time.sleep(30.0)
+    num_instances = ray.get(manager.scale_up.remote([], []))
+    assert num_instances == 4
+    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
+
+    actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
+    instance_ids = [actor_name_dict['name'].split("_")[-1] for actor_name_dict in actor_names_dict
+                    if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
+    assert len(instance_ids) == 4
+    ray.get(manager._clear_instance_ray_resources.remote(instance_ids[0]))
+    ray.get(manager._clear_instance_ray_resources.remote(instance_ids[1]))
+    # TODO(s5u13b): Get ray queue rpc error or some instances died sometimes.
+    time.sleep(30.0)
+    num_instances = ray.get(manager.scale_up.remote([], []))
+    assert num_instances == 4
+    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
+
+@pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
+def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_output_queue_type):
+    manager, _, _, _, _ = init_manager_with_deployment_mode(DeploymentMode.GLOBAL, request_output_queue_type)
+    time.sleep(30.0)
+    num_instances = ray.get(manager.scale_up.remote([], []))
+    assert num_instances == 4
+    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
+
+    actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
+    instance_ids = [actor_name_dict['name'].split("_")[-1] for actor_name_dict in actor_names_dict
+                    if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
+    assert len(instance_ids) == 4
+    remove_placement_group(instance_ids[0])
+    kill_server(instance_ids[1])
+    kill_instance(instance_ids[2])
+    # Wait for check deployment states, scale down instance and auto scale up.
+    time.sleep(90.0)
+    num_instances = ray.get(manager.scale_up.remote([], []))
+    assert num_instances == 4
+    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4

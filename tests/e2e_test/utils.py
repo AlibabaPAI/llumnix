@@ -56,6 +56,40 @@ def generate_launch_command(result_filename: str = "",
     )
     return command
 
+def generate_serve_command(result_filename: str = "",
+                           ip: str = "127.0.0.1",
+                           port: int = 37000,
+                           dispatch_policy: str = "load",
+                           migration_backend = "gloo",
+                           model = "facebook/opt-125m",
+                           max_model_len: int = 4096,
+                           log_instance_info: bool = False,
+                           request_migration_policy: str = 'SR',
+                           max_num_batched_tokens: int = 16000):
+    command = (
+        f"RAY_DEDUP_LOGS=0 "
+        f"nohup python -u -m llumnix.entrypoints.vllm.serve "
+        f"--host {ip} "
+        f"--port {port} "
+        f"{'--log-filename manager ' if log_instance_info else ''}"
+        f"{'--log-instance-info ' if log_instance_info else ''}"
+        f"--enable-migration "
+        f"--model {model} "
+        f"--engine-use-ray "
+        f"--worker-use-ray "
+        f"--max-model-len {max_model_len} "
+        f"--dispatch-policy {dispatch_policy} "
+        f"--trust-remote-code "
+        f"--request-migration-policy {request_migration_policy} "
+        f"--migration-backend {migration_backend} "
+        f"--migration-buffer-blocks 32 "
+        f"--tensor-parallel-size 1 "
+        f"--request-output-queue-port {1234+port} "
+        f"--max-num-batched-tokens {max_num_batched_tokens} "
+        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+    )
+    return command
+
 def wait_for_llumnix_service_ready(ip_ports, timeout=120):
     start_time = time.time()
     while True:
@@ -112,6 +146,7 @@ def generate_bench_command(ip_ports: str,
 def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
+    subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
 
 @pytest.fixture
 def shutdown_llumnix_service():

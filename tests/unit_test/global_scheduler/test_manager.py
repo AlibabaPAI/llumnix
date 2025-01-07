@@ -119,7 +119,7 @@ def init_manager():
     return manager
 
 def init_manager_with_deployment_mode(deployment_mode, request_output_queue_type="rayqueue"):
-    manager_args = ManagerArgs(migration_backend="rayrpc", enbale_port_increment=True)
+    manager_args = ManagerArgs(migration_backend="rayrpc", enable_port_increment=True)
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type=request_output_queue_type)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     deployment_args = DeploymentArgs(deployment_mode=deployment_mode, backend_type=BackendType.VLLM)

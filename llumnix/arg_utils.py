@@ -150,7 +150,7 @@ class ManagerArgs:
 
     enable_pd_disagg: bool = None
 
-    enbale_port_increment: bool = None
+    enable_port_increment: bool = None
 
     def __post_init__(self):
         # Check if all fields default to None

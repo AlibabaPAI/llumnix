@@ -13,7 +13,6 @@
 
 import math
 from unittest.mock import MagicMock
-import ray
 
 from vllm.sequence import (Logprob, SequenceGroupOutput, SequenceOutput,
                            SequenceStatus,SamplerOutput)
@@ -29,7 +28,9 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
+from llumnix.backends.utils import initialize_placement_group
 
+from tests.conftest import ray_env
 from .utils import create_dummy_prompt, initialize_scheduler
 
 
@@ -98,13 +99,13 @@ def test_llm_engine_from_engine_args():
                                              instance_id="0", migration_config=None, latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
 
-def test_llm_engine_add_requset():
+def test_llm_engine_add_requset(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+    placement_group = initialize_placement_group(instance_id="0", num_cpus=3, num_gpus=1, detached=True)
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
-                                                   placement_group=None,
-                                                   node_id=ray.get_runtime_context().get_node_id(),
+                                                   placement_group=placement_group,
                                                    migration_config=None,
                                                    latency_mem=MagicMock(sepc=LatencyMemData))
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)

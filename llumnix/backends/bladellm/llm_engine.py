@@ -22,7 +22,7 @@ import queue
 import ray
 from loguru import logger
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
@@ -40,23 +40,13 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 
 class AsyncBackQueueWrapper(APIWrapper):
-    def __init__(self, placement_group, node_id, instance_id, output_queue_type) -> None:
+    def __init__(self, placement_group, instance_id, output_queue_type) -> None:
         super().__init__(args=None, resp_queue=None)
-        if placement_group:
-            scheduling_strategy = PlacementGroupSchedulingStrategy(
-                placement_group=placement_group,
-                placement_group_capture_child_tasks=True,
-            )
-        elif node_id:
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=node_id,
-                soft=False,
-            )
-        else: # When use simulator, placement_group and node_id are both None.
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
-                soft=False,
-            )
+        scheduling_strategy = PlacementGroupSchedulingStrategy(
+            placement_group=placement_group,
+            placement_group_bundle_index=0,
+            placement_group_capture_child_tasks=True,
+        )
         self.put_queue_args_queue = queue.Queue()
         self.put_queue_loop_thread = threading.Thread(
             target=self._put_request_outputs_loop, args=(), daemon=True, name="put_queue_loop"
@@ -126,7 +116,6 @@ class AsyncLLMEngineLlumnixMixin:
                  output_queue_type: QueueType,
                  migration_config: MigrationConfig,
                  placement_group: Optional[PlacementGroup],
-                 node_id: Optional[str],
                  ) -> None:
         self.instance_id = instance_id
 
@@ -135,7 +124,6 @@ class AsyncLLMEngineLlumnixMixin:
 
         self.placement_group = placement_group
         self.output_queue_type = output_queue_type
-        self.node_id = node_id
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -145,7 +133,8 @@ class AsyncLLMEngineLlumnixMixin:
         super().start(loop)
         self._client = self.init_client_from_engine()
         self.trans_wrapper: AsyncBackQueueWrapper = AsyncBackQueueWrapper(self.placement_group,
-                              self.node_id, self.instance_id, self.output_queue_type)
+                                                                          self.instance_id,
+                                                                          self.output_queue_type)
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
     async def update_callback(self, resp_list, step_requests):
@@ -199,11 +188,10 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                 output_queue_type: QueueType,
                 migration_config: MigrationConfig,
                 placement_group: Optional[PlacementGroup],
-                node_id: Optional[str],
                 *args, **kwargs,
                 ) -> None:
         AsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group, node_id)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group)
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,
@@ -211,11 +199,10 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             output_queue_type: QueueType,
             migration_config: MigrationConfig,
             placement_group: Optional[PlacementGroup],
-            node_id: Optional[str],
             *args, **kwargs,
             ) -> None:
         PrefillAsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group, node_id)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group)
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
@@ -223,11 +210,10 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
             output_queue_type: QueueType,
             migration_config: MigrationConfig,
             placement_group: Optional[PlacementGroup],
-            node_id: Optional[str],
             *args, **kwargs,
             ) -> None:
         DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group, node_id)
+        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, output_queue_type, migration_config, placement_group)
 
 class BackendBladeLLM(BackendInterface):
     def __init__(
@@ -237,12 +223,11 @@ class BackendBladeLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: ServingArgs,
         placement_group: PlacementGroup = None,
-        node_id: str = None,
     ) -> None:
         self.instance_id = instance_id
         self.engine_args = engine_args
         engine_cls = self._get_engine_cls()
-        self.engine = engine_cls(instance_id, output_queue_type, migration_config, placement_group, node_id, engine_args)
+        self.engine = engine_cls(instance_id, output_queue_type, migration_config, placement_group, engine_args)
 
         self._loop = asyncio.new_event_loop()
         self._engine_ready = threading.Event()
@@ -331,7 +316,7 @@ class BackendBladeLLM(BackendInterface):
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         pass
 
-    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, src_blocks: List[int], dst_blocks: List[int]):
+    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
         pass
 
     def commit_dst_request(self, backend_request: LlumnixRequest) -> None:

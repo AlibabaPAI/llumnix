@@ -16,6 +16,14 @@ import shutil
 import os
 import subprocess
 import ray
+from ray._raylet import PlacementGroupID
+from ray._private.utils import hex_to_binary
+from ray.util.placement_group import (
+    PlacementGroup,
+    placement_group_table,
+    remove_placement_group,
+)
+
 import pytest
 
 from llumnix.utils import random_uuid
@@ -24,29 +32,47 @@ def pytest_sessionstart(session):
     subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-@pytest.fixture
-def setup_ray_env():
-    ray.init(namespace="llumnix", ignore_reinit_error=True)
-    yield
+def cleanup_ray_env_func():
+    try:
+        # list_placement_groups cannot take effects.
+        for placement_group_info in placement_group_table().values():
+            try:
+                pg = PlacementGroup(
+                    PlacementGroupID(hex_to_binary(placement_group_info["placement_group_id"]))
+                )
+                remove_placement_group(pg)
+            # pylint: disable=bare-except
+            except:
+                pass
+    # pylint: disable=bare-except
+    except:
+        pass
+
     try:
         named_actors = ray.util.list_named_actors(True)
         for actor in named_actors:
             try:
                 actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-            # pylint: disable=bare-except
-            except:
-                continue
-
-            try:
                 ray.kill(actor_handle)
             # pylint: disable=bare-except
             except:
                 continue
+    # pylint: disable=bare-except
+    except:
+        pass
+
+    try:
         # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
         ray.shutdown()
     # pylint: disable=bare-except
     except:
         pass
+
+@pytest.fixture
+def ray_env():
+    ray.init(namespace="llumnix", ignore_reinit_error=True)
+    yield
+    cleanup_ray_env_func()
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

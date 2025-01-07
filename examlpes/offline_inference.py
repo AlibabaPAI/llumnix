@@ -4,11 +4,13 @@ import asyncio
 
 import ray
 
-from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager, init_llumlets
+from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager
 from llumnix import (SamplingParams, ServerInfo, EngineManagerArgs, LLMEngineManager, Llumlet,
                      EngineArgs, QueueType, BackendType)
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
+
+from tests.conftest import cleanup_ray_env_func
 
 # Sample prompts.
 prompts = [
@@ -35,18 +37,19 @@ manager_args = EngineManagerArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370)
 
-# Create llumlets.
-llumlet_ids: List[str] = None
-llumlets: List[Llumlet] = None
-llumlet_ids, llumlets = init_llumlets(
-    manager_args, engine_args, ray.get_runtime_context().get_node_id(),
-    QueueType("rayqueue"), BackendType.VLLM, 1,
-)
-
-
 # Create a manager. If the manager is created first, and then the llumlets are created, manager.scale_up
 # need to be called to add the newly created llumlets to the management of the manager.
 manager: LLMEngineManager = init_manager(manager_args)
+ray.get(manager.is_ready.remote())
+
+# Create llumlets.
+instance_ids: List[str] = None
+llumlets: List[Llumlet] = None
+instance_ids, llumlets = ray.get(manager.init_llumlets.remote(
+    engine_args, QueueType("rayqueue"), BackendType.VLLM, 1,
+))
+
+ray.get(manager.scale_up.remote(instance_ids, llumlets))
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()
@@ -90,6 +93,8 @@ for actor in named_actors:
         ray.kill(actor_handle)
     except:
         continue
+    
+cleanup_ray_env_func()
 
 # Shutdown ray cluster.
 ray.shutdown()

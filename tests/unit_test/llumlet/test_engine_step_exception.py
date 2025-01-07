@@ -25,12 +25,17 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.backends.utils import initialize_placement_group
+
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 
 @ray.remote(num_cpus=1, max_concurrency=4)
 class MockLlumlet(Llumlet):
     def __init__(self, *args, **kwargs) -> None:
+        instance_id = kwargs["instance_id"]
+        placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
+        kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         self.origin_step = self.backend_engine.engine.step_async
 
@@ -49,23 +54,21 @@ class MockLlumlet(Llumlet):
         asyncio.create_task(self.backend_engine._start_engine_step_loop())
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
-def test_engine_step_exception(setup_ray_env):
+def test_engine_step_exception(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
     migration_config = MigrationConfig("SR", "rayrpc", 16, 1, 4, 5, 20)
-    node_id = ray.get_runtime_context().get_node_id()
-    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
+    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
     origin_free_memory, _ = torch.cuda.mem_get_info()
 
     actor_name = "instance_0"
     llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
                                   scheduling_strategy=scheduling_strategy).remote(
-        request_output_queue_type=QueueType.RAYQUEUE,
         instance_id="0",
+        request_output_queue_type=QueueType.RAYQUEUE,
         backend_type=BackendType.VLLM,
         migration_config=migration_config,
         engine_args=engine_args,
-        node_id=node_id
     )
     ray.get(llumlet.is_ready.remote())
 

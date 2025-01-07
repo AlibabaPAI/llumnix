@@ -14,6 +14,11 @@
 import uuid
 import ray
 
+PLACEMENT_GROUP_NAME_PREFIX = "pg_"
+SERVER_NAME_PREFIX = "server_"
+INSTANCE_NAME_PREFIX = "instance_"
+
+
 def random_uuid() -> str:
     return str(uuid.uuid4().hex)
 
@@ -38,3 +43,21 @@ def clear_gloo_backend_state():
     except ValueError:
         # gloo_queue may not have been created yet; just ignore this error.
         pass
+
+def get_placement_group_name(instance_id: str) -> str:
+    return f"{PLACEMENT_GROUP_NAME_PREFIX}{instance_id}"
+
+def get_instance_name(instance_id: str) -> str:
+    return f"{INSTANCE_NAME_PREFIX}{instance_id}"
+
+def remove_placement_group(instance_id: str) -> bool:
+    try:
+        placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
+        if not placement_group:
+            return False
+        # asynchronous api
+        ray.util.remove_placement_group(placement_group)
+    # pylint: disable=broad-except
+    except Exception:
+        return False
+    return True

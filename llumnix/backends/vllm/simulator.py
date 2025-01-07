@@ -15,7 +15,7 @@ import os
 import asyncio
 from typing import List
 
-import ray.actor
+from ray.util.placement_group import PlacementGroup
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.logger import init_logger
@@ -34,9 +34,9 @@ class BackendSimVLLM(BackendVLLM):
         instance_id: str,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        profiling_result_file_path: str,
+        placement_group: PlacementGroup,
         engine_args: EngineArgs,
-        node_id: str = None,
+        profiling_result_file_path: str,
     ) -> None:
         # multi-instance args
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
@@ -44,8 +44,8 @@ class BackendSimVLLM(BackendVLLM):
                                                                           request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
-                                                                          latency_mem=latency_mem,
-                                                                          node_id=node_id)
+                                                                          placement_group=placement_group,
+                                                                          latency_mem=latency_mem)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
@@ -78,5 +78,5 @@ class BackendSimVLLM(BackendVLLM):
         return latency_mem
 
     # pylint: disable=unused-argument
-    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         await self.engine.model_executor.send_blocks(len(src_blocks))

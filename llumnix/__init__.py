@@ -14,8 +14,7 @@
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.setup import (launch_ray_cluster,
                                        connect_to_ray_cluster,
-                                       init_manager,
-                                       init_llumlets)
+                                       init_manager)
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.llm_engine_manager import LLMEngineManager
 from llumnix.llumlet.llumlet import Llumlet
@@ -29,7 +28,6 @@ __all__ = [
     "launch_ray_cluster",
     "connect_to_ray_cluster",
     "init_manager",
-    "init_llumlets",
     "EngineManagerArgs",
     "LLMEngineManager",
     "Llumlet",

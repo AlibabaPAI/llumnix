@@ -12,9 +12,10 @@ from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.backends.utils import initialize_placement_group
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 from tests.unit_test.queue.utils import request_output_queue_server
 
 from .utils import create_dummy_prompt, initialize_scheduler
@@ -68,7 +69,7 @@ async def test_executor():
     assert len(outputs[0].outputs) == 2
 
 @pytest.mark.asyncio
-async def test_backend(setup_ray_env):
+async def test_backend(ray_env):
     # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
@@ -85,9 +86,11 @@ async def test_backend(setup_ray_env):
                                 namespace='llumnix',
                                 max_concurrency=4)(DummyActor)
     dummy_actor = dummy_actor.remote()
+    placement_group = initialize_placement_group("0", num_cpus=2, num_gpus=0, detached=True)
     sim_backend = MockBackendSim(instance_id="0",
                                  request_output_queue_type=request_output_queue_type,
                                  migration_config=migration_config,
+                                 placement_group=placement_group,
                                  profiling_result_file_path="",
                                  engine_args=engine_args)
 

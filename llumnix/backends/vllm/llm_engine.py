@@ -20,7 +20,7 @@ import asyncio
 import queue
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.core.scheduler import ScheduledSequenceGroup
@@ -40,44 +40,35 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
+from llumnix.utils import get_instance_name
 
 logger = init_logger(__name__)
 
 NO_OUTPUTS_STEP_INTERVAL = 0.01
+
 
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
                  request_output_queue_type: QueueType,
                  placement_group: Optional[PlacementGroup],
-                 node_id: Optional[str],
                  *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
         # Place the async put queue actor together with the instance.
-        if placement_group:
-            scheduling_strategy = PlacementGroupSchedulingStrategy(
-                placement_group=placement_group,
-                placement_group_capture_child_tasks=True,
-            )
-        elif node_id:
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=node_id,
-                soft=False,
-            )
-        else: # When use simulator, placement_group and node_id are both None.
-            scheduling_strategy = NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
-                soft=False,
-            )
+        scheduling_strategy = PlacementGroupSchedulingStrategy(
+            placement_group=placement_group,
+            placement_group_bundle_index=0,
+            placement_group_capture_child_tasks=True,
+        )
         self.put_queue_args_queue = queue.Queue()
         self.put_queue_loop_thread = threading.Thread(
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
         )
         self.async_put_queue_actor = ray.remote(
-            num_cpus=0,
+            num_cpus=1,
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
@@ -92,12 +83,12 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         instance_id: str = None,
         placement_group: Optional[PlacementGroup] = None,
-        node_id: Optional[str] = None,
         latency_mem: Optional[LatencyMemData] = None
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
+        # Hack to pass placement_group for init workers.
         engine_config.parallel_config.placement_group = placement_group
         # Initialize the cluster and specify the executor class.
         # pylint: disable=import-outside-toplevel
@@ -111,14 +102,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             executor_class.migration_config = migration_config
         else:
             raise ValueError('Unsupported executor backend')
-        # Hack to pass node_id to _init_workers_ray function.
-        executor_class.node_id = node_id
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
             request_output_queue_type=request_output_queue_type,
             placement_group=placement_group,
-            node_id=node_id,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -251,28 +239,25 @@ class BackendVLLM(BackendInterface):
         instance_id: str,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
+        placement_group: PlacementGroup,
         engine_args: EngineArgs,
-        placement_group: PlacementGroup = None,
-        node_id: str = None
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
-                                                                          placement_group=placement_group,
-                                                                          node_id=node_id)
+                                                                          placement_group=placement_group)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
-            self.worker_handle_list.insert(0, ray.get_actor(f"instance_{self.instance_id}", namespace="llumnix"))
+            self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix"))
         self._run_workers("init_migration", instance_id=instance_id,
                                             migration_config=migration_config,
                                             src_worker_handle_list=self.worker_handle_list,
-                                            placement_group=placement_group,
-                                            node_id=node_id)
+                                            placement_group=placement_group)
 
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))

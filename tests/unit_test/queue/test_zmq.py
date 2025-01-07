@@ -25,7 +25,7 @@ from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
 
 # pylint: disable=W0611
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 
 @ray.remote(num_cpus=1)
 class Server:
@@ -107,7 +107,7 @@ async def benchmark_queue(qps, ip=None, port=None):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("qps", [128.0, 256.0, 512.0, 1024.0])
-async def test_queue_zmq(setup_ray_env, qps):
+async def test_queue_zmq(ray_env, qps):
     ip = '127.0.0.1'
     port = 1234
     await benchmark_queue(qps, ip, port)

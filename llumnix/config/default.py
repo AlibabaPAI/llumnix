@@ -64,10 +64,6 @@ _C.MANAGER.LOG_FILENAME = "server.log"
 # Profiling result file path
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = ""
 
-# Disable fixing the placement of instance to current node
-_C.MANAGER.DISABLE_FIXED_NODE_INIT_INSTANCE = False
-# Disable initializing instance by manager
-_C.MANAGER.DISABLE_INIT_INSTANCE_BY_MANAGER = False
 # Number of instances created at initialization
 _C.MANAGER.INITIAL_INSTANCES = 1
 # Time interval(s) to update instance info and pair migration

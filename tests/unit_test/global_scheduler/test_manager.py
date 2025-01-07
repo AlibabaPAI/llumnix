@@ -19,7 +19,6 @@ import numpy as np
 
 from vllm import EngineArgs
 
-from llumnix.utils import random_uuid, get_instance_name, get_manager_name
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, DeploymentArgs
 from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo
@@ -31,9 +30,8 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.entrypoints.utils import DeploymentMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
-                           initialize_placement_group, remove_placement_group, INSTANCE_NAME_PREFIX,
-                           SERVER_NAME_PREFIX, remove_placement_group, kill_server,
-                           kill_instance)
+                           remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
+                           kill_instance, random_uuid, get_manager_name)
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -317,7 +315,7 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
             assert num_migrate_in == 0 and num_migrate_out > 1
         else:
             assert num_migrate_in == 0 and num_migrate_out == 0
-            
+
 def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_deployment_mode(DeploymentMode.LOCAL)
     instance_id = random_uuid()

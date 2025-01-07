@@ -91,6 +91,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, deploy
                                                ip=ip,
                                                port=base_port,
                                                model=model)
+        # pylint: disable=subprocess-run-check
         subprocess.run('ray start --head', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(serve_command, shell=True, check=True)
 

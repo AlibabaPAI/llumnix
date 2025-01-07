@@ -17,8 +17,6 @@ import ray
 import torch
 import pytest
 
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
-
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.backends.backend_interface import BackendType
@@ -57,7 +55,8 @@ class MockLlumlet(Llumlet):
 def test_engine_step_exception(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
     migration_config = MigrationConfig("SR", "rayrpc", 16, 1, 4, 5, 20)
-    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
+
+    time.sleep(5.0)
 
     device_count = torch.cuda.device_count()
     origin_free_memory_list = []
@@ -66,8 +65,7 @@ def test_engine_step_exception(ray_env):
         origin_free_memory_list.append(origin_free_memory)
 
     actor_name = "instance_0"
-    llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
-                                  scheduling_strategy=scheduling_strategy).remote(
+    llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix').remote(
         instance_id="0",
         request_output_queue_type=QueueType.RAYQUEUE,
         backend_type=BackendType.VLLM,

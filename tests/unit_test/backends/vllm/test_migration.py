@@ -16,7 +16,6 @@ import math
 from unittest.mock import MagicMock
 import pytest
 import ray
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -113,15 +112,13 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     request_output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
-    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
     llumlet_0 = init_llumlet(request_output_queue_type, "0", migration_config, engine_args)
     llumlet_1 = init_llumlet(request_output_queue_type, "1", migration_config, engine_args)
 
     llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
         name='instance_2',
-        namespace='llumnix',
-        scheduling_strategy=scheduling_strategy).remote(
+        namespace='llumnix').remote(
             instance_id="2",
             request_output_queue_type=request_output_queue_type,
             backend_type=BackendType.VLLM,

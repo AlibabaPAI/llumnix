@@ -150,6 +150,8 @@ class ManagerArgs:
 
     enable_pd_disagg: bool = None
 
+    enbale_port_increment: bool = None
+
     def __post_init__(self):
         # Check if all fields default to None
         for field_info in dataclasses.fields(self):
@@ -346,6 +348,10 @@ class ManagerArgs:
         parser.add_argument('--num-dispatch-instances',
                             type=int,
                             help='number of available instances for dispatch')
+
+        parser.add_argument('--enable-port-increment',
+                            action='store_true',
+                            help='enable port increment when desploying multiple servers')
 
         return parser
 

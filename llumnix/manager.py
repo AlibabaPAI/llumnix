@@ -14,6 +14,7 @@
 import asyncio
 import time
 import csv
+import copy
 import os
 from typing import Dict, List, Tuple, Union, Iterable
 from collections import defaultdict
@@ -47,7 +48,7 @@ CLEAR_REQUEST_INSTANCE_INTERVAL = 600.0
 NO_INSTANCE_RETRY_INTERVAL = 0.1
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 0.1
 AUTO_SCALE_UP_INTERVAL = 1.0
-WAIT_PLACEMENT_GROUP_TIMEOUT = 1.0
+WAIT_PLACEMENT_GROUP_TIMEOUT = 5.0
 CHECK_DEPLOYMENT_STATES_INTERVAL = 60.0
 WATCH_DEPLOYMENT_INTERVAL = 10.0
 
@@ -123,6 +124,7 @@ class Manager:
         asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
+        self.port_count = 0
         if hasattr(self, "deployment_mode") and self.deployment_mode == DeploymentMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
             self.last_timeout_instance_id = None
@@ -281,7 +283,7 @@ class Manager:
             try:
                 new_pg = None
                 if self.last_timeout_instance_id is not None:
-                    last_timeout_pg_name = get_placement_group_name(last_timeout_instance_id)
+                    last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
                     last_timeout_pg_states = list_placement_groups(filters=[("name", "=", last_timeout_pg_name)])
                     if len(last_timeout_pg_states) > 0:
                         new_instance_id = self.last_timeout_instance_id
@@ -297,7 +299,7 @@ class Manager:
                     self.scale_down(instance_id)
                 if new_pg is None:
                     new_instance_id = random_uuid()
-                    new_pg = self._init_placement_group(new_instance_id, self.engine_args, self.backend_type, init_server=True)
+                    new_pg = self._init_placement_group(new_instance_id, self.engine_args, self.backend_type, init_server=True, block=False)
                 try:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
                 except asyncio.TimeoutError:
@@ -307,7 +309,8 @@ class Manager:
                     await asyncio.sleep(interval)
                     continue
                 self._init_server_and_instance(new_instance_id, new_pg)
-                logger.info("[_auto_scale_up_loop] deploy server and instance to new placement group done")
+                logger.info("[_auto_scale_up_loop] deploy server and instance to new placement group done, "
+                            "instance_id: {}".format(new_instance_id))
             # pylint: disable=broad-except
             except Exception as e:
                 logger.error("[_auto_scale_up_loop] unexpected exception occurs: {}".format(e))
@@ -423,16 +426,16 @@ class Manager:
                 if ins_id in self.instances:
                     del self.instances[ins_id]
                 else:
-                    logger.warning("[scale_down] instance {} is not in self.instances".format(ins_id))
+                    logger.debug("[scale_down] instance {} is not in self.instances".format(ins_id))
                 if ins_id in self.instance_migrating:
                     del self.instance_migrating[ins_id]
                 else:
-                    logger.warning("[scale_down] instance {} is not in self.instance_migrating".format(ins_id))
+                    logger.debug("[scale_down] instance {} is not in self.instance_migrating".format(ins_id))
                 if self.log_instance_info:
                     if ins_id in self.instance_last_logged_empty:
                         del self.instance_last_logged_empty[ins_id]
                     else:
-                        logger.warning("[scale_down] instance {} is not in self.instance_last_logged_empty".format(ins_id))
+                        logger.debug("[scale_down] instance {} is not in self.instance_last_logged_empty".format(ins_id))
                 self.pending_rebuild_migration_instances += 1
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
@@ -449,11 +452,11 @@ class Manager:
 
     def _clear_instance_ray_resources(self, instance_id: str):
         if not remove_placement_group(instance_id):
-            logger.warning("[clear_instance_ray_resources] failed to remove placement group {}".format(instance_id))
+            logger.debug("[clear_instance_ray_resources] failed to remove placement group {}".format(instance_id))
         if not kill_server(instance_id):
-            logger.warning("[clear_instance_ray_resources] failed to kill server {}".format(instance_id))
+            logger.debug("[clear_instance_ray_resources] failed to kill server {}".format(instance_id))
         if not kill_instance(instance_id):
-            logger.warning("[clear_instance_ray_resources] failed to kill instance {}".format(instance_id))
+            logger.debug("[clear_instance_ray_resources] failed to kill instance {}".format(instance_id))
 
     async def _connect_to_instances(self):
         def connect_to_instances_done_callback(instance_id: str, instance_actor_handle: "ray.actor.ActorHandle", fut):
@@ -507,16 +510,17 @@ class Manager:
                               instance_id: str,
                               engine_args,
                               backend_type: BackendType,
-                              init_server: bool = False) -> PlacementGroup:
+                              init_server: bool = False,
+                              block: bool = True) -> PlacementGroup:
         if not self.manager_args.profiling_result_file_path:
             # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
-            placement_group = initialize_placement_group(instance_id, num_cpus=3+int(init_server), num_gpus=world_size, detached=True)
+            placement_group = initialize_placement_group(instance_id, num_cpus=3+int(init_server), num_gpus=world_size, detached=True, block=block)
         else:
             assert backend_type == backend_type.VLLM, "Only support the simulator backend for vLLM."
             # num_cpus=1, for Llumlet + AsyncPutQueueActor
-            placement_group = initialize_placement_group(instance_id, num_cpus=2+int(init_server), num_gpus=0, detached=True)
+            placement_group = initialize_placement_group(instance_id, num_cpus=2+int(init_server), num_gpus=0, detached=True, block=block)
 
         return placement_group
 
@@ -524,6 +528,10 @@ class Manager:
                      instance_id: str,
                      placement_group: PlacementGroup,
                      entrypoints_args: EntrypointsArgs) -> FastAPIServer:
+        entrypoints_args = copy.deepcopy(entrypoints_args)
+        entrypoints_args.port += self.port_count
+        entrypoints_args.request_output_queue_port += self.port_count
+        self.port_count += 1
         fastapi_server = FastAPIServer.from_args(instance_id, placement_group, entrypoints_args)
         return fastapi_server
 

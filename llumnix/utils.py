@@ -17,6 +17,10 @@ import threading
 import ray
 from ray.util.placement_group import PlacementGroup
 
+from llumnix.logger import init_logger
+
+logger = init_logger(__name__)
+
 MANAGER_NAME = "manager"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
@@ -25,9 +29,10 @@ INSTANCE_NAME_PREFIX = "instance_"
 
 def initialize_placement_group(
     instance_id: str,
-    num_cpus: int = 1,
-    num_gpus: int = 1,
-    detached: bool = False
+    num_cpus: int,
+    num_gpus: int,
+    detached: bool = False,
+    block: bool = True
 ) -> PlacementGroup:
     """Initialize the distributed cluster probably with Ray.
 
@@ -79,7 +84,8 @@ def initialize_placement_group(
         # Wait until PG is ready - this will block until all
         # requested resources are available, and will timeout
         # if they cannot be provisioned.
-        ray.get(current_placement_group.ready(), timeout=1800)
+        if block:
+            ray.get(current_placement_group.ready(), timeout=1800)
 
     return current_placement_group
 
@@ -123,8 +129,9 @@ def get_instance_name(instance_id: str) -> str:
 def remove_placement_group(instance_id: str) -> bool:
     try:
         placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
-        if not placement_group:
-            return False
+    except ValueError:
+        return False
+    try:
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
         logger.info("remove placement group {}".format(instance_id))
@@ -153,7 +160,7 @@ def kill_instance(instance_id: str) -> bool:
         return False
     try:
         ray.kill(instance)
-        print("kill instance {}".format(instance_id))
+        logger.info("kill instance {}".format(instance_id))
     # pylint: disable=broad-except
     except Exception:
         return False

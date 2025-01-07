@@ -86,11 +86,10 @@ class Llumlet:
             if backend_type == backend_type.BLADELLM:
                 world_size = get_engine_world_size(engine_args, backend_type)
                 num_gpus = world_size
-            instance_name = get_instance_name(instance_id)
             # TODO(s5u13b): Check the max_concurrency.
             llumlet_class = ray.remote(num_cpus=1,
                                        num_gpus=num_gpus,
-                                       name=instance_name,
+                                       name=get_instance_name(instance_id),
                                        namespace='llumnix',
                                        max_concurrency=4,
                                        lifetime="detached")(cls).options(

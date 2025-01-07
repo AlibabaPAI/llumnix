@@ -1,5 +1,6 @@
 import threading
 import traceback
+import uvicorn
 
 import ray
 from ray.util.placement_group import PlacementGroup

@@ -65,6 +65,8 @@ _C.MANAGER.LOG_INSTANCE_INFO = False
 _C.MANAGER.LOG_FILENAME = "server.log"
 # Profiling result file path
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = None
+# Enable port increment when deploying multiple servers
+_C.MANAGER.ENABLE_PORT_INCREMENT = False
 
 # Number of instances created at initialization
 _C.MANAGER.INITIAL_INSTANCES = 1

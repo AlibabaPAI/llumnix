@@ -52,4 +52,7 @@ class RayQueueServer(QueueServerBase):
         pass
 
     def cleanup(self):
-        pass
+        try:
+            ray.kill(self.queue)
+        except Exception as e:
+            pass

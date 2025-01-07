@@ -116,9 +116,9 @@ def init_manager():
     ray.get(manager.is_ready.remote())
     return manager
 
-def init_manager_with_deployment_mode(deployment_mode):
+def init_manager_with_deployment_mode(deployment_mode, request_output_queue_type="rayqueue"):
     manager_args = ManagerArgs(migration_backend="rayrpc", enbale_port_increment=True)
-    entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type="rayqueue")
+    entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type=request_output_queue_type)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     deployment_args = DeploymentArgs(deployment_mode=deployment_mode, backend_type=BackendType.VLLM)
     manager = Manager.from_args(manager_args=manager_args,
@@ -316,8 +316,9 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
         else:
             assert num_migrate_in == 0 and num_migrate_out == 0
 
-def test_auto_scale_up_loop_and_get_curr_deployment(ray_env):
-    manager, _, _, _, _ = init_manager_with_deployment_mode(DeploymentMode.GLOBAL)
+@pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
+def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queue_type):
+    manager, _, _, _, _ = init_manager_with_deployment_mode(DeploymentMode.GLOBAL, request_output_queue_type)
     time.sleep(30.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
@@ -329,13 +330,14 @@ def test_auto_scale_up_loop_and_get_curr_deployment(ray_env):
                             if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
     instance_ids = [actor_name.split("_")[-1] for actor_name in instance_actor_names]
     ray.get(manager._clear_instance_ray_resources.remote(instance_ids[0]))
+    time.sleep(5.0)
     ray.get(manager._clear_instance_ray_resources.remote(instance_ids[1]))
-    time.sleep(20.0)
+    # TODO(s5u13b): Get ray queue rpc error or some instances died sometimes.
+    time.sleep(30.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
-
 
 def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_deployment_mode(DeploymentMode.LOCAL)

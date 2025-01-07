@@ -55,6 +55,7 @@ WATCH_DEPLOYMENT_INTERVAL = 10.0
 # TODO(s5u13b): Fix the logger when manager failover.
 # TODO(s5u13b): Handle exception of ray operations.
 # TODO(s5u13b): Update the documents of global deployment.
+# TODO(s5u13b): Add exeception handling wrapper.
 
 
 class Manager:

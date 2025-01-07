@@ -530,9 +530,10 @@ class Manager:
                      placement_group: PlacementGroup,
                      entrypoints_args: EntrypointsArgs) -> FastAPIServer:
         entrypoints_args = copy.deepcopy(entrypoints_args)
-        entrypoints_args.port += self.port_count
-        entrypoints_args.request_output_queue_port += self.port_count
-        self.port_count += 1
+        if self.manager_args.enable_port_increment:
+            entrypoints_args.port += self.port_count
+            entrypoints_args.request_output_queue_port += self.port_count
+            self.port_count += 1
         fastapi_server = FastAPIServer.from_args(instance_id, placement_group, entrypoints_args)
         return fastapi_server
 

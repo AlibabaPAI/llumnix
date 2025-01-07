@@ -86,6 +86,7 @@ def generate_serve_command(result_filename: str = "",
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
+        f"--enable-port-increment "
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command

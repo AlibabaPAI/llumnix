@@ -28,7 +28,7 @@ from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
-from llumnix.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group, get_placement_group_name
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -46,7 +46,7 @@ TEST_PROMPTS = [
 ]
 
 def init_llumlet(request_output_queue_type, instance_id, migration_config, engine_args):
-    placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
+    placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=1, detached=True)
     llumlet = Llumlet.from_args(
                 instance_id=instance_id,
                 placement_group=placement_group,
@@ -69,7 +69,7 @@ class MockLlumlet(Llumlet):
 class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, **kwargs):
         instance_id = kwargs["instance_id"]
-        placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
+        placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=1, detached=True)
         kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop

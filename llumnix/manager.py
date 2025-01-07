@@ -36,7 +36,8 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placement_group,
                            get_instance_name, get_manager_name, INSTANCE_NAME_PREFIX,
                            SERVER_NAME_PREFIX, get_placement_group_name, run_async_func_sync,
-                           kill_server, kill_instance, initialize_placement_group)
+                           kill_server, kill_instance, initialize_placement_group,
+                           get_server_name)
 from llumnix.entrypoints.utils import DeploymentMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
@@ -300,7 +301,8 @@ class Manager:
                     self.scale_down(instance_id)
                 if new_pg is None:
                     new_instance_id = random_uuid()
-                    new_pg = self._init_placement_group(new_instance_id, self.engine_args, self.backend_type, init_server=True, block=False)
+                    new_pg = self._init_placement_group(get_placement_group_name(new_instance_id), self.engine_args, self.backend_type,
+                                                        init_server=True, block=False)
                 try:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
                 except asyncio.TimeoutError:
@@ -508,7 +510,7 @@ class Manager:
         return manager
 
     def _init_placement_group(self,
-                              instance_id: str,
+                              placement_group_name: str,
                               engine_args,
                               backend_type: BackendType,
                               init_server: bool = False,
@@ -517,16 +519,18 @@ class Manager:
             # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
-            placement_group = initialize_placement_group(instance_id, num_cpus=3+int(init_server), num_gpus=world_size, detached=True, block=block)
+            placement_group = initialize_placement_group(placement_group_name,
+                                                         num_cpus=3+int(init_server), num_gpus=world_size, detached=True, block=block)
         else:
             assert backend_type == backend_type.VLLM, "Only support the simulator backend for vLLM."
             # num_cpus=1, for Llumlet + AsyncPutQueueActor
-            placement_group = initialize_placement_group(instance_id, num_cpus=2+int(init_server), num_gpus=0, detached=True, block=block)
+            placement_group = initialize_placement_group(placement_group_name,
+                                                         num_cpus=2+int(init_server), num_gpus=0, detached=True, block=block)
 
         return placement_group
 
     def _init_server(self,
-                     instance_id: str,
+                     server_name: str,
                      placement_group: PlacementGroup,
                      entrypoints_args: EntrypointsArgs) -> FastAPIServer:
         entrypoints_args = copy.deepcopy(entrypoints_args)
@@ -534,7 +538,7 @@ class Manager:
             entrypoints_args.port += self.port_count
             entrypoints_args.request_output_queue_port += self.port_count
             self.port_count += 1
-        fastapi_server = FastAPIServer.from_args(instance_id, placement_group, entrypoints_args)
+        fastapi_server = FastAPIServer.from_args(server_name, placement_group, entrypoints_args)
         return fastapi_server
 
     def _init_instance(self,
@@ -617,7 +621,7 @@ class Manager:
 
         request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         instance = self._init_instance(instance_id, placement_group, request_output_queue_type, self.backend_type, self.engine_args)
-        server = self._init_server(instance_id, placement_group, self.entrypoints_args)
+        server = self._init_server(get_server_name(instance_id), placement_group, self.entrypoints_args)
         asyncio.create_task(done_scale_up())
 
     async def _check_deployment_states_loop(self, interval: float) -> None:

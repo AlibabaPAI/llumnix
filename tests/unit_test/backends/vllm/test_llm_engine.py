@@ -28,7 +28,7 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
-from llumnix.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group, get_placement_group_name
 
 from tests.conftest import ray_env
 from .utils import create_dummy_prompt, initialize_scheduler
@@ -90,7 +90,7 @@ def test_llm_engine_process_model_outputs():
 
 def test_llm_engine_from_engine_args(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    placement_group = initialize_placement_group(instance_id="0", num_cpus=3, num_gpus=1, detached=True)
+    placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=3, num_gpus=1, detached=True)
     llm_engine = MockEngine.from_engine_args(engine_args=engine_args, request_output_queue_type=QueueType.RAYQUEUE,
                                              instance_id="0", migration_config=None, placement_group=placement_group)
     assert llm_engine.executor_class == LlumnixRayGPUExecutor
@@ -98,7 +98,7 @@ def test_llm_engine_from_engine_args(ray_env):
 def test_llm_engine_from_engine_args_sim(ray_env):
     latency_data = LatencyMemData({},{},{})
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    placement_group = initialize_placement_group(instance_id="0", num_cpus=2, num_gpus=1, detached=True)
+    placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=2, num_gpus=1, detached=True)
     llm_engine = MockEngine.from_engine_args(engine_args=engine_args, request_output_queue_type=QueueType.RAYQUEUE,
                                              instance_id="0", migration_config=None, latency_mem=latency_data,
                                              placement_group=placement_group)
@@ -106,7 +106,7 @@ def test_llm_engine_from_engine_args_sim(ray_env):
 
 def test_llm_engine_add_requset(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    placement_group = initialize_placement_group(instance_id="0", num_cpus=3, num_gpus=1, detached=True)
+    placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=3, num_gpus=1, detached=True)
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",

@@ -9,7 +9,6 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.utils import get_server_name
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.logger import init_logger
 
@@ -62,12 +61,12 @@ class FastAPIServer:
 
     @classmethod
     def from_args(cls,
-                  instance_id: str,
+                  server_name: str,
                   placement_group: PlacementGroup,
                   entrypoints_args: EntrypointsArgs):
         try:
             fastapi_server_class = ray.remote(num_cpus=1,
-                                              name=get_server_name(instance_id),
+                                              name=server_name,
                                               namespace="llumnix",
                                               lifetime="detached")(cls).options(
                                                     scheduling_strategy=PlacementGroupSchedulingStrategy(

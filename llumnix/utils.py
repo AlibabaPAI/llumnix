@@ -28,7 +28,7 @@ INSTANCE_NAME_PREFIX = "instance_"
 
 
 def initialize_placement_group(
-    instance_id: str,
+    placement_group_name: str,
     num_cpus: int,
     num_gpus: int,
     detached: bool = False,
@@ -37,7 +37,7 @@ def initialize_placement_group(
     """Initialize the distributed cluster probably with Ray.
 
     Args:
-        instance_id: The instance id of the instance scheduled to the placement group.
+        placement_group_name: The name of placement group.
         num_cpus: The number of cpus in placement group.
         num_cpus: The number of cpus in placement group.
         detached: Whether the lifetime of the placement group being detached.
@@ -80,7 +80,7 @@ def initialize_placement_group(
         # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Workers
         placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
         current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
+            placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
         # Wait until PG is ready - this will block until all
         # requested resources are available, and will timeout
         # if they cannot be provisioned.

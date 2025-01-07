@@ -319,7 +319,8 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
 def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_deployment_mode(DeploymentMode.LOCAL)
     instance_id = random_uuid()
-    pg = ray.get(manager._init_placement_group.remote(instance_id, engine_args, BackendType.VLLM, init_server=True))
+    pg = ray.get(manager._init_placement_group.remote(get_placement_group_name(instance_id),
+                                                      engine_args, BackendType.VLLM, init_server=True))
     pg = ray.util.get_placement_group(get_placement_group_name(instance_id))
     ray.get(pg.ready())
     ray.get(manager._init_server_and_instance.remote(instance_id, pg))

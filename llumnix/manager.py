@@ -626,11 +626,12 @@ class Manager:
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_deployment(instance_id: str):
-            logger.warning("[_check_deployment_states_loop] watch instance {} deployment".format(instance_id))
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
             curr_pgs, curr_servers, curr_instances = self.get_curr_deployment()
             if instance_id in curr_pgs and (instance_id not in curr_servers or instance_id not in curr_instances):
-                logger.warning("[_check_deployment_states_loop] instance {} deployment states incorrect".format(instance_id))
+                logger.warning("[_check_deployment_states_loop] instance {} deployment states incorrect, "
+                               "states: (pg {}, server {}, instance {})"
+                               .format(instance_id, instance_id in curr_pgs, instance_id in curr_servers, instance_id in curr_instances))
                 self.scale_down(instance_id)
 
         while True:

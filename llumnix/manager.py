@@ -57,6 +57,8 @@ WATCH_DEPLOYMENT_INTERVAL = 30.0
 # TODO(s5u13b): Handle exception of ray operations.
 # TODO(s5u13b): Update the documents of global deployment.
 # TODO(s5u13b): Add exeception handling wrapper.
+# TODO(s5u13b): Update Arguments.md.
+# TODO(s5u13b): Reorganize constant variables.
 
 
 class Manager:

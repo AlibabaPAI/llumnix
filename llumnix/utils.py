@@ -41,6 +41,7 @@ def initialize_placement_group(
         num_cpus: The number of cpus in placement group.
         num_cpus: The number of cpus in placement group.
         detached: Whether the lifetime of the placement group being detached.
+        block: If True, the function will block until the placement group is ready.
 
     Returns:
         `placement_group`. `placement_group` includes the specification

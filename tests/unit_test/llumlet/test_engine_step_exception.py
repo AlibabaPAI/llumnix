@@ -80,6 +80,12 @@ def test_engine_step_exception(ray_env):
     all_actor_names = [actor["name"] for actor in all_actors]
     assert actor_name in all_actor_names
 
+    cur_free_memory_list = []
+    for device_id in range(device_count):
+        cur_free_memory, _ = torch.cuda.mem_get_info(device_id)
+        cur_free_memory_list.append(cur_free_memory)
+    assert origin_free_memory_list != cur_free_memory_list
+
     ray.get(llumlet.set_error_step.remote(True))
     time.sleep(3)
 
@@ -91,5 +97,4 @@ def test_engine_step_exception(ray_env):
     for device_id in range(device_count):
         cur_free_memory, _ = torch.cuda.mem_get_info(device_id)
         cur_free_memory_list.append(cur_free_memory)
-
     assert origin_free_memory_list == cur_free_memory_list

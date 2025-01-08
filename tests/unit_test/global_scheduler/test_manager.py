@@ -383,7 +383,7 @@ def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_ou
     kill_server(instance_ids[1])
     kill_instance(instance_ids[2])
     # Wait for check deployment states, scale down instance and auto scale up.
-    time.sleep(90.0)
+    time.sleep(120.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())

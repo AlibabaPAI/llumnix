@@ -42,7 +42,7 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
 
         llumnix_context: LlumnixEntrypointsContext = \
             setup_llumnix(engine_manager_args, engine_args, llumnix_config, BackendType.BLADELLM,
-                                        world_size, instance_ids=instance_ids)
+                          world_size, instance_ids=instance_ids)
         llm_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
 
     return llm_client

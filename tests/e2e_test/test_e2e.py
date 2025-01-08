@@ -21,8 +21,9 @@ import torch
 from vllm import LLM, SamplingParams
 
 # pylint: disable=unused-import
+from tests.conftest import ray_env
 from .utils import (generate_launch_command, wait_for_llumnix_service_ready,
-                    cleanup_ray_env, shutdown_llumnix_service)
+                    shutdown_llumnix_service)
 
 
 async def get_llumnix_response(prompt, sampling_params, ip_ports):
@@ -62,11 +63,8 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for e2e test")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rayrpc'])
-@pytest.mark.parametrize("launch_mode", ['eief', 'eidf', 'dief', 'didf'])
-async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_backend, launch_mode):
-    if migration_backend == 'gloo' and launch_mode != 'eief':
-        pytest.skip("When the migration backend is gloo, the launch mode of llumnix can only be eief")
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo'])
+async def test_e2e(ray_env, shutdown_llumnix_service, model, migration_backend):
     max_model_len = 370
     sampling_params = {
         "n": 1,
@@ -81,6 +79,8 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
     if len(vllm_output) == 0:
         vllm_output = ray.get(run_vllm.remote(model, max_model_len, sampling_params))
 
+    ray.shutdown()
+
     await asyncio.sleep(5)
 
     # generate llumnix outputs
@@ -91,8 +91,7 @@ async def test_e2e(cleanup_ray_env, shutdown_llumnix_service, model, migration_b
                                       ip=ip,
                                       port=base_port,
                                       migration_backend=migration_backend,
-                                      launch_ray_cluster=False,
-                                      launch_mode=launch_mode)
+                                      launch_ray_cluster=False)
     subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"], timeout=120)

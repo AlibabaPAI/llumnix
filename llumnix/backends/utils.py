@@ -17,13 +17,17 @@ import time
 
 import ray
 from ray.util.placement_group import PlacementGroup
-from loguru import logger
 
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
+from llumnix.logger import init_logger
+from llumnix.utils import get_placement_group_name, get_instance_name
+
+logger = init_logger(__name__)
+
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id, request_output_queue_type: QueueType):
@@ -36,7 +40,7 @@ class AsyncPutQueueActor:
                                     server_request_outputs: Dict[str, List],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
-            self.engine_actor_handle = ray.get_actor("instance_{}".format(self.instance_id), namespace="llumnix")
+            self.engine_actor_handle = ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix")
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
@@ -76,7 +80,9 @@ def init_backend_engine(instance_id: str, request_output_queue_type: QueueType,
     return backend_engine
 
 def initialize_placement_group(
-    world_size: int = 1,
+    instance_id: str,
+    num_cpus: int = 1,
+    num_gpus: int = 1,
     detached: bool = False
 ) -> Tuple[str, Optional[PlacementGroup]]:
     """Initialize the distributed cluster probably with Ray.
@@ -113,20 +119,21 @@ def initialize_placement_group(
                     "Placement group bundle cannot have more than 1 GPU.")
             if bundle_gpus:
                 gpu_bundles += 1
-        if world_size > gpu_bundles:
+        if num_gpus > gpu_bundles:
             raise ValueError(
                 "The number of required GPUs exceeds the total number of "
                 "available GPUs in the placement group.")
     else:
         num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
-        if world_size > num_gpus_in_cluster:
+        if num_gpus > num_gpus_in_cluster:
             raise ValueError(
                 "The number of required GPUs exceeds the total number of "
                 "available GPUs in the cluster.")
         # Create a new placement group
-        placement_group_specs = ([{"CPU": 1}] + [{"GPU": 1}] * world_size)
+        # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Workers
+        placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
         current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", lifetime=lifetime)
+            placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
         # Wait until PG is ready - this will block until all
         # requested resources are available, and will timeout
         # if they cannot be provisioned.

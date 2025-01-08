@@ -32,7 +32,9 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
+from llumnix.backends.utils import initialize_placement_group
 
+from tests.conftest import ray_env
 from .utils import create_dummy_prompt, initialize_scheduler
 # pylint: disable=unused-import
 from tests.conftest import setup_ray_env
@@ -71,7 +73,6 @@ def test_llm_engine_add_requset(setup_ray_env):
                                                    instance_id="0",
                                                    placement_group=None,
                                                    latency_mem = latency_data,
-                                                   node_id=ray.get_runtime_context().get_node_id(),
                                                    migration_config=None)
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     server_info = ServerInfo(None, None, None, None, None)

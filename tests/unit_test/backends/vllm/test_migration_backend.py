@@ -21,9 +21,10 @@ from vllm.engine.arg_utils import EngineArgs
 from llumnix.backends.vllm.worker import MigrationWorker
 from llumnix.arg_utils import EngineManagerArgs
 from llumnix.utils import random_uuid
+from llumnix.backends.utils import initialize_placement_group
 
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 from .test_worker import create_worker
 
 class MockMigrationWorker(MigrationWorker):
@@ -39,7 +40,7 @@ class MockMigrationWorker(MigrationWorker):
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
-def test_migrate_cache(setup_ray_env, backend):
+def test_migrate_cache(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = EngineManagerArgs(migration_buffer_blocks=3, migration_num_layers=5).create_migration_config()
     migraiton_config.migration_backend = backend
@@ -59,20 +60,22 @@ def test_migrate_cache(setup_ray_env, backend):
     ray.get(worker1.execute_method.remote('initialize_cache', num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=0))
 
     worker0_id = random_uuid()
+    placement_group0 = initialize_placement_group(instance_id=worker0_id, num_cpus=1, num_gpus=1, detached=True)
     ray.get(worker0.execute_method.remote(
         'init_migration',
         instance_id=worker0_id,
         migration_config=migraiton_config,
         src_worker_handle_list=[worker0],
-        node_id=ray.get_runtime_context().get_node_id()))
+        placement_group=placement_group0))
 
     worker1_id = random_uuid()
+    placement_group1 = initialize_placement_group(instance_id=worker1_id, num_cpus=1, num_gpus=1, detached=True)
     ray.get(worker1.execute_method.remote(
         'init_migration',
         instance_id=worker1_id,
         migration_config=migraiton_config,
         src_worker_handle_list=[worker1],
-        node_id=ray.get_runtime_context().get_node_id()))
+        placement_group=placement_group1))
 
     instance_rank = {worker0_id: 0, worker1_id: 1}
     group_name = random_uuid()

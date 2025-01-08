@@ -28,10 +28,11 @@ from llumnix.backends.utils import BackendType
 from llumnix.internal_config import MigrationConfig
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
+from llumnix.backends.utils import initialize_placement_group
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
-from tests.conftest import setup_ray_env
+from tests.conftest import ray_env
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt
@@ -43,6 +44,18 @@ TEST_PROMPTS = [
     "Explain the cultural significance of the Mona Lisa painting, and how its perception might vary in Western versus Eastern societies.\n",
     "Swahili: 'The early bird catches the worm.'\n"
 ]
+
+def init_llumlet(request_output_queue_type, instance_id, migration_config, engine_args):
+    placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
+    llumlet = Llumlet.from_args(
+                request_output_queue_type,
+                instance_id,
+                BackendType.VLLM,
+                1,
+                migration_config,
+                placement_group,
+                engine_args,)
+    return llumlet
 
 class MockBackendVLLM(BackendVLLM):
     def __init__(self):
@@ -56,6 +69,9 @@ class MockLlumlet(Llumlet):
 @ray.remote(num_cpus=1, max_concurrency=4)
 class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, **kwargs):
+        instance_id = kwargs["instance_id"]
+        placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
+        kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop
         self.backend_engine.engine.scheduler[0].schedule = MagicMock()
@@ -87,8 +103,8 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
 @pytest.mark.asyncio
-async def test_migration_correctness(setup_ray_env, migration_backend, migration_request_status):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.9)
+async def test_migration_correctness(ray_env, migration_backend, migration_request_status):
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0": 0, "1": 1, "2": 2}
     if migration_request_status == 'running':
         request_migration_policy = "SR"
@@ -99,30 +115,10 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
     request_output_queue_type = QueueType.RAYQUEUE
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
-    node_id = ray.get_runtime_context().get_node_id()
-    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
+    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
-    llumlet_0: Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            False,
-                            False,
-                            node_id,
-                            "0",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            engine_args)
-
-    llumlet_1: Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            False,
-                            False,
-                            node_id,
-                            "1",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            engine_args)
+    llumlet_0 = init_llumlet(request_output_queue_type, "0", migration_config, engine_args)
+    llumlet_1 = init_llumlet(request_output_queue_type, "1", migration_config, engine_args)
 
     llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
         name='instance_2',
@@ -133,7 +129,6 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
             backend_type=BackendType.VLLM,
             migration_config=migration_config,
             engine_args=engine_args,
-            node_id=node_id
         )
 
     while True:
@@ -206,8 +201,8 @@ async def test_migration_correctness(setup_ray_env, migration_backend, migration
 
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
-async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, gpu_memory_utilization=0.9)
+async def test_pd_diaggregation_correctness(ray_env, migration_backend):
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     id_rank_map = {"0":0, "1":1}
     migration_config = MigrationConfig("SR", migration_backend, 16, 1, 4, 5, 20)
 
@@ -215,28 +210,8 @@ async def test_pd_diaggregation_correctness(setup_ray_env, migration_backend):
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
-    llumlet_0:Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            False,
-                            True,
-                            ray.get_runtime_context().get_node_id(),
-                            "0",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            engine_args,)
-
-    llumlet_1:Llumlet = Llumlet.from_args(
-                            request_output_queue_type,
-                            False,
-                            True,
-                            ray.get_runtime_context().get_node_id(),
-                            "1",
-                            BackendType.VLLM,
-                            1,
-                            migration_config,
-                            engine_args,
-                     )
+    llumlet_0 = init_llumlet(request_output_queue_type, "0", migration_config, engine_args)
+    llumlet_1 = init_llumlet(request_output_queue_type, "1", migration_config, engine_args)
 
     while True:
         res = ray.get([llumlet_0.is_ready.remote(),llumlet_1.is_ready.remote()])

@@ -21,8 +21,9 @@ import torch
 import numpy as np
 
 # pylint: disable=unused-import
+from tests.conftest import ray_env
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
-                    cleanup_ray_env, wait_for_llumnix_service_ready, shutdown_llumnix_service)
+                    wait_for_llumnix_service_ready, shutdown_llumnix_service)
 
 BENCH_TEST_TIMEOUT_MINS = 30
 
@@ -62,7 +63,7 @@ def parse_log_file():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-async def test_simple_benchmark(cleanup_ray_env, shutdown_llumnix_service, model):
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model):
     device_count = torch.cuda.device_count()
     ip = "127.0.0.1"
     base_port = 37037

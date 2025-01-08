@@ -103,7 +103,10 @@ class GlobalScheduler:
         for ins_id in instance_ids:
             if ins_id in self.instance_id_set:
                 logger.info("scale down instance: {}".format(ins_id))
-                del self.instance_info[ins_id]
+                if ins_id in self.instance_info:
+                    del self.instance_info[ins_id]
+                else:
+                    logger.warning("[scale_down] instance {} is not in self.instance_info".format(ins_id))
                 self._remove_instance(ins_id)
         logger.info("self.num_instances: {}, self.instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances

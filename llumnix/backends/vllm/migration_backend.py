@@ -24,7 +24,7 @@ from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
 
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=1)
 class ProxyActor:
     def exec_method(self, is_driver_worker, handle, *args, **kwargs):
         try:

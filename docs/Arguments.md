@@ -6,17 +6,28 @@ Note: since Llumnix is still in alpha stage, the interface and arguments are *su
 
 ```
 usage: -m llumnix.entrypoints.vllm.api_server [-h]
+            [--host HOST]
+            [--port PORT]
+            [--ssl-keyfile SSL_KEYFILE]
+            [--ssl-certfile SSL_CERTFILE]
+            [--log-level {debug,info,warning,error}]
+            [--launch-ray-cluster]
+            [--ray-cluster-port RAY_CLUSTER_PORT]
+            [--request-output-queue-type {rayqueue,zmq}]
+            [--request-output-queue-port REQUEST_OUTPUT_QUEUE_PORT]
+            [--disable-log-requests-server]
+            [--log-request-timestamps]
             [--config-file CONFIG_FILE]
             [--initial-instances INITIAL_INSTANCES]
             [--load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue,rr}]
             [--enable-migration]
+            [--enable-defrag]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag_constrained,defrag_relaxed}]
             [--migrate-out-threshold MIGRATE_OUT_THRESHOLD]
             [--request-migration-policy {LCR,SR,LR,FCW,FCWSR}]
-            [--enable-defrag ENABLE_DEFRAG]
             [--enable-scaling]
             [--min-instances MIN_INSTANCES]
             [--max-instances MAX_INSTANCES]
@@ -29,24 +40,66 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--log-filename LOG_FILENAME]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
-            [--polling-interval POLLING_INTERVAL]
             [--migration-backend {gloo,nccl,rayrpc,grpc,kvtransfer}]
             [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
-            [--migration-backend-transfer-type {cuda_ipc,rdma,}]
-            [--migration-backend-kvtransfer-naming-url MIGRATION_BACKEND_KVTRANSFER_NAMING_URL]
-            [--migration-backend-server-address MIGRATION_BACKEND_SERVER_ADDRESS]
-            [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
-            [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
+            [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
+            [--migration-backend-transfer-type {cuda_ipc,rdma,}]
+            [--grpc-migration-backend-server-address GRPC_MIGRATION_BACKEND_SERVER_ADDRESS]
+            [--kvtransfer-migration-backend-naming-url KVTRANSFER_MIGRATION_BACKEND_NAMING_URL]
             [--max-stages MAX_STAGES]
+            [--last-stage-max-blocks LAST_STAGE_MAX_BLOCKS]
             [--enable-pd-disagg]
             [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
-            [--log-request-timestamps]
-
+            [--enable-port-increment]
 ```
 
+`--host`
+- Hostname of the server.
+- Default: "localhost"
+
+`--port`
+- Port number of the server.
+- Default: 8000
+
+`--ssl-keyfile`
+- Path to SSL key file.
+- Default: None
+
+`--ssl-certfile`
+- Path to SSL certificate file.
+- Default: None
+
+`--log-level`
+- Log level for the server.
+- Possible choices: debug, info, warning, error
+- Default: "info"
+
+`--launch-ray-cluster`
+- If launch ray cluster.
+
+`--ray-cluster-port`
+- Ray cluster port.
+- Default: 6379
+
+`--request-output-queue-type`
+- Queue type for request output queue.
+- Possible choices: rayqueue, zmq
+- Default: "rayqueue"
+
+`--request-output-queue-port`
+- Port number for the zmq request output queue.
+- Default: 1234
+
+`--disable-log-requests-server`
+- Disable logging requests in server.
+
+`--log-request-timestamps`
+- If log request timestamps.
+
 `--config-file`
-- Path to config file.
+- Path to config file of arguments.
+- Default: None
 
 `--initial-instances`
 - Number of instances created at initialization.
@@ -69,6 +122,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-migration`
 - Enable migrate requests between instances.
 
+`--enable-defrag`
+- Enable defragmentation through migration based on virtual usage.
+
 `--pair-migration-frequency`
 - Pair migration frequency.
 - Default: 1
@@ -86,10 +142,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Request migration policy.
 - Possible choices: LCR, SR, LR, FCW, FCWSR
 - Default: "SR"
-
-`--enable-defrag`
-- Enable defragmentation through migration based on virtual usage.
-- Default: False
 
 `--enable-scaling`
 - Enable auto scaling.
@@ -130,59 +182,56 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: "server.log"
 
 `--profiling-result-file-path`
-- Profiling result file path.
-- Default: ""
-
-`--gpu-type`
-- GPU type specified when using simulator.
-- Default: "a10"
+- Profiling result file path when using simulator.
+- Default: None
 
 `--migration-backend`
 - Communication backend of migration.
 - Possible choices: gloo, rayrpc, nccl, grpc, kvtransfer. [gloo, rayrpc, nccl] are available for vllm and [grpc, kvtransfer] are available for bladellm.
 - Default: "gloo"
 
-`--migration-backend-transfer-type`
-- Transfer type for migration backend kvTransfer.
-- Possible choices: cuda_ipc, rdma
-- Default: "rdma"
-
-`--migration-backend-server-address`
-- Address of grpc server for migration backend
-- Default: "127.0.0.1:50051"
-
-`--migration-backend-kvtransfer-naming-url`
-- URL of naming server for kvtransfer migration backend
-- Default: "file:/tmp/llumnix/naming/"
-
 `--migration-buffer-blocks`
 - Number of buffer blocks in migration.
 - Default: 512
-
-`--migration-backend-init-timeout`
-- Timeout(s) for initializing migration backend.
-- Default: 10.0
 
 `--migration-num-layers`
 - number of kv-cache layers to transfer in each round during migration
 - Default: 1
 
-`--last-stage-max-blocks`
-- If the number of remaining blocks < last_stage_max_blocks, do last stage migration.
-- Default: 4
+`--migration-backend-init-timeout`
+- Timeout(s) for initializing migration backend.
+- Default: 10.0
+
+`--migration-backend-transfer-type`
+- Transfer type for migration backend grpc and kvTransfer.
+- Possible choices: cuda_ipc, rdma
+- Default: "rdma"
+
+`--grpc-migration-backend-server-address`
+- Address of grpc server for migration backend
+- Default: "127.0.0.1:50051"
+
+`--kvtransfer-migration-backend-naming-url`
+- URL of naming server for kvtransfer migration backend
+- Default: "file:/tmp/llumnix/naming/"
 
 `--max-stages`
 - Drop migration if the number of stages > max_stages.
 - Default: 3
 
-`--log-request-timestamps`
-- Enable logging request timestamps.
+`--last-stage-max-blocks`
+- If the number of remaining blocks < last_stage_max_blocks, do last stage migration.
+- Default: 16
 
 `--enable-pd-disagg`
 - Enable prefill decoding disaggregation.
 
 `--num-dispatch-instances`
 - Number of available instances for dispatch.
+- Default: math.inf
+
+`--enable-port-increment`
+- Enable port increment when desploying multiple servers.
 
 # Unsupported vLLM feature options
 

@@ -81,16 +81,22 @@ class Manager:
         if deployment_args is not None:
             self.deployment_mode: DeploymentMode = deployment_args.deployment_mode
             self.backend_type: BackendType = deployment_args.backend_type
+
+        # migration args
+        self.enable_migration = manager_args.enable_migration
+        self.pair_migration_frequency = manager_args.pair_migration_frequency
+        self.enable_pd_disagg = manager_args.enable_pd_disagg
+
+        # scaling args
+        self.enable_scaling = manager_args.enable_scaling
         self.max_instances = manager_args.max_instances
         self.min_instances = manager_args.min_instances
-
-        # scheduling args
-        self.enable_migration = manager_args.enable_migration
-        self.enable_scaling = manager_args.enable_scaling
-        self.enable_pd_disagg = manager_args.enable_pd_disagg
-        self.polling_interval = manager_args.polling_interval
-        self.pair_migration_frequency = manager_args.pair_migration_frequency
         self.scaling_interval = manager_args.scaling_interval
+        self.scaling_policy = manager_args.scaling_policy
+        self.scale_up_threshold = manager_args.scale_up_threshold
+        self.scale_down_threshold = manager_args.scale_down_threshold
+
+        self.polling_interval = manager_args.polling_interval
 
         global_scheduler_config = manager_args.create_global_scheduler_config()
         self.global_scheduler = GlobalScheduler(global_scheduler_config)

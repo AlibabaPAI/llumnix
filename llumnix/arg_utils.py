@@ -85,17 +85,17 @@ class EntrypointsArgs:
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
-                            help='if launch ray cluster in server')
+                            help='if launch ray cluster')
         parser.add_argument("--ray-cluster-port",
                             type=int,
                             help='ray cluster port')
         parser.add_argument("--request-output-queue-type",
                             type=str,
                             choices=['rayqueue', 'zmq'],
-                            help='request output queue type for request output queue')
+                            help='queue type for request output queue')
         parser.add_argument("--request-output-queue-port",
                             type=int,
-                            help='port for zmq')
+                            help='port number for the zmq request output queue')
         parser.add_argument('--disable-log-requests-server',
                             action='store_true',
                             help='disable logging requests in server')
@@ -104,7 +104,7 @@ class EntrypointsArgs:
                             help='if log request timestamps')
         parser.add_argument("--config-file",
                             type=str,
-                            help="path to config file")
+                            help="path to config file of arguments")
 
         return parser
 
@@ -116,7 +116,6 @@ class ManagerArgs:
     polling_interval: float = None
 
     dispatch_policy: str = None
-    num_dispatch_instances: int = None
 
     enable_migration: bool = None
     enable_defrag: bool = None
@@ -133,22 +132,23 @@ class ManagerArgs:
     scale_up_threshold: float = None
     scale_down_threshold: float = None
 
-    log_filename: str = None
     disable_log_requests_manager: bool = None
     log_instance_info: bool = None
+    log_filename: str = None
     profiling_result_file_path: str = None
 
-    migration_backend_kvtransfer_naming_url: str = None
-    migration_backend_server_address: str = None
-    migration_backend_init_timeout: float = None
     migration_backend: str = None
     migration_buffer_blocks: int = None
-    migration_backend_transfer_type: str = None
     migration_num_layers: int = None
+    migration_backend_init_timeout: float = None
+    migration_backend_transfer_type: str = None
+    grpc_migration_backend_server_address: str = None
+    kvtransfer_migration_backend_naming_url: str = None
     last_stage_max_blocks: int = None
     max_stages: int = None
 
     enable_pd_disagg: bool = None
+    num_dispatch_instances: int = None
 
     enable_port_increment: bool = None
 
@@ -240,13 +240,13 @@ class ManagerArgs:
                             '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
                             '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
                             '* "rr" dispatch requests with round-robin policy.\n')
-        parser.add_argument('--num-available-dispatch-instances',
-                            type=int,
-                            help='number of available instances for dispatching')
 
         parser.add_argument('--enable-migration',
                             action='store_true',
                             help='enable migrate requests between instances')
+        parser.add_argument('--enable-defrag',
+                            type=bool,
+                            help='enable defragmentation through migration based on virtual usage')
         parser.add_argument('--pair-migration-frequency',
                             type=int,
                             help='pair migration frequency')
@@ -272,9 +272,6 @@ class ManagerArgs:
                             '* "LR" migrate the running request longest.\n'
                             '* "FCW" migrate the waiting request first come.\n'
                             '* "FCWSR" migrate the waiting request first come and running request shortest.\n')
-        parser.add_argument('--enable-defrag',
-                            type=bool,
-                            help='enable defragmentation through migration based on virtual usage')
 
         parser.add_argument('--enable-scaling',
                             action='store_true',
@@ -310,37 +307,37 @@ class ManagerArgs:
                             help='log filename')
         parser.add_argument('--profiling-result-file-path',
                             type=str,
-                            help='profiling result file path')
+                            help='profiling result file path when using simulator')
         parser.add_argument('--migration-backend',
                             type=str,
                             choices=['gloo','nccl','rayrpc','grpc','kvtransfer'],
                             help='communication backend of migration, [gloo, rayrpc, nccl] are available for vllm \
                                 and [grpc, kvtransfer] are available for bladellm')
-        parser.add_argument('--migration-backend-transfer-type',
-                            type=str,
-                            choices=['cuda_ipc','rdma', ''],
-                            help='transfer type for migration backend grpc and kvTransfer')
-        parser.add_argument('--grpc-migration-backend-address',
-                            type=str,
-                            help='address of grpc server for migration backend')
-        parser.add_argument('--migration-backend-kvtransfer-naming-url',
-                            type=str,
-                            help='url of naming server for kvtransfer migration backend')
-        parser.add_argument('--migration-backend-init-timeout',
-                            type=float,
-                            help='timeout(s) for initializing migration backend')
         parser.add_argument('--migration-buffer-blocks',
                             type=int,
                             help='number of buffer blocks in migration')
         parser.add_argument('--migration-num-layers',
                             type=int,
                             help='number of kv-cache layers to transfer in each round during migration')
-        parser.add_argument('--last-stage-max-blocks',
-                            type=int,
-                            help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
+        parser.add_argument('--migration-backend-init-timeout',
+                            type=float,
+                            help='timeout(s) for initializing migration backend')
+        parser.add_argument('--migration-backend-transfer-type',
+                            type=str,
+                            choices=['cuda_ipc','rdma', ''],
+                            help='transfer type for migration backend grpc and kvTransfer')
+        parser.add_argument('--grpc-migration-backend-server-address',
+                            type=str,
+                            help='address of grpc server for migration backend')
+        parser.add_argument('--kvtransfer-migration-backend-naming-url',
+                            type=str,
+                            help='url of naming server for kvtransfer migration backend')
         parser.add_argument('--max-stages',
                             type=int,
                             help='drop migration if the number of stages > max_stages')
+        parser.add_argument('--last-stage-max-blocks',
+                            type=int,
+                            help='if the number pf remain blocks < last_stage_max_blocks, do last stage migration')
 
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',

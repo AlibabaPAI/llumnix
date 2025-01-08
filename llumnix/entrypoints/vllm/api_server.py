@@ -177,7 +177,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int)
     parser.add_argument("--ssl-keyfile", type=str)
     parser.add_argument("--ssl-certfile", type=str)
-    parser.add_argument("--log-level", type=str)
+    parser.add_argument("--log-level", type=str, choices=["debug", "info", "warning", "error"])
 
     cli_args = add_cli_args(parser)
     cfg = get_llumnix_config(cli_args.config_file, cli_args)

@@ -314,7 +314,7 @@ class Manager:
                 except asyncio.TimeoutError:
                     logger.info("[_auto_scale_up_loop] waiting for new placement group ready timeout")
                     # After timeout, the new placement group might be pending,
-                    # created(without server and instance), rescheduling or killed.
+                    # created(without server and instance), rescheduling.
                     self.last_timeout_instance_id = new_instance_id
                     await asyncio.sleep(interval)
                     continue

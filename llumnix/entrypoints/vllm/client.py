@@ -11,6 +11,8 @@ from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.server_info import RequestTimestamps
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
+from llumnix.manager import Manager
+from llumnix.llumlet.llumlet import Llumlet
 
 logger = init_logger(__name__)
 

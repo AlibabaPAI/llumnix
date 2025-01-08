@@ -210,7 +210,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.engine_add_request_timestamp = time.time()
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
-                                                          seq_group.sampling_params, seq_group.metrics.arrival_time, seq_group.lora_request,
+                                                          seq_group.metrics.arrival_time, seq_group.sampling_params, seq_group.lora_request,
                                                           seq_group.multi_modal_data)
 
     def _start_put_queue_loop(self):

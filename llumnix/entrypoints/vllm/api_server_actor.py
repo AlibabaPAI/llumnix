@@ -80,6 +80,7 @@ class FastAPIServer:
         except Exception as e:
             logger.error("failed to initialize FastAPIServer: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
+            raise
 
         return fastapi_server
 

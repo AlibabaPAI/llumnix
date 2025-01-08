@@ -69,6 +69,7 @@ class Llumlet:
         except Exception as e:
             logger.error("failed to initialize Llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
+            raise
 
     @classmethod
     def from_args(cls,
@@ -110,6 +111,7 @@ class Llumlet:
         except Exception as e:
             logger.error("failed to initialize Llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
+            raise
 
         return llumlet
 

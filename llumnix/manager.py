@@ -198,8 +198,6 @@ class Manager:
             else:
                 logger.info("[_update_instance_info_loop] instance {} is dead".format(instance_id))
                 self.scale_down(instance_id)
-                logger.info("[_update_instance_info_loop] dead instances: {}.".format(ret))
-                logger.info("[_update_instance_info_loop] dead instances: {}.".format(self.instances))
 
         while True:
             try:

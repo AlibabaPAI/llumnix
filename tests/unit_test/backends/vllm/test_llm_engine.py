@@ -36,8 +36,6 @@ from llumnix.backends.utils import initialize_placement_group
 
 from tests.conftest import ray_env
 from .utils import create_dummy_prompt, initialize_scheduler
-# pylint: disable=unused-import
-from tests.conftest import setup_ray_env
 
 class MockEngine(LLMEngineLlumnix):
     def __init__(self, *args, executor_class=None, **kwargs):
@@ -54,7 +52,7 @@ class MockEngine(LLMEngineLlumnix):
         pass
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
-def test_llm_engine_from_engine_args(setup_ray_env):
+def test_llm_engine_from_engine_args(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     llm_engine = MockEngine.from_engine_args(engine_args, request_output_queue_type=QueueType.RAYQUEUE,
                                              instance_id="0", migration_config=None)
@@ -65,7 +63,7 @@ def test_llm_engine_from_engine_args(setup_ray_env):
                                              instance_id="0", migration_config=None, latency_mem=latency_data)
     assert llm_engine.executor_class == SimGPUExecutor
 
-def test_llm_engine_add_requset(setup_ray_env):
+def test_llm_engine_add_requset(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     latency_data = LatencyMemData({},{},{})
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,

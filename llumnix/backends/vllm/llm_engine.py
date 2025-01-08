@@ -61,7 +61,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  instance_id: str,
                  request_output_queue_type: QueueType,
                  placement_group: Optional[PlacementGroup],
-                 node_id: Optional[str],
                  *arg, **kwargs) -> None:
         # pylint: disable=import-outside-toplevel
         import vllm.outputs
@@ -240,8 +239,7 @@ class BackendVLLM(BackendInterface):
                                                                           request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
-                                                                          placement_group=placement_group,
-                                                                          node_id=node_id)
+                                                                          placement_group=placement_group)
         self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
                                  for _ in range(engine_args.pipeline_parallel_size)]
         for vid in range(engine_args.pipeline_parallel_size):

@@ -70,6 +70,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
 
         # Create the workers.
         driver_ip = get_ip()
+        worker_wrapper_kwargs = self._get_worker_wrapper_args()
         for rank in range(self.parallel_config.world_size):
             bundle = placement_group.bundle_specs[rank + 1]
             if not bundle.get("GPU", 0):

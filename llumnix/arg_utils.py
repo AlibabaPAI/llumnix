@@ -190,8 +190,8 @@ class ManagerArgs:
                                            self.max_stages,
                                            self.migration_backend_init_timeout,
                                            self.migration_backend_transfer_type,
-                                           self.migration_backend_server_address,
-                                           self.migration_backend_kvtransfer_naming_url)
+                                           self.grpc_migration_backend_server_address,
+                                           self.kvtransfer_migration_backend_naming_url)
         return migration_config
 
     @classmethod

@@ -22,8 +22,8 @@ class MigrationConfig:
             max_stages: int,
             migration_backend_init_timeout: float,
             migration_backend_transfer_type: str = "",
-            migration_backend_server_address: str = "",
-            migration_backend_kvtransfer_naming_url: str = "",
+            grpc_migration_backend_server_address: str = "",
+            kvtransfer_migration_backend_naming_url: str = "",
             ) -> None:
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
@@ -33,8 +33,8 @@ class MigrationConfig:
         self.last_stage_max_blocks = last_stage_max_blocks
         self.max_stages = max_stages
         self.migration_backend_init_timeout = migration_backend_init_timeout
-        self.migration_backend_server_address = migration_backend_server_address
-        self.migration_backend_kvtransfer_naming_url = migration_backend_kvtransfer_naming_url
+        self.grpc_migration_backend_server_address = grpc_migration_backend_server_address
+        self.kvtransfer_migration_backend_naming_url = kvtransfer_migration_backend_naming_url
 
 class GlobalSchedulerConfig:
     def __init__(

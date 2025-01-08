@@ -205,9 +205,6 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend):
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
-    placement_group_0 = initialize_placement_group(instance_id="0", world_size=1, detached=True)
-    placement_group_1 = initialize_placement_group(instance_id="1", world_size=1, detached=True)
-
     llumlet_0 = init_llumlet(request_output_queue_type, "0", migration_config, engine_args)
     llumlet_1 = init_llumlet(request_output_queue_type, "1", migration_config, engine_args)
 

@@ -578,26 +578,12 @@ class Manager:
             instance_id = random_uuid()
             if not manager_args.profiling_result_file_path:
                 # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor, num_gpus=world_size, for Workers
-                placement_group = initialize_placement_group(instance_id, num_cpus=3, num_gpus=world_size, detached=True)
-                # TODO(s5u13b): Refine the order of arguments.
-                llumlet = Llumlet.from_args(
-                    request_output_queue_type,
-                    instance_id,
-                    backend_type,
-                    world_size,
-                    engine_manager_args.create_migration_config(),
-                    placement_group,
-                    engine_args,
-                    placement_group,
-                    engine_args,
-                    *args,
-                    **kwargs
-                )
+                placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=world_size, detached=True)
             else:
                 assert backend_type == backend_type.VLLM, 'Only support the simulator backend for vLLM.'
                 # num_cpus=1, for Llumlet + AsyncPutQueueActor
-                placement_group = initialize_placement_group(instance_id, num_cpus=2, num_gpus=0, detached=True)
-            llumlet = Llumlet.from_args(
+                placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=2, num_gpus=0, detached=True)
+            instance = Llumlet.from_args(
                             instance_id,
                             placement_group,
                             request_output_queue_type,

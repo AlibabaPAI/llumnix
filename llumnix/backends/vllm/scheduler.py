@@ -259,6 +259,7 @@ class SchedulerLlumnix(Scheduler):
         return seq_group_metadata_list, scheduler_outputs, allow_async_output_proc
 
     def _schedule_running(self, *args, **kwargs):
+        # pylint: disable=access-member-before-definition
         running_queue = self.running
         filtered_running_queue = deque()
         remove_running = deque()

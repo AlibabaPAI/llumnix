@@ -294,11 +294,12 @@ class Manager:
                     last_timeout_pg_states = list_placement_groups(filters=[("name", "=", last_timeout_pg_name)])
                     if len(last_timeout_pg_states) > 0:
                         new_instance_id = self.last_timeout_instance_id
-                        # pending or created(without server and instance)
+                        # pending, created(without server and instance) or rescheduling
                         new_pg = ray.util.get_placement_group(last_timeout_pg_name)
                     # reset
                     self.last_timeout_instance_id = None
                 pending_pg_states = list_placement_groups(filters=[("state", "=", "PENDING")])
+                pending_pg_states.extend(list_placement_groups(filters=[("state", "=", "RESCHEDULING")]))
                 for pending_pg_state in pending_pg_states:
                     instance_id = pending_pg_state["name"].split("_")[-1]
                     if new_pg is not None and instance_id == new_instance_id:
@@ -312,7 +313,8 @@ class Manager:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
                 except asyncio.TimeoutError:
                     logger.info("[_auto_scale_up_loop] waiting for new placement group ready timeout")
-                    # After timeout, the new instance might be pending, created(without server and instance) or killed.
+                    # After timeout, the new placement group might be pending,
+                    # created(without server and instance), rescheduling or killed.
                     self.last_timeout_instance_id = new_instance_id
                     await asyncio.sleep(interval)
                     continue

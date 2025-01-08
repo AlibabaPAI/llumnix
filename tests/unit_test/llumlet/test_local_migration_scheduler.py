@@ -57,6 +57,18 @@ class MockRequest(LlumnixRequest):
     def prefill_num_blocks(self) -> int:
         pass
 
+    @property
+    def n_blocks(self) -> int:
+        pass
+
+    @property
+    def token_ids(self) -> int:
+        pass
+
+    @property
+    def block_size(self) -> int:
+        pass
+
 class MockeEngine():
     def __init__(self) -> None:
         self.running = []

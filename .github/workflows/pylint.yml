@@ -29,4 +29,4 @@ jobs:
           -v ${PWD}:/workspace \
           -w /workspace \
           registry.cn-beijing.aliyuncs.com/llumnix/llumnix-dev:20240909_action_678a439 \
-          bash -c "pip install -e . > /dev/null && make lint"
+          bash -c "pip uninstall vllm && pip install -e . > /dev/null && make lint"

@@ -359,7 +359,6 @@ def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queu
     assert len(instance_ids) == 4
     ray.get(manager._clear_instance_ray_resources.remote(instance_ids[0]))
     ray.get(manager._clear_instance_ray_resources.remote(instance_ids[1]))
-    # TODO(s5u13b): Get ray queue rpc error or some instances died sometimes.
     time.sleep(30.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4

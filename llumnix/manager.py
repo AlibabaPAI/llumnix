@@ -53,11 +53,8 @@ WAIT_PLACEMENT_GROUP_TIMEOUT = 5.0
 CHECK_DEPLOYMENT_STATES_INTERVAL = 30.0
 WATCH_DEPLOYMENT_INTERVAL = 40.0
 
-# TODO(s5u13b): Fix the logger when manager failover.
 # TODO(s5u13b): Handle exception of ray operations.
-# TODO(s5u13b): Update the documents of global deployment.
 # TODO(s5u13b): Add exeception handling wrapper.
-# TODO(s5u13b): Update Arguments.md.
 # TODO(s5u13b): Reorganize constant variables.
 
 

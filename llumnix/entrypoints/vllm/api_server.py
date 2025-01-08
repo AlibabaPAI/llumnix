@@ -44,7 +44,6 @@ llumnix_client: LlumnixClientVLLM = None
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
-    # TODO(s5u13b): Do not run request output queue in event loop of api server.
     asyncio.create_task(llumnix_client.request_output_queue.run_server_loop())
     asyncio.create_task(llumnix_client.get_request_outputs_loop())
     yield

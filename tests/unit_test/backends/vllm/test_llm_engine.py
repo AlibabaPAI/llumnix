@@ -66,10 +66,11 @@ def test_llm_engine_from_engine_args(ray_env):
 def test_llm_engine_add_requset(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     latency_data = LatencyMemData({},{},{})
+    placement_group = initialize_placement_group(instance_id="0", num_cpus=1, num_gpus=0, detached=True)
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args,
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
-                                                   placement_group=None,
+                                                   placement_group=placement_group,
                                                    latency_mem = latency_data,
                                                    migration_config=None)
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)

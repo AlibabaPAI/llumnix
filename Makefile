@@ -17,7 +17,7 @@ init:
 
 .PHONY: install
 install:
-	@pip install -e .[vllm]
+	@pip install -e .
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed

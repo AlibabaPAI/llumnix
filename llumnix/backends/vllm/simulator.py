@@ -44,6 +44,7 @@ class BackendSimVLLM(BackendVLLM):
                                                                           request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
+                                                                          placement_group=placement_group,
                                                                           latency_mem=latency_mem)
         self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
                                  for _ in range(engine_args.pipeline_parallel_size)]

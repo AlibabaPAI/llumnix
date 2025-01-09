@@ -182,7 +182,8 @@ def test_init_llumlet(ray_env, llumlet):
 
 def test_init_instances(ray_env, manager):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+    _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+    num_instances = len(instances)
     manager_args = ManagerArgs()
     assert num_instances == manager_args.initial_instances
 
@@ -192,7 +193,8 @@ def test_init_instances_sim(ray_env, manager):
     import llumnix.backends.vllm.simulator
     llumnix.backends.vllm.simulator.BackendSimVLLM = MockBackendSim
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+    _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
+    num_instances = len(instances)
     manager_args = ManagerArgs()
     assert num_instances == manager_args.initial_instances
 

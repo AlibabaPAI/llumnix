@@ -29,6 +29,7 @@ __all__ = [
     "connect_to_ray_cluster",
     "init_manager",
     "EngineManagerArgs",
+    "InstanceArgs",
     "LLMEngineManager",
     "Llumlet",
     "QueueType",

@@ -20,15 +20,15 @@ from collections import defaultdict
 import traceback
 from functools import partial
 import ray
+from loguru import logger
 
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
 from llumnix.instance_info import InstanceInfo
 from llumnix.internal_config import GlobalSchedulerConfig
-from llumnix.arg_utils import EngineManagerArgs
+from llumnix.arg_utils import EngineManagerArgs, InstanceArgs
 from llumnix.backends.profiling import ProfilingDatabase
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
@@ -39,8 +39,6 @@ from llumnix.utils import (random_uuid,
                            INSTANCE_NAME_PREFIX)
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import initialize_placement_group
-
-logger = init_logger(__name__)
 
 MANAGER_ACTOR_NAME = 'manager'
 CLEAR_REQUEST_INSTANCE_INTERVAL = 3600
@@ -194,7 +192,6 @@ class LLMEngineManager:
                 self.scale_down(instance_id)
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(ret))
                 logger.info("[_update_instance_info_loop] dead instances: {}.".format(self.instances))
-
         while True:
             try:
                 await asyncio.sleep(interval)
@@ -255,6 +252,7 @@ class LLMEngineManager:
                         logger.info("[_migrate] instance {} is dead".format(instance_id))
                         self.scale_down(instance_id)
             else:
+                logger.info("[_migrate] migrate done, {}, {}", ret, migrate_instance_pair)
                 migrate_out_request_ids = ret
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
@@ -262,16 +260,19 @@ class LLMEngineManager:
                 logger.info("[_migrate] {}->{} migrate done, migrate request {}".format(
                     migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
-            ret = fut.result()
+            ret = fut.result()[0]
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
 
         try:
             migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
+            if len(migrate_instance_pairs) > 0:
+                logger.info(f"migrate_instance_pairs: {migrate_instance_pairs}")
             migration_tasks = []
             for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
                 migrate_out_instance_id, migrate_in_instance_id = migrate_instance_pair
                 if self.instance_migrating[migrate_out_instance_id] or self.instance_migrating[migrate_in_instance_id]:
+                    logger.info(f"migrate_instance_pairs: {migrate_instance_pairs} is migrating")
                     continue
                 self.instance_migrating[migrate_out_instance_id] = True
                 self.instance_migrating[migrate_in_instance_id] = True
@@ -348,7 +349,8 @@ class LLMEngineManager:
         # Restore migrate config
         self.enable_migration = origin_config
 
-    def scale_up(self, instance_id: Union[str, Iterable[str]], llumlet_actor_handles: List["ray.actor.ActorHandle"]) -> None:
+    def scale_up(self, instance_id: Union[str, Iterable[str]], instance_args: List[InstanceArgs],
+                 llumlet_actor_handles: List["ray.actor.ActorHandle"]) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
@@ -364,7 +366,7 @@ class LLMEngineManager:
                 if self.log_instance_info:
                     self.instance_last_logged_empty[ins_id] = False
                 self.pending_rebuild_migration_instances += 1
-        self.global_scheduler.scale_up(instance_ids)
+        self.global_scheduler.scale_up(instance_ids, instance_args)
         self.num_instances = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
@@ -434,6 +436,7 @@ class LLMEngineManager:
                                 if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []
+        scale_up_instance_args = []
         scale_up_instance_actor_handles = []
         tasks = []
         for instance_actor_name, instance_actor_handle in zip(instance_actor_names, instance_actor_handles):
@@ -444,7 +447,7 @@ class LLMEngineManager:
                 tasks.append(task)
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
-        self.scale_up(scale_up_instance_ids, scale_up_instance_actor_handles)
+        self.scale_up(scale_up_instance_ids, scale_up_instance_args, scale_up_instance_actor_handles)
 
     async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
         def check_instance_error_done_callback(idx: int, instance_id: str, fut):

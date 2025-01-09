@@ -24,7 +24,7 @@ from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
-from llumnix.arg_utils import EngineManagerArgs
+from llumnix.arg_utils import EngineManagerArgs, InstanceArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.queue.utils import init_request_output_queue_server
@@ -74,7 +74,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         sys.exit(1)
     ray_start_command = None
     if 'HEAD_NODE' in os.environ:
-        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
+        ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port} --log-dir=/mnt/xinyi/custom_logs"
         try:
             result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
         except subprocess.CalledProcessError as e:
@@ -152,12 +152,11 @@ def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
     return manager
 
 def init_llumnix_components(engine_manager_args: EngineManagerArgs,
+                            instance_args: InstanceArgs,
                             engine_args,
                             request_output_queue_type: QueueType,
                             ip: str,
-                            request_output_queue_port: str,
-                            *args,
-                            **kwargs
+                            request_output_queue_port: str
                             ):
     manager = init_manager(engine_manager_args)
     instance_ids, llumlets = retry_manager_method_sync(
@@ -186,16 +185,16 @@ def init_llumnix_components(engine_manager_args: EngineManagerArgs,
 
     return manager, available_instance_ids, available_llumlets, request_output_queue
 
-def setup_llumnix(engine_manager_args, engine_args, cfg, *args, **kwargs):
+def setup_llumnix(engine_manager_args: EngineManagerArgs, instance_args: InstanceArgs, engine_args, cfg,
+                  backend_type: BackendType, world_size):
     ip = get_ip_address()
     manager, instance_ids, llumlets, request_output_queue = \
         init_llumnix_components(engine_manager_args,
+                                instance_args,
                                 engine_args,
                                 cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,
                                 ip,
-                                cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT,
-                                *args,
-                                **kwargs)
+                                cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT,)
     server_id = random_uuid()
     server_info = ServerInfo(server_id,
                              cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,

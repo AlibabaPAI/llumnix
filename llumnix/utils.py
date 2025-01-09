@@ -53,40 +53,22 @@ def initialize_placement_group(
             "serving.")
 
     lifetime = "detached" if detached else None
-    # Create placement group for worker processes
-    current_placement_group = ray.util.get_current_placement_group()
-    if current_placement_group:
-        # We are in a placement group
-        bundles = current_placement_group.bundle_specs
-        # Verify that we can use the placement group.
-        gpu_bundles = 0
-        for bundle in bundles:
-            bundle_gpus = bundle.get("GPU", 0)
-            if bundle_gpus > 1:
-                raise ValueError(
-                    "Placement group bundle cannot have more than 1 GPU.")
-            if bundle_gpus:
-                gpu_bundles += 1
-        if num_gpus > gpu_bundles:
-            raise ValueError(
-                "The number of required GPUs exceeds the total number of "
-                "available GPUs in the placement group.")
-    else:
-        num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
-        if num_gpus > num_gpus_in_cluster:
-            raise ValueError(
-                "The number of required GPUs exceeds the total number of "
-                "available GPUs in the cluster.")
-        # Create a new placement group
-        # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Workers
-        placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
-        current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
-        # Wait until PG is ready - this will block until all
-        # requested resources are available, and will timeout
-        # if they cannot be provisioned.
-        if block:
-            ray.get(current_placement_group.ready(), timeout=1800)
+
+    num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
+    if num_gpus > num_gpus_in_cluster:
+        raise ValueError(
+            "The number of required GPUs exceeds the total number of "
+            "available GPUs in the cluster.")
+    # Create a new placement group
+    # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Workers
+    placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
+    current_placement_group = ray.util.placement_group(
+        placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
+    # Wait until PG is ready - this will block until all
+    # requested resources are available, and will timeout
+    # if they cannot be provisioned.
+    if block:
+        ray.get(current_placement_group.ready(), timeout=1800)
 
     return current_placement_group
 

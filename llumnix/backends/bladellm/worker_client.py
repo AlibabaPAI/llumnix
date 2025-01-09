@@ -11,10 +11,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 from blade_llm.service.workers.worker_client import LocalWorkerClient, ResponseMode
-from blade_llm.service.proto.bladellm_pb2 import WorkerMetaRequest, WorkerDummyRequest
+from blade_llm.service.proto.bladellm_pb2 import WorkerMetaRequest
 
 
 class LocalWorkerClientLlumnix(LocalWorkerClient):

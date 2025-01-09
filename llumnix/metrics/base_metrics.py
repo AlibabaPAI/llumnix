@@ -13,7 +13,7 @@
 
 from abc import ABC, abstractmethod
 
-from llumnix.metrics.variable import _REGISTRY, Status, PassiveStatus
+from llumnix.metrics.variable import _REGISTRY, Status
 from llumnix.metrics.dumper import Dumper, DummyDumper
 from llumnix.instance_info import InstanceInfo
 

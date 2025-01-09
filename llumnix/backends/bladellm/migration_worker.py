@@ -29,7 +29,6 @@ from blade_llm.service.proto import bladellm_pb2
 from llumnix.entrypoints.setup import get_ip_address
 from llumnix.backends.bladellm.migration_backend import get_migration_backend
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
-from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateCacheResponse
 from llumnix.internal_config import MigrationConfig
 
 class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):

@@ -74,7 +74,7 @@ class BackendInterface(ABC):
     # Methods for migration
     @abstractmethod
     async def get_request_incremental_blocks(self, backend_request: LlumnixRequest,
-                                             pre_stage_num_blocks: int, last_stage_max_blocks: int) -> List[int]:
+                                             pre_stage_num_blocks: int) -> List[int]:
         """Retrieves the incremental block table for a given request.
 
         This method is used to fetch a list of block numbers that represent the incremental

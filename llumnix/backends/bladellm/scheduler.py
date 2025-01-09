@@ -53,8 +53,8 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
         if isinstance(batches[0], GenerationGroupState):
             return [b for b in batches if b.request_group_id not in self.running_filter_request_ids]
-        else:
-            return [b for b in batches if b not in self.running_filter_request_ids]
+
+        return [b for b in batches if b not in self.running_filter_request_ids]
 
     def step(self) -> SchedulerStepOutput:
         step_out = super().step()
@@ -234,7 +234,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     def get_num_cached_request_ids(self) -> int:
         return len(self.id2group)
-    
+
     def get_num_blocks_all_waiting_requests(self) -> int:
         num_blocks_all_waiting_requests = 0
         for gen_group_state in self.waiting:

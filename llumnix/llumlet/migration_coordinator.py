@@ -113,10 +113,10 @@ class MigrationCoordinator:
 
             pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
             incremental_blocks, is_last_stage = await self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
-            
+
             if migrate_out_request.should_abort_migration():
                 return MigrationStatus.ABORTED_SRC
-            
+
             # live migration, transfer all blocks except last one(currently updating)
             if not is_last_stage:
                 migration_status = MigrationStatus.RUNNING

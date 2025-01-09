@@ -13,7 +13,6 @@
 
 # pylint: disable=protected-access
 
-import copy
 from functools import partial
 import json
 import traceback
@@ -33,7 +32,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
 from blade_llm.protocol import GenerateStreamResponse, ServerRequest
-from blade_llm.service.proto.bladellm_pb2 import WorkerStepResponse, WorkerDummyRequest
+from blade_llm.service.proto.bladellm_pb2 import WorkerStepResponse
 from blade_llm.service.communications.engine_wrapper import APIWrapper
 from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
@@ -182,7 +181,7 @@ class AsyncLLMEngineLlumnixMixin:
                 request_barrier.notify()
                 self._scheduler.remove_running_request(request_barrier.request_id)
             self._scheduler.running_filter_request_ids = self._scheduler.running_filter_request_ids - running_filter_request_ids
-        
+
         barrier_size = self.request_barriers.qsize()
         if barrier_size > 0:
             all_request_barriers = []
@@ -283,10 +282,10 @@ class AsyncLLMEngineLlumnixMixin:
     # metrics
     def get_num_trans_wrapper_cached_request(self):
         return len(self.trans_wrapper.request_server_map)
-    
+
     def get_all_request_ids(self) -> List[int]:
         return list(self._scheduler.get_all_request_ids())
-    
+
     def get_num_wait_update_request_ids(self) -> int:
         return self.request_barriers.qsize()
 
@@ -417,24 +416,18 @@ class BackendBladeLLM(BackendInterface):
 
     async def get_request_incremental_blocks(self, backend_request: GenerationGroupStateLlumnix,
                                              pre_stage_num_blocks: int) -> List[int]:
-        try:
-            if backend_request.request_id not in self.engine.scheduler.id2group:
-                return [], False
+        if backend_request.request_id not in self.engine.scheduler.id2group:
+            return [], False
 
+        incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
+        is_last_stage = (len(incremental_blocks) <= self.migration_config.last_stage_max_blocks) or backend_request.blocking_migration
+        if is_last_stage:
+            request_barrier = RequestBarrier(backend_request.request_id)
+            self.request_barriers.put_nowait(request_barrier)
+            self.engine.inject_request_barriers()
+            await request_barrier.wait()
             incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
-            is_last_stage = (len(incremental_blocks) <= self.migration_config.last_stage_max_blocks) or backend_request.blocking_migration
-            if is_last_stage:
-                request_barrier = RequestBarrier(backend_request.request_id)
-                self.request_barriers.put_nowait(request_barrier)
-                self.engine.inject_request_barriers()
-                logger.debug("request {} wait for barrier", backend_request.request_id)
-                await request_barrier.wait()
-                logger.debug("request {} wakeup from barrier", backend_request.request_id)
-                incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
-            logger.debug("request {} finish get_request_incremental_blocks, incremental_blocks: {}, is_last_stage: {}",
-                        backend_request.request_id, len(incremental_blocks), is_last_stage)
-        except:
-            logger.exception("Error in get_request_incremental_blocks")
+
         return incremental_blocks, is_last_stage
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:
@@ -471,7 +464,7 @@ class BackendBladeLLM(BackendInterface):
         self.engine.trans_wrapper.drop_request(backend_request.request_id)
         return self.engine.scheduler.free_src_request(backend_request)
 
-    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int, 
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
                           src_blocks: List[int], dst_blocks: List[int], has_more: bool):
         worker_infos = []
         for index, ip_addr in enumerate(self.src_worker_ip_address):

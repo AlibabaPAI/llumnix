@@ -31,9 +31,6 @@ def detect_unsupported_feature(engine_args: ServingArgs) -> None:
 
 def check_engine_args(engine_args: ServingArgs, engine_manager_args: EngineManagerArgs) -> None:
     migration_config = engine_manager_args.create_migration_config()
-    if (engine_args.tensor_parallel_size > 1 or engine_args.tensor_parallel_size > 1) and \
-        migration_config.migration_backend == 'nccl':
-        logger.info("Llumnix does not support TP or PP enabled model when the migration backend is nccl, \
-                    change migration backend to gloo.")
-        engine_manager_args.migration_backend = 'gloo'
+    assert migration_config.migration_backend in ['grpc', 'kvtransfer'], \
+        f'Unsupported migration backend for BladeLLM: {migration_config.migration_backend}'
     detect_unsupported_feature(engine_args)

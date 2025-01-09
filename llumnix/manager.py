@@ -541,7 +541,6 @@ class Manager:
                      placement_group: PlacementGroup,
                      entrypoints_args: EntrypointsArgs) -> FastAPIServerActor:
         entrypoints_args = copy.deepcopy(entrypoints_args)
-        # TODO(s5u13b): Temporary workaround for port conflict, will be failed when manager restarts.
         if self.manager_args.enable_port_increment:
             entrypoints_args.port += self.port_offset
             entrypoints_args.request_output_queue_port += self.port_offset

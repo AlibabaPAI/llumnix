@@ -17,9 +17,7 @@ import threading
 from typing import Any, Union
 import ray
 from ray.util.placement_group import PlacementGroup
-import ray.cloudpickle as pickle
 from ray.experimental.internal_kv import (
-    _internal_kv_del,
     _internal_kv_get,
     _internal_kv_initialized,
     _internal_kv_put,

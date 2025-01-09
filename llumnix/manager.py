@@ -37,7 +37,8 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placeme
                            get_instance_name, get_manager_name, INSTANCE_NAME_PREFIX,
                            SERVER_NAME_PREFIX, get_placement_group_name, run_async_func_sync,
                            kill_server, kill_instance, initialize_placement_group,
-                           get_server_name)
+                           get_server_name, get_actor_data_from_ray_internal_kv,
+                           put_actor_data_to_ray_internal_kv)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
@@ -131,7 +132,8 @@ class Manager:
         asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
-        self.port_count = 0
+        value = get_actor_data_from_ray_internal_kv("manager", "port_offset")
+        self.port_offset = 0 if value is None else int(value)
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
             self.last_timeout_instance_id = None
@@ -539,10 +541,12 @@ class Manager:
                      placement_group: PlacementGroup,
                      entrypoints_args: EntrypointsArgs) -> FastAPIServerActor:
         entrypoints_args = copy.deepcopy(entrypoints_args)
+        # TODO(s5u13b): Temporary workaround for port conflict, will be failed when manager restarts.
         if self.manager_args.enable_port_increment:
-            entrypoints_args.port += self.port_count
-            entrypoints_args.request_output_queue_port += self.port_count
-            self.port_count += 1
+            entrypoints_args.port += self.port_offset
+            entrypoints_args.request_output_queue_port += self.port_offset
+            self.port_offset += 1
+            put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
         fastapi_server = FastAPIServerActor.from_args(server_name, placement_group, entrypoints_args)
         return fastapi_server
 

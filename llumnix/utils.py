@@ -14,8 +14,16 @@
 import uuid
 import asyncio
 import threading
+from typing import Any, Union
 import ray
 from ray.util.placement_group import PlacementGroup
+import ray.cloudpickle as pickle
+from ray.experimental.internal_kv import (
+    _internal_kv_del,
+    _internal_kv_get,
+    _internal_kv_initialized,
+    _internal_kv_put,
+)
 
 from llumnix.logger import init_logger
 
@@ -150,3 +158,26 @@ def run_async_func_sync(func):
     thread = threading.Thread(target=run_task)
     thread.start()
     thread.join()
+
+def _make_key(actor_name: str, data_name: str):
+    """Generate a binary key for the given actor name and data.
+
+    Args:
+        actor_name: The name of the actor
+        data_name: The data member of the actor
+
+    Returns:
+        The key to use for storing a the value.
+    """
+    return (actor_name.encode("ascii") + b"." + data_name.encode("ascii"))
+
+def get_actor_data_from_ray_internal_kv(actor_name: str, data_name: str) -> Union[str, None]:
+    value = None
+    if _internal_kv_initialized():
+        value = _internal_kv_get(_make_key(actor_name, data_name))
+    print(f"value: {value}")
+    return value if value is None else value.decode()
+
+def put_actor_data_to_ray_internal_kv(actor_name: str, data_name: str, value: Any):
+    if _internal_kv_initialized():
+        _internal_kv_put(_make_key(actor_name, data_name), f"{value}".encode(), overwrite=True)

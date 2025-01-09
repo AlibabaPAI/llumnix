@@ -59,6 +59,7 @@ class EntrypointsArgs:
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
     config_file: str = None
+    disable_keep_serve_process_alive: bool = None
 
     def __post_init__(self):
         for attr in dataclasses.fields(self):

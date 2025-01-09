@@ -44,6 +44,8 @@ _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
 _C.SERVER.LOG_REQUEST_TIMESTAMPS = False
 # Path to config file of arguments
 _C.SERVER.CONFIG_FILE = None
+# Disable keep serve process alive
+_C.SERVER.DISABLE_KEEP_SERVE_PROCESS_ALIVE = False
 
 # -----------------------------------------------------------------------------
 # RAY CONFIGURATION

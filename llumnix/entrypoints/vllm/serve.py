@@ -19,6 +19,7 @@ if __name__ == "__main__":
     parser.add_argument("--ssl-keyfile", type=str)
     parser.add_argument("--ssl-certfile", type=str)
     parser.add_argument("--log-level", type=str)
+    parser.add_argument('--disable-keep-serve-process-alive', action='store_true')
 
     cli_args = add_cli_args(parser)
     cfg = get_llumnix_config(cli_args.config_file, cli_args)
@@ -36,5 +37,6 @@ if __name__ == "__main__":
     setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args)
 
     # keep the process alive to get the terminal output.
-    while True:
-        time.sleep(100.0)
+    if not entrypoints_args.disable_keep_serve_process_alive:
+        while True:
+            time.sleep(100.0)

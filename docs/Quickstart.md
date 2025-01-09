@@ -69,7 +69,7 @@ Following these steps, Llumnix acts as the request scheduling layer situated beh
 
 ## Global Deployment
 
-Llumnix also supports deploying multiple servers and instances at once by running `python -m vllm.entrypoints.serve`, which is named as global deployment.
+Llumnix also supports deploying multiple servers and instances at once by running `python -m entrypoints.vllm.serve`, which is named as global deployment.
 
 ```
 python -m llumnix.entrypoints.vllm.serve \

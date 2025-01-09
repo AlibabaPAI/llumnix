@@ -98,7 +98,8 @@ HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
                 --model $MODEL_PATH \
                 --engine-use-ray \
                 --worker-use-ray \
-                --max-model-len 4096
+                --max-model-len 4096 \
+                --migration-backend rayrpc \
 ```
 `CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node, 
 

@@ -64,12 +64,12 @@ def parse_log_file():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("deployment_mode", ['global', 'local'])
-async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, deployment_mode):
+@pytest.mark.parametrize("launch_mode", ['global', 'local'])
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode):
     ip = "127.0.0.1"
     base_port = 37037
     ip_ports = []
-    if deployment_mode == 'local':
+    if launch_mode == 'local':
         device_count = torch.cuda.device_count()
         for i in range(device_count):
             port = base_port+i
@@ -129,7 +129,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, deploy
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    if deployment_mode == 'local':
+    if launch_mode == 'local':
         with open("performance.txt", "w", encoding="utf-8") as f:
             f.write(parse_log_file())
 

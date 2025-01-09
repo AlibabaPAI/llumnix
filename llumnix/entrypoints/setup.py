@@ -22,12 +22,12 @@ from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logger import init_logger
 from llumnix.utils import random_uuid, get_manager_name
-from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, DeploymentArgs
+from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address, retry_manager_method_sync
-from llumnix.entrypoints.utils import DeploymentMode
+from llumnix.entrypoints.utils import LaunchMode
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
 
@@ -89,14 +89,14 @@ def setup_ray_cluster(entrypoints_args) -> None:
 def init_manager(manager_args: ManagerArgs,
                  entrypoints_args: EntrypointsArgs = None,
                  engine_args = None,
-                 deployment_args: DeploymentArgs = None,
+                 launch_args: LaunchArgs = None,
                  ) -> Manager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:
         manager = Manager.from_args(manager_args=manager_args,
                                     entrypoints_args=entrypoints_args,
                                     engine_args=engine_args,
-                                    deployment_args=deployment_args)
+                                    launch_args=launch_args)
         logger.info("Init Manager on current node.")
     except ValueError:
         manager = ray.get_actor(get_manager_name(), namespace='llumnix')
@@ -143,21 +143,21 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
                                              log_request_timestamps)
 
     return entrypoints_context
-def _setup_llumnix_local(manager_args, entrypoints_args, engine_args, deployment_args) -> EntrypointsContext:
+def _setup_llumnix_local(manager_args, entrypoints_args, engine_args, launch_args) -> EntrypointsContext:
     manager, instance_ids, instances, request_output_queue = \
         init_llumnix_components(manager_args,
                                 engine_args,
                                 QueueType(entrypoints_args.request_output_queue_type),
                                 entrypoints_args.request_output_queue_port,
-                                deployment_args.backend_type)
+                                launch_args.backend_type)
 
     return setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue)
 
-def _setup_llumnix_global(manager_args, entrypoints_args, engine_args, deployment_args) -> None:
-    _ = init_manager(manager_args, entrypoints_args, engine_args, deployment_args)
+def _setup_llumnix_global(manager_args, entrypoints_args, engine_args, launch_args) -> None:
+    _ = init_manager(manager_args, entrypoints_args, engine_args, launch_args)
 
-def setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args) -> Optional[EntrypointsContext]:
-    if deployment_args.deployment_mode == DeploymentMode.LOCAL:
-        return _setup_llumnix_local(manager_args, entrypoints_args, engine_args, deployment_args)
+def setup_llumnix(manager_args, entrypoints_args, engine_args, launch_args) -> Optional[EntrypointsContext]:
+    if launch_args.launch_mode == LaunchMode.LOCAL:
+        return _setup_llumnix_local(manager_args, entrypoints_args, engine_args, launch_args)
 
-    return _setup_llumnix_global(manager_args, entrypoints_args, engine_args, deployment_args)
+    return _setup_llumnix_global(manager_args, entrypoints_args, engine_args, launch_args)

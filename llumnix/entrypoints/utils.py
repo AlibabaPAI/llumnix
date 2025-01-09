@@ -14,7 +14,7 @@ RETRIES_INTERVALS = 0.1
 logger = init_logger(__name__)
 
 
-class DeploymentMode(str, Enum):
+class LaunchMode(str, Enum):
     LOCAL = "LOCAL"
     GLOBAL = "GLOBAL"
 

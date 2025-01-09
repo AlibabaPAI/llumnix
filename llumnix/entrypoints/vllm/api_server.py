@@ -22,7 +22,7 @@ import uvicorn
 
 from vllm.sampling_params import SamplingParams
 
-from llumnix.arg_utils import LlumnixArgumentParser, DeploymentArgs
+from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.utils import init_per_token_latency_breakdown_dict, record_per_token_latency_breakdown
 from llumnix.entrypoints.vllm.arg_utils import add_cli_args, get_args
@@ -31,7 +31,7 @@ from llumnix.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
-from llumnix.entrypoints.utils import DeploymentMode, is_gpu_available
+from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm.api_server")
@@ -182,14 +182,14 @@ if __name__ == "__main__":
     cfg = get_llumnix_config(cli_args.config_file, cli_args)
     entrypoints_args, manager_args, engine_args = get_args(cfg, parser, cli_args)
 
-    deployment_args = DeploymentArgs(deployment_mode=DeploymentMode.LOCAL, backend_type=BackendType.VLLM)
+    launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.VLLM)
 
     # Launch or connect to the ray cluster for multi-node serving.
     setup_ray_cluster(entrypoints_args)
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():
-        entrypoints_context = setup_llumnix(manager_args, entrypoints_args, engine_args, deployment_args)
+        entrypoints_context = setup_llumnix(manager_args, entrypoints_args, engine_args, launch_args)
         llumnix_client = LlumnixClientVLLM(entrypoints_context)
 
         # Start the api server after all the components of llumnix are ready.

@@ -19,7 +19,7 @@ import numpy as np
 
 from vllm import EngineArgs
 
-from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, DeploymentArgs
+from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs
 from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo
 from llumnix.server_info import ServerInfo
@@ -28,7 +28,7 @@ from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
-from llumnix.entrypoints.utils import DeploymentMode
+from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
                            remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
                            kill_instance, random_uuid, get_manager_name)
@@ -116,17 +116,17 @@ def init_manager():
     ray.get(manager.is_ready.remote())
     return manager
 
-def init_manager_with_deployment_mode(deployment_mode, request_output_queue_type="rayqueue"):
+def init_manager_with_launch_mode(launch_mode, request_output_queue_type="rayqueue"):
     manager_args = ManagerArgs(migration_backend="rayrpc", enable_port_increment=True)
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type=request_output_queue_type)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    deployment_args = DeploymentArgs(deployment_mode=deployment_mode, backend_type=BackendType.VLLM)
+    launch_args = LaunchArgs(launch_mode=launch_mode, backend_type=BackendType.VLLM)
     manager = Manager.from_args(manager_args=manager_args,
                                 entrypoints_args=entrypoints_args,
                                 engine_args=engine_args,
-                                deployment_args=deployment_args)
+                                launch_args=launch_args)
     ray.get(manager.is_ready.remote())
-    return manager, manager_args, entrypoints_args, engine_args, deployment_args
+    return manager, manager_args, entrypoints_args, engine_args, launch_args
 
 def init_instances(initial_instances):
     instance_ids = []
@@ -315,7 +315,7 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
             assert num_migrate_in == 0 and num_migrate_out == 0
 
 def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
-    manager, _, _, engine_args, _ = init_manager_with_deployment_mode(DeploymentMode.LOCAL)
+    manager, _, _, engine_args, _ = init_manager_with_launch_mode(LaunchMode.LOCAL)
     instance_id = random_uuid()
     pg = ray.get(manager._init_placement_group.remote(get_placement_group_name(instance_id),
                                                       engine_args, BackendType.VLLM, init_server=True))
@@ -344,7 +344,7 @@ def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
 
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
 def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queue_type):
-    manager, _, _, _, _ = init_manager_with_deployment_mode(DeploymentMode.GLOBAL, request_output_queue_type)
+    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
     time.sleep(30.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
@@ -365,7 +365,7 @@ def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queu
 
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
 def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_output_queue_type):
-    manager, _, _, _, _ = init_manager_with_deployment_mode(DeploymentMode.GLOBAL, request_output_queue_type)
+    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
     time.sleep(30.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4

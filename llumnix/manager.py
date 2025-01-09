@@ -30,7 +30,7 @@ from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
 from llumnix.instance_info import InstanceInfo
-from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, DeploymentArgs
+from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placement_group,
@@ -38,7 +38,7 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placeme
                            SERVER_NAME_PREFIX, get_placement_group_name, run_async_func_sync,
                            kill_server, kill_instance, initialize_placement_group,
                            get_server_name)
-from llumnix.entrypoints.utils import DeploymentMode
+from llumnix.entrypoints.utils import LaunchMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
 from llumnix.entrypoints.vllm.api_server_actor import FastAPIServerActor
@@ -64,7 +64,7 @@ class Manager:
                  work_dir: str,
                  entrypoints_args: EntrypointsArgs = None,
                  engine_args = None,
-                 deployment_args: DeploymentArgs = None
+                 launch_args: LaunchArgs = None
                  ) -> None:
         os.chdir(work_dir)
         self.actor_name = get_manager_name()
@@ -72,12 +72,12 @@ class Manager:
         # engine_args and entrypoints_args are used in global deployment.
         self.entrypoints_args = entrypoints_args
         self.engine_args = engine_args
-        self.deployment_args = deployment_args
+        self.launch_args = launch_args
 
-        # deployment args
-        if deployment_args is not None:
-            self.deployment_mode: DeploymentMode = deployment_args.deployment_mode
-            self.backend_type: BackendType = deployment_args.backend_type
+        # launch args
+        if launch_args is not None:
+            self.launch_mode: LaunchMode = launch_args.launch_mode
+            self.backend_type: BackendType = launch_args.backend_type
 
         # migration args
         self.enable_migration = manager_args.enable_migration
@@ -132,7 +132,7 @@ class Manager:
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
         self.port_count = 0
-        if hasattr(self, "deployment_mode") and self.deployment_mode == DeploymentMode.GLOBAL:
+        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
             self.last_timeout_instance_id = None
             asyncio.create_task(self._auto_scale_up_loop(AUTO_SCALE_UP_INTERVAL))
@@ -499,7 +499,7 @@ class Manager:
                   manager_args: ManagerArgs,
                   entrypoints_args: EntrypointsArgs = None,
                   engine_args = None,
-                  deployment_args: DeploymentArgs = None,
+                  launch_args: LaunchArgs = None,
                   ) -> "Manager":
         manager_class = ray.remote(num_cpus=1,
                                    max_restarts=-1,
@@ -510,7 +510,7 @@ class Manager:
                                        os.getcwd(),
                                        entrypoints_args,
                                        engine_args,
-                                       deployment_args)
+                                       launch_args)
 
         return manager
 

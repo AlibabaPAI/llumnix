@@ -22,7 +22,7 @@ from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.backends.backend_interface import BackendType
-from llumnix.entrypoints.utils import DeploymentMode
+from llumnix.entrypoints.utils import LaunchMode
 
 
 class LlumnixArgumentParser(argparse.ArgumentParser):
@@ -354,6 +354,6 @@ class ManagerArgs:
         return parser
 
 @dataclass
-class DeploymentArgs:
-    deployment_mode: DeploymentMode = None
+class LaunchArgs:
+    launch_mode: LaunchMode = None
     backend_type: BackendType = None

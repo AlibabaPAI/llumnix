@@ -59,6 +59,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     continue
                 await self.request_streams[request_id].put(request_output)
                 if request_output.is_finished:
+                    logger.debug("client recv request output: {}".format(request_output))
                     del self.entrypoint_id2llumnix_id[self.llumnix_id2entrypoint_id[request_id]]
                     del self.llumnix_id2entrypoint_id[request_id]
                     del self.request_streams[request_id]

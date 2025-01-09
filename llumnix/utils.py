@@ -173,9 +173,12 @@ def get_actor_data_from_ray_internal_kv(actor_name: str, data_name: str) -> Unio
     value = None
     if _internal_kv_initialized():
         value = _internal_kv_get(_make_key(actor_name, data_name))
-    print(f"value: {value}")
-    return value if value is None else value.decode()
+    if value is not None:
+        value = value.decode()
+    logger.info("get {}.{} from ray internal key value store, value: {}".format(actor_name, data_name, value))
+    return value
 
 def put_actor_data_to_ray_internal_kv(actor_name: str, data_name: str, value: Any):
     if _internal_kv_initialized():
         _internal_kv_put(_make_key(actor_name, data_name), f"{value}".encode(), overwrite=True)
+        logger.debug("put {}.{} to ray internal key value store, value: {}".format(actor_name, data_name, value))

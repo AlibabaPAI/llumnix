@@ -36,7 +36,7 @@ class MockManagerServer(MockManager):
         ray.get(self.server.run.remote())
 
     def init_server(self, entrypoints_args):
-        server = FastAPIServer.options(name=ENTRYPOINTS_ACTOR_NAME,
+        server = FastAPIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME,
                                        namespace='llumnix').remote(entrypoints_args)
         return server
 
@@ -52,7 +52,7 @@ class MockManagerServer(MockManager):
 
 
 @ray.remote(num_cpus=1, lifetime="detached")
-class FastAPIServer:
+class FastAPIServerActor:
     def __init__(self, entrypoints_args):
         self.host = entrypoints_args.host
         self.port = entrypoints_args.port

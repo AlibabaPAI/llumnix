@@ -15,7 +15,7 @@ from llumnix.logger import init_logger
 logger = init_logger(__name__)
 
 
-class FastAPIServer:
+class FastAPIServerActor:
     def __init__(self, entrypoints_args: EntrypointsArgs):
         self.entrypoints_args = entrypoints_args
         self.request_output_queue_port = self.entrypoints_args.request_output_queue_port

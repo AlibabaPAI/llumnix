@@ -41,7 +41,7 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placeme
 from llumnix.entrypoints.utils import DeploymentMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
-from llumnix.entrypoints.vllm.api_server_actor import FastAPIServer
+from llumnix.entrypoints.vllm.api_server_actor import FastAPIServerActor
 
 logger = init_logger(__name__)
 
@@ -537,13 +537,13 @@ class Manager:
     def _init_server(self,
                      server_name: str,
                      placement_group: PlacementGroup,
-                     entrypoints_args: EntrypointsArgs) -> FastAPIServer:
+                     entrypoints_args: EntrypointsArgs) -> FastAPIServerActor:
         entrypoints_args = copy.deepcopy(entrypoints_args)
         if self.manager_args.enable_port_increment:
             entrypoints_args.port += self.port_count
             entrypoints_args.request_output_queue_port += self.port_count
             self.port_count += 1
-        fastapi_server = FastAPIServer.from_args(server_name, placement_group, entrypoints_args)
+        fastapi_server = FastAPIServerActor.from_args(server_name, placement_group, entrypoints_args)
         return fastapi_server
 
     def _init_instance(self,
@@ -653,7 +653,7 @@ class Manager:
 
         return results
 
-    def get_curr_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServer], Dict[str, Llumlet]]:
+    def get_curr_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServerActor], Dict[str, Llumlet]]:
         curr_pgs: Dict[str, PlacementGroup] = {}
         curr_servers: Dict[str, PlacementGroup] = {}
         curr_instances: Dict[str, Llumlet] = {}

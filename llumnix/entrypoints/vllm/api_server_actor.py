@@ -24,7 +24,7 @@ class FastAPIServer:
         self.request_output_queue = init_request_output_queue_server(
                                         ip, self.request_output_queue_port, self.request_output_queue_type)
 
-    def setup_entrypoints_context(self,
+    def _setup_entrypoints_context(self,
                                   manager: "ray.actor.ActorHandle",
                                   instance_id: str,
                                   instance: Llumlet):
@@ -52,7 +52,11 @@ class FastAPIServer:
                     ssl_keyfile=entrypoints_args.ssl_keyfile,
                     ssl_certfile=entrypoints_args.ssl_certfile)
 
-    def run(self):
+    def run(self,
+            manager: "ray.actor.ActorHandle",
+            instance_id: str,
+            instance: Llumlet):
+        self._setup_entrypoints_context(manager, instance_id, instance)
         self.run_uvicorn_server_thread = threading.Thread(
             target=self._run_uvicorn_server, args=(self.entrypoints_args, self.entrypoints_context),
             daemon=True, name="run_uvicorn_server"

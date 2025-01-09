@@ -33,7 +33,6 @@ class MockManagerServer(MockManager):
         self.request_output_queue = init_request_output_queue_client(
                                         QueueType(entrypoints_args.request_output_queue_type))
         self.server = self.init_server(entrypoints_args)
-        ray.get(self.server.setup_entrypoints_context.remote())
         ray.get(self.server.run.remote())
 
     def init_server(self, entrypoints_args):
@@ -59,13 +58,14 @@ class FastAPIServer:
         self.port = entrypoints_args.port
         self.request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
 
-    def setup_entrypoints_context(self):
+    def _setup_entrypoints_context(self):
         self.entrypoints_context = setup_entrypoints_context(self.request_output_queue_type)
 
     def _run_uvicorn_server(self):
         run_uvicorn_server(self.host, self.port, self.entrypoints_context)
 
     def run(self):
+        self._setup_entrypoints_context()
         self.run_uvicorn_server_thread = threading.Thread(
             target=self._run_uvicorn_server, args=(),
             daemon=True, name="run_uvicorn_server"

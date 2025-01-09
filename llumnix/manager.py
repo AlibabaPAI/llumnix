@@ -588,10 +588,8 @@ class Manager:
         async def done_scale_up():
             try:
                 manager = ray.get_actor(get_manager_name(), namespace="llumnix")
-                await server.is_ready.remote()
-                await server.setup_entrypoints_context.remote(manager, instance_id, instance)
                 await instance.is_ready.remote()
-                await server.run.remote()
+                await server.run.remote(manager, instance_id, instance)
                 self.scale_up(instance_id, instance)
             # pylint: disable=broad-except
             except Exception as e:

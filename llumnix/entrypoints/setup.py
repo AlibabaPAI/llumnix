@@ -113,29 +113,10 @@ def init_llumnix_components(manager_args: ManagerArgs,
     instance_ids, instances = retry_manager_method_sync(
         manager.init_instances.remote, 'init_instances', request_output_queue_type, backend_type, engine_args)
 
-    available_instance_ids: List[str] = []
-    dead_instance_ids: List[str] = []
-    available_instances: List[Llumlet] = []
-    ready_tasks = [instance.is_ready.remote() for instance in instances]
-    for idx, task in enumerate(ready_tasks):
-        try:
-            ray.get(task)
-            available_instance_ids.append(instance_ids[idx])
-            available_instances.append(instances[idx])
-        except ray.exceptions.RayActorError:
-            dead_instance_ids.append(instance_ids[idx])
-    if len(dead_instance_ids) > 0:
-        retry_manager_method_sync(manager.scale_down.remote, 'scale_down', dead_instance_ids)
-    if len(available_instance_ids) > 0:
-        retry_manager_method_sync(manager.scale_up.remote, 'scale_up',
-                                  available_instance_ids, available_instances)
-        logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
-                    .format(len(available_instance_ids), available_instance_ids))
-
     ip = get_ip_address()
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
-    return manager, available_instance_ids, available_instances, request_output_queue
+    return manager, instance_ids, instances, request_output_queue
 
 def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue) -> EntrypointsContext:
     instances_dict: Dict[str, Llumlet] = {}

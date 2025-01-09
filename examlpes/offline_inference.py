@@ -38,8 +38,7 @@ manager_args = ManagerArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370)
 
-# Create a manager. If the manager is created first, and then the instances are created, manager.scale_up
-# need to be called to add the newly created instances to the management of the manager.
+# Create a manager. If the manager is created first, and then the instances are created.
 manager: Manager = init_manager(manager_args)
 ray.get(manager.is_ready.remote())
 
@@ -47,8 +46,6 @@ ray.get(manager.is_ready.remote())
 instance_ids: List[str] = None
 instances: List[Llumlet] = None
 instance_ids, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, engine_args))
-
-ray.get(manager.scale_up.remote(instance_ids, instances))
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()

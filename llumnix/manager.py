@@ -578,6 +578,8 @@ class Manager:
             instance_ids.append(instance_id)
             instances.append(instance)
 
+        self.scale_up(instance_ids, instances)
+
         return instance_ids, instances
 
     def _init_server_and_instance(self,

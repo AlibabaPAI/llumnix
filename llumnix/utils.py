@@ -130,9 +130,6 @@ def get_instance_name(instance_id: str) -> str:
 def remove_placement_group(instance_id: str) -> bool:
     try:
         placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
-    except ValueError:
-        return False
-    try:
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
         logger.info("remove placement group {}".format(instance_id))
@@ -144,9 +141,6 @@ def remove_placement_group(instance_id: str) -> bool:
 def kill_server(instance_id: str) -> bool:
     try:
         server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
-    except ValueError:
-        return False
-    try:
         ray.kill(server)
         logger.info("kill server {}".format(instance_id))
     # pylint: disable=broad-except
@@ -157,9 +151,6 @@ def kill_server(instance_id: str) -> bool:
 def kill_instance(instance_id: str) -> bool:
     try:
         instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
-    except ValueError:
-        return False
-    try:
         ray.kill(instance)
         logger.info("kill instance {}".format(instance_id))
     # pylint: disable=broad-except

@@ -59,7 +59,7 @@ def generate_serve_command(result_filename: str = "",
                            ip: str = "127.0.0.1",
                            port: int = 37000,
                            dispatch_policy: str = "load",
-                           migration_backend = "gloo",
+                           migration_backend = "rayrpc",
                            model = "facebook/opt-125m",
                            max_model_len: int = 4096,
                            log_instance_info: bool = False,
@@ -74,7 +74,6 @@ def generate_serve_command(result_filename: str = "",
         f"{'--log-instance-info ' if log_instance_info else ''}"
         f"--enable-migration "
         f"--model {model} "
-        f"--engine-use-ray "
         f"--worker-use-ray "
         f"--max-model-len {max_model_len} "
         f"--dispatch-policy {dispatch_policy} "

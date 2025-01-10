@@ -36,6 +36,7 @@ from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_pre
 
 logger = init_logger(__name__)
 
+
 class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     migration_config: MigrationConfig = None
 

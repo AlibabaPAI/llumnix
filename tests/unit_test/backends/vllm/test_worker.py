@@ -21,9 +21,9 @@ from vllm.worker.cache_engine import CacheEngine
 from vllm.config import EngineConfig
 from vllm.executor.ray_gpu_executor import RayWorkerWrapper
 
-from llumnix.arg_utils import EngineManagerArgs
+from llumnix.arg_utils import ManagerArgs
 from llumnix.utils import random_uuid
-from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -60,7 +60,7 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
 def test_reserve_memory_for_migration(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
-    migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()
+    migration_config = ManagerArgs(migration_buffer_blocks=1).create_migration_config()
     migration_config.migration_backend = backend
     worker = create_worker(rank=0, local_rank=0, engine_config=engine_config)
     ray.get(worker.execute_method.remote('init_device'))
@@ -81,12 +81,12 @@ def test_reserve_memory_for_migration(ray_env, backend):
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
 def test_rebuild_migration_backend(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
-    migration_config = EngineManagerArgs(migration_buffer_blocks=1).create_migration_config()
+    migration_config = ManagerArgs(migration_buffer_blocks=1).create_migration_config()
     migration_config.migration_backend = backend
 
     worker0 = create_worker(rank=0, local_rank=0, engine_config=engine_config)
     worker0_id = random_uuid()
-    placement_group0 = initialize_placement_group(instance_id=worker0_id, num_cpus=1, num_gpus=1, detached=True)
+    placement_group0 = initialize_placement_group(get_placement_group_name(worker0_id), num_cpus=1, num_gpus=1, detached=True)
     ray.get(worker0.execute_method.remote('init_device'))
     ray.get(worker0.execute_method.remote('initialize_cache', num_gpu_blocks=8, num_cpu_blocks=0))
     ray.get(worker0.execute_method.remote(
@@ -102,7 +102,7 @@ def test_rebuild_migration_backend(ray_env, backend):
 
     worker1 = create_worker(rank=0, local_rank=0, engine_config=engine_config)
     worker1_id = random_uuid()
-    placement_group1 = initialize_placement_group(instance_id=worker1_id, num_cpus=1, num_gpus=1, detached=True)
+    placement_group1 = initialize_placement_group(get_placement_group_name(worker1_id), num_cpus=1, num_gpus=1, detached=True)
     ray.get(worker1.execute_method.remote('init_device'))
     ray.get(worker1.execute_method.remote('initialize_cache', num_gpu_blocks=8, num_cpu_blocks=0))
     ray.get(worker1.execute_method.remote(

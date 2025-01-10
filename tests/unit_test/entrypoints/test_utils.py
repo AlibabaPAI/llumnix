@@ -15,14 +15,11 @@ import os
 import pytest
 import ray
 
-from llumnix.arg_utils import EngineManagerArgs
-from llumnix.entrypoints.setup import (get_ip_address,
-                                       launch_ray_cluster,
-                                       init_manager,
-                                       retry_manager_method_sync,
-                                       retry_manager_method_async)
-from llumnix.llm_engine_manager import MANAGER_ACTOR_NAME
+from llumnix.arg_utils import ManagerArgs
+from llumnix.entrypoints.setup import launch_ray_cluster, init_manager
+from llumnix.entrypoints.utils import get_ip_address, retry_manager_method_sync, retry_manager_method_async
 from llumnix.queue.utils import init_request_output_queue_server
+from llumnix.utils import get_manager_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -36,10 +33,10 @@ def test_launch_ray_cluster():
     assert result.returncode == 0
 
 def test_init_manager(ray_env):
-    engine_manager_args = EngineManagerArgs()
-    manager = init_manager(engine_manager_args)
+    manager_args = ManagerArgs()
+    manager = init_manager(manager_args)
     assert manager is not None
-    manager_actor_handle = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
+    manager_actor_handle = ray.get_actor(get_manager_name(), namespace='llumnix')
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 
@@ -50,14 +47,14 @@ def test_init_zmq(ray_env):
     assert request_output_queue is not None
 
 def test_retry_manager_method_sync(ray_env):
-    engine_manager_args = EngineManagerArgs()
-    manager = init_manager(engine_manager_args)
+    manager_args = ManagerArgs()
+    manager = init_manager(manager_args)
     ret = retry_manager_method_sync(manager.is_ready.remote, 'is_ready')
     assert ret is True
 
 @pytest.mark.asyncio
 async def test_retry_manager_method_async(ray_env):
-    engine_manager_args = EngineManagerArgs()
-    manager = init_manager(engine_manager_args)
+    manager_args = ManagerArgs()
+    manager = init_manager(manager_args)
     ret = await retry_manager_method_async(manager.is_ready.remote, 'is_ready')
     assert ret is True

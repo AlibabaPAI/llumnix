@@ -47,7 +47,7 @@ Llumnix is easy to use with:
 
 ## Getting Started
 
-If you are already utilizing vLLM for multi-instance LLM serving deployments, simply replace the vLLM serving deployment command `python -m vllm.entrypoints.api_server ...` for each instance with the command provided below:
+If you are already utilizing vLLM for multi-instance LLM serving deployments, simply replace the vLLM serving deployment command `python -m entrypoints.vllm.api_server ...` for each instance with the command provided below:
 ```
 python -m llumnix.entrypoints.vllm.api_server \
     --host $HOST \

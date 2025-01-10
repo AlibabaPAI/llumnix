@@ -50,9 +50,10 @@ NO_OUTPUTS_STEP_INTERVAL = 0.01
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
+                 placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 placement_group: Optional[PlacementGroup],
-                 *args, **kwargs) -> None:
+                 *args,
+                 **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()
@@ -77,13 +78,13 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
     @classmethod
     def from_engine_args(
         cls,
-        engine_args: EngineArgs,
+        instance_id: str,
+        placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
-        instance_id: str = None,
-        placement_group: Optional[PlacementGroup] = None,
-        latency_mem: Optional[LatencyMemData] = None
+        engine_args: EngineArgs,
+        latency_mem: Optional[LatencyMemData] = None,
+        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
@@ -105,8 +106,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
-            request_output_queue_type=request_output_queue_type,
             placement_group=placement_group,
+            request_output_queue_type=request_output_queue_type,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -209,8 +210,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.engine_add_request_timestamp = time.time()
         self.scheduler.waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
-                                                          seq_group.sampling_params, seq_group.metrics.arrival_time, seq_group.lora_request,
-                                                          seq_group.multi_modal_data)
+                                                          sampling_params=seq_group.sampling_params,
+                                                          arrival_time=seq_group.metrics.arrival_time,
+                                                          lora_request=seq_group.lora_request,
+                                                          multi_modal_data=seq_group.multi_modal_data)
 
     def _start_put_queue_loop(self):
         while True:
@@ -237,16 +240,16 @@ class BackendVLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
+        placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        placement_group: PlacementGroup,
         engine_args: EngineArgs,
     ) -> None:
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          request_output_queue_type=request_output_queue_type,
-                                                                          migration_config=migration_config,
-                                                                          instance_id=instance_id,
-                                                                          placement_group=placement_group)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(instance_id,
+                                                                          placement_group,
+                                                                          request_output_queue_type,
+                                                                          migration_config,
+                                                                          engine_args)
         self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
         self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
@@ -279,7 +282,7 @@ class BackendVLLM(BackendInterface):
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("Error in engine loop: {}".format(e))
+                logger.error("error in engine loop: {}".format(e))
                 logger.error("exception traceback: {}".format(traceback.format_exc()))
                 self._run_workers("shutdown")
 

@@ -23,7 +23,8 @@ import numpy as np
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
-                    wait_for_llumnix_service_ready, shutdown_llumnix_service)
+                    wait_for_llumnix_service_ready, shutdown_llumnix_service,
+                    generate_serve_command)
 
 BENCH_TEST_TIMEOUT_MINS = 30
 
@@ -63,21 +64,36 @@ def parse_log_file():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model):
-    device_count = torch.cuda.device_count()
+@pytest.mark.parametrize("launch_mode", ['global', 'local'])
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode):
     ip = "127.0.0.1"
     base_port = 37037
     ip_ports = []
-    for i in range(device_count):
-        port = base_port+i
-        ip_port = f"{ip}:{port}"
-        ip_ports.append(ip_port)
-        launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                 launch_ray_cluster=False,
-                                                 ip=ip,
-                                                 port=port,
-                                                 model=model)
-        subprocess.run(launch_command, shell=True, check=True)
+    if launch_mode == 'local':
+        device_count = torch.cuda.device_count()
+        for i in range(device_count):
+            port = base_port+i
+            ip_port = f"{ip}:{port}"
+            ip_ports.append(ip_port)
+            launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                                                     launch_ray_cluster=False,
+                                                     ip=ip,
+                                                     port=port,
+                                                     model=model)
+            subprocess.run(launch_command, shell=True, check=True)
+    else: # global
+        device_count = torch.cuda.device_count()
+        for i in range(device_count):
+            port = base_port+i
+            ip_port = f"{ip}:{port}"
+            ip_ports.append(ip_port)
+        serve_command = generate_serve_command(result_filename=str(base_port)+".out",
+                                               ip=ip,
+                                               port=base_port,
+                                               model=model)
+        # pylint: disable=subprocess-run-check
+        subprocess.run('ray start --head', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(serve_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
 
@@ -113,7 +129,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model):
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    with open("performance.txt", "w", encoding="utf-8") as f:
-        f.write(parse_log_file())
+    if launch_mode == 'local':
+        with open("performance.txt", "w", encoding="utf-8") as f:
+            f.write(parse_log_file())
 
     await asyncio.sleep(3)

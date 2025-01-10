@@ -15,49 +15,27 @@ import subprocess
 import sys
 import os
 import time
-from typing import Dict
-import asyncio
-import socket
+from typing import Dict, Optional, List, Tuple
 import ray
 
-from llumnix.llm_engine_manager import LLMEngineManager, MANAGER_ACTOR_NAME
+from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logger import init_logger
-from llumnix.utils import random_uuid
-from llumnix.arg_utils import EngineManagerArgs
+from llumnix.utils import random_uuid, get_manager_name
+from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs
 from llumnix.queue.queue_type import QueueType
-from llumnix.server_info import ServerInfo, RequestTimestamps
+from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
+from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address, retry_manager_method_sync
+from llumnix.entrypoints.utils import LaunchMode
+from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
+
+MAX_RAY_RESTARTS = 5
+RAY_RESTART_INTERVALS = 10
 
 logger = init_logger(__name__)
 
-MAX_RESTARTS = 30
-RESTART_INTERVALS = 1
-MAX_TASK_RETRIES = 300
-RETRIES_INTERVALS = 0.1
-
-
-class LlumnixEntrypointsContext:
-    def __init__(self,
-                 manager: LLMEngineManager,
-                 instances: Dict[str, Llumlet],
-                 request_output_queue: QueueServerBase,
-                 server_info: ServerInfo,
-                 log_requests: bool,
-                 log_request_timestamps: bool):
-        self.manager = manager
-        self.instances = instances
-        self.request_output_queue = request_output_queue
-        self.server_info = server_info
-        self.log_requests = log_requests
-        self.log_request_timestamps = log_request_timestamps
-
-
-def get_ip_address():
-    hostname = socket.gethostname()
-    ip_address = socket.gethostbyname(hostname)
-    return ip_address
 
 def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     head_node_ip = os.getenv('HEAD_NODE_IP')
@@ -66,11 +44,11 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         # Stop the existing ray processes on the node first.
         subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        logger.info("'ray stop' failed with: \n{}".format(e.stderr))
+        logger.error("'ray stop' failed with: \n{}".format(e.stderr))
         sys.exit(1)
     # Need to specify the head node ip through environment variable currently.
     if head_node_ip is None:
-        logger.info("Environment variable 'HEAD_NODE_IP' should be set for ray cluster launch.")
+        logger.error("Environment variable 'HEAD_NODE_IP' should be set for ray cluster launch.")
         sys.exit(1)
     ray_start_command = None
     if 'HEAD_NODE' in os.environ:
@@ -78,160 +56,108 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         try:
             result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
         except subprocess.CalledProcessError as e:
-            logger.info("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
+            logger.error("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
             sys.exit(1)
     else:
         ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
-        for attempt in range(MAX_RESTARTS):
+        for attempt in range(MAX_RAY_RESTARTS):
             try:
                 # wait about 2 mins by default
                 result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'], check=True, text=True, capture_output=True)
                 break
             except subprocess.CalledProcessError as e:
-                if attempt < MAX_RESTARTS:
-                    print("Execute '{}' repeatedly until the head node starts...".format(ray_start_command))
-                    time.sleep(RESTART_INTERVALS)
+                if attempt < MAX_RAY_RESTARTS:
+                    logger.warning("execute '{}' repeatedly until the head node starts".format(ray_start_command))
+                    time.sleep(RAY_RESTART_INTERVALS)
                 else:
-                    logger.info("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
+                    logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
                     sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
     return result
 
-def connect_to_ray_cluster(port: int, namespace="llumnix") -> None:
-    head_node_ip = os.getenv('HEAD_NODE_IP')
-    ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace)
+def connect_to_ray_cluster(head_node_ip: str = None, port: int = None, namespace="llumnix") -> None:
+    if head_node_ip is not None and port is not None:
+        ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace)
+    else:
+        ray.init(ignore_reinit_error=True, namespace=namespace)
 
-def setup_ray_cluster(cfg):
-    if cfg.SERVER.LAUNCH_RAY_CLUSTER:
-        launch_ray_cluster(cfg.SERVER.RAY_CLUSTER_PORT)
-    connect_to_ray_cluster(port=cfg.SERVER.RAY_CLUSTER_PORT)
+def setup_ray_cluster(entrypoints_args) -> None:
+    if entrypoints_args.launch_ray_cluster:
+        launch_ray_cluster(entrypoints_args.ray_cluster_port)
+    connect_to_ray_cluster(head_node_ip=os.getenv('HEAD_NODE_IP'), port=entrypoints_args.ray_cluster_port, namespace="llumnix")
 
-def is_gpu_available() -> bool:
-    try:
-        subprocess.check_output(['nvidia-smi'])
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
-def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
-    for attempt in range(MAX_TASK_RETRIES):
-        try:
-            ret = ray.get(ray_call(*args, **kwargs))
-            break
-        except ray.exceptions.RayActorError:
-            if attempt < MAX_TASK_RETRIES - 1:
-                logger.info("Manager is unavailable, sleep {}s, and retry {} again...".format(RETRIES_INTERVALS, method_name))
-                time.sleep(RETRIES_INTERVALS)
-            else:
-                logger.info("After {} times retries, manager is still unavailable".format(MAX_TASK_RETRIES))
-                raise
-    return ret
-
-async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
-    for attempt in range(MAX_TASK_RETRIES):
-        try:
-            ret = await ray_call(*args, **kwargs)
-            break
-        except ray.exceptions.RayActorError:
-            if attempt < MAX_TASK_RETRIES - 1:
-                logger.info("Manager is unavailable, sleep {}s, and retry {} again...".format(RETRIES_INTERVALS, method_name))
-                await asyncio.sleep(RETRIES_INTERVALS)
-            else:
-                logger.info("After {} times retries, manager is still unavailable".format(MAX_TASK_RETRIES))
-                raise
-    return ret
-
-def init_manager(engine_manager_args: EngineManagerArgs) -> LLMEngineManager:
+def init_manager(manager_args: ManagerArgs,
+                 entrypoints_args: EntrypointsArgs = None,
+                 engine_args = None,
+                 launch_args: LaunchArgs = None,
+                 ) -> Manager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:
-        manager = LLMEngineManager.from_args(engine_manager_args, None)
-        logger.info("Init LLMEngineManager on current node")
+        manager = Manager.from_args(manager_args=manager_args,
+                                    entrypoints_args=entrypoints_args,
+                                    engine_args=engine_args,
+                                    launch_args=launch_args)
+        logger.info("Init Manager on current node.")
     except ValueError:
-        manager = ray.get_actor(MANAGER_ACTOR_NAME, namespace='llumnix')
-        logger.info("Get existing LLMEngineManager")
+        manager = ray.get_actor(get_manager_name(), namespace='llumnix')
+        logger.info("Get existing Manager.")
     return manager
 
-def init_llumnix_components(engine_manager_args: EngineManagerArgs,
+def init_llumnix_components(manager_args: ManagerArgs,
                             engine_args,
                             request_output_queue_type: QueueType,
-                            ip: str,
                             request_output_queue_port: str,
-                            *args,
-                            **kwargs
-                            ):
-    manager = init_manager(engine_manager_args)
-    instance_ids, llumlets = retry_manager_method_sync(
-        manager.init_llumlets.remote, 'init_llumlets', engine_args, request_output_queue_type, *args, **kwargs)
+                            backend_type: BackendType) -> Tuple[Manager, List[str], List[Llumlet], QueueServerBase]:
+    manager = init_manager(manager_args)
 
-    available_instance_ids = []
-    dead_instance_ids = []
-    available_llumlets = []
-    ready_tasks = [llumlet.is_ready.remote() for llumlet in llumlets]
-    for idx, task in enumerate(ready_tasks):
-        try:
-            ray.get(task)
-            available_instance_ids.append(instance_ids[idx])
-            available_llumlets.append(llumlets[idx])
-        except ray.exceptions.RayActorError:
-            dead_instance_ids.append(instance_ids[idx])
-    if len(dead_instance_ids) > 0:
-        retry_manager_method_sync(manager.scale_down.remote, 'scale_down', dead_instance_ids)
-    if len(available_instance_ids) > 0:
-        retry_manager_method_sync(manager.scale_up.remote, 'scale_up',
-                                  available_instance_ids, available_llumlets)
-        logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
-                    .format(len(available_instance_ids), available_instance_ids))
+    instance_ids, instances = retry_manager_method_sync(
+        manager.init_instances.remote, 'init_instances', request_output_queue_type, backend_type, engine_args)
 
+    ip = get_ip_address()
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
-    return manager, available_instance_ids, available_llumlets, request_output_queue
+    return manager, instance_ids, instances, request_output_queue
 
-def setup_llumnix(engine_manager_args, engine_args, cfg, *args, **kwargs):
-    ip = get_ip_address()
-    manager, instance_ids, llumlets, request_output_queue = \
-        init_llumnix_components(engine_manager_args,
-                                engine_args,
-                                cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,
-                                ip,
-                                cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT,
-                                *args,
-                                **kwargs)
+def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue) -> EntrypointsContext:
+    instances_dict: Dict[str, Llumlet] = {}
+    for idx, ins_id in enumerate(instance_ids):
+        instances_dict[ins_id] = instances[idx]
+
     server_id = random_uuid()
+    ip = get_ip_address()
     server_info = ServerInfo(server_id,
-                             cfg.SERVER.REQUEST_OUTPUT_QUEUE_TYPE,
+                             QueueType(entrypoints_args.request_output_queue_type),
                              request_output_queue,
                              ip,
-                             cfg.SERVER.REQUEST_OUTPUT_QUEUE_PORT)
-    instances: Dict[str, Llumlet] = {}
-    for idx, ins_id in enumerate(instance_ids):
-        instances[ins_id] = llumlets[idx]
+                             entrypoints_args.request_output_queue_port)
 
-    log_requests = not cfg.SERVER.DISABLE_LOG_REQUESTS_SERVER
-    log_request_timestamps = cfg.SERVER.LOG_REQUEST_TIMESTAMPS
+    log_requests = not entrypoints_args.disable_log_requests_server
+    log_request_timestamps = entrypoints_args.log_request_timestamps
     logger.info("log_requests: {}, log_request_timestamps: {}".format(log_requests, log_request_timestamps))
 
-    llumnix_entrypoints_context = LlumnixEntrypointsContext(manager,
-                                                            instances,
-                                                            request_output_queue,
-                                                            server_info,
-                                                            log_requests,
-                                                            log_request_timestamps)
+    entrypoints_context = EntrypointsContext(manager,
+                                             instances_dict,
+                                             request_output_queue,
+                                             server_info,
+                                             log_requests,
+                                             log_request_timestamps)
 
-    return llumnix_entrypoints_context
+    return entrypoints_context
+def _setup_llumnix_local(manager_args, entrypoints_args, engine_args, launch_args) -> EntrypointsContext:
+    manager, instance_ids, instances, request_output_queue = \
+        init_llumnix_components(manager_args,
+                                engine_args,
+                                QueueType(entrypoints_args.request_output_queue_type),
+                                entrypoints_args.request_output_queue_port,
+                                launch_args.backend_type)
 
-def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
-    per_token_latency_breakdown_dict = {
-        'step_latency_engine': [],
-        'process_model_outputs_latency': [],
-        'step_postprocess_latency': [],
-        'across_async_put_queue_thread_latency': [],
-        'across_async_put_queue_actor_latency': [],
-        'queue_rpc_latency': [],
-        'background_process_get_queue_latency': [],
-        'generate_benchmark_return_output_latency': []
-    }
-    return per_token_latency_breakdown_dict
+    return setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue)
 
-def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_timestamps: RequestTimestamps):
-    for key in per_token_latency_breakdown_dict.keys():
-        per_token_latency_breakdown_dict[key].append(getattr(request_timestamps, key))
+def _setup_llumnix_global(manager_args, entrypoints_args, engine_args, launch_args) -> None:
+    _ = init_manager(manager_args, entrypoints_args, engine_args, launch_args)
+
+def setup_llumnix(manager_args, entrypoints_args, engine_args, launch_args) -> Optional[EntrypointsContext]:
+    if launch_args.launch_mode == LaunchMode.LOCAL:
+        return _setup_llumnix_local(manager_args, entrypoints_args, engine_args, launch_args)
+
+    return _setup_llumnix_global(manager_args, entrypoints_args, engine_args, launch_args)

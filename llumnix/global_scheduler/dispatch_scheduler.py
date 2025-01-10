@@ -49,7 +49,7 @@ class DispatchScheduler:
         if self.num_requests % 100 == 0:
             logger.info("self.num_requests: {}".format(self.num_requests))
             for instance_id, num_requests in self.instance_num_requests.items():
-                logger.info("Instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
+                logger.info("instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
         return dispatch_instance_id
 
     def update_instance_infos(self,

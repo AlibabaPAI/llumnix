@@ -12,7 +12,7 @@ from llumnix.backends.vllm.simulator import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -82,11 +82,11 @@ async def test_backend(ray_env):
         def __init__(self):
             pass
     dummy_actor = ray.remote(num_cpus=1,
-                                name="instance_0",
-                                namespace='llumnix',
-                                max_concurrency=4)(DummyActor)
+                             name="instance_0",
+                             namespace='llumnix',
+                             max_concurrency=4)(DummyActor)
     dummy_actor = dummy_actor.remote()
-    placement_group = initialize_placement_group("0", num_cpus=2, num_gpus=0, detached=True)
+    placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=2, num_gpus=0, detached=True)
     sim_backend = MockBackendSim(instance_id="0",
                                  request_output_queue_type=request_output_queue_type,
                                  migration_config=migration_config,

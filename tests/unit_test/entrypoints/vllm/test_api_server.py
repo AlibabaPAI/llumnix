@@ -45,11 +45,16 @@ def _query_server_generate(prompt: str) -> dict:
 def _query_server_generate_benchmark(prompt: str) -> dict:
     return _query_server(prompt, interface='generate_benchmark')
 
-@pytest.fixture(params=["zmq", "rayqueue"])
+@pytest.fixture(params=[("zmq", "api_server"), ("rayqueue", "api_server"), ("zmq", "api_server_actor"), ("rayqueue", "api_server_actor")])
 def api_server(request):
-    request_output_queue_type = QueueType(request.param)
-    script_path = Path(__file__).parent.joinpath(
-        "api_server_manager.py").absolute()
+    request_output_queue_type = QueueType(request.param[0])
+    print(f"{request.param[0]}-{request.param[1]}")
+    if request.param[1] == "api_server":
+        script_path = Path(__file__).parent.joinpath(
+            "api_server.py").absolute()
+    else:
+        script_path = Path(__file__).parent.joinpath(
+            "api_server_actor.py").absolute()
     commands = [
         sys.executable,
         "-u",

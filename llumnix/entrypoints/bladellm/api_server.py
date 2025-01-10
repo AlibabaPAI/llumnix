@@ -32,7 +32,8 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
     llumnix_config = get_llumnix_config(bladellm_args.llumnix_config)
     entrypoints_args, manager_args, engine_args = get_args(llumnix_config, llumnix_parser, bladellm_args)
 
-    launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.VLLM)
+    assert not manager_args.simulator_mode, "Only support the simulator mode for vLLM."
+    launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
 
     setup_ray_cluster(entrypoints_args)
 

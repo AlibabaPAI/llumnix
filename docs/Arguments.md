@@ -38,6 +38,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--disable-log-requests-manager]
             [--log-instance-info]
             [--log-filename LOG_FILENAME]
+            [--simulator-mode]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
             [--migration-backend {gloo,nccl,rayrpc,grpc,kvtransfer}]
@@ -180,6 +181,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--log-filename`
 - Log filename.
 - Default: "server.log"
+
+`--simulator-mode`
+- Enable simulator mode.
 
 `--profiling-result-file-path`
 - Profiling result file path when using simulator.

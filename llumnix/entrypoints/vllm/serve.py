@@ -25,6 +25,7 @@ if __name__ == "__main__":
     cfg = get_llumnix_config(cli_args.config_file, cli_args)
     entrypoints_args, manager_args, engine_args = get_args(cfg, parser, cli_args)
 
+    backend_type = BackendType.VLLM if not manager_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=BackendType.VLLM)
 
     # Assume that there is an existing ray cluster when using centralized deployment.

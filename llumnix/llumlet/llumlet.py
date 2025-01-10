@@ -81,7 +81,7 @@ class Llumlet:
                   engine_args,
                   profiling_result_file_path: str = None):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM], \
+            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
                 f'unimplemented backend {backend_type}'
             num_gpus = 0
             if backend_type == backend_type.BLADELLM:

@@ -69,6 +69,8 @@ _C.MANAGER.DISABLE_LOG_REQUESTS_MANAGER = False
 _C.MANAGER.LOG_INSTANCE_INFO = False
 # Log filename
 _C.MANAGER.LOG_FILENAME = "server.log"
+# Enable simulator mode
+_C.MANAGER.SIMULATOR_MODE = False
 # Profiling result file path when using simulator
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = None
 # Enable port increment when deploying multiple servers

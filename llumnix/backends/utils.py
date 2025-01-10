@@ -71,22 +71,12 @@ def init_backend_engine(instance_id: str,
                         profiling_result_file_path: str = None) -> BackendInterface:
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
-        if profiling_result_file_path is None:
-            from llumnix.backends.vllm.llm_engine import BackendVLLM
-            backend_engine = BackendVLLM(instance_id,
-                                         placement_group,
-                                         request_output_queue_type,
-                                         migration_config,
-                                         engine_args)
-        else:
-            # pylint: disable=import-outside-toplevel
-            from llumnix.backends.vllm.simulator import BackendSimVLLM
-            backend_engine = BackendSimVLLM(instance_id,
-                                            placement_group,
-                                            request_output_queue_type,
-                                            migration_config,
-                                            engine_args,
-                                            profiling_result_file_path)
+        from llumnix.backends.vllm.llm_engine import BackendVLLM
+        backend_engine = BackendVLLM(instance_id,
+                                        placement_group,
+                                        request_output_queue_type,
+                                        migration_config,
+                                        engine_args)
     elif backend_type == BackendType.BLADELLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.bladellm.llm_engine import BackendBladeLLM
@@ -95,6 +85,15 @@ def init_backend_engine(instance_id: str,
                                          request_output_queue_type,
                                          migration_config,
                                          engine_args)
+    elif backend_type == BackendType.SIM_VLLM:
+        # pylint: disable=import-outside-toplevel
+        from llumnix.backends.vllm.simulator import BackendSimVLLM
+        backend_engine = BackendSimVLLM(instance_id,
+                                        placement_group,
+                                        request_output_queue_type,
+                                        migration_config,
+                                        engine_args,
+                                        profiling_result_file_path)
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine

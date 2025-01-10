@@ -136,6 +136,7 @@ class ManagerArgs:
     disable_log_requests_manager: bool = None
     log_instance_info: bool = None
     log_filename: str = None
+    simulator_mode: bool = None
     profiling_result_file_path: str = None
 
     migration_backend: str = None
@@ -217,6 +218,9 @@ class ManagerArgs:
             and args.migration_backend_transfer_type), \
             ("When using kvTransfer as migration backend, "
              "do not set --migration-backend-transfer-type as empty.")
+
+        assert not args.simulator_mode or args.profiling_result_file_path is not None, \
+            "Set profiling_result_file_path args when enable simulator mode"
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -309,6 +313,9 @@ class ManagerArgs:
         parser.add_argument('--profiling-result-file-path',
                             type=str,
                             help='profiling result file path when using simulator')
+        parser.add_argument('--simulator-mode',
+                            action='store_true',
+                            help='enable simulator mode')
         parser.add_argument('--migration-backend',
                             type=str,
                             choices=['gloo','nccl','rayrpc','grpc','kvtransfer'],

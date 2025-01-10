@@ -59,8 +59,8 @@ class LlumnixOutput(RequestOutputFactory):
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
+                 placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 placement_group: Optional[PlacementGroup],
                  *arg, **kwargs) -> None:
         # pylint: disable=import-outside-toplevel
         import vllm.outputs
@@ -89,13 +89,13 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
     @classmethod
     def from_engine_args(
         cls,
-        engine_args: EngineArgs,
+        instance_id: str,
+        placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
-        instance_id: str = None,
-        placement_group: Optional[PlacementGroup] = None,
-        latency_mem: Optional[LatencyMemData] = None
+        engine_args: EngineArgs,
+        latency_mem: Optional[LatencyMemData] = None,
+        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT
     ) -> "LLMEngineLlumnix":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
@@ -117,8 +117,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
-            request_output_queue_type=request_output_queue_type,
             placement_group=placement_group,
+            request_output_queue_type=request_output_queue_type,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -230,9 +230,9 @@ class BackendVLLM(BackendInterface):
     def __init__(
         self,
         instance_id: str,
+        placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        placement_group: PlacementGroup,
         engine_args: EngineArgs,
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
@@ -274,7 +274,7 @@ class BackendVLLM(BackendInterface):
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("Error in engine loop: {}".format(e))
+                logger.error("error in engine loop: {}".format(e))
                 logger.error("exception traceback: {}".format(traceback.format_exc()))
                 self._run_workers("shutdown")
 

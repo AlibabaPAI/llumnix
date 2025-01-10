@@ -28,15 +28,18 @@ from blade_llm.protocol import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.server_info import RequestTimestamps
-from llumnix.entrypoints.setup import LlumnixEntrypointsContext
+from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.logger import init_logger
 
 logger = init_logger(__name__)
 
 WAIT_MANAGER_INTERVAL = 5
 
+# TODO(KuilongCui): Update LlumnixCient of BladeLLM.
+
+
 class LlumnixClientBladeLLM(MultiProcessingLLMClient):
-    def __init__(self, args: ServingArgs, llumnix_context: LlumnixEntrypointsContext, loop: asyncio.AbstractEventLoop):
+    def __init__(self, args: ServingArgs, llumnix_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
         super().__init__(args, -1)
         self.entrypoint_id2llumnix_id = {}
         self.llumnix_id2entrypoint_id = {}
@@ -56,7 +59,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     continue
                 await self.request_streams[request_id].put(request_output)
                 if request_output.is_finished:
-                    logger.info("Client Recv: {}".format(request_output))
+                    logger.debug("client recv request output: {}".format(request_output))
                     del self.entrypoint_id2llumnix_id[self.llumnix_id2entrypoint_id[request_id]]
                     del self.llumnix_id2entrypoint_id[request_id]
                     del self.request_streams[request_id]
@@ -110,7 +113,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     return await asyncio.create_task(self._manager_generate(request, request_id))
             except (ray.exceptions.RayActorError, KeyError):
                 if instance_id in self.llumnix_context.instances:
-                    logger.info("[manager_generate] instance {} is dead".format(instance_id))
+                    logger.info("[_manager_generate] instance {} is dead".format(instance_id))
                     del self.llumnix_context.instances[instance_id]
                     del self.llumnix_context.instance_num_requests[instance_id]
                     return await asyncio.create_task(self._manager_generate(request, request_id))

@@ -32,11 +32,11 @@ class BackendSimVLLM(BackendVLLM):
     def __init__(
         self,
         instance_id: str,
+        placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        placement_group: PlacementGroup,
         engine_args: EngineArgs,
-        profiling_result_file_path: str,
+        profiling_result_file_path: str
     ) -> None:
         # multi-instance args
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)

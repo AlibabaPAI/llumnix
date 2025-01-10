@@ -18,24 +18,24 @@ from typing import Iterable, List, Union, Deque, Tuple
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 
+
 class EngineState(str, Enum):
     INIT = "INIT"
     CRASHED = "CRASHED"
     RUNNING = "RUNNING"
     STOPPED = "STOPPED"
 
+
 class BackendType(str, Enum):
     VLLM = "VLLM"
-    SIM_VLLM = "SIM_VLLM"
     BLADELLM = "BLADELLM"
+    SIM_VLLM = "SIM_VLLM"
 
     @staticmethod
     def is_sim_backend(status: "BackendType") -> bool:
-        return status in [
-            BackendType.SIM_VLLM,
-        ]
+        return status in [BackendType.SIM_VLLM]
 
-# TODO(KuilongCui): separate backend interface into two parts: DispatchBackendInterface and MigrationBackendInterface
+
 class BackendInterface(ABC):
     # Methods for inference
     @abstractmethod

@@ -17,15 +17,13 @@ import ray
 import torch
 import pytest
 
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
-
 from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.backends.backend_interface import BackendType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.utils import initialize_placement_group
+from llumnix.utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -34,7 +32,7 @@ from tests.conftest import ray_env
 class MockLlumlet(Llumlet):
     def __init__(self, *args, **kwargs) -> None:
         instance_id = kwargs["instance_id"]
-        placement_group = initialize_placement_group(instance_id=instance_id, num_cpus=3, num_gpus=1, detached=True)
+        placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=1, detached=True)
         kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         self.origin_step = self.backend_engine.engine.step_async
@@ -57,13 +55,17 @@ class MockLlumlet(Llumlet):
 def test_engine_step_exception(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
     migration_config = MigrationConfig("SR", "rayrpc", 16, 1, 4, 5, 20)
-    scheduling_strategy = NodeAffinitySchedulingStrategy(node_id=ray.get_runtime_context().get_node_id(), soft=False)
 
-    origin_free_memory, _ = torch.cuda.mem_get_info()
+    time.sleep(5.0)
+
+    device_count = torch.cuda.device_count()
+    origin_free_memory_list = []
+    for device_id in range(device_count):
+        origin_free_memory, _ = torch.cuda.mem_get_info(device_id)
+        origin_free_memory_list.append(origin_free_memory)
 
     actor_name = "instance_0"
-    llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix',
-                                  scheduling_strategy=scheduling_strategy).remote(
+    llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix').remote(
         instance_id="0",
         request_output_queue_type=QueueType.RAYQUEUE,
         backend_type=BackendType.VLLM,
@@ -76,8 +78,11 @@ def test_engine_step_exception(ray_env):
     all_actor_names = [actor["name"] for actor in all_actors]
     assert actor_name in all_actor_names
 
-    cur_free_memory, _ = torch.cuda.mem_get_info()
-    assert cur_free_memory < origin_free_memory
+    cur_free_memory_list = []
+    for device_id in range(device_count):
+        cur_free_memory, _ = torch.cuda.mem_get_info(device_id)
+        cur_free_memory_list.append(cur_free_memory)
+    assert origin_free_memory_list != cur_free_memory_list
 
     ray.get(llumlet.set_error_step.remote(True))
     time.sleep(3)
@@ -86,5 +91,8 @@ def test_engine_step_exception(ray_env):
     all_actor_names = [actor["name"] for actor in all_actors]
     assert actor_name not in all_actor_names
 
-    cur_free_memory, _ = torch.cuda.mem_get_info()
-    assert origin_free_memory == cur_free_memory
+    cur_free_memory_list = []
+    for device_id in range(device_count):
+        cur_free_memory, _ = torch.cuda.mem_get_info(device_id)
+        cur_free_memory_list.append(cur_free_memory)
+    assert origin_free_memory_list == cur_free_memory_list

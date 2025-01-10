@@ -202,7 +202,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         try:
             init_group(world_size, rank, self.backend, group_name)
         except FunctionTimedOut:
-            logger.info("create migration backend fail (group_name: {}, world_size: {}, rank: {}, backbend: {})."
+            logger.info("create migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {})."
                 .format(group_name, world_size, rank, self.backend))
             return False
 
@@ -240,7 +240,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                 col.allreduce(self.dummy_cache[0], self.group_name)
             # pylint: disable=W0703
             except Exception as e:
-                logger.info("warmup migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
+                logger.error("warmup migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend, e))
                 return False
 

@@ -17,13 +17,13 @@ from typing import List, Union, Iterable
 import time
 
 import ray
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy, NodeAffinitySchedulingStrategy
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
-from llumnix.backends.utils import init_backend_engine
+from llumnix.backends.utils import init_backend_engine, get_engine_world_size
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
@@ -40,22 +40,23 @@ CHECK_ENGINE_STATE_INTERVAL = 1.0
 class Llumlet:
     def __init__(self,
                  instance_id: str,
-                 request_output_queue_type: QueueType,
-                 backend_type: BackendType,
-                 migration_config: MigrationConfig,
                  placement_group: PlacementGroup,
-                 *args,
-                 **kwargs) -> None:
+                 request_output_queue_type: QueueType,
+                 migration_config: MigrationConfig,
+                 backend_type: BackendType,
+                 engine_args,
+                 profiling_result_file_path: str = None) -> None:
         try:
+            logger.info("Llumlet backend type: {}".format(backend_type))
             self.instance_id = instance_id
-            self.instance_name = get_instance_name(instance_id)
-            self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
-                                                                        request_output_queue_type,
-                                                                        backend_type,
-                                                                        migration_config,
+            self.actor_name = get_instance_name(instance_id)
+            self.backend_engine: BackendInterface = init_backend_engine(instance_id,
                                                                         placement_group,
-                                                                        *args,
-                                                                        **kwargs)
+                                                                        request_output_queue_type,
+                                                                        migration_config,
+                                                                        backend_type,
+                                                                        engine_args,
+                                                                        profiling_result_file_path)
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
                                                               migration_config.last_stage_max_blocks,
                                                               migration_config.max_stages)
@@ -66,62 +67,51 @@ class Llumlet:
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize llumlet: {}".format(e))
+            logger.error("failed to initialize Llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
+            raise
 
     @classmethod
     def from_args(cls,
-                  request_output_queue_type: QueueType,
                   instance_id: str,
-                  backend_type: BackendType,
-                  world_size: int,
-                  migration_config: MigrationConfig,
                   placement_group: PlacementGroup,
-                  *args,
-                  **kwargs):
+                  request_output_queue_type: QueueType,
+                  migration_config: MigrationConfig,
+                  backend_type: BackendType,
+                  engine_args,
+                  profiling_result_file_path: str = None):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.SIM_VLLM, backend_type.BLADELLM], \
+            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
                 f'unimplemented backend {backend_type}'
             num_gpus = 0
             if backend_type == backend_type.BLADELLM:
+                world_size = get_engine_world_size(engine_args, backend_type)
                 num_gpus = world_size
-            instance_name = get_instance_name(instance_id)
-            if backend_type in [backend_type.VLLM, backend_type.BLADELLM]:
-                llumlet_class = ray.remote(num_cpus=1,
-                                           num_gpus=num_gpus,
-                                           name=instance_name,
-                                           namespace='llumnix',
-                                           max_concurrency=4,
-                                           lifetime="detached")(cls).options(
-                                                scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                                    placement_group=placement_group,
-                                                    placement_group_bundle_index=0,
-                                                    placement_group_capture_child_tasks=True,
-                                                )
+            # TODO(s5u13b): Check the max_concurrency.
+            llumlet_class = ray.remote(num_cpus=1,
+                                       num_gpus=num_gpus,
+                                       name=get_instance_name(instance_id),
+                                       namespace='llumnix',
+                                       max_concurrency=4,
+                                       lifetime="detached")(cls).options(
+                                            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                                                placement_group=placement_group,
+                                                placement_group_bundle_index=0,
+                                                placement_group_capture_child_tasks=True
                                             )
-            else: # backend_type == backend_type.SIM_VLLM:
-                llumlet_class = ray.remote(num_cpus=1,
-                                           num_gpus=num_gpus,
-                                           name=instance_name,
-                                           namespace='llumnix',
-                                           max_concurrency=4,
-                                           lifetime="detached")(cls).options(
-                                                scheduling_strategy=NodeAffinitySchedulingStrategy(
-                                                    node_id=ray.get_runtime_context().get_node_id(),
-                                                    soft=False,
-                                                )
-                                            )
+                                        )
             llumlet = llumlet_class.remote(instance_id,
-                                           request_output_queue_type,
-                                           backend_type,
-                                           migration_config,
                                            placement_group,
-                                           *args,
-                                           **kwargs)
+                                           request_output_queue_type,
+                                           migration_config,
+                                           backend_type,
+                                           engine_args,
+                                           profiling_result_file_path)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize llumlet: {}".format(e))
+            logger.error("failed to initialize Llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
+            raise
 
         return llumlet
 
@@ -129,11 +119,11 @@ class Llumlet:
         while True:
             await asyncio.sleep(CHECK_ENGINE_STATE_INTERVAL)
             if self.backend_engine.state == EngineState.CRASHED:
-                logger.warning("llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
+                logger.error("Llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
                 # pylint: disable=protected-access
                 self.backend_engine._stop_event.set()
                 await asyncio.sleep(0)
-                self_actor = ray.get_actor(self.instance_name)
+                self_actor = ray.get_actor(self.actor_name)
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:

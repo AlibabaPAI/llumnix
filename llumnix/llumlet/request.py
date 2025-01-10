@@ -16,6 +16,7 @@ import math
 
 from llumnix.server_info import ServerInfo
 
+
 class RequestInferenceType(str, Enum):
     PREFILL = "prefill"
     DECODE = "decode"

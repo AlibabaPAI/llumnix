@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Dict, List
+from typing import Dict, List
 import asyncio
 import time
 
@@ -24,13 +24,14 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logger import init_logger
-from llumnix.utils import get_placement_group_name, get_instance_name
+from llumnix.utils import get_instance_name
+from llumnix.internal_config import MigrationConfig
 
 logger = init_logger(__name__)
 
 
 class AsyncPutQueueActor:
-    def __init__(self, instance_id, request_output_queue_type: QueueType):
+    def __init__(self, instance_id: str, request_output_queue_type: QueueType):
         self.instance_id = instance_id
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
@@ -56,87 +57,51 @@ class AsyncPutQueueActor:
                 logger.info("server {} is dead".format(server_id))
                 if self.request_output_queue_type == QueueType.ZMQ:
                     logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                                server_info.request_output_queue_port))
+                                                                               server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)
 
-def init_backend_engine(instance_id: str, request_output_queue_type: QueueType,
-                        backend_type: BackendType, *args, **kwargs) -> BackendInterface:
+def init_backend_engine(instance_id: str,
+                        placement_group: PlacementGroup,
+                        request_output_queue_type: QueueType,
+                        migration_config: MigrationConfig,
+                        backend_type: BackendType,
+                        engine_args,
+                        profiling_result_file_path: str = None) -> BackendInterface:
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.llm_engine import BackendVLLM
-        backend_engine = BackendVLLM(instance_id, request_output_queue_type, *args, **kwargs)
-    elif backend_type == BackendType.SIM_VLLM:
-        # pylint: disable=import-outside-toplevel
-        from llumnix.backends.vllm.simulator import BackendSimVLLM
-        backend_engine = BackendSimVLLM(instance_id, request_output_queue_type, *args, **kwargs)
+        backend_engine = BackendVLLM(instance_id,
+                                        placement_group,
+                                        request_output_queue_type,
+                                        migration_config,
+                                        engine_args)
     elif backend_type == BackendType.BLADELLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.bladellm.llm_engine import BackendBladeLLM
-        backend_engine = BackendBladeLLM(instance_id, request_output_queue_type, *args, **kwargs)
+        backend_engine = BackendBladeLLM(instance_id,
+                                         placement_group,
+                                         request_output_queue_type,
+                                         migration_config,
+                                         engine_args)
+    elif backend_type == BackendType.SIM_VLLM:
+        # pylint: disable=import-outside-toplevel
+        from llumnix.backends.vllm.simulator import BackendSimVLLM
+        backend_engine = BackendSimVLLM(instance_id,
+                                        placement_group,
+                                        request_output_queue_type,
+                                        migration_config,
+                                        engine_args,
+                                        profiling_result_file_path)
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine
 
-def initialize_placement_group(
-    instance_id: str,
-    num_cpus: int = 1,
-    num_gpus: int = 1,
-    detached: bool = False
-) -> Tuple[str, Optional[PlacementGroup]]:
-    """Initialize the distributed cluster probably with Ray.
-
-    Args:
-        parallel_config: The configurations for parallel execution.
-        engine_use_ray: Whether to use Ray for async engine.
-        ray_address: The address of the Ray cluster. If None, uses
-            the default Ray cluster address.
-
-    Returns:
-        A tuple of (`distributed_init_method`, `placement_group`). The
-        `distributed_init_method` is the address for initializing the
-        distributed backend. `placement_group` includes the specification
-        of the resources for each distributed worker.
-    """
-    if ray is None:
-        raise ImportError(
-            "Ray is not installed. Please install Ray to use distributed "
-            "serving.")
-
-    lifetime = "detached" if detached else None
-    # Create placement group for worker processes
-    current_placement_group = ray.util.get_current_placement_group()
-    if current_placement_group:
-        # We are in a placement group
-        bundles = current_placement_group.bundle_specs
-        # Verify that we can use the placement group.
-        gpu_bundles = 0
-        for bundle in bundles:
-            bundle_gpus = bundle.get("GPU", 0)
-            if bundle_gpus > 1:
-                raise ValueError(
-                    "Placement group bundle cannot have more than 1 GPU.")
-            if bundle_gpus:
-                gpu_bundles += 1
-        if num_gpus > gpu_bundles:
-            raise ValueError(
-                "The number of required GPUs exceeds the total number of "
-                "available GPUs in the placement group.")
-    else:
-        num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
-        if num_gpus > num_gpus_in_cluster:
-            raise ValueError(
-                "The number of required GPUs exceeds the total number of "
-                "available GPUs in the cluster.")
-        # Create a new placement group
-        # bundle_0: Llumlet + AsyncPutQueueActor + ProxyActor, bundle_1: Workers
-        placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
-        current_placement_group = ray.util.placement_group(
-            placement_group_specs, "STRICT_PACK", name=get_placement_group_name(instance_id), lifetime=lifetime)
-        # Wait until PG is ready - this will block until all
-        # requested resources are available, and will timeout
-        # if they cannot be provisioned.
-        ray.get(current_placement_group.ready(), timeout=1800)
-
-    return current_placement_group
+def get_engine_world_size(engine_args, backend_type: BackendType):
+    if backend_type == BackendType.VLLM:
+        engine_config = engine_args.create_engine_config()
+        world_size = engine_config.parallel_config.world_size
+    else: # BLADE_LLM
+        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
+    return world_size

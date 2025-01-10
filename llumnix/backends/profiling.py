@@ -196,7 +196,7 @@ def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingData
         assert sim_parallel_config in profiling_result.para_dict.keys(), "sim parallel config not in database"
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
         return latency_mem
-    raise ValueError(f'Unsupported backend: {backend_type}')
+    raise ValueError(f'Unsupported simulator backend: {backend_type}')
 
 if __name__ == "__main__":
     import argparse

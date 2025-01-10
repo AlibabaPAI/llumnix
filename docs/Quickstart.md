@@ -34,7 +34,7 @@ After installation, you can follow this guide to use Llumnix for multi-instance 
 
 ## Migrating from Existing Deployments
 
-Inference engines like vLLM provide an API server user interface, e.g., `python -m vllm.entrypoints.api_server`. To deploy multiple instances, people start multiple such API servers, each corresponding to one instance, on multiple nodes / containers / k8s pods.
+Inference engines like vLLM provide an API server user interface, e.g., `python -m entrypoints.vllm.api_server`. To deploy multiple instances, people start multiple such API servers, each corresponding to one instance, on multiple nodes / containers / k8s pods.
 
 Llumnix provides a similar user interface to enable seamless integration with such existing multi-instance deployments.
 You only need two simple steps to migrate from a deployed vLLM service to Llumnix:
@@ -62,10 +62,24 @@ export HEAD_NODE=1
 
 During the execution of serving deployment, Llumnix will:
 - Initiate the Ray cluster for distributed execution.
-- Start Llumnix actor components, including LLMEngineManager, Llumlet, among others.
+- Start Llumnix actor components, including Manager, Llumlet, among others.
 - Launch the vLLM engine instances.
 
 Following these steps, Llumnix acts as the request scheduling layer situated behind the multiple frontend API servers and above the multiple backend vLLM engine instances. This positioning allows Llumnix to significantly enhance serving performance through its dynamic, fine-grained, and KV-cache-aware request scheduling and rescheduling across instances.
+
+## Centralized Deployment
+
+Llumnix also supports deploying multiple servers and instances at once by running `python -m entrypoints.vllm.serve`, which is named as centralized deployment.
+
+```
+python -m llumnix.entrypoints.vllm.serve \
+    --config-file $CONFIG_PATH \
+    # vLLM arguments ...
+    # Llumnix arguments ...
+    ...
+```
+
+Centralized deployment assumes that user has already launch a Ray cluter. Upon running the serve module, Llumnix will automatically connect to the existing Ray cluster, start the Llumnix components, and deploy multiple servers and instances to the Ray cluster until there is no more available gpus or cpus.
 
 ## Ray Cluster Notice
 When you include the --launch-ray-cluster option in Llumnix's serving deployment command, Llumnix automatically builds a Ray cluster during the execution of serving deployment. This action will overwrite any existing Ray cluster. If this behavior is not desired, simply omit the --launch-ray-cluster option, and Llumnix will initiate its actor components within the current Ray cluster.
@@ -83,7 +97,8 @@ HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
                 --launch-ray-cluster \
                 --model $MODEL_PATH \
                 --worker-use-ray \
-                --max-model-len 4096
+                --max-model-len 4096 \
+                --migration-backend rayrpc \
 ```
 `CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node,
 

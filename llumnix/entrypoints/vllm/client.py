@@ -7,10 +7,12 @@ from vllm.engine.async_llm_engine import AsyncStream
 from vllm import SamplingParams
 
 from llumnix.logger import init_logger
-from llumnix.entrypoints.setup import LlumnixEntrypointsContext
+from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.server_info import RequestTimestamps
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
+from llumnix.manager import Manager
+from llumnix.llumlet.llumlet import Llumlet
 
 logger = init_logger(__name__)
 
@@ -19,20 +21,20 @@ WAIT_MANAGER_INTERVAL = 5
 
 class LlumnixClientVLLM:
     def __init__(self,
-                 llumnix_entrypoints_context: LlumnixEntrypointsContext):
-        self.manager: LLMEngineManager = llumnix_entrypoints_context.manager
-        self.instances: Dict[str, Llumlet] = llumnix_entrypoints_context.instances
-        self.request_output_queue: QueueServerBase = llumnix_entrypoints_context.request_output_queue
-        self.server_info: ServerInfo = llumnix_entrypoints_context.server_info
-        self.log_requests: bool = llumnix_entrypoints_context.log_requests
-        self.log_request_timestamps: bool = llumnix_entrypoints_context.log_request_timestamps
+                 entrypoints_context: EntrypointsContext):
+        self.manager: Manager = entrypoints_context.manager
+        self.instances: Dict[str, Llumlet] = entrypoints_context.instances
+        self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
+        self.server_info: ServerInfo = entrypoints_context.server_info
+        self.log_requests = entrypoints_context.log_requests
+        self.log_request_timestamps = entrypoints_context.log_request_timestamps
 
         self.request_streams: Dict[str, AsyncStream] = {}
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
-        self.num_finished_requests: int = 0
-        self.manager_available: bool = True
+        self.num_finished_requests = 0
+        self.manager_available = True
 
     async def generate(self,
                        prompt: str,
@@ -85,10 +87,10 @@ class LlumnixClientVLLM:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 await self.instances[instance_id].generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
-                logger.info("LLMEngineManager is unavailable temporarily, dispatch request {} to instance {}".format(
+                logger.warning("Manager is unavailable temporarily, dispatch request {} to instance {}".format(
                     request_id, instance_id))
             else:
-                logger.info("LLMEngineManager is unavailable temporarily, but there is no instance behind this api server, "
+                logger.warning("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
                 await asyncio.sleep(WAIT_MANAGER_INTERVAL)
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
@@ -110,7 +112,7 @@ class LlumnixClientVLLM:
             logger.info("abort request: {}.".format(request_id))
             await self.manager.abort.remote(request_id)
         except ray.exceptions.RayActorError:
-            logger.info("manager is unavailable")
+            logger.warning("manager is unavailable")
 
     async def is_ready(self) -> bool:
         ready_status = await self.manager.is_ready.remote()

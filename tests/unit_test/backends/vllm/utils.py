@@ -14,11 +14,11 @@
 import math
 import time
 from unittest.mock import MagicMock
-from typing import Iterable, Optional, Tuple
+from typing import Optional, Tuple
 
 from vllm import SamplingParams
 from vllm.lora.request import LoRARequest
-from vllm.sequence import Logprob, Sequence, SequenceStatus
+from vllm.sequence import Sequence, SequenceStatus
 from vllm.inputs import token_inputs
 from vllm.config import SchedulerConfig, CacheConfig
 from vllm.core.scheduler import SchedulingBudget

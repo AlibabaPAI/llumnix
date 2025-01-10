@@ -12,15 +12,12 @@
 # limitations under the License.
 
 import math
-import torch
 from unittest.mock import MagicMock
-import ray
+
+import torch
 import pytest
 
-from vllm.sequence import (Logprob, SequenceGroupOutput, SequenceOutput,
-                           SequenceStatus)
 from vllm import EngineArgs, SamplingParams
-from vllm.model_executor.layers.sampler import SamplerOutput
 from vllm.engine.output_processor.single_step import SingleStepOutputProcessor
 from vllm.engine.output_processor.stop_checker import StopChecker
 from vllm.transformers_utils.detokenizer import Detokenizer
@@ -34,8 +31,9 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.utils import initialize_placement_group, get_placement_group_name
 
+# pylint: disable=unused-import
 from tests.conftest import ray_env
-from .utils import create_dummy_prompt, initialize_scheduler
+from .utils import initialize_scheduler
 
 class MockEngine(LLMEngineLlumnix):
     def __init__(self, *args, executor_class=None, **kwargs):
@@ -46,7 +44,10 @@ class MockEngine(LLMEngineLlumnix):
         self.instance_info = None
         self.executor_class = executor_class
         self.scheduler[0].add_update_instance_info_callback(self.update_instance_info)
-        self.output_processor = SingleStepOutputProcessor(self.scheduler[0].scheduler_config,detokenizer, self.scheduler, self.seq_counter, stop_checker)
+        self.output_processor = SingleStepOutputProcessor(self.scheduler[0].scheduler_config,detokenizer,
+                                                          self.scheduler,
+                                                          self.seq_counter,
+                                                          stop_checker)
 
     def update_instance_info(self, instance_info):
         pass

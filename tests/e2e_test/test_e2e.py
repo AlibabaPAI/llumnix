@@ -54,7 +54,7 @@ def run_vllm(model, max_model_len, sampling_params):
     vllm_output = {}
     raw_vllm = LLM(model=model, trust_remote_code=True, max_model_len=max_model_len)
     outputs = raw_vllm.generate(prompts, SamplingParams(**sampling_params))
-
+    # pylint: disable=not-an-iterable
     for output in outputs:
         vllm_output[output.prompt] = output.prompt + output.outputs[0].text
 

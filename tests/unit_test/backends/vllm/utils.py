@@ -67,48 +67,6 @@ def create_dummy_prompt(
 
     return seq, seq_group
 
-
-def create_seq_group(
-        seq_prompt_len: int = 1024,
-        seq_output_lens: Iterable[int] = (128, ),
-        request_id: str = '0',
-        seq_id_start: int = 0,
-        sampling_params: Optional[SamplingParams] = None) -> SequenceGroupLlumnix:
-
-    assert len(seq_output_lens) > 0
-
-    if sampling_params is None:
-        sampling_params = SamplingParams()
-
-    prompt_token_ids = [0] * seq_prompt_len
-
-    seqs = []
-    for seq_id_offset, output_len in enumerate(seq_output_lens):
-        seq = Sequence(
-            seq_id=seq_id_start + seq_id_offset,
-            prompt="",
-            prompt_token_ids=prompt_token_ids,
-            block_size=16,
-        )
-
-        for i in range(output_len):
-            seq.append_token_id(
-                token_id=i,
-                logprobs={i: Logprob(0.0)},
-            )
-        seqs.append(seq)
-
-    seq_group = SequenceGroupLlumnix(
-        request_id=request_id,
-        server_info=None,
-        expected_steps=math.inf,
-        seqs=seqs,
-        sampling_params=sampling_params,
-        arrival_time=time.time(),
-    )
-
-    return seq_group
-
 def create_token_budget(token_budget: int = 10000,
                         max_num_seqs: int = 10000) -> SchedulingBudget:
     return SchedulingBudget(

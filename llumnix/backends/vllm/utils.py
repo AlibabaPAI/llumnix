@@ -43,7 +43,7 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
         raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
 
 def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs) -> None:
-    assert engine_args.engine_use_ray and engine_args.worker_use_ray, \
+    assert engine_args.worker_use_ray, \
             ("In Llumnix, engine and worker must be ray actor.")
     migration_config = manager_args.create_migration_config()
     engine_config = engine_args.create_engine_config()

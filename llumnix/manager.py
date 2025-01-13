@@ -45,6 +45,7 @@ from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETR
                                WATCH_DEPLOYMENT_INTERVAL, WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
 from llumnix.launcher import Launcher
 
+
 logger = init_logger(__name__)
 
 # TODO(s5u13b): Handle exception of ray operations.

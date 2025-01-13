@@ -5,3 +5,4 @@ pandas
 matplotlib
 pyyaml
 yacs
+loguru

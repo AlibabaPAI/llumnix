@@ -113,7 +113,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     return await asyncio.create_task(self._manager_generate(request, request_id))
             except (ray.exceptions.RayActorError, KeyError):
                 if instance_id in self.llumnix_context.instances:
-                    logger.info("[_manager_generate] instance {} is dead".format(instance_id))
+                    logger.info("instance {} is dead".format(instance_id))
                     del self.llumnix_context.instances[instance_id]
                     del self.llumnix_context.instance_num_requests[instance_id]
                     return await asyncio.create_task(self._manager_generate(request, request_id))

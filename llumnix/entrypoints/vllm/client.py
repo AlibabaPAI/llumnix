@@ -45,7 +45,7 @@ class LlumnixClientVLLM:
         if sampling_params.n > 1 or sampling_params.use_beam_search:
             raise ValueError("Unsupported feature: multiple sequence decoding")
 
-        logger.info("[generate] entrypoints received request {}".format(request_id))
+        logger.info("entrypoints received request {}".format(request_id))
 
         results_generator = AsyncStream(request_id)
         self.request_streams[request_id] = results_generator
@@ -98,7 +98,7 @@ class LlumnixClientVLLM:
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
         except (ray.exceptions.RayActorError, KeyError):
             if instance_id in self.instances:
-                logger.info("[manager_generate] instance {} is dead".format(instance_id))
+                logger.info("instance {} is dead".format(instance_id))
                 if instance_id in self.instances:
                     del self.instances[instance_id]
                 else:

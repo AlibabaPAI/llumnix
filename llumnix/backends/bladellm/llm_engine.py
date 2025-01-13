@@ -88,7 +88,7 @@ class AsyncBackQueueWrapper(APIWrapper):
             server_request_outputs[server_id].append((req_id, request_output.model_dump_json()))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        logger.debug("_put_request_outputs_to_server, {}", server_request_outputs)
+        logger.debug("_put_request_outputs_to_server: {}", server_request_outputs)
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     # pylint: disable=unused-argument
@@ -174,7 +174,7 @@ class AsyncLLMEngineLlumnixMixin:
         await super()._handle_abort(abort)
 
     async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
-        logger.debug("engine {} add request {}", self.instance_id, server_request)
+        logger.debug("engine {} add request {}".format(self.instance_id, server_request))
         self.trans_wrapper.add_request(server_request.id, server_info)
         # pylint: disable=protected-access
         await self._client._add_request(server_request)

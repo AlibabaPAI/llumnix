@@ -175,7 +175,7 @@ class Llumlet:
                         .format(self.instance_id, dst_instance_id, migrated_request, status, \
                                 sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:
-            logger.info("[migrate_out] instance {} is dead".format(dst_instance_name[len("instance_"):]))
+            logger.info("instance {} is dead".format(dst_instance_name[len("instance_"):]))
             raise
         # pylint: disable=W0703
         except Exception as e:

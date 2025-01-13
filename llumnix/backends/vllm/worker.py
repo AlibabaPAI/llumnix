@@ -108,13 +108,13 @@ class MigrationWorker(Worker):
         try:
             self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks)
         except ray.exceptions.RayActorError:
-            logger.info("[migrate_cache] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+            logger.info("self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
         end_time = time.time()
 
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
             self.cache_config, self.model_config, self.parallel_config)
         speed = total_kv_cache_size/_GB/(end_time - start_time)
-        logger.info("[migrate_cache] blocks_num: {}, total_kv_cache_size: {}, time: {}s, speed: {}GB/s."
+        logger.info("blocks_num: {}, total_kv_cache_size: {}, time: {}s, speed: {}GB/s"
                     .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
 
     def do_recv(self, *args, **kwargs):

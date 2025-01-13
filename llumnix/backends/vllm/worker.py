@@ -32,6 +32,7 @@ from llumnix.utils import convert_bytes
 
 logger = init_logger(__name__)
 
+
 class MigrationWorker(Worker):
     def __init__(self, *args, **kwargs) -> None:
         # replace sampler

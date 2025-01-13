@@ -47,6 +47,7 @@ class Llumlet:
                  engine_args,
                  profiling_result_file_path: str = None) -> None:
         try:
+            self.node_id = ray.get_runtime_context().get_node_id()
             logger.info("Llumlet backend type: {}".format(backend_type))
             self.instance_id = instance_id
             self.actor_name = get_instance_name(instance_id)
@@ -70,6 +71,9 @@ class Llumlet:
             logger.error("failed to initialize Llumlet: {}".format(e))
             logger.error("exception traceback: {}".format(traceback.format_exc()))
             raise
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(node_id={self.node_id[:5]},instance_id={self.instance_id[:5]})"
 
     @classmethod
     def from_args(cls,

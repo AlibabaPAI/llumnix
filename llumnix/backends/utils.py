@@ -32,10 +32,14 @@ logger = init_logger(__name__)
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id: str, request_output_queue_type: QueueType):
+        self.node_id = ray.get_runtime_context().get_node_id()
         self.instance_id = instance_id
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(node_id={self.node_id[:5]},instance_id={self.instance_id[:5]})"
 
     async def put_nowait_to_servers(self,
                                     server_request_outputs: Dict[str, List],

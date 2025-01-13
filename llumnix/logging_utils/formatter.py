@@ -11,23 +11,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict
-
-from llumnix.logger import init_logger
-
-logger = init_logger(__name__)
+import logging
 
 
-class Dumper(ABC):
-    @abstractmethod
-    def dump(self, metrics: Dict[str, Any]) -> None:
-        ...
+class NewLineFormatter(logging.Formatter):
+    """Adds logging prefix to newlines to align multi-line messages."""
 
-class LoggerDumper(Dumper):
-    def dump(self, metrics: Dict[str, Any]) -> None:
-        logger.info("Metrics: {}".format(metrics))
+    def __init__(self, fmt, datefmt=None, style="%"):
+        logging.Formatter.__init__(self, fmt, datefmt, style)
 
-class DummyDumper(Dumper):
-    def dump(self, metrics: Dict[str, Any]) -> None:
-        pass
+    def format(self, record):
+        msg = logging.Formatter.format(self, record)
+        if record.message != "":
+            parts = msg.split(record.message)
+            msg = msg.replace("\n", "\r\n" + parts[0])
+        return msg

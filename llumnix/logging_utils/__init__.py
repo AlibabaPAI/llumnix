@@ -11,23 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict
+from llumnix.logging_utils.formatter import NewLineFormatter
 
-from llumnix.logger import init_logger
-
-logger = init_logger(__name__)
-
-
-class Dumper(ABC):
-    @abstractmethod
-    def dump(self, metrics: Dict[str, Any]) -> None:
-        ...
-
-class LoggerDumper(Dumper):
-    def dump(self, metrics: Dict[str, Any]) -> None:
-        logger.info("Metrics: {}".format(metrics))
-
-class DummyDumper(Dumper):
-    def dump(self, metrics: Dict[str, Any]) -> None:
-        pass
+__all__ = [
+    "NewLineFormatter",
+]

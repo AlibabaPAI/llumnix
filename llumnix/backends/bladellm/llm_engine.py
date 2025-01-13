@@ -20,7 +20,6 @@ import asyncio
 import queue
 
 import ray
-from loguru import logger
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
@@ -38,6 +37,10 @@ from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
+from llumnix.logger import init_logger
+
+logger = init_logger(__name__)
+
 
 class AsyncBackQueueWrapper(APIWrapper):
     def __init__(self, placement_group, instance_id, request_output_queue_type) -> None:
@@ -88,7 +91,7 @@ class AsyncBackQueueWrapper(APIWrapper):
             server_request_outputs[server_id].append((req_id, request_output.model_dump_json()))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        logger.debug("_put_request_outputs_to_server: {}", server_request_outputs)
+        logger.debug("_put_request_outputs_to_server: {}".format(server_request_outputs))
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     # pylint: disable=unused-argument

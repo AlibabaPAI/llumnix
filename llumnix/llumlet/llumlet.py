@@ -73,7 +73,7 @@ class Llumlet:
             raise
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(node_id={self.node_id[:5]},instance_id={self.instance_id[:5]})"
+        return f"{self.__class__.__name__}(instance_id={self.instance_id[:5]},node_id={self.node_id[:5]})"
 
     @classmethod
     def from_args(cls,

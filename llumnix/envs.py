@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     LLUMNIX_CONFIGURE_LOGGING: int = 1
     LLUMNIX_LOGGING_CONFIG_PATH: Optional[str] = None
     LLUMNIX_LOGGING_LEVEL: str = "INFO"
-    LLUMNIX_LOGGING_PREFIX: str = ""
+    LLUMNIX_LOGGING_PREFIX: str = "Llumnix"
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {

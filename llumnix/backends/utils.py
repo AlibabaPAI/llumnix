@@ -23,7 +23,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.utils import get_instance_name
 from llumnix.internal_config import MigrationConfig
 
@@ -39,7 +39,7 @@ class AsyncPutQueueActor:
         self.engine_actor_handle = None
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(instance_id={self.instance_id[:5]}, node_id={self.node_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]}, nid={self.node_id[:5]})"
 
     async def put_nowait_to_servers(self,
                                     server_request_outputs: Dict[str, List],

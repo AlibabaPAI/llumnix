@@ -10,7 +10,7 @@ from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -27,7 +27,7 @@ class FastAPIServerActor:
                                         ip, self.request_output_queue_port, self.request_output_queue_type)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(instance_id={self.instance_id[:5]},node_id={self.node_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]},nid={self.node_id[:5]})"
 
     def _setup_entrypoints_context(self,
                                   manager: "ray.actor.ActorHandle",

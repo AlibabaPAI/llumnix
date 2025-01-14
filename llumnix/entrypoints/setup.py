@@ -20,7 +20,7 @@ import ray
 
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, get_manager_name
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs
 from llumnix.queue.queue_type import QueueType

@@ -20,7 +20,7 @@ import zmq
 import zmq.asyncio
 import cloudpickle
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.server_info import ServerInfo
 
 from llumnix.queue.zmq_utils import (RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RPC_SUCCESS_STR,

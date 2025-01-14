@@ -20,7 +20,7 @@ import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
 from llumnix.backends.utils import init_backend_engine, get_engine_world_size
@@ -73,7 +73,7 @@ class Llumlet:
             raise
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(instance_id={self.instance_id[:5]},node_id={self.node_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]},nid={self.node_id[:5]})"
 
     @classmethod
     def from_args(cls,

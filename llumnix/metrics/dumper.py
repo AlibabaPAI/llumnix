@@ -14,7 +14,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 

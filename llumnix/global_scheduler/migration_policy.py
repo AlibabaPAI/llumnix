@@ -17,7 +17,7 @@ from enum import Enum
 import copy
 import numpy as np
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 
 logger = init_logger(__name__)

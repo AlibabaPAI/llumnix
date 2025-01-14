@@ -6,7 +6,7 @@ import asyncio
 import time
 import ray
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 MAX_TASK_RETRIES = 300
 RETRIES_INTERVALS = 0.1

@@ -6,7 +6,7 @@ import ray
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm import SamplingParams
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.setup import EntrypointsContext
 from llumnix.server_info import RequestTimestamps
 from llumnix.queue.queue_server_base import QueueServerBase

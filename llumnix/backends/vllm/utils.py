@@ -22,7 +22,7 @@ from vllm.sampling_params import SamplingType
 from vllm.model_executor.layers.sampler import SampleResultType, _multinomial, _greedy_sample, _random_sample,\
                                                _modify_greedy_probs_inplace, _beam_search_sample
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.arg_utils import ManagerArgs
 
 logger = init_logger(__name__)

@@ -14,7 +14,7 @@
 from typing import Callable, Dict, List, Optional
 from abc import ABC, abstractmethod
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints

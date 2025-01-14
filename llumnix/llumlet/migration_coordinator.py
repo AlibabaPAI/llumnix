@@ -18,7 +18,7 @@ from typing import List
 # pylint: disable=unused-import
 import ray
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface
 

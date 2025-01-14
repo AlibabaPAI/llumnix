@@ -37,7 +37,7 @@ from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 

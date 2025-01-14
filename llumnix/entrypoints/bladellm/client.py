@@ -29,7 +29,7 @@ from blade_llm.service.communications.response import error_resp
 
 from llumnix.server_info import RequestTimestamps
 from llumnix.entrypoints.setup import EntrypointsContext
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 

@@ -23,7 +23,7 @@ from ray.experimental.internal_kv import (
     _internal_kv_put,
 )
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 

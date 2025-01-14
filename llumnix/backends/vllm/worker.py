@@ -24,7 +24,7 @@ from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
 from vllm.worker.cache_engine import CacheEngine
 from vllm.config import _GB
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migration_backend
 from llumnix.internal_config import MigrationConfig

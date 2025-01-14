@@ -19,7 +19,7 @@ from llumnix.queue.zmq_client import ZmqClient
 from llumnix.queue.ray_queue_client import RayQueueClient
 from llumnix.queue.zmq_utils import get_open_zmq_ipc_path
 from llumnix.queue.queue_type import QueueType
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 

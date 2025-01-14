@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from llumnix.logging_utils.formatter import NewLineFormatter
+from llumnix.logging.formatter import NewLineFormatter
 
 __all__ = [
     "NewLineFormatter",

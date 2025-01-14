@@ -22,7 +22,7 @@ from vllm.sequence import SequenceGroup
 from vllm.core.interfaces import AllocStatus
 
 from llumnix.instance_info import InstanceInfo
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 

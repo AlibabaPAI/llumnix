@@ -124,7 +124,7 @@ class MigrationCoordinator:
             if not is_last_stage:
                 migration_status = MigrationStatus.RUNNING
                 src_blocks = incremental_blocks[:-1]
-                incremental_token_ids = incremental_token_ids[:src_blocks*migrate_out_request.block_size]
+                incremental_token_ids = incremental_token_ids[:len(src_blocks)*migrate_out_request.block_size]
                 stage_block_num = len(incremental_blocks) - 1
                 dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                         .remote("migrate_in_pre_alloc", migrate_out_request.request_id,

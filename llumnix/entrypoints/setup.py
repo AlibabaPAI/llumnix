@@ -35,6 +35,7 @@ from llumnix.constants import MAX_RAY_RESTARTS, RAY_RESTART_INTERVAL
 
 logger = init_logger(__name__)
 
+
 def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     head_node_ip = os.getenv('HEAD_NODE_IP')
     node_ip_address = get_ip_address()

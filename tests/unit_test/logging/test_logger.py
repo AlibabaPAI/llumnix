@@ -16,9 +16,7 @@
 
 import json
 import logging
-import os
 import sys
-import tempfile
 from json.decoder import JSONDecodeError
 from tempfile import NamedTemporaryFile
 from typing import Any

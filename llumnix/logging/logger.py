@@ -16,17 +16,14 @@
 # Adapted from vLLM(v0.6.6.post1):
 # https://github.com/vllm-project/vllm/blob/5340a30d0193547a19e236757fec1f3f246642f9/vllm/logger.py
 
-import datetime
 import json
 import logging
-import os
-import sys
-from functools import lru_cache, partial
+from functools import lru_cache
 from logging import Logger
 from logging.config import dictConfig
 from os import path
 from types import MethodType
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 # pylint: disable=consider-using-from-import
 import llumnix.envs as envs

@@ -24,11 +24,9 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from unittest.mock import MagicMock
 
 from llumnix.logging.logger import _FORMAT, _configure_llumnix_root_logger, init_logger
-from llumnix.logging import NewLineFormatter, NodeFileHandler
-from llumnix import envs
+from llumnix.logging import NewLineFormatter
 
 
 def test_default_llumnix_root_logger_configuration():

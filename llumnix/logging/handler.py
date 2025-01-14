@@ -20,5 +20,5 @@ class NodeFileHandler(logging.Handler):
     def emit(self, record):
         node_id = ray.get_runtime_context().get_node_id()
         filename = os.path.join(self.base_path, f"{node_id}.log")
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(self.format(record) + '\n')

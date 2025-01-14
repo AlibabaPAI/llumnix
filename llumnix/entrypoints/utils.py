@@ -7,16 +7,19 @@ import time
 import ray
 
 from llumnix.logging.logger import init_logger
+from llumnix import constants
 
-MAX_TASK_RETRIES = 300
-RETRIES_INTERVALS = 0.1
+MAX_TASK_RETRIES = constants.MAX_TASK_RETRIES
+RETRIES_INTERVAL = constants.RETRIES_INTERVAL
 
 logger = init_logger(__name__)
 
 
+# Put it in utils.py to avoid circular import.
 class LaunchMode(str, Enum):
     LOCAL = "LOCAL"
     GLOBAL = "GLOBAL"
+
 
 # Use "" type hint to avoid circular import.
 class EntrypointsContext:
@@ -33,6 +36,7 @@ class EntrypointsContext:
         self.server_info = server_info
         self.log_requests = log_requests
         self.log_request_timestamps = log_request_timestamps
+
 
 def get_ip_address():
     hostname = socket.gethostname()
@@ -53,8 +57,8 @@ def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
             break
         except ray.exceptions.RayActorError:
             if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVALS, method_name))
-                time.sleep(RETRIES_INTERVALS)
+                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVAL, method_name))
+                time.sleep(RETRIES_INTERVAL)
             else:
                 logger.error("manager is still unavailable after {} times retries".format(MAX_TASK_RETRIES))
                 raise
@@ -67,8 +71,8 @@ async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
             break
         except ray.exceptions.RayActorError:
             if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVALS, method_name))
-                await asyncio.sleep(RETRIES_INTERVALS)
+                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVAL, method_name))
+                await asyncio.sleep(RETRIES_INTERVAL)
             else:
                 logger.error("manager is still unavailable after {} times retries".format(MAX_TASK_RETRIES))
                 raise

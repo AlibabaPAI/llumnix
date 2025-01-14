@@ -17,6 +17,7 @@ from collections.abc import Iterable
 
 from llumnix.server_info import ServerInfo
 
+
 class QueueClientBase(ABC):
     @abstractmethod
     async def put_nowait(self, item: Any, server_info: ServerInfo):

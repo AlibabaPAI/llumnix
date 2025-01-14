@@ -31,10 +31,11 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.utils import get_instance_name
+from llumnix import constants
 
 logger = init_logger(__name__)
 
-CHECK_ENGINE_STATE_INTERVAL = 1.0
+CHECK_ENGINE_STATE_INTERVAL = constants.CHECK_ENGINE_STATE_INTERVAL
 
 
 class Llumlet:

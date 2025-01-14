@@ -17,6 +17,7 @@ from llumnix.metrics.variable import _REGISTRY, Status
 from llumnix.metrics.dumper import Dumper, DummyDumper
 from llumnix.instance_info import InstanceInfo
 
+
 class LlumnixMetrics(ABC):
     def __init__(self):
         self.instance_id = Status("instance_id")

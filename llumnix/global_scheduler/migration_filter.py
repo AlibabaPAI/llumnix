@@ -21,6 +21,7 @@ from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 
 logger = init_logger(__name__)
 
+
 class MigrationFilterConfig:
     def __init__(self, migrate_out_load_threshold):
         self.migrate_out_load_threshold: float = migrate_out_load_threshold

@@ -36,6 +36,7 @@ class MigrationConfig:
         self.grpc_migration_backend_server_address = grpc_migration_backend_server_address
         self.kvtransfer_migration_backend_naming_url = kvtransfer_migration_backend_naming_url
 
+
 class GlobalSchedulerConfig:
     def __init__(
             self,

@@ -26,16 +26,16 @@ from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address, retry_manager_method_sync
-from llumnix.entrypoints.utils import LaunchMode
+from llumnix.entrypoints.utils import (LaunchMode, EntrypointsContext, get_ip_address,
+                                       retry_manager_method_sync)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
+from llumnix import constants
 
-MAX_RAY_RESTARTS = 5
-RAY_RESTART_INTERVALS = 10
+MAX_RAY_RESTARTS = constants.MAX_RAY_RESTARTS
+RAY_RESTART_INTERVAL = constants.RAY_RESTART_INTERVAL
 
 logger = init_logger(__name__)
-
 
 def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     head_node_ip = os.getenv('HEAD_NODE_IP')
@@ -68,7 +68,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RAY_RESTARTS:
                     logger.warning("execute '{}' repeatedly until the head node starts".format(ray_start_command))
-                    time.sleep(RAY_RESTART_INTERVALS)
+                    time.sleep(RAY_RESTART_INTERVAL)
                 else:
                     logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
                     sys.exit(1)

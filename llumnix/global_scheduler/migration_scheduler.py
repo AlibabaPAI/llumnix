@@ -20,6 +20,7 @@ from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, 
 
 logger = init_logger(__name__)
 
+
 class MigrationScheduler:
     def __init__(self,
                  pair_migration_policy: str,

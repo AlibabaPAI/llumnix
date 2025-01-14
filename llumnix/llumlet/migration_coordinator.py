@@ -24,6 +24,7 @@ from llumnix.backends.backend_interface import BackendInterface
 
 logger = init_logger(__name__)
 
+
 class MigrationStatus(enum.Enum):
     """Status of Migration."""
     RUNNING = enum.auto()

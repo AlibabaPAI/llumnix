@@ -7,16 +7,17 @@ from vllm.engine.async_llm_engine import AsyncStream
 from vllm import SamplingParams
 
 from llumnix.logging.logger import init_logger
-from llumnix.entrypoints.setup import EntrypointsContext
+from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.server_info import RequestTimestamps
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
+from llumnix import constants
 
 logger = init_logger(__name__)
 
-WAIT_MANAGER_INTERVAL = 5
+WAIT_MANAGER_INTERVAL = constants.WAIT_MANAGER_INTERVAL
 
 
 class LlumnixClientVLLM:

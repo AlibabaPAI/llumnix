@@ -28,12 +28,13 @@ from blade_llm.protocol import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.server_info import RequestTimestamps
-from llumnix.entrypoints.setup import EntrypointsContext
+from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
+from llumnix import constants
 
 logger = init_logger(__name__)
 
-WAIT_MANAGER_INTERVAL = 5
+WAIT_MANAGER_INTERVAL = constants.WAIT_MANAGER_INTERVAL
 
 # TODO(KuilongCui): Update LlumnixCient of BladeLLM.
 

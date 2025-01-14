@@ -15,10 +15,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Union, List, Any
 
-RPC_GET_DATA_TIMEOUT_MS: int = 5000
-RPC_SOCKET_LIMIT_CUTOFF = 2000
-RPC_ZMQ_HWM = 0
+from llumnix import constants
+
+RPC_GET_DATA_TIMEOUT_MS = constants.RPC_GET_DATA_TIMEOUT_MS
+RPC_SOCKET_LIMIT_CUTOFF = constants.RPC_SOCKET_LIMIT_CUTOFF
+RPC_ZMQ_HWM = constants.RPC_ZMQ_HWM
 RPC_SUCCESS_STR = "SUCCESS"
+
 
 @dataclass
 class RPCPutNoWaitQueueRequest:

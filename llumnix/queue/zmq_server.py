@@ -27,6 +27,7 @@ from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 
+
 class Empty(Exception):
     pass
 

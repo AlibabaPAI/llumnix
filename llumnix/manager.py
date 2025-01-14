@@ -58,7 +58,6 @@ WATCH_DEPLOYMENT_INTERVAL = constants.WATCH_DEPLOYMENT_INTERVAL
 WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE = constants.WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE
 
 # TODO(s5u13b): Handle exception of ray operations.
-# TODO(s5u13b): Add exeception handling wrapper.
 
 
 class Manager:

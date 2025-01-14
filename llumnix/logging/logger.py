@@ -131,33 +131,7 @@ def _configure_llumnix_root_logger() -> None:
             "implies LLUMNIX_CONFIGURE_LOGGING. Please enable "
             "LLUMNIX_CONFIGURE_LOGGING or unset LLUMNIX_LOGGING_CONFIG_PATH.")
 
-    print(f"LLUMNIX_CONFIGURE_LOGGING: {LLUMNIX_CONFIGURE_LOGGING}")
-    print(f"LLUMNIX_LOG_STREAM: {LLUMNIX_LOG_STREAM}")
-    print(f"LLUMNIX_LOG_NODE_PATH: {LLUMNIX_LOG_NODE_PATH}")
-
     if LLUMNIX_CONFIGURE_LOGGING:
-        if LLUMNIX_LOG_STREAM:
-            print(f"LLUMNIX_LOG_STREAM: {LLUMNIX_LOG_STREAM}")
-            DEFAULT_LOGGING_CONFIG["handlers"]["stream"] = {
-                "class": "logging.StreamHandler",
-                "formatter": "llumnix",
-                "level": LLUMNIX_LOGGING_LEVEL,
-                "stream": "ext://sys.stdout",
-            }
-            DEFAULT_LOGGING_CONFIG["loggers"]["llumnix"]["handlers"].append("stream")
-
-        if LLUMNIX_LOG_NODE_PATH:
-            print(f"LLUMNIX_LOG_NODE_PATH: {LLUMNIX_LOG_NODE_PATH}")
-            DEFAULT_LOGGING_CONFIG["handlers"]["file"] = {
-                "class": "llumnix.logging.NodeFileHandler",
-                "formatter": "llumnix",
-                "level": LLUMNIX_LOGGING_LEVEL,
-                "base_path": LLUMNIX_LOG_NODE_PATH,
-            }
-            DEFAULT_LOGGING_CONFIG["loggers"]["llumnix"]["handlers"].append("file")
-
-        print(f"DEFAULT_LOGGING_CONFIG: {DEFAULT_LOGGING_CONFIG}")
-
         logging_config = DEFAULT_LOGGING_CONFIG
 
     if LLUMNIX_LOGGING_CONFIG_PATH:

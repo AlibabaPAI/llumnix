@@ -148,7 +148,7 @@ class Manager:
 
     def __repr__(self):
         # Customizing prefixes for Actor logs.
-        return f"{self.__class__.__name__}(node_id={self.node_id[:5]})"
+        return f"{self.__class__.__name__}(nid={self.node_id[:5]})"
 
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:

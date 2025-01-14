@@ -48,6 +48,7 @@ def test_default_llumnix_root_logger_configuration():
     assert isinstance(formatter, NewLineFormatter)
     assert formatter._fmt == _FORMAT
 
+
 @patch("llumnix.logging.logger.LLUMNIX_CONFIGURE_LOGGING", 1)
 @patch("llumnix.logging.logger.LLUMNIX_LOGGING_CONFIG_PATH", None)
 def test_descendent_loggers_depend_on_and_propagate_logs_to_root_logger():

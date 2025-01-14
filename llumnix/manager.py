@@ -42,7 +42,7 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placeme
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
-from llumnix.entrypoints.vllm.api_server_actor import FastAPIServerActor
+from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
 
 
 logger = init_logger(__name__)
@@ -549,7 +549,7 @@ class Manager:
     def _init_server(self,
                      server_name: str,
                      placement_group: PlacementGroup,
-                     entrypoints_args: EntrypointsArgs) -> FastAPIServerActor:
+                     entrypoints_args: EntrypointsArgs) -> APIServerActor:
         entrypoints_args = copy.deepcopy(entrypoints_args)
         if self.manager_args.enable_port_increment:
             entrypoints_args.port += self.port_offset
@@ -557,8 +557,8 @@ class Manager:
             self.port_offset += 1
             if self.manager_args.enable_port_offset_store:
                 put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
-        fastapi_server = FastAPIServerActor.from_args(server_name, placement_group, entrypoints_args)
-        return fastapi_server
+        api_server = APIServerActor.from_args(server_name, placement_group, entrypoints_args)
+        return api_server
 
     def _init_instance(self,
                        instance_id: str,
@@ -677,7 +677,7 @@ class Manager:
 
         return results
 
-    def _get_cluster_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServerActor], Dict[str, Llumlet]]:
+    def _get_cluster_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, APIServerActor], Dict[str, Llumlet]]:
         curr_pgs: Dict[str, PlacementGroup] = {}
         curr_servers: Dict[str, PlacementGroup] = {}
         curr_instances: Dict[str, Llumlet] = {}

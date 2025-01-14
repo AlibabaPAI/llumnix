@@ -54,6 +54,7 @@ class EntrypointsArgs:
     log_level: str = None
     launch_ray_cluster: bool = None
     ray_cluster_port: int = None
+    disable_log_to_driver: bool = None
     request_output_queue_type: str = None
     request_output_queue_port: int = None
     disable_log_requests_server: bool = None
@@ -90,6 +91,9 @@ class EntrypointsArgs:
         parser.add_argument("--ray-cluster-port",
                             type=int,
                             help='ray cluster port')
+        parser.add_argument('--disable-log-to-driver',
+                            action='store_true',
+                            help='disable redirecting all worker logs to driver')
         parser.add_argument("--request-output-queue-type",
                             type=str,
                             choices=['rayqueue', 'zmq'],

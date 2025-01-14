@@ -75,16 +75,22 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
     return result
 
-def connect_to_ray_cluster(head_node_ip: str = None, port: int = None, namespace="llumnix") -> None:
+def connect_to_ray_cluster(head_node_ip: str = None,
+                           port: int = None,
+                           namespace: str ="llumnix",
+                           log_to_driver: bool=True) -> None:
     if head_node_ip is not None and port is not None:
-        ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace)
+        ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
     else:
-        ray.init(ignore_reinit_error=True, namespace=namespace)
+        ray.init(ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
 
 def setup_ray_cluster(entrypoints_args) -> None:
     if entrypoints_args.launch_ray_cluster:
         launch_ray_cluster(entrypoints_args.ray_cluster_port)
-    connect_to_ray_cluster(head_node_ip=os.getenv('HEAD_NODE_IP'), port=entrypoints_args.ray_cluster_port, namespace="llumnix")
+    connect_to_ray_cluster(head_node_ip=os.getenv('HEAD_NODE_IP'),
+                           port=entrypoints_args.ray_cluster_port,
+                           namespace="llumnix",
+                           log_to_driver=not entrypoints_args.disable_log_to_driver)
 
 def init_manager(manager_args: ManagerArgs,
                  entrypoints_args: EntrypointsArgs = None,

@@ -153,6 +153,8 @@ class ManagerArgs:
     num_dispatch_instances: int = None
 
     enable_port_increment: bool = None
+    enable_port_offset_store: bool = None
+
 
     def __post_init__(self):
         # Check if all fields default to None
@@ -221,6 +223,9 @@ class ManagerArgs:
 
         assert not args.simulator_mode or args.profiling_result_file_path is not None, \
             "Set profiling_result_file_path args when enable simulator mode"
+
+        assert not args.enable_port_offset_store or args.enable_port_increment, \
+            "Set enable_port_increment when enable_port_offset_store"
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -357,6 +362,9 @@ class ManagerArgs:
         parser.add_argument('--enable-port-increment',
                             action='store_true',
                             help='enable port increment when desploying multiple servers')
+        parser.add_argument('--enable-port-offset-store',
+                            action='store_true',
+                            help='enable store port offset when desploying multiple servers')
 
         return parser
 

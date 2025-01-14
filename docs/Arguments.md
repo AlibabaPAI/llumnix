@@ -53,6 +53,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--enable-pd-disagg]
             [--num-dispatch-instances NUM_DISPATCH_INSTANCES]
             [--enable-port-increment]
+            [--enable-port-offset-store]
 ```
 
 `--host`
@@ -236,6 +237,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--enable-port-increment`
 - Enable port increment when desploying multiple servers.
+
+`--enable-port-offset-store`
+- Enable store port offset when desploying multiple servers.
 
 # Unsupported vLLM feature options
 

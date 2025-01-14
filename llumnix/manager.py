@@ -133,8 +133,12 @@ class Manager:
         asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
-        value = get_actor_data_from_ray_internal_kv("manager", "port_offset")
-        self.port_offset = 0 if value is None else int(value)
+        if self.manager_args.enable_port_increment:
+            self.port_offset = 0
+            if self.manager_args.enable_port_offset_store:
+                value = get_actor_data_from_ray_internal_kv("manager", "port_offset")
+                if value is not None:
+                    self.port_offset = int(value)
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
             self.last_timeout_instance_id = None
@@ -545,7 +549,8 @@ class Manager:
             entrypoints_args.port += self.port_offset
             entrypoints_args.request_output_queue_port += self.port_offset
             self.port_offset += 1
-            put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
+            if self.manager_args.enable_port_offset_store:
+                put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
         fastapi_server = FastAPIServerActor.from_args(server_name, placement_group, entrypoints_args)
         return fastapi_server
 

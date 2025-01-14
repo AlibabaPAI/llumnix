@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     LLUMNIX_LOGGING_CONFIG_PATH: Optional[str] = None
     LLUMNIX_LOGGING_LEVEL: str = "INFO"
     LLUMNIX_LOGGING_PREFIX: str = "Llumnix"
+    LLUMNIX_LOG_STREAM: int = 1
+    LLUMNIX_LOG_NODE_PATH: str = ""
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -38,6 +40,14 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     # if set, LLUMNIX_LOGGING_PREFIX will be prepended to all log messages
     "LLUMNIX_LOGGING_PREFIX":
     lambda: os.getenv("LLUMNIX_LOGGING_PREFIX", ""),
+
+    # if set, llumnix will routing all logs to stream
+    "LLUMNIX_LOG_STREAM":
+    lambda: os.getenv("LLUMNIX_LOG_STREAM", "1"),
+    
+    # if set, llumnix will routing all node logs to this path
+    "LLUMNIX_LOG_NODE_PATH":
+    lambda: os.getenv("LLUMNIX_LOG_NODE_PATH", ""),
 }
 
 

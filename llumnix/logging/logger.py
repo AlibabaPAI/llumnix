@@ -39,6 +39,8 @@ LLUMNIX_CONFIGURE_LOGGING = envs.LLUMNIX_CONFIGURE_LOGGING
 LLUMNIX_LOGGING_CONFIG_PATH = envs.LLUMNIX_LOGGING_CONFIG_PATH
 LLUMNIX_LOGGING_LEVEL = envs.LLUMNIX_LOGGING_LEVEL
 LLUMNIX_LOGGING_PREFIX = envs.LLUMNIX_LOGGING_PREFIX
+LLUMNIX_LOG_STREAM = envs.LLUMNIX_LOG_STREAM
+LLUMNIX_LOG_NODE_PATH = envs.LLUMNIX_LOG_NODE_PATH
 
 _FORMAT = (f"{LLUMNIX_LOGGING_PREFIX}%(levelname)s %(asctime)s "
            "%(filename)s:%(lineno)d] %(message)s")
@@ -51,22 +53,10 @@ DEFAULT_LOGGING_CONFIG = {
         },
     },
     "handlers": {
-        "stream": {
-            "class": "logging.StreamHandler",
-            "formatter": "llumnix",
-            "level": LLUMNIX_LOGGING_LEVEL,
-            "stream": "ext://sys.stdout",
-        },
-        "file": {
-            "class": "llumnix.logging.NodeFileHandler",
-            "formatter": "llumnix",
-            "level": LLUMNIX_LOGGING_LEVEL,
-            "base_path": "/mnt/sunbiao.sun/develop/llumnix-github/log"
-        },
     },
     "loggers": {
         "llumnix": {
-            "handlers": ["stream", "file"],
+            "handlers": [],
             "level": "DEBUG",
             "propagate": False,
         },
@@ -74,7 +64,6 @@ DEFAULT_LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False
 }
-
 
 # pylint: disable=redefined-outer-name
 @lru_cache
@@ -124,7 +113,33 @@ def _configure_llumnix_root_logger() -> None:
             "implies LLUMNIX_CONFIGURE_LOGGING. Please enable "
             "LLUMNIX_CONFIGURE_LOGGING or unset LLUMNIX_LOGGING_CONFIG_PATH.")
 
+    print(f"LLUMNIX_CONFIGURE_LOGGING: {LLUMNIX_CONFIGURE_LOGGING}")
+    print(f"LLUMNIX_LOG_STREAM: {LLUMNIX_LOG_STREAM}")
+    print(f"LLUMNIX_LOG_NODE_PATH: {LLUMNIX_LOG_NODE_PATH}")
+
     if LLUMNIX_CONFIGURE_LOGGING:
+        if LLUMNIX_LOG_STREAM:
+            print(f"LLUMNIX_LOG_STREAM: {LLUMNIX_LOG_STREAM}")
+            DEFAULT_LOGGING_CONFIG["handlers"]["stream"] = {
+                "class": "logging.StreamHandler",
+                "formatter": "llumnix",
+                "level": LLUMNIX_LOGGING_LEVEL,
+                "stream": "ext://sys.stdout",
+            }
+            DEFAULT_LOGGING_CONFIG["loggers"]["llumnix"]["handlers"].append("stream")
+
+        if LLUMNIX_LOG_NODE_PATH:
+            print(f"LLUMNIX_LOG_NODE_PATH: {LLUMNIX_LOG_NODE_PATH}")
+            DEFAULT_LOGGING_CONFIG["handlers"]["file"] = {
+                "class": "llumnix.logging.NodeFileHandler",
+                "formatter": "llumnix",
+                "level": LLUMNIX_LOGGING_LEVEL,
+                "base_path": LLUMNIX_LOG_NODE_PATH,
+            }
+            DEFAULT_LOGGING_CONFIG["loggers"]["llumnix"]["handlers"].append("file")
+        
+        print(f"DEFAULT_LOGGING_CONFIG: {DEFAULT_LOGGING_CONFIG}")
+
         logging_config = DEFAULT_LOGGING_CONFIG
 
     if LLUMNIX_LOGGING_CONFIG_PATH:

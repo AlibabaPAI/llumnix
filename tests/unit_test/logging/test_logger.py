@@ -24,6 +24,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from unittest.mock import MagicMock
 
 from llumnix.logging.logger import _FORMAT, _configure_llumnix_root_logger, init_logger
 from llumnix.logging import NewLineFormatter
@@ -47,7 +48,6 @@ def test_default_llumnix_root_logger_configuration():
     assert formatter is not None
     assert isinstance(formatter, NewLineFormatter)
     assert formatter._fmt == _FORMAT
-
 
 @patch("llumnix.logging.logger.LLUMNIX_CONFIGURE_LOGGING", 1)
 @patch("llumnix.logging.logger.LLUMNIX_LOGGING_CONFIG_PATH", None)

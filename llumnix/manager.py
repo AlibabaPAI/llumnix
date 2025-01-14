@@ -70,7 +70,12 @@ class Manager:
                  launch_args: LaunchArgs = None
                  ) -> None:
         os.chdir(work_dir)
+        self.job_id = ray.get_runtime_context().get_job_id()
+        self.worker_id = ray.get_runtime_context().get_worker_id()
+        self.actor_id = ray.get_runtime_context().get_actor_id()
         self.node_id = ray.get_runtime_context().get_node_id()
+        logger.info("Manager(job_id={}, worker_id={}, actor_id={}, node_id={})".format(
+                        self.job_id, self.worker_id, self.actor_id, self.node_id))
         self.actor_name = get_manager_name()
         self.manager_args = manager_args
         # engine_args and entrypoints_args are used in global deployment.
@@ -146,10 +151,6 @@ class Manager:
             self.last_timeout_instance_id = None
             asyncio.create_task(self._auto_scale_up_loop(AUTO_SCALE_UP_INTERVAL))
             asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
-
-    def __repr__(self):
-        # Customizing prefixes for Actor logs.
-        return f"{self.__class__.__name__}(nid={self.node_id[:5]})"
 
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:

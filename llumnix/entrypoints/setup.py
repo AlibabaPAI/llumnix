@@ -37,6 +37,7 @@ RAY_RESTART_INTERVAL = constants.RAY_RESTART_INTERVAL
 
 logger = init_logger(__name__)
 
+
 def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     head_node_ip = os.getenv('HEAD_NODE_IP')
     node_ip_address = get_ip_address()
@@ -149,6 +150,7 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
                                              log_request_timestamps)
 
     return entrypoints_context
+
 def _setup_llumnix_local(manager_args, entrypoints_args, engine_args, launch_args) -> EntrypointsContext:
     manager, instance_ids, instances, request_output_queue = \
         init_llumnix_components(manager_args,

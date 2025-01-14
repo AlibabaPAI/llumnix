@@ -17,8 +17,13 @@ logger = init_logger(__name__)
 
 class APIServerActor:
     def __init__(self, server_name: str, entrypoints_args: EntrypointsArgs):
+        self.job_id = ray.get_runtime_context().get_job_id()
+        self.worker_id = ray.get_runtime_context().get_worker_id()
+        self.actor_id = ray.get_runtime_context().get_actor_id()
         self.node_id = ray.get_runtime_context().get_node_id()
         self.instance_id = server_name.split("_")[-1]
+        logger.info("APIServerActor(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
+                        self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
         self.entrypoints_args = entrypoints_args
         self.request_output_queue_port = self.entrypoints_args.request_output_queue_port
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
@@ -27,7 +32,7 @@ class APIServerActor:
                                         ip, self.request_output_queue_port, self.request_output_queue_type)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(iid={self.instance_id[:5]},nid={self.node_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     def _setup_entrypoints_context(self,
                                   manager: "ray.actor.ActorHandle",

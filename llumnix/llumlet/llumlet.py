@@ -48,9 +48,14 @@ class Llumlet:
                  engine_args,
                  profiling_result_file_path: str = None) -> None:
         try:
+            self.job_id = ray.get_runtime_context().get_job_id()
+            self.worker_id = ray.get_runtime_context().get_worker_id()
+            self.actor_id = ray.get_runtime_context().get_actor_id()
             self.node_id = ray.get_runtime_context().get_node_id()
-            logger.info("Llumlet backend type: {}".format(backend_type))
             self.instance_id = instance_id
+            logger.info("Llumlet(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
+                            self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
+            logger.info("Llumlet backend type: {}".format(backend_type))
             self.actor_name = get_instance_name(instance_id)
             self.backend_engine: BackendInterface = init_backend_engine(instance_id,
                                                                         placement_group,
@@ -74,7 +79,7 @@ class Llumlet:
             raise
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(iid={self.instance_id[:5]},nid={self.node_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     @classmethod
     def from_args(cls,

@@ -155,7 +155,7 @@ def _configure_llumnix_root_logger() -> None:
                 "base_path": LLUMNIX_LOG_NODE_PATH,
             }
             DEFAULT_LOGGING_CONFIG["loggers"]["llumnix"]["handlers"].append("file")
-        
+
         print(f"DEFAULT_LOGGING_CONFIG: {DEFAULT_LOGGING_CONFIG}")
 
         logging_config = DEFAULT_LOGGING_CONFIG

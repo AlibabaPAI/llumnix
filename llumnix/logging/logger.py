@@ -38,13 +38,11 @@ LLUMNIX_LOGGING_PREFIX = envs.LLUMNIX_LOGGING_PREFIX
 
 _FORMAT = (f"{LLUMNIX_LOGGING_PREFIX}%(levelname)s %(asctime)s "
            "%(filename)s:%(lineno)d] %(message)s")
-_DATE_FORMAT = "%m-%d %H:%M:%S"
 
 DEFAULT_LOGGING_CONFIG = {
     "formatters": {
         "llumnix": {
             "class": "llumnix.logging.NewLineFormatter",
-            "datefmt": _DATE_FORMAT,
             "format": _FORMAT,
         },
     },

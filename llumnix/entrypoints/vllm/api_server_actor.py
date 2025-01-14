@@ -80,14 +80,14 @@ class APIServerActor:
                   entrypoints_args: EntrypointsArgs):
         try:
             api_server_class = ray.remote(num_cpus=1,
-                                              name=server_name,
-                                              namespace="llumnix",
-                                              lifetime="detached")(cls).options(
-                                                    scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                                        placement_group=placement_group,
-                                                        placement_group_bundle_index=0,
-                                                        placement_group_capture_child_tasks=True
-                                                    )
+                                          name=server_name,
+                                          namespace="llumnix",
+                                          lifetime="detached")(cls).options(
+                                                scheduling_strategy=PlacementGroupSchedulingStrategy(
+                                                    placement_group=placement_group,
+                                                    placement_group_bundle_index=0,
+                                                    placement_group_capture_child_tasks=True
+                                                )
                                              )
             api_server = api_server_class.remote(server_name, entrypoints_args)
         # pylint: disable=broad-except

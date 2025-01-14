@@ -28,6 +28,13 @@ from typing import Any, cast
 # pylint: disable=consider-using-from-import
 import llumnix.envs as envs
 
+try:
+    # import vllm logger first avoid other logger being disabled
+    # pylint: disable=unused-import
+    import vllm.logger
+except ImportError:
+    pass
+
 LLUMNIX_CONFIGURE_LOGGING = envs.LLUMNIX_CONFIGURE_LOGGING
 LLUMNIX_LOGGING_CONFIG_PATH = envs.LLUMNIX_LOGGING_CONFIG_PATH
 LLUMNIX_LOGGING_LEVEL = envs.LLUMNIX_LOGGING_LEVEL
@@ -44,16 +51,22 @@ DEFAULT_LOGGING_CONFIG = {
         },
     },
     "handlers": {
-        "llumnix": {
+        "stream": {
             "class": "logging.StreamHandler",
             "formatter": "llumnix",
             "level": LLUMNIX_LOGGING_LEVEL,
             "stream": "ext://sys.stdout",
         },
+        "file": {
+            "class": "llumnix.logging.NodeFileHandler",
+            "formatter": "llumnix",
+            "level": LLUMNIX_LOGGING_LEVEL,
+            "base_path": "/mnt/sunbiao.sun/develop/llumnix-github/log"
+        },
     },
     "loggers": {
         "llumnix": {
-            "handlers": ["llumnix"],
+            "handlers": ["stream", "file"],
             "level": "DEBUG",
             "propagate": False,
         },

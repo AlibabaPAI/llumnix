@@ -37,6 +37,9 @@ SERVER_TIMEOUT_KEEP_ALIVE: float = 5.0
 # llumnix/llumlet/llumlet.py
 CHECK_ENGINE_STATE_INTERVAL: float = 1.0
 
+# llumnix/backends/vllm/llm_engine.py
+NO_OUTPUTS_STEP_INTERVAL: float = 0.01
+
 # llumnix/queue/zmq_utils.py
 RPC_GET_DATA_TIMEOUT_MS: int = 5000
 RPC_SOCKET_LIMIT_CUTOFF: int = 2000

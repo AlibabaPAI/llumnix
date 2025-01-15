@@ -606,7 +606,7 @@ class Manager:
         asyncio.create_task(done_scale_up())
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
-        async def watch_deployment(instance_id: str):
+        async def watch_instance_deployment_states(instance_id: str):
             instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))])
             instance_pending_creation = len(instance_state) == 1 and instance_state[0]["state"] == "PENDING_CREATION"
             if not instance_pending_creation:
@@ -626,7 +626,7 @@ class Manager:
                 tasks = []
                 for instance_id in curr_pgs:
                     if instance_id not in curr_servers or instance_id not in curr_instances:
-                        tasks.append(asyncio.create_task(watch_deployment(instance_id)))
+                        tasks.append(asyncio.create_task(watch_instance_deployment_states(instance_id)))
                 await asyncio.gather(*tasks, return_exceptions=True)
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except

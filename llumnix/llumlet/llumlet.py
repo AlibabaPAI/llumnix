@@ -194,7 +194,6 @@ class Llumlet:
         return self.backend_engine.get_all_request_ids()
 
     def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        # This should not be used for logging, as it is monotonic time.
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.llumlet_generate_timestamp = time.time()
         self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)

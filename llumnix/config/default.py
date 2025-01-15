@@ -75,6 +75,8 @@ _C.MANAGER.SIMULATOR_MODE = False
 _C.MANAGER.PROFILING_RESULT_FILE_PATH = None
 # Enable port increment when deploying multiple servers
 _C.MANAGER.ENABLE_PORT_INCREMENT = False
+# Enable store port offset when deploying multiple servers
+_C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
 
 # -----------------------------------------------------------------------------
 # DISPATCH CONFIGURATION

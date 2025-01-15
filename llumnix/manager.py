@@ -52,7 +52,8 @@ WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 0.1
 AUTO_SCALE_UP_INTERVAL = 1.0
 WAIT_PLACEMENT_GROUP_TIMEOUT = 5.0
 CHECK_DEPLOYMENT_STATES_INTERVAL = 30.0
-WATCH_DEPLOYMENT_INTERVAL = 40.0
+WATCH_DEPLOYMENT_INTERVAL = 10.0
+WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE = 120.0
 
 # TODO(s5u13b): Handle exception of ray operations.
 # TODO(s5u13b): Add exeception handling wrapper.
@@ -312,7 +313,7 @@ class Manager:
                 try:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
                 except asyncio.TimeoutError:
-                    logger.info("[_auto_scale_up_loop] waiting for new placement group ready timeout")
+                    logger.debug("[_auto_scale_up_loop] waiting for new placement group ready timeout")
                     # After timeout, the new placement group might be pending,
                     # created(without server and instance), rescheduling.
                     self.last_timeout_instance_id = new_instance_id
@@ -430,7 +431,7 @@ class Manager:
         no_pending_instance = self.pending_rebuild_migration_instances == 0
 
         for ins_id in instance_ids:
-            self._clear_instance_ray_resources(ins_id)
+            self._clear_instance_ray_states(ins_id)
             if ins_id in self.instances:
                 indeed_update = True
                 if ins_id in self.instances:
@@ -460,7 +461,7 @@ class Manager:
 
         return self.num_instances
 
-    def _clear_instance_ray_resources(self, instance_id: str):
+    def _clear_instance_ray_states(self, instance_id: str):
         if not remove_placement_group(instance_id):
             logger.debug("[clear_instance_ray_resources] failed to remove placement group {}".format(instance_id))
         if not kill_server(instance_id):
@@ -606,17 +607,21 @@ class Manager:
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_deployment(instance_id: str):
-            await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
-            curr_pgs, curr_servers, curr_instances = self.get_curr_deployment()
-            if instance_id in curr_pgs and (instance_id not in curr_servers or instance_id not in curr_instances):
-                logger.warning("[_check_deployment_states_loop] instance {} deployment states incorrect, "
-                               "states: (pg {}, server {}, instance {})"
-                               .format(instance_id, instance_id in curr_pgs, instance_id in curr_servers, instance_id in curr_instances))
+            instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))])
+            instance_pending_creation = len(instance_state) == 1 and instance_state[0]["state"] == "PENDING_CREATION"
+            if not instance_pending_creation:
+                await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
+            else:
+                await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
+            pg_created, server_alive, instance_alive = self._get_instance_deployment_states(instance_id)
+            if pg_created and (not server_alive or not instance_alive):
+                logger.warning("instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
+                               .format(instance_id, pg_created, server_alive, instance_alive))
                 self.scale_down(instance_id)
 
         while True:
             try:
-                curr_pgs, curr_servers, curr_instances = self.get_curr_deployment()
+                curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment()
                 assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
                 tasks = []
                 for instance_id in curr_pgs:
@@ -655,7 +660,7 @@ class Manager:
 
         return results
 
-    def get_curr_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServerActor], Dict[str, Llumlet]]:
+    def _get_cluster_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServerActor], Dict[str, Llumlet]]:
         curr_pgs: Dict[str, PlacementGroup] = {}
         curr_servers: Dict[str, PlacementGroup] = {}
         curr_instances: Dict[str, Llumlet] = {}
@@ -676,6 +681,16 @@ class Manager:
 
         return curr_pgs, curr_servers, curr_instances
 
+    def _get_instance_deployment_states(self, instance_id: str):
+        pg_state = list_placement_groups(filters=[("name", "=", get_placement_group_name(instance_id))])
+        pg_created = len(pg_state) == 1 and pg_state[0]["state"] == "CREATED"
+        server_state = list_actors(filters=[("name", "=", get_server_name(instance_id))])
+        server_alive = len(server_state) == 1 and server_state[0]["state"] == "ALIVE"
+        instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))])
+        instance_alive = len(instance_state) == 1 and instance_state[0]["state"] == "ALIVE"
+
+        return pg_created, server_alive, instance_alive
+
     async def _get_request_instance(self) -> None:
         def get_request_instance_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
@@ -690,12 +705,12 @@ class Manager:
         instance_ids = []
         tasks = []
         for instance_id, instance_actor_handle in self.instances.items():
-            task = asyncio.gather(instance_actor_handle.get_instance_info.remote(), return_exceptions=True)
+            task = asyncio.gather(instance_actor_handle.get_all_request_ids.remote(), return_exceptions=True)
             task.add_done_callback(partial(get_request_instance_done_callback, instance_id))
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.debug("[_get_request_instance] instance_ids: {}".format(instance_ids))
-        logger.debug("[_get_request_instance] instance_requests: {}".format(instance_requests))
+        logger.info("instance_ids: {}".format(instance_ids))
+        logger.info("instance_requests: {}".format(instance_requests))
         for (instance_id, requests) in zip(instance_ids, instance_requests):
             for request_id in requests:
                 self.request_instance[request_id] = instance_id

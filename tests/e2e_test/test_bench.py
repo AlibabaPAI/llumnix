@@ -133,4 +133,5 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
         with open("performance.txt", "w", encoding="utf-8") as f:
             f.write(parse_log_file())
 
+    subprocess.run("ray stop", shell=True, check=True)
     await asyncio.sleep(3)

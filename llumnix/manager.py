@@ -614,10 +614,16 @@ class Manager:
         async def watch_instance_deployment_states(instance_id: str):
             # There might be some delays of calling _init_server_and_instance, so sleep first.
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
-            instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))])
-            instance_pending_creation = len(instance_state) == 1 and instance_state[0]["state"] == "PENDING_CREATION"
-            if instance_pending_creation:
-                await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
+            wait_pending_instance_time = 0.0
+            while True:
+                instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))])
+                instance_pending_creation = len(instance_state) == 1 and instance_state[0]["state"] == "PENDING_CREATION"
+                if not instance_pending_creation:
+                    break
+                await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
+                wait_pending_instance_time += WATCH_DEPLOYMENT_INTERVAL
+                if wait_pending_instance_time >= WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE:
+                    break
             pg_created, server_alive, instance_alive = self._get_instance_deployment_states(instance_id)
             if pg_created and (not server_alive or not instance_alive):
                 logger.warning("instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"

@@ -52,7 +52,7 @@ WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 0.1
 AUTO_SCALE_UP_INTERVAL = 1.0
 WAIT_PLACEMENT_GROUP_TIMEOUT = 5.0
 CHECK_DEPLOYMENT_STATES_INTERVAL = 30.0
-WATCH_DEPLOYMENT_INTERVAL = 30.0
+WATCH_DEPLOYMENT_INTERVAL = 10.0
 WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE = 120.0
 
 # TODO(s5u13b): Handle exception of ray operations.
@@ -612,11 +612,11 @@ class Manager:
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_instance_deployment_states(instance_id: str):
+            # There might be some delays of calling _init_server_and_instance, so sleep first.
+            await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
             instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))])
             instance_pending_creation = len(instance_state) == 1 and instance_state[0]["state"] == "PENDING_CREATION"
-            if not instance_pending_creation:
-                await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
-            else:
+            if instance_pending_creation:
                 await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
             pg_created, server_alive, instance_alive = self._get_instance_deployment_states(instance_id)
             if pg_created and (not server_alive or not instance_alive):

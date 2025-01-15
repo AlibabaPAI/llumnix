@@ -41,10 +41,11 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import get_instance_name
+from llumnix.constants import constants
 
 logger = init_logger(__name__)
 
-NO_OUTPUTS_STEP_INTERVAL = 0.01
+NO_OUTPUTS_STEP_INTERVAL = constants.NO_OUTPUTS_STEP_INTERVAL
 
 
 class LlumnixRequestOutputFactory(RequestOutputFactory):
@@ -223,6 +224,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             instance_info.num_blocks_last_running_request = len(tot_blocks)
 
         self.instance_info = instance_info
+
+        for request_output in request_outputs:
+            if hasattr(request_output, 'request_timestamps'):
+                request_output.request_timestamps.engine_put_queue_timestamp = time.time()
 
         if request_outputs:
             self.put_queue_args_queue.put_nowait((request_outputs, server_infos))

@@ -400,9 +400,8 @@ class MeasureLatency:
                 self._all_token_latencies.append(lat_arr)
                 self._decode_sum_latencies.append(decode_sum_latency)
                 self._all_decode_token_latencies.extend(lat_arr[1:,1])
+                self._inference_latencies.append(0.0)
             if 'per_token_latency_breakdown_list' in output:
-                step_latency = np.mean([request_timestamps['engine_step_latency'] for request_timestamps in output['per_token_latency_breakdown_list']])
-                self._inference_latencies.append(step_latency)
                 self._per_token_latency_breakdown_list.append(output['per_token_latency_breakdown_list'])
             return prompt, output
         return measured

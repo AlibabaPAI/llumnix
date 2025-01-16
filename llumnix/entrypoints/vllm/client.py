@@ -21,8 +21,7 @@ logger = init_logger(__name__)
 
 
 class LlumnixClientVLLM:
-    def __init__(self,
-                 entrypoints_context: EntrypointsContext):
+    def __init__(self, entrypoints_context: EntrypointsContext):
         self.manager: Manager = entrypoints_context.manager
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue

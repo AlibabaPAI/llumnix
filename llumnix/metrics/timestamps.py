@@ -64,7 +64,7 @@ class RequestTimestamps:
                 (self.queue_server_receive_timestamp - self.queue_client_send_timestamp) * 1000,
             "api_server_get_queue_latency":
                 (self.api_server_get_queue_timestamp - self.queue_server_receive_timestamp) * 1000,
-            "across_results_generator_latency":
+            "across_request_streams_latency":
                 (self.api_server_generate_timestamp_end - self.api_server_get_queue_timestamp) * 1000,
         }
         return latency_dict

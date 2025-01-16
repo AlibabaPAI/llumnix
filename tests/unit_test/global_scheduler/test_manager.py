@@ -363,8 +363,8 @@ def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_output_q
     instance_ids = [actor_name_dict['name'].split("_")[-1] for actor_name_dict in actor_names_dict
                     if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
     assert len(instance_ids) == 4
-    ray.get(manager._clear_instance_ray_resources.remote(instance_ids[0]))
-    ray.get(manager._clear_instance_ray_resources.remote(instance_ids[1]))
+    ray.get(manager._clear_instance_ray_states.remote(instance_ids[0]))
+    ray.get(manager._clear_instance_ray_states.remote(instance_ids[1]))
     time.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4

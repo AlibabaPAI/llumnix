@@ -10,7 +10,7 @@ from vllm import SamplingParams
 
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
-from llumnix.server_info import RequestTimestamps
+from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
 from llumnix.manager import Manager
@@ -74,7 +74,7 @@ class LlumnixClientVLLM:
         if self.log_request_timestamps:
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
-            server_info.request_timestamps.api_server_manager_generate_timestamp = time.time()
+            server_info.request_timestamps.api_server_generate_timestamp = time.time()
         await self.manager.generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
 
     async def _generate_by_instance(self,
@@ -128,9 +128,7 @@ class LlumnixClientVLLM:
     async def get_request_outputs_loop(self):
         while True:
             request_outputs = await self.request_output_queue.get()
-            for request_output in request_outputs:
-                if hasattr(request_output, 'request_timestamps'):
-                    request_output.request_timestamps.api_server_background_process_get_queue_timestamp = time.time()
+            set_timestamp(request_outputs, 'api_server_get_queue_timestamp', time.time())
             for request_output in request_outputs:
                 request_id = request_output.request_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.

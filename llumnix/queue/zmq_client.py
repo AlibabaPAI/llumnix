@@ -27,6 +27,7 @@ from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPC_REQUEST_TYPE, RPCClien
                                      RPCUtilityRequest, RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest,
                                      get_open_zmq_ipc_path)
 from llumnix.constants import RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -109,10 +110,7 @@ class ZmqClient:
 
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
-        if isinstance(item, Iterable):
-            for request_output in item:
-                if hasattr(request_output, 'request_timestamps'):
-                    request_output.request_timestamps.queue_client_send_timestamp = time.time()
+        set_timestamp(item, 'queue_client_send_timestamp', time.time())
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitQueueRequest(item=item),
                         rpc_path=rpc_path,
@@ -120,9 +118,7 @@ class ZmqClient:
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
         rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
-        for request_output in items:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.queue_client_send_timestamp = time.time()
+        set_timestamp(items, 'queue_client_send_timestamp', time.time())
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitBatchQueueRequest(items=items),
                         rpc_path=rpc_path,

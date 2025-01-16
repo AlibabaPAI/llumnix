@@ -74,19 +74,3 @@ async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
                 logger.error("Manager is still unavailable after {} times retries.".format(MAX_TASK_RETRIES))
                 raise
     return ret
-
-def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
-    per_token_latency_breakdown_dict = {
-        'step_latency_engine': [],
-        'step_postprocess_latency': [],
-        'across_async_put_queue_thread_latency': [],
-        'across_async_put_queue_actor_latency': [],
-        'queue_rpc_latency': [],
-        'background_process_get_queue_latency': [],
-        'generate_benchmark_return_output_latency': []
-    }
-    return per_token_latency_breakdown_dict
-
-def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_timestamps: "RequestTimestamps"):
-    for key in per_token_latency_breakdown_dict.keys():
-        per_token_latency_breakdown_dict[key].append(getattr(request_timestamps, key))

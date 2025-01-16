@@ -372,7 +372,7 @@ class MeasureLatency:
         self._decode_sum_latencies = []
         self._all_decode_token_latencies = []
         self._inference_latencies = []
-        self._per_token_latencies_breakdown_dict = []
+        self._per_token_latency_breakdown_list = []
 
     def measure(self, f):
         async def measured(*args, **kwargs):
@@ -400,9 +400,10 @@ class MeasureLatency:
                 self._all_token_latencies.append(lat_arr)
                 self._decode_sum_latencies.append(decode_sum_latency)
                 self._all_decode_token_latencies.extend(lat_arr[1:,1])
-            if 'per_token_latency_breakdown_dict' in output:
-                self._inference_latencies.append(np.mean(output['per_token_latency_breakdown_dict']['step_latency_engine']))
-                self._per_token_latencies_breakdown_dict.append(output['per_token_latency_breakdown_dict'])
+            if 'per_token_latency_breakdown_list' in output:
+                step_latency = np.mean([request_timestamps['engine_step_latency'] for request_timestamps in output['per_token_latency_breakdown_list']])
+                self._inference_latencies.append(step_latency)
+                self._per_token_latency_breakdown_list.append(output['per_token_latency_breakdown_list'])
             return prompt, output
         return measured
 
@@ -494,7 +495,7 @@ async def benchmark(
            m._decode_sum_latencies, \
            m._request_lens, \
            m._all_decode_token_latencies, \
-           m._per_token_latencies_breakdown_dict
+           m._per_token_latency_breakdown_list
 
 def gen_random_response_lens(distribution: str, len_mean, len_range, num_prompts):
     if distribution == 'uniform':
@@ -785,7 +786,7 @@ def main():
     decode_sum_latencies, \
     request_lens, \
     all_decode_token_latencies, \
-    per_token_latencies_breakdown_dict = asyncio.run(benchmark(
+    per_token_latency_breakdown_list = asyncio.run(benchmark(
         backend,
         tokenizer,
         prompts,
@@ -823,8 +824,8 @@ def main():
                         "decode_sum_latencies": decode_sum_latencies,
                         "all_decode_token_latencies": all_decode_token_latencies,
                         "inference_latencies": inference_latencies,
-                        "per_token_latencies_breakdown_dict": per_token_latencies_breakdown_dict,
-                        "throughput": throughput,
+                        "per_token_latency_breakdown_list": per_token_latency_breakdown_list,
+                        "throughput": throughput, 
                         "instance_num": avg_instance_num})
         json.dump(results, f)
 

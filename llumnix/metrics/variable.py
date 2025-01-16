@@ -39,7 +39,9 @@ class Registery:
     def remove(self, key) -> None:
         del self._metrics[key]
 
+
 _REGISTRY = Registery()
+
 
 class Variable(ABC):
     def __init__(self, name: str):
@@ -60,6 +62,7 @@ class Variable(ABC):
     @property
     def name(self) -> str:
         return self._name
+
 
 class Status(Variable):
     def __init__(self, name: str, initial_value: Any = None):

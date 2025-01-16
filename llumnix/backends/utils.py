@@ -26,6 +26,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.logging.logger import init_logger
 from llumnix.utils import get_instance_name
 from llumnix.internal_config import MigrationConfig
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -54,9 +55,7 @@ class AsyncPutQueueActor:
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
-            for req_output in req_outputs:
-                if hasattr(req_output, 'request_timestamps'):
-                    req_output.request_timestamps.engine_actor_put_queue_timestamp = time.time()
+            set_timestamp(req_outputs, 'engine_actor_put_queue_timestamp', time.time())
             tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for idx, ret in enumerate(rets):

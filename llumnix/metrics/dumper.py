@@ -24,9 +24,11 @@ class Dumper(ABC):
     def dump(self, metrics: Dict[str, Any]) -> None:
         ...
 
+
 class LoggerDumper(Dumper):
     def dump(self, metrics: Dict[str, Any]) -> None:
         logger.info("Metrics: {}".format(metrics))
+
 
 class DummyDumper(Dumper):
     def dump(self, metrics: Dict[str, Any]) -> None:

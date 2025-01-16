@@ -14,7 +14,6 @@
 import asyncio
 import time
 from typing import (Coroutine, Any)
-from collections.abc import Iterable
 from typing_extensions import Never
 
 import zmq
@@ -25,6 +24,7 @@ from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
                                      RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
 from llumnix.logging.logger import init_logger
 from llumnix.constants import RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -128,10 +128,7 @@ class ZmqServer:
     async def _put_nowait(self, identity, put_nowait_queue_request: RPCPutNoWaitQueueRequest):
         try:
             item = put_nowait_queue_request.item
-            if isinstance(item, Iterable):
-                for request_output in item:
-                    if hasattr(request_output, 'request_timestamps'):
-                        request_output.request_timestamps.queue_server_receive_timestamp = time.time()
+            set_timestamp(item, 'queue_server_receive_timestamp', time.time())
             self.put_nowait(item)
             await self.socket.send_multipart(
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
@@ -142,9 +139,7 @@ class ZmqServer:
     async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
         try:
             items = put_nowait_batch_queue_request.items
-            for request_output in items:
-                if hasattr(request_output, 'request_timestamps'):
-                    request_output.request_timestamps.queue_server_receive_timestamp = time.time()
+            set_timestamp(items, 'queue_server_receive_timestamp', time.time())
             self.put_nowait_batch(items)
             await self.socket.send_multipart(
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])

@@ -19,7 +19,8 @@ from vllm.outputs import CompletionOutput, RequestOutput
 
 import llumnix.entrypoints.vllm.api_server
 import llumnix.manager
-from llumnix.server_info import ServerInfo, RequestTimestamps
+from llumnix.server_info import ServerInfo
+from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.utils import random_uuid, get_manager_name
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.utils import EntrypointsContext

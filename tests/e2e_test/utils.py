@@ -28,6 +28,7 @@ def generate_launch_command(result_filename: str = "",
                             model = "facebook/opt-125m",
                             max_model_len: int = 4096,
                             log_instance_info: bool = False,
+                            log_request_timestamps: bool = False,
                             request_migration_policy: str = 'SR',
                             max_num_batched_tokens: int = 16000,
                             enable_pd_disagg: bool = False,
@@ -40,6 +41,7 @@ def generate_launch_command(result_filename: str = "",
         f"--initial-instances {instances_num} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
+        f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
         f"--enable-migration "
         f"--model {model} "
         f"--worker-use-ray "
@@ -66,7 +68,8 @@ def generate_serve_command(result_filename: str = "",
                            migration_backend = "gloo",
                            model = "facebook/opt-125m",
                            max_model_len: int = 4096,
-                           log_instance_info: bool = False,
+                           log_instance_info: bool = True,
+                           log_request_timestamps: bool = True,
                            request_migration_policy: str = 'SR',
                            max_num_batched_tokens: int = 16000,
                            enable_pd_disagg: bool = False,
@@ -78,6 +81,7 @@ def generate_serve_command(result_filename: str = "",
         f"--port {port} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
+        f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
         f"--enable-migration "
         f"--model {model} "
         f"--worker-use-ray "

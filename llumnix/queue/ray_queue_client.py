@@ -17,20 +17,16 @@ import time
 
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_client_base import QueueClientBase
+from llumnix.metrics.timestamps import set_timestamp
 
 
 class RayQueueClient(QueueClientBase):
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
-        if isinstance(item, Iterable):
-            for request_output in item:
-                if hasattr(request_output, 'request_timestamps'):
-                    request_output.request_timestamps.queue_client_send_timestamp = time.time()
+        set_timestamp(item, 'queue_client_send_timestamp', time.time())
         return await output_queue.actor.put_nowait.remote(item)
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
-        for request_output in items:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.queue_client_send_timestamp = time.time()
+        set_timestamp(items, 'queue_client_send_timestamp', time.time())
         return await output_queue.actor.put_nowait_batch.remote(items)

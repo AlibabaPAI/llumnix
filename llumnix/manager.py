@@ -44,6 +44,7 @@ from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETR
                                WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
                                WATCH_DEPLOYMENT_INTERVAL, WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
 from llumnix.launcher import Launcher
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -153,8 +154,7 @@ class Manager:
 
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:
-            if hasattr(server_info, 'request_timestamps'):
-                server_info.request_timestamps.manager_generate_timestamp = time.time()
+            set_timestamp(server_info, 'manager_generate_timestamp', time.time())
             await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
             if self.log_requests:
                 logger.info("manager receive request {}".format(request_id))

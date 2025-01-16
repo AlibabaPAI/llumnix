@@ -1,6 +1,8 @@
 import copy
 import time
 import asyncio
+from functools import partial
+
 import ray
 
 from vllm.engine.async_llm_engine import AsyncStream
@@ -45,7 +47,7 @@ class LlumnixClientVLLM:
         if sampling_params.n > 1:
             raise ValueError("Unsupported feature: multiple sequence decoding")
         # pylint: disable=unexpected-keyword-arg
-        results_generator = AsyncStream(request_id, cancel=None)
+        results_generator = AsyncStream(request_id, cancel=partial(self.abort, verbose=False))
         self.request_streams[request_id] = results_generator
         server_info_copy = copy.deepcopy(self.server_info)
 

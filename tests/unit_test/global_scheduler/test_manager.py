@@ -316,7 +316,7 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
         else:
             assert num_migrate_in == 0 and num_migrate_out == 0
 
-def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
+def test_init_server_and_get_instance_deployment_states_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_launch_mode(LaunchMode.LOCAL)
     instance_id = random_uuid()
     pg = ray.get(manager._init_placement_group.remote(get_placement_group_name(instance_id),
@@ -333,8 +333,11 @@ def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     num_instances = ray.get(manager.scale_up.remote(instance_id, instance))
     assert num_instances == 1
 
+    pg_created, server_alive, instance_alive = ray.get(manager._get_instance_deployment_states.remote(instance_id))
+    assert pg_created and server_alive and instance_alive
+
     # test clear_instance_ray_resources
-    ray.get(manager._clear_instance_ray_resources.remote(instance_id))
+    ray.get(manager._clear_instance_ray_states.remote(instance_id))
     # wait for remove and kill
     time.sleep(1.0)
     pg_exists = is_placement_group_exists(get_placement_group_name(instance_id))
@@ -344,13 +347,16 @@ def test_init_server_and_instance_and_clear_instance_ray_resources(ray_env):
     instance_exists = is_actor_exists(get_instance_name(instance_id))
     assert not instance_exists
 
+    pg_created, server_alive, instance_alive = ray.get(manager._get_instance_deployment_states.remote(instance_id))
+    assert not pg_created and not server_alive and not instance_alive
+
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
-def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queue_type):
+def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_output_queue_type):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
     time.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    curr_pgs, curr_servers, curr_instances = ray.get(manager._get_cluster_deployment.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
     actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
@@ -362,7 +368,7 @@ def test_auto_scale_up_loop_and_get_curr_deployment(ray_env, request_output_queu
     time.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    curr_pgs, curr_servers, curr_instances = ray.get(manager._get_cluster_deployment.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
@@ -371,7 +377,7 @@ def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_ou
     time.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    curr_pgs, curr_servers, curr_instances = ray.get(manager._get_cluster_deployment.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
     actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
@@ -382,8 +388,8 @@ def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_ou
     kill_server(instance_ids[1])
     kill_instance(instance_ids[2])
     # Wait for check deployment states, scale down instance and auto scale up.
-    time.sleep(120.0)
+    time.sleep(90.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = ray.get(manager.get_curr_deployment.remote())
+    curr_pgs, curr_servers, curr_instances = ray.get(manager._get_cluster_deployment.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4

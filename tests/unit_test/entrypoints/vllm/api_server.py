@@ -80,7 +80,7 @@ def run_uvicorn_server(host: str, port: int, entrypoints_context: EntrypointsCon
         host=host,
         port=port,
         log_level="debug",
-        timeout_keep_alive=llumnix.entrypoints.vllm.api_server.TIMEOUT_KEEP_ALIVE)
+        timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE)
 
 
 if __name__ == "__main__":

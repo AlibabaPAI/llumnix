@@ -58,7 +58,7 @@ class APIServerActor:
                     host=entrypoints_args.host,
                     port=entrypoints_args.port,
                     log_level=entrypoints_args.log_level,
-                    timeout_keep_alive=llumnix.entrypoints.vllm.api_server.TIMEOUT_KEEP_ALIVE,
+                    timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE,
                     ssl_keyfile=entrypoints_args.ssl_keyfile,
                     ssl_certfile=entrypoints_args.ssl_certfile)
 

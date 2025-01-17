@@ -43,7 +43,7 @@ class RequestTimestamps:
     api_server_get_queue_timestamp: float = field(default=0.0)
     api_server_generate_timestamp_end: float = field(default=0.0)
 
-    def to_latency_breakdown_dict(self) -> Dict[str, Union[float, List[float]]]:
+    def to_latency_breakdown_dict(self) -> Dict[str, float]:
         latency_dict = {
             "across_manager_latency": (self.manager_generate_timestamp - self.api_server_generate_timestamp) * 1000,
             "across_llumlet_latency": (self.llumlet_generate_timestamp - self.manager_generate_timestamp) * 1000,

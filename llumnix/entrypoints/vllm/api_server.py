@@ -32,12 +32,10 @@ from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
-from llumnix import constants
+from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm.api_server")
-
-TIMEOUT_KEEP_ALIVE = constants.SERVER_TIMEOUT_KEEP_ALIVE
 
 llumnix_client: LlumnixClientVLLM = None
 

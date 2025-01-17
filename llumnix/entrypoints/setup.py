@@ -30,10 +30,8 @@ from llumnix.entrypoints.utils import (LaunchMode, EntrypointsContext, get_ip_ad
                                        retry_manager_method_sync)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix import constants
+from llumnix.constants import MAX_RAY_RESTARTS, RAY_RESTART_INTERVAL
 
-MAX_RAY_RESTARTS = constants.MAX_RAY_RESTARTS
-RAY_RESTART_INTERVAL = constants.RAY_RESTART_INTERVAL
 
 logger = init_logger(__name__)
 

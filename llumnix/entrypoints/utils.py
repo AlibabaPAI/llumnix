@@ -7,10 +7,7 @@ import time
 import ray
 
 from llumnix.logging.logger import init_logger
-from llumnix import constants
-
-MAX_TASK_RETRIES = constants.MAX_TASK_RETRIES
-RETRIES_INTERVAL = constants.RETRIES_INTERVAL
+from llumnix.constants import MAX_TASK_RETRIES, RETRIES_INTERVAL
 
 logger = init_logger(__name__)
 

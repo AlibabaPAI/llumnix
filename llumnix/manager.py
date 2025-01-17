@@ -43,19 +43,13 @@ from llumnix.entrypoints.utils import LaunchMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
 from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
-from llumnix import constants
+from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_INTERVAL,
+                               WAIT_ALL_MIGRATIONS_DONE_INTERVAL, AUTO_SCALE_UP_INTERVAL,
+                               WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
+                               WATCH_DEPLOYMENT_INTERVAL, WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
 
 
 logger = init_logger(__name__)
-
-CLEAR_REQUEST_INSTANCE_INTERVAL = constants.CLEAR_REQUEST_INSTANCE_INTERVAL
-NO_INSTANCE_RETRY_INTERVAL = constants.NO_INSTANCE_RETRY_INTERVAL
-WAIT_ALL_MIGRATIONS_DONE_INTERVAL = constants.WAIT_ALL_MIGRATIONS_DONE_INTERVAL
-AUTO_SCALE_UP_INTERVAL = constants.AUTO_SCALE_UP_INTERVAL
-WAIT_PLACEMENT_GROUP_TIMEOUT = constants.WAIT_PLACEMENT_GROUP_TIMEOUT
-CHECK_DEPLOYMENT_STATES_INTERVAL = constants.CHECK_DEPLOYMENT_STATES_INTERVAL
-WATCH_DEPLOYMENT_INTERVAL = constants.WATCH_DEPLOYMENT_INTERVAL
-WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE = constants.WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE
 
 # TODO(s5u13b): Handle exception of ray operations.
 

@@ -13,11 +13,9 @@ from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix import constants
+from llumnix.constants import WAIT_MANAGER_INTERVAL
 
 logger = init_logger(__name__)
-
-WAIT_MANAGER_INTERVAL = constants.WAIT_MANAGER_INTERVAL
 
 
 class LlumnixClientVLLM:

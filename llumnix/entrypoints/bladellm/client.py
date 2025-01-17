@@ -30,11 +30,9 @@ from blade_llm.service.communications.response import error_resp
 from llumnix.server_info import RequestTimestamps
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
-from llumnix import constants
+from llumnix.constants import WAIT_MANAGER_INTERVAL
 
 logger = init_logger(__name__)
-
-WAIT_MANAGER_INTERVAL = constants.WAIT_MANAGER_INTERVAL
 
 # TODO(KuilongCui): Update LlumnixCient of BladeLLM.
 

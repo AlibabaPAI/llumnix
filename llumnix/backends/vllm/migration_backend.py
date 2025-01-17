@@ -75,7 +75,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.migration_stream = torch.cuda.Stream()
 
     def init_backend(self, group_name, world_size, rank) -> bool:
-        logger.info("create rayrpc migration backend successfully.")
+        logger.info("Create rayrpc migration backend successfully.")
         return True
 
     def destory_backend(self) -> None:
@@ -85,7 +85,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
     def warmup(self) -> bool:
         self.actor.exec_method.remote(self.is_driver_worker, "do_send", [0])
-        logger.info("rayrpc migration backend warmup successfully.")
+        logger.info("Rayrpc migration backend warmup successfully.")
         return True
 
     # The src actor will pack the kv-cache data layer by layer. Specifically, NumPy is used for the transfer
@@ -189,7 +189,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         try:
             init_group(world_size, rank, self.backend, group_name)
         except FunctionTimedOut:
-            logger.info("create migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {})."
+            logger.info("Create migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {})."
                 .format(group_name, world_size, rank, self.backend))
             return False
 
@@ -197,7 +197,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.global_world_size = world_size
         self.global_rank = rank
 
-        logger.info("create migration backend group successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
+        logger.info("Create migration backend group successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend))
         return True
 
@@ -213,10 +213,10 @@ class RayColMigrationBackend(MigrationBackendBase):
             err_info = e
 
         if err_info is not None:
-            logger.info("destory migration backend successfully (group_name: {}, backbend: {}), error: {}."
+            logger.info("Destory migration backend successfully (group_name: {}, backbend: {}), error: {}."
                     .format(self.group_name, self.backend, err_info))
         else:
-            logger.info("destory migration backend successfully (group_name: {}, backbend: {})."
+            logger.info("Destory migration backend successfully (group_name: {}, backbend: {})."
                     .format(self.group_name, self.backend))
 
         self.group_name = None
@@ -227,11 +227,11 @@ class RayColMigrationBackend(MigrationBackendBase):
                 col.allreduce(self.dummy_cache[0], self.group_name)
             # pylint: disable=W0703
             except Exception as e:
-                logger.error("warmup migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
+                logger.error("Migration backend warmup failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend, e))
                 return False
 
-        logger.info("migration backend warmup successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
+        logger.info("Migration backend warmup successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend))
         return True
 

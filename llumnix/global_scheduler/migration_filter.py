@@ -43,7 +43,7 @@ class MigrationInstanceFilter(ABC):
 
     def register_filter(self, filter_name: str, migration_filter: MigrationFilterPolicy) -> bool:
         if filter_name in self.registered_filters:
-            logger.warning("migration filter {} has been registered.".format(filter_name))
+            logger.warning("Migration filter {} has been registered.".format(filter_name))
             return False
 
         self.registered_filters[filter_name] = migration_filter

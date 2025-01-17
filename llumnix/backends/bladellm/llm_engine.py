@@ -91,7 +91,7 @@ class AsyncBackQueueWrapper(APIWrapper):
             server_request_outputs[server_id].append((req_id, request_output.model_dump_json()))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        logger.debug("_put_request_outputs_to_server: {}".format(server_request_outputs))
+        logger.debug("server_request_outputs: {}".format(server_request_outputs))
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     # pylint: disable=unused-argument
@@ -153,8 +153,8 @@ class AsyncLLMEngineLlumnixMixin:
             await super()._loop()
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
             previous_state = self.state
             self.state = EngineState.CRASHED

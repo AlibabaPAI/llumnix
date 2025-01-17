@@ -46,7 +46,7 @@ class LlumnixClientVLLM:
         if sampling_params.n > 1 or sampling_params.use_beam_search:
             raise ValueError("Unsupported feature: multiple sequence decoding")
 
-        logger.info("entrypoints received request {}".format(request_id))
+        logger.info("entrypoints receive request {}".format(request_id))
 
         results_generator = AsyncStream(request_id)
         self.request_streams[request_id] = results_generator
@@ -99,7 +99,7 @@ class LlumnixClientVLLM:
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
         except (ray.exceptions.RayActorError, KeyError):
             if instance_id in self.instances:
-                logger.info("instance {} is dead".format(instance_id))
+                logger.info("Instance {} is dead.".format(instance_id))
                 if instance_id in self.instances:
                     del self.instances[instance_id]
                 else:
@@ -112,10 +112,10 @@ class LlumnixClientVLLM:
 
     async def abort(self, request_id: str) -> None:
         try:
-            logger.info("abort request: {}.".format(request_id))
+            logger.info("Abort request: {}.".format(request_id))
             await self.manager.abort.remote(request_id)
         except ray.exceptions.RayActorError:
-            logger.warning("manager is unavailable")
+            logger.warning("Manager is unavailable.")
 
     async def is_ready(self) -> bool:
         ready_status = await self.manager.is_ready.remote()

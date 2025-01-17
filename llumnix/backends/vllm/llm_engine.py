@@ -282,8 +282,8 @@ class BackendVLLM(BackendInterface):
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("error in engine loop: {}".format(e))
-                logger.error("exception traceback: {}".format(traceback.format_exc()))
+                logger.error("Error in engine loop: {}".format(e))
+                logger.error("Exception traceback: {}".format(traceback.format_exc()))
                 self._run_workers("shutdown")
 
                 previous_state = self.state

@@ -74,8 +74,8 @@ class Llumlet:
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("failed to initialize Llumlet: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Failed to initialize Llumlet: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
 
     def __repr__(self):
@@ -119,8 +119,8 @@ class Llumlet:
                                            profiling_result_file_path)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("failed to initialize Llumlet: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Failed to initialize Llumlet: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
 
         return llumlet
@@ -185,12 +185,12 @@ class Llumlet:
                         .format(self.instance_id, dst_instance_id, migrated_request, status, \
                                 sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:
-            logger.info("instance {} is dead".format(dst_instance_name[len("instance_"):]))
+            logger.info("Instance {} is dead.".format(dst_instance_name[len("instance_"):]))
             raise
         # pylint: disable=W0703
         except Exception as e:
-            logger.error("unexpected exception occurs: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Unexpected exception: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
         return migrated_request
 
@@ -215,7 +215,7 @@ class Llumlet:
         return self.backend_engine.abort_request(request_ids)
 
     def clear_migration_states(self, is_migrate_in: bool) -> None:
-        logger.info("instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
+        logger.info("Instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
             logger.info("clear_migration_states: free_dst_pre_alloc_cache")

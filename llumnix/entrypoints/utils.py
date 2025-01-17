@@ -57,10 +57,10 @@ def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
             break
         except ray.exceptions.RayActorError:
             if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVAL, method_name))
+                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRIES_INTERVAL, method_name))
                 time.sleep(RETRIES_INTERVAL)
             else:
-                logger.error("manager is still unavailable after {} times retries".format(MAX_TASK_RETRIES))
+                logger.error("Manager is still unavailable after {} times retries.".format(MAX_TASK_RETRIES))
                 raise
     return ret
 
@@ -71,10 +71,10 @@ async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
             break
         except ray.exceptions.RayActorError:
             if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("manager is unavailable, sleep {}s, and retry {} again".format(RETRIES_INTERVAL, method_name))
+                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRIES_INTERVAL, method_name))
                 await asyncio.sleep(RETRIES_INTERVAL)
             else:
-                logger.error("manager is still unavailable after {} times retries".format(MAX_TASK_RETRIES))
+                logger.error("Manager is still unavailable after {} times retries.".format(MAX_TASK_RETRIES))
                 raise
     return ret
 

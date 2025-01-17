@@ -68,7 +68,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
                 break
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RAY_RESTARTS:
-                    logger.warning("execute '{}' repeatedly until the head node starts".format(ray_start_command))
+                    logger.warning("Execute '{}' repeatedly until the head node starts.".format(ray_start_command))
                     time.sleep(RAY_RESTART_INTERVAL)
                 else:
                     logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))

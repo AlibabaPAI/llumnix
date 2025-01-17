@@ -15,8 +15,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Union, List, Any
 
-from llumnix.constants import RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM
-
 RPC_SUCCESS_STR = "SUCCESS"
 
 

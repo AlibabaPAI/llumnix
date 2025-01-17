@@ -23,9 +23,10 @@ import cloudpickle
 from llumnix.logging.logger import init_logger
 from llumnix.server_info import ServerInfo
 
-from llumnix.queue.zmq_utils import (RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RPC_SUCCESS_STR,
-                                     RPCClientClosedError, RPC_REQUEST_TYPE, RPCUtilityRequest, RPCPutNoWaitQueueRequest,
-                                     RPCPutNoWaitBatchQueueRequest, get_open_zmq_ipc_path)
+from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPC_REQUEST_TYPE, RPCClientClosedError,
+                                     RPCUtilityRequest, RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest,
+                                     get_open_zmq_ipc_path)
+from llumnix.constants import RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM
 
 logger = init_logger(__name__)
 

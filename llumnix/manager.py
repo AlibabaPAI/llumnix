@@ -135,7 +135,7 @@ class Manager:
         # tasks
         # When manager starts, it automatically connects to all existing instances.
         run_async_func_sync(self._connect_to_instances())
-        asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
+        asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
@@ -195,8 +195,8 @@ class Manager:
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _update_instance_info_loop(self, interval: float) -> None:
-        def update_instance_info_done_callback(instance_id: str, fut):
+    async def _poll_instance_info_loop(self, interval: float) -> None:
+        def get_instance_info_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
             if not isinstance(ret, ray.exceptions.RayActorError):
                 if ret is not None:
@@ -214,9 +214,11 @@ class Manager:
                 for instance_id, instance in self.instances.items():
                     # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
-                    task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
+                    task.add_done_callback(partial(get_instance_info_done_callback, instance_id))
                     tasks.append(task)
+                logger.debug("Polling instance infos of all instances starts.")
                 await asyncio.gather(*tasks, return_exceptions=True)
+                logger.debug("Polling instance infos of all instances ends.")
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \
@@ -284,7 +286,9 @@ class Manager:
                                       return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
+            logger.info("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
+            logger.info("{} migration tasks ends.".format(len(migration_tasks))
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Unexpected exception: {}".format(e))

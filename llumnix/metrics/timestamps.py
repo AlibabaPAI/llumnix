@@ -26,22 +26,22 @@ def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
 
 @dataclass
 class RequestTimestamps:
-    api_server_generate_timestamp: float = field(default=0.0)
-    manager_generate_timestamp: float = field(default=0.0)
-    llumlet_generate_timestamp: float = field(default=0.0)
-    engine_add_request_timestamp: float = field(default=0.0)
-    engine_process_model_outputs_timestamp_begin: float = field(default=0.0)
-    engine_process_model_outputs_timestamp_end: float = field(default=0.0)
-    engine_step_timestamp_begin: float = field(default=0.0)
-    engine_step_timestamp_end: float = field(default=0.0)
-    engine_step_postprocess_timestamp_end: float = field(default=0.0)
-    engine_put_queue_timestamp: float = field(default=0.0)
-    engine_thread_put_queue_timestamp: float = field(default=0.0)
-    engine_actor_put_queue_timestamp: float = field(default=0.0)
-    queue_client_send_timestamp: float = field(default=0.0)
-    queue_server_receive_timestamp: float = field(default=0.0)
-    api_server_get_queue_timestamp: float = field(default=0.0)
-    api_server_generate_timestamp_end: float = field(default=0.0)
+    api_server_generate_timestamp: float = 0.0
+    manager_generate_timestamp: float = 0.0
+    llumlet_generate_timestamp: float = 0.0
+    engine_add_request_timestamp: float = 0.0
+    engine_process_model_outputs_timestamp_begin: float = 0.0
+    engine_process_model_outputs_timestamp_end: float = 0.0
+    engine_step_timestamp_begin: float = 0.0
+    engine_step_timestamp_end: float = 0.0
+    engine_step_postprocess_timestamp_end: float = 0.0
+    engine_put_queue_timestamp: float = 0.0
+    engine_thread_put_queue_timestamp: float = 0.0
+    engine_actor_put_queue_timestamp: float = 0.0
+    queue_client_send_timestamp: float = 0.0
+    queue_server_receive_timestamp: float = 0.0
+    api_server_get_queue_timestamp: float = 0.0
+    api_server_generate_timestamp_end: float = 0.0
 
     def to_latency_breakdown_dict(self) -> Dict[str, float]:
         latency_dict = {

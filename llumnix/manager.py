@@ -216,9 +216,11 @@ class Manager:
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
                     task.add_done_callback(partial(get_instance_info_done_callback, instance_id))
                     tasks.append(task)
-                logger.debug("Polling instance infos of all instances starts.")
+                if self.num_instance_info_updates % 100 == 0:
+                    logger.debug("Polling instance infos of all instances starts.")
                 await asyncio.gather(*tasks, return_exceptions=True)
-                logger.debug("Polling instance infos of all instances ends.")
+                if self.num_instance_info_updates % 100 == 0:
+                    logger.debug("Polling instance infos of all instances ends.")
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \
@@ -286,9 +288,11 @@ class Manager:
                                       return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
-            logger.info("{} migration tasks starts.".format(len(migration_tasks)))
+            if len(migration_tasks) > 0:
+                logger.info("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
-            logger.info("{} migration tasks ends.".format(len(migration_tasks)))
+            if len(migration_tasks) > 0:
+                logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Unexpected exception: {}".format(e))

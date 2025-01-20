@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from typing import Dict
 import numpy as np
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import RequestInferenceType
 
 logger = init_logger(__name__)

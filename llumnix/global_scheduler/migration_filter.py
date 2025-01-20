@@ -14,12 +14,13 @@
 from typing import Callable, Dict, List, Optional
 from abc import ABC, abstractmethod
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 
 logger = init_logger(__name__)
+
 
 class MigrationFilterConfig:
     def __init__(self, migrate_out_load_threshold):
@@ -42,7 +43,7 @@ class MigrationInstanceFilter(ABC):
 
     def register_filter(self, filter_name: str, migration_filter: MigrationFilterPolicy) -> bool:
         if filter_name in self.registered_filters:
-            logger.warning("migration filter {} has been registered.".format(filter_name))
+            logger.warning("Migration filter {} has been registered.".format(filter_name))
             return False
 
         self.registered_filters[filter_name] = migration_filter

@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from asyncio.log import logger
 import time
 from typing import Dict, List, Optional, Tuple, Deque
 from collections import deque
@@ -23,7 +22,7 @@ from vllm.sequence import SequenceGroup
 from vllm.core.interfaces import AllocStatus
 
 from llumnix.instance_info import InstanceInfo
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 
@@ -195,7 +194,7 @@ class SchedulerLlumnix(Scheduler):
 
     def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
-        logger.info("free request: {}, seq: {}".format(backend_request.request_id, seq.seq_id))
+        logger.info("free request: {} (seq: {})".format(backend_request.request_id, seq.seq_id))
         self.free_seq(seq)
 
     def _get_instance_info(self, scheduled_seq_groups: List[SequenceGroupLlumnix]) -> InstanceInfo:

@@ -2,7 +2,7 @@ from vllm.engine.arg_utils import AsyncEngineArgs
 from llumnix.backends.vllm.utils import check_engine_args
 
 from llumnix.arg_utils import EntrypointsArgs, ManagerArgs
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 

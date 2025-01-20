@@ -27,16 +27,15 @@ from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.utils import init_per_token_latency_breakdown_dict, record_per_token_latency_breakdown
 from llumnix.entrypoints.vllm.arg_utils import add_cli_args, get_args
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
+from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm.api_server")
-
-TIMEOUT_KEEP_ALIVE = 5  # seconds.
 
 llumnix_client: LlumnixClientVLLM = None
 
@@ -199,6 +198,6 @@ if __name__ == "__main__":
                     host=entrypoints_args.host,
                     port=entrypoints_args.port,
                     log_level=entrypoints_args.log_level,
-                    timeout_keep_alive=TIMEOUT_KEEP_ALIVE,
+                    timeout_keep_alive=SERVER_TIMEOUT_KEEP_ALIVE,
                     ssl_keyfile=entrypoints_args.ssl_keyfile,
                     ssl_certfile=entrypoints_args.ssl_certfile)

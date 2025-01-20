@@ -13,12 +13,13 @@
 
 from typing import Dict, List, Tuple, Set
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig, CustomFilter
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
 
 logger = init_logger(__name__)
+
 
 class MigrationScheduler:
     def __init__(self,

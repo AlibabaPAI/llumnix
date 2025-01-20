@@ -11,11 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from loguru import logger
-
 from blade_llm.service.args import ServingArgs
+
 from llumnix.arg_utils import EntrypointsArgs, ManagerArgs
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
+
 
 def detect_unsupported_feature(engine_args: ServingArgs) -> None:
     unsupported_feature = None
@@ -47,8 +49,8 @@ def get_args(llumnix_cfg, llumnix_parser, engine_args):
     ManagerArgs.check_args(manager_args, llumnix_parser)
     check_engine_args(engine_args, manager_args)
 
-    logger.info("entrypoints_args: {}", entrypoints_args)
-    logger.info("manager_args: {}", manager_args)
-    logger.info("engine_args: {}", engine_args)
+    logger.info("entrypoints_args: {}".format(entrypoints_args))
+    logger.info("manager_args: {}".format(manager_args))
+    logger.info("engine_args: {}".format(engine_args))
 
     return entrypoints_args, manager_args, engine_args

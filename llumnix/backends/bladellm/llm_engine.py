@@ -20,7 +20,6 @@ import asyncio
 import queue
 
 import ray
-from loguru import logger
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
@@ -38,6 +37,10 @@ from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
+
 
 class AsyncBackQueueWrapper(APIWrapper):
     def __init__(self, placement_group, instance_id, request_output_queue_type) -> None:
@@ -88,7 +91,7 @@ class AsyncBackQueueWrapper(APIWrapper):
             server_request_outputs[server_id].append((req_id, request_output.model_dump_json()))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        logger.debug("_put_request_outputs_to_server, {}", server_request_outputs)
+        logger.debug("server_request_outputs: {}".format(server_request_outputs))
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     # pylint: disable=unused-argument
@@ -150,8 +153,8 @@ class AsyncLLMEngineLlumnixMixin:
             await super()._loop()
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Error in engine loop: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
             previous_state = self.state
             self.state = EngineState.CRASHED
@@ -174,7 +177,7 @@ class AsyncLLMEngineLlumnixMixin:
         await super()._handle_abort(abort)
 
     async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
-        logger.debug("engine {} add request {}", self.instance_id, server_request)
+        logger.debug("engine {} add request {}".format(self.instance_id, server_request))
         self.trans_wrapper.add_request(server_request.id, server_info)
         # pylint: disable=protected-access
         await self._client._add_request(server_request)

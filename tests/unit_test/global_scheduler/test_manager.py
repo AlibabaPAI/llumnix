@@ -94,7 +94,7 @@ class MockLlumlet:
         migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
         ray.get(migrate_in_ray_actor.migrate_in.remote(self.actor_name))
         time.sleep(0.1)
-        return self.num_migrate_out
+        return []
 
     def migrate_in(self, src_instance_name):
         self.num_migrate_in += 1

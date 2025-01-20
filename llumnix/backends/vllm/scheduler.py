@@ -146,9 +146,14 @@ class SchedulerLlumnix(Scheduler):
         if not block_table:
             block_table = self.block_manager.get_free_blocks(block_num, token_ids)
             self.pre_alloc_cache_dict[request_id] = block_table
+        elif self.block_manager.get_num_free_gpu_blocks() >= block_num:
+            block_table.allocate(token_ids)
+
+        if len(block_table.blocks) == self.block_manager.max_block_sliding_window:
+            # abort migration due to sliding window
+            return []
         else:
-            block_table.append_token_ids(token_ids)
-        return block_table.physical_block_ids[-block_num:]
+            return block_table.physical_block_ids[-block_num:]
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
         self._set_status(backend_request, status_to=SequenceStatus.RUNNING)

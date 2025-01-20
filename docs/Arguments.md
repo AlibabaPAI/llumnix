@@ -255,10 +255,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-chunked-prefill`
 - Llumnix does not support chunked prefill currently.
 
-`--use-v2-block-manager`
-- Llumnix does not support speculative decoding currently.
-
 `--speculative-model`
 - Llumnix does not support speculative decoding currently.
+
+`--pipeline-parallel-size`
+- Llumnix does not support pipeline parallel currently.
+
+`--num-schedule-steps`
+- Llumnix does not support multi-step scheduling.
 
 Besides, Llumnix does not support sampling algorithms whose number of ouput sequences is greater than one (vllm.SamplingParams.n > 1), such as beam search.

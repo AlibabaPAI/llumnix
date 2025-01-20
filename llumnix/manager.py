@@ -288,7 +288,7 @@ class Manager:
                 migration_tasks.append(task)
             logger.info("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
-            logger.info("{} migration tasks ends.".format(len(migration_tasks))
+            logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Unexpected exception: {}".format(e))

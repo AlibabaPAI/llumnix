@@ -11,8 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass, field
-from typing import List, Union, Dict, Any, Iterable
+from dataclasses import dataclass
+from typing import Dict, Any, Iterable
 
 def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
     if not isinstance(obj, Iterable):

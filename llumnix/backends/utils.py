@@ -95,7 +95,7 @@ def init_backend_engine(instance_id: str,
                                          engine_args)
     elif backend_type == BackendType.SIM_VLLM:
         # pylint: disable=import-outside-toplevel
-        from llumnix.backends.vllm.simulator import BackendSimVLLM
+        from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
         backend_engine = BackendSimVLLM(instance_id,
                                         placement_group,
                                         request_output_queue_type,

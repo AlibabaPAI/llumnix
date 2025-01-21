@@ -184,7 +184,7 @@ class Llumlet:
                 if status == MigrationStatus.ABORTED_SRC:
                     await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
             t1 = time.time()
-            logger.info("{}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
+            logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
                         .format(self.instance_id, dst_instance_id, migrated_request, status, \
                                 sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:

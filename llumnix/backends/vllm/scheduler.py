@@ -146,7 +146,7 @@ class SchedulerLlumnix(Scheduler):
             block_table = self.block_manager.get_free_blocks(block_num, token_ids)
             self.pre_alloc_cache_dict[request_id] = block_table
         elif self.block_manager.get_num_free_gpu_blocks() >= block_num:
-            block_table.allocate(token_ids)
+            block_table.append_token_ids(token_ids)
 
         if len(block_table.blocks) == self.block_manager.max_block_sliding_window:
             # abort migration due to sliding window

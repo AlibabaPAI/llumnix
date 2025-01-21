@@ -41,8 +41,6 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
         unsupported_feature = "speculative decoding"
     elif engine_args.pipeline_parallel_size > 1:
         unsupported_feature = "pipeline parallel"
-    elif not engine_args.use_v2_block_manager:
-        unsupported_feature = "v1 block manager"
     elif engine_args.num_scheduler_steps > 1:
         unsupported_feature = "multi-step scheduling"
     if unsupported_feature:

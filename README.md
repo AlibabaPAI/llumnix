@@ -10,6 +10,7 @@ Efficient and easy <i>multi-instance</i> LLM serving
 
 ## 🔥 Latest News
 
+- [2025.1] We updated vLLM to version v0.6.3.post1
 - [2024.11] Llumnix v0.1.0 launched!
 - [2024.7] We officially released the first version of Llumnix.
 - [2024.6] We released our OSDI '24 [research paper](https://arxiv.org/abs/2406.03243) on arxiv.

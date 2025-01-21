@@ -267,7 +267,7 @@ class Manager:
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
                     self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
-                logger.info("instance {}->{} migrate done, migrate request {}".format(
+                logger.info("Instance {}->{} migrate done, migrate request {}".format(
                     migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
             ret = fut.result()[0]

@@ -250,8 +250,8 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     def _get_worker_module_and_class(
             self) -> Tuple[str, str, Optional[Callable[[], Type[WorkerBase]]]]:
         worker_class_fn = None
-        if self.scheduler_config.is_multi_step or self.speculative_config:
-            raise NotImplementedError
+        assert not (self.scheduler_config.is_multi_step or self.speculative_config), \
+                "Llumnix does not support mult_step_worker and spec_decode_worker"
         worker_module_name = "llumnix.backends.vllm.worker"
         worker_class_name = "MigrationWorker"
         return (worker_module_name, worker_class_name, worker_class_fn)

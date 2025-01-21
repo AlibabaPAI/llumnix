@@ -29,5 +29,4 @@ jobs:
           -v ${PWD}:/workspace \
           -w /workspace \
           registry.cn-beijing.aliyuncs.com/llumnix/llumnix-dev:20240909_action_678a439 \
-          bash -c "pip install -e . > /dev/null && pip install vllm==0.6.3.post1 && \
-          pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp310-cp310-manylinux2014_x86_64.whl && make lint"
+          bash -c "pip install -e .[vllm] > /dev/null && make lint"

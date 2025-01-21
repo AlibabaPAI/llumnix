@@ -46,7 +46,7 @@ logger = init_logger(__name__)
 NO_OUTPUTS_STEP_INTERVAL = 0.01
 
 
-class LlumnixOutput(RequestOutputFactory):
+class LlumnixRequestOutputFactory(RequestOutputFactory):
     @staticmethod
     def create(seq_group: SequenceGroupLlumnix, use_cache: bool = False):
         # Determine the type based on a condition, for example:
@@ -64,7 +64,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  *arg, **kwargs) -> None:
         # pylint: disable=import-outside-toplevel
         import vllm.outputs
-        vllm.outputs.RequestOutputFactory.create = LlumnixOutput.create
+        vllm.outputs.RequestOutputFactory.create = LlumnixRequestOutputFactory.create
         super().__init__(*arg, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()

@@ -24,13 +24,14 @@ from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
 from vllm.worker.cache_engine import CacheEngine
 from vllm.utils import GiB_bytes
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migration_backend
 from llumnix.internal_config import MigrationConfig
 from llumnix.utils import convert_bytes
 
 logger = init_logger(__name__)
+
 
 class MigrationWorker(Worker):
     def __init__(self, *args, **kwargs) -> None:
@@ -68,7 +69,7 @@ class MigrationWorker(Worker):
                                  "try to increase gpu-memory-utilization or reduce migration-buffer-blocks."
                                  .format(migration_memory_ratio, cache_config.gpu_memory_utilization))
 
-            logger.info("nccl migration backend take {:.4f} gpu memory, left gpu_memory_utilization {:.4f} for kv cache."
+            logger.info("Nccl migration backend take {:.4f} gpu memory, left gpu_memory_utilization {:.4f} for kv cache."
                         .format(migration_memory_ratio, cache_config.gpu_memory_utilization))
 
         return dummy_cache_size
@@ -108,7 +109,7 @@ class MigrationWorker(Worker):
         try:
             self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks)
         except ray.exceptions.RayActorError:
-            logger.info("[migrate_cache] self.rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+            logger.info("rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
         end_time = time.time()
 
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(

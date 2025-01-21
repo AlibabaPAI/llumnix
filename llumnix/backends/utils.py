@@ -23,7 +23,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.utils import get_instance_name
 from llumnix.internal_config import MigrationConfig
 
@@ -32,10 +32,19 @@ logger = init_logger(__name__)
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id: str, request_output_queue_type: QueueType):
+        self.job_id = ray.get_runtime_context().get_job_id()
+        self.worker_id = ray.get_runtime_context().get_worker_id()
+        self.actor_id = ray.get_runtime_context().get_actor_id()
+        self.node_id = ray.get_runtime_context().get_node_id()
         self.instance_id = instance_id
+        logger.info("AsyncPutQueueActor(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
+                        self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     async def put_nowait_to_servers(self,
                                     server_request_outputs: Dict[str, List],
@@ -54,10 +63,10 @@ class AsyncPutQueueActor:
             if isinstance(ret, Exception):
                 server_id = list(server_request_outputs.keys())[idx]
                 server_info = server_info_dict[server_id]
-                logger.info("server {} is dead".format(server_id))
+                logger.warning("Server {} is dead.".format(server_id))
                 if self.request_output_queue_type == QueueType.ZMQ:
-                    logger.info("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                               server_info.request_output_queue_port))
+                    logger.warning("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
+                                                                                  server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort_request.remote(request_ids)

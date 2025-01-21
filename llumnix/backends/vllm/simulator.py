@@ -18,7 +18,7 @@ from typing import List
 from ray.util.placement_group import PlacementGroup
 from vllm.engine.arg_utils import EngineArgs
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM, EngineState

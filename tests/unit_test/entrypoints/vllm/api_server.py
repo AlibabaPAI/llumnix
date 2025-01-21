@@ -22,7 +22,7 @@ import llumnix.manager
 from llumnix.server_info import ServerInfo, RequestTimestamps
 from llumnix.utils import random_uuid, get_manager_name
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
-from llumnix.entrypoints.setup import EntrypointsContext
+from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 
 import tests.unit_test.entrypoints.vllm.api
@@ -80,7 +80,7 @@ def run_uvicorn_server(host: str, port: int, entrypoints_context: EntrypointsCon
         host=host,
         port=port,
         log_level="debug",
-        timeout_keep_alive=llumnix.entrypoints.vllm.api_server.TIMEOUT_KEEP_ALIVE)
+        timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE)
 
 
 if __name__ == "__main__":

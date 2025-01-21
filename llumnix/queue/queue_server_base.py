@@ -13,6 +13,7 @@
 
 from abc import ABC, abstractmethod
 
+
 class QueueServerBase(ABC):
     @abstractmethod
     async def get(self):

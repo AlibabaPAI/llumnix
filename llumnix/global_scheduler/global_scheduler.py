@@ -14,7 +14,7 @@
 from typing import Dict, List, Tuple, Union, Iterable, Set
 import math
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
@@ -88,12 +88,12 @@ class GlobalScheduler:
         instance_ids = list(instance_id)
         for ins_id in instance_ids:
             if ins_id not in self.instance_id_set:
-                logger.info("scale up instance: {}".format(ins_id))
+                logger.info("Scale up instance: {}.".format(ins_id))
                 new_intance_info = self._get_empty_instance_info()
                 new_intance_info.instance_id = ins_id
                 self.instance_info[ins_id] = new_intance_info
                 self._add_instance(ins_id)
-        logger.info("self.num_instances: {}, self.instances: {}".format(self.num_instances, self.instance_id_set))
+        logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
     def scale_down(self, instance_id: Union[str, Iterable[str]]) -> int:
@@ -102,13 +102,13 @@ class GlobalScheduler:
         instance_ids = list(instance_id)
         for ins_id in instance_ids:
             if ins_id in self.instance_id_set:
-                logger.info("scale down instance: {}".format(ins_id))
+                logger.info("Scale down instance: {}.".format(ins_id))
                 if ins_id in self.instance_info:
                     del self.instance_info[ins_id]
                 else:
-                    logger.warning("[scale_down] instance {} is not in self.instance_info".format(ins_id))
+                    logger.warning("instance {} is not in instance_info".format(ins_id))
                 self._remove_instance(ins_id)
-        logger.info("self.num_instances: {}, self.instances: {}".format(self.num_instances, self.instance_id_set))
+        logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
     def _add_instance(self, instance_id: str) -> None:

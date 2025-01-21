@@ -31,7 +31,7 @@ from vllm.sequence import Logprob, SequenceOutput, ExecuteModelRequest
 from vllm.utils import GiB_bytes
 
 from llumnix.internal_config import MigrationConfig
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import get_cache_block_size
 from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_prefill, model_decode, _pad_to_alignment
 
@@ -288,7 +288,7 @@ class SimGPUExecutor(RayGPUExecutor):
 
     def initialize_cache(self, num_gpu_blocks: int,
                          num_cpu_blocks: int) -> None:
-        logger.info("# GPU blocks: %d, # CPU blocks: %d", num_gpu_blocks, num_cpu_blocks)
+        logger.info("# GPU blocks: {}, # CPU blocks: {}".format(num_gpu_blocks, num_cpu_blocks))
 
     async def execute_model_async(
             self,

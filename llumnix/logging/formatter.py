@@ -11,18 +11,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-from typing import Any
-from collections.abc import Iterable
-
-from llumnix.server_info import ServerInfo
+import logging
 
 
-class QueueClientBase(ABC):
-    @abstractmethod
-    async def put_nowait(self, item: Any, server_info: ServerInfo):
-        raise NotImplementedError
+class NewLineFormatter(logging.Formatter):
+    """Adds logging prefix to newlines to align multi-line messages."""
 
-    @abstractmethod
-    async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
-        raise NotImplementedError
+    def __init__(self, fmt, datefmt=None, style="%"):
+        logging.Formatter.__init__(self, fmt, datefmt, style)
+
+    def format(self, record):
+        msg = logging.Formatter.format(self, record)
+        if record.message != "":
+            parts = msg.split(record.message)
+            msg = msg.replace("\n", "\r\n" + parts[0])
+        return msg

@@ -20,19 +20,18 @@ import ray
 
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, get_manager_name
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address, retry_manager_method_sync
-from llumnix.entrypoints.utils import LaunchMode
+from llumnix.entrypoints.utils import (LaunchMode, EntrypointsContext, get_ip_address,
+                                       retry_manager_method_sync)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
+from llumnix.constants import MAX_RAY_RESTARTS, RAY_RESTART_INTERVAL
 
-MAX_RAY_RESTARTS = 5
-RAY_RESTART_INTERVALS = 10
 
 logger = init_logger(__name__)
 
@@ -67,24 +66,30 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
                 break
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RAY_RESTARTS:
-                    logger.warning("execute '{}' repeatedly until the head node starts".format(ray_start_command))
-                    time.sleep(RAY_RESTART_INTERVALS)
+                    logger.warning("Execute '{}' repeatedly until the head node starts.".format(ray_start_command))
+                    time.sleep(RAY_RESTART_INTERVAL)
                 else:
                     logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
                     sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
     return result
 
-def connect_to_ray_cluster(head_node_ip: str = None, port: int = None, namespace="llumnix") -> None:
+def connect_to_ray_cluster(head_node_ip: str = None,
+                           port: int = None,
+                           namespace: str ="llumnix",
+                           log_to_driver: bool=True) -> None:
     if head_node_ip is not None and port is not None:
-        ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace)
+        ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
     else:
-        ray.init(ignore_reinit_error=True, namespace=namespace)
+        ray.init(ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
 
 def setup_ray_cluster(entrypoints_args) -> None:
     if entrypoints_args.launch_ray_cluster:
         launch_ray_cluster(entrypoints_args.ray_cluster_port)
-    connect_to_ray_cluster(head_node_ip=os.getenv('HEAD_NODE_IP'), port=entrypoints_args.ray_cluster_port, namespace="llumnix")
+    connect_to_ray_cluster(head_node_ip=os.getenv('HEAD_NODE_IP'),
+                           port=entrypoints_args.ray_cluster_port,
+                           namespace="llumnix",
+                           log_to_driver=not entrypoints_args.disable_log_to_driver)
 
 def init_manager(manager_args: ManagerArgs,
                  entrypoints_args: EntrypointsArgs = None,
@@ -143,6 +148,7 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
                                              log_request_timestamps)
 
     return entrypoints_context
+
 def _setup_llumnix_local(manager_args, entrypoints_args, engine_args, launch_args) -> EntrypointsContext:
     manager, instance_ids, instances, request_output_queue = \
         init_llumnix_components(manager_args,

@@ -18,6 +18,7 @@ import time
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_client_base import QueueClientBase
 
+
 class RayQueueClient(QueueClientBase):
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         output_queue = server_info.request_output_queue

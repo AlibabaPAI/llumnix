@@ -14,7 +14,10 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
-from loguru import logger
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
+
 
 class Dumper(ABC):
     @abstractmethod
@@ -23,7 +26,7 @@ class Dumper(ABC):
 
 class LoggerDumper(Dumper):
     def dump(self, metrics: Dict[str, Any]) -> None:
-        logger.info("Metrics: {}", metrics)
+        logger.info("Metrics: {}".format(metrics))
 
 class DummyDumper(Dumper):
     def dump(self, metrics: Dict[str, Any]) -> None:

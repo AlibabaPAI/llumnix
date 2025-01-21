@@ -14,6 +14,7 @@
 from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.queue.queue_type import QueueType
 
+
 class RequestTimestamps:
     def __init__(self):
         self.api_server_manager_generate_timestamp = -1.0

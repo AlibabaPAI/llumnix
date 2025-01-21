@@ -23,7 +23,7 @@ from vllm.model_executor.layers.sampler import SamplingMetadata, SamplingTensors
                                                 flashinfer_top_k_top_p_sampling, _top_k_top_p_multinomial_with_flashinfer, \
                                                 VLLM_INVALID_TOKEN_ID, _multinomial, _modify_greedy_probs_inplace, get_pythonized_sample_results
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.arg_utils import ManagerArgs
 
 logger = init_logger(__name__)

@@ -23,7 +23,7 @@ from ray.experimental.internal_kv import (
     _internal_kv_put,
 )
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -120,7 +120,7 @@ def remove_placement_group(instance_id: str) -> bool:
         placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
-        logger.info("remove placement group {}".format(instance_id))
+        logger.info("Remove placement group {}.".format(instance_id))
     # pylint: disable=broad-except
     except Exception:
         return False
@@ -130,7 +130,7 @@ def kill_server(instance_id: str) -> bool:
     try:
         server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
         ray.kill(server)
-        logger.info("kill server {}".format(instance_id))
+        logger.info("Kill server {}.".format(instance_id))
     # pylint: disable=broad-except
     except Exception:
         return False
@@ -140,7 +140,7 @@ def kill_instance(instance_id: str) -> bool:
     try:
         instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
         ray.kill(instance)
-        logger.info("kill instance {}".format(instance_id))
+        logger.info("Kill instance {}.".format(instance_id))
     # pylint: disable=broad-except
     except Exception:
         return False
@@ -175,10 +175,10 @@ def get_actor_data_from_ray_internal_kv(actor_name: str, data_name: str) -> Unio
         value = _internal_kv_get(_make_key(actor_name, data_name))
     if value is not None:
         value = value.decode()
-    logger.info("get {}.{} from ray internal key value store, value: {}".format(actor_name, data_name, value))
+    logger.info("Get {}.{} from ray internal key-value store, value: {}.".format(actor_name, data_name, value))
     return value
 
 def put_actor_data_to_ray_internal_kv(actor_name: str, data_name: str, value: Any):
     if _internal_kv_initialized():
         _internal_kv_put(_make_key(actor_name, data_name), f"{value}".encode(), overwrite=True)
-        logger.debug("put {}.{} to ray internal key value store, value: {}".format(actor_name, data_name, value))
+        logger.debug("Put {}.{} to ray internal key-value store, value: {}.".format(actor_name, data_name, value))

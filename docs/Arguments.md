@@ -13,6 +13,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--log-level {debug,info,warning,error}]
             [--launch-ray-cluster]
             [--ray-cluster-port RAY_CLUSTER_PORT]
+            [--disable-log-to-driver]
             [--request-output-queue-type {rayqueue,zmq}]
             [--request-output-queue-port REQUEST_OUTPUT_QUEUE_PORT]
             [--disable-log-requests-server]
@@ -83,6 +84,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--ray-cluster-port`
 - Ray cluster port.
 - Default: 6379
+
+`--disable-log-to-driver`
+- Disable redirecting all worker logs to driver.
 
 `--request-output-queue-type`
 - Queue type for request output queue.

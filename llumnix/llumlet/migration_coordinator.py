@@ -19,11 +19,12 @@ from typing import List
 # pylint: disable=unused-import
 import ray
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface
 
 logger = init_logger(__name__)
+
 
 class MigrationStatus(enum.Enum):
     """Status of Migration."""
@@ -55,8 +56,8 @@ class MigrationCoordinator:
         try:
             return await self._migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
         except Exception as e:
-            logger.error("unexpected exception occurs: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Unexpected exception: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
 
     async def migrate_out_waiting_request(self,
@@ -82,8 +83,8 @@ class MigrationCoordinator:
 
             return MigrationStatus.FINISHED
         except Exception as e:
-            logger.error("unexpected exception occurs: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Unexpected exception: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
 
     async def _migrate_out_multistage(self,
@@ -104,8 +105,8 @@ class MigrationCoordinator:
             # exceed max stages
             return MigrationStatus.ABORTED_SRC
         except Exception as e:
-            logger.error("unexpected exception occurs: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Unexpected exception: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
 
     async def _migrate_out_onestage(self,
@@ -170,8 +171,8 @@ class MigrationCoordinator:
 
             return migration_status
         except Exception as e:
-            logger.error("unexpected exception occurs: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Unexpected exception: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
 
     def migrate_in_pre_alloc(self,

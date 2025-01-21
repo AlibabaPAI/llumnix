@@ -15,7 +15,7 @@ from typing import Dict, List, Set
 from abc import ABC, abstractmethod
 import random
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceLoadCalculator, InstanceInfo
 
 logger = init_logger(__name__)
@@ -47,7 +47,7 @@ class DispatchScheduler:
                                                              self.sorted_instance_infos)
         self.instance_num_requests[dispatch_instance_id] += 1
         if self.num_requests % 100 == 0:
-            logger.info("self.num_requests: {}".format(self.num_requests))
+            logger.info("num_requests: {}".format(self.num_requests))
             for instance_id, num_requests in self.instance_num_requests.items():
                 logger.info("instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
         return dispatch_instance_id
@@ -73,7 +73,7 @@ class DispatchScheduler:
         if instance_id in self.instance_num_requests:
             del self.instance_num_requests[instance_id]
         else:
-            logger.warning("instance {} not in self.instance_num_requests".format(instance_id))
+            logger.warning("instance {} not in instance_num_requests".format(instance_id))
         if instance_id in self.available_dispatch_instance_set:
             self.available_dispatch_instance_set.remove(instance_id)
             # TODO(KuilongCui): Check it when there is no decode instance.

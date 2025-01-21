@@ -25,7 +25,7 @@ from ray.util.state import list_placement_groups, list_actors
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
@@ -42,22 +42,16 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_state, remove_placeme
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
-from llumnix.entrypoints.vllm.api_server_actor import FastAPIServerActor
+from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
+from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_INTERVAL,
+                               WAIT_ALL_MIGRATIONS_DONE_INTERVAL, AUTO_SCALE_UP_INTERVAL,
+                               WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
+                               WATCH_DEPLOYMENT_INTERVAL, WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
+
 
 logger = init_logger(__name__)
 
-CLEAR_REQUEST_INSTANCE_INTERVAL = 600.0
-NO_INSTANCE_RETRY_INTERVAL = 0.1
-WAIT_ALL_MIGRATIONS_DONE_INTERVAL = 0.1
-AUTO_SCALE_UP_INTERVAL = 1.0
-WAIT_PLACEMENT_GROUP_TIMEOUT = 5.0
-CHECK_DEPLOYMENT_STATES_INTERVAL = 30.0
-WATCH_DEPLOYMENT_INTERVAL = 10.0
-WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE = 120.0
-
 # TODO(s5u13b): Handle exception of ray operations.
-# TODO(s5u13b): Add exeception handling wrapper.
-# TODO(s5u13b): Reorganize constant variables.
 
 
 class Manager:
@@ -69,6 +63,12 @@ class Manager:
                  launch_args: LaunchArgs = None
                  ) -> None:
         os.chdir(work_dir)
+        self.job_id = ray.get_runtime_context().get_job_id()
+        self.worker_id = ray.get_runtime_context().get_worker_id()
+        self.actor_id = ray.get_runtime_context().get_actor_id()
+        self.node_id = ray.get_runtime_context().get_node_id()
+        logger.info("Manager(job_id={}, worker_id={}, actor_id={}, node_id={})".format(
+                        self.job_id, self.worker_id, self.actor_id, self.node_id))
         self.actor_name = get_manager_name()
         self.manager_args = manager_args
         # engine_args and entrypoints_args are used in global deployment.
@@ -147,8 +147,8 @@ class Manager:
 
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
-            logger.warning("[generate] no instance available temporarily, sleep {}s, "
-                           "and regenerate request {}".format(NO_INSTANCE_RETRY_INTERVAL, request_id))
+            logger.warning("No instance available now, sleep {}s, "
+                           "and regenerate request {}.".format(NO_INSTANCE_RETRY_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_INTERVAL)
 
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
@@ -157,11 +157,11 @@ class Manager:
                 server_info.request_timestamps.manager_generate_timestamp = time.time()
             await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
             if self.log_requests:
-                logger.info("[generate] manager received request {}".format(request_id))
-                logger.info("[generate] dispath request {} to instance {}".format(request_id, instance_id))
+                logger.info("manager receive request {}".format(request_id))
+                logger.info("dispath request {} to instance {}".format(request_id, instance_id))
                 self.request_instance[request_id] = instance_id
         except (ray.exceptions.RayActorError, KeyError):
-            logger.info("[generate] instance {} is dead, regenerate request {}".format(instance_id, request_id))
+            logger.info("Instance {} is dead, regenerate request {}.".format(instance_id, request_id))
             self.scale_down(instance_id)
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
@@ -169,14 +169,14 @@ class Manager:
             ret = fut.result()[0]
             if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
                 if self.log_requests:
-                    logger.info("[abort] abort requests: {}.".format(request_ids))
+                    logger.info("Abort requests: {}.".format(request_ids))
                 for req_id in request_ids:
                     if req_id in self.request_instance:
                         del self.request_instance[req_id]
                     else:
-                        logger.warning("[abort] request {} is not in request_instance".format(req_id))
+                        logger.warning("request {} is not in request_instance".format(req_id))
             else:
-                logger.info("[abort] instance {} is dead".format(instance_id))
+                logger.info("Instance {} is dead.".format(instance_id))
                 self.scale_down(instance_id)
 
         if isinstance(request_id, str):
@@ -203,7 +203,7 @@ class Manager:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
             else:
-                logger.info("[_update_instance_info_loop] instance {} is dead".format(instance_id))
+                logger.info("Instance {} is dead.".format(instance_id))
                 self.scale_down(instance_id)
 
         while True:
@@ -226,8 +226,8 @@ class Manager:
                     self._log_instance_infos_to_csv(instance_infos)
             # pylint: disable=W0703
             except Exception as e:
-                logger.error("[_update_instance_info_loop] unexpected exception occurs: {}".format(e))
-                logger.error("[_update_instance_info_loop] exception traceback: {}".format(traceback.format_exc()))
+                logger.error("Unexpected exception: {}".format(e))
+                logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
     async def _push_migrations(self) -> None:
         if self.enable_pd_disagg:
@@ -256,14 +256,14 @@ class Manager:
                 for i, has_error in enumerate(has_error_pair):
                     if has_error:
                         instance_id = migrate_instance_pair[i]
-                        logger.info("[_migrate] instance {} is dead".format(instance_id))
+                        logger.info("Instance {} is dead.".format(instance_id))
                         self.scale_down(instance_id)
             else:
                 migrate_out_request_ids = ret[0]
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
                     self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
-                logger.info("[_migrate] {}->{} migrate done, migrate request {}".format(
+                logger.info("instance {}->{} migrate done, migrate request {}".format(
                     migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
             ret = fut.result()
@@ -287,8 +287,8 @@ class Manager:
             await asyncio.gather(*migration_tasks, return_exceptions=True)
         # pylint: disable=W0703
         except Exception as e:
-            logger.error("[_migrate] unexpected exception occurs: {}".format(e))
-            logger.error("[_migrate] exception traceback: {}".format(traceback.format_exc()))
+            logger.error("Unexpected exception: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
     async def _auto_scale_up_loop(self, interval: float) -> None:
         while True:
@@ -317,19 +317,18 @@ class Manager:
                 try:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
                 except asyncio.TimeoutError:
-                    logger.debug("[_auto_scale_up_loop] waiting for new placement group ready timeout")
+                    logger.debug("Waiting for new placement group {} ready timeout.".format(new_instance_id))
                     # After timeout, the new placement group might be pending,
                     # created(without server and instance), rescheduling.
                     self.last_timeout_instance_id = new_instance_id
                     await asyncio.sleep(interval)
                     continue
                 self._init_server_and_instance(new_instance_id, new_pg)
-                logger.info("[_auto_scale_up_loop] deploy server and instance to new placement group done, "
-                            "instance_id: {}".format(new_instance_id))
+                logger.info("Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id))
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("[_auto_scale_up_loop] unexpected exception occurs: {}".format(e))
-                logger.error("[_auto_scale_up_loop] exception traceback: {}".format(traceback.format_exc()))
+                logger.error("Unexpected exception: {}".format(e))
+                logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
     # TODO(KuilongCui): Add comments for this function.
     async def _rebuild_migration_backend(self) -> None:
@@ -387,7 +386,7 @@ class Manager:
             src_filter=lambda instance_info: instance_info.instance_id in alive_instances,
             dst_filter=lambda instance_info: instance_info.instance_id in alive_instances)
 
-        logger.info("[rebuild_migration_backend] rebuild {} migration backend done, group_name: {}, alive instance ({}): {}"
+        logger.info("Rebuild {} migration backend done, group_name: {}, alive instance ({}): {}."
             .format(self.manager_args.migration_backend, group_name, len(alive_instances), alive_instances))
 
         # Restore migrate config
@@ -441,16 +440,16 @@ class Manager:
                 if ins_id in self.instances:
                     del self.instances[ins_id]
                 else:
-                    logger.debug("[scale_down] instance {} is not in self.instances".format(ins_id))
+                    logger.debug("instance {} is not in instances".format(ins_id))
                 if ins_id in self.instance_migrating:
                     del self.instance_migrating[ins_id]
                 else:
-                    logger.debug("[scale_down] instance {} is not in self.instance_migrating".format(ins_id))
+                    logger.debug("instance {} is not in instance_migrating".format(ins_id))
                 if self.log_instance_info:
                     if ins_id in self.instance_last_logged_empty:
                         del self.instance_last_logged_empty[ins_id]
                     else:
-                        logger.debug("[scale_down] instance {} is not in self.instance_last_logged_empty".format(ins_id))
+                        logger.debug("instance {} is not in instance_last_logged_empty".format(ins_id))
                 self.pending_rebuild_migration_instances += 1
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
@@ -467,11 +466,11 @@ class Manager:
 
     def _clear_instance_ray_states(self, instance_id: str):
         if not remove_placement_group(instance_id):
-            logger.debug("[clear_instance_ray_resources] failed to remove placement group {}".format(instance_id))
+            logger.debug("Failed to remove placement group {}.".format(instance_id))
         if not kill_server(instance_id):
-            logger.debug("[clear_instance_ray_resources] failed to kill server {}".format(instance_id))
+            logger.debug("Failed to kill server {}.".format(instance_id))
         if not kill_instance(instance_id):
-            logger.debug("[clear_instance_ray_resources] failed to kill instance {}".format(instance_id))
+            logger.debug("Failed to kill instance {}.".format(instance_id))
 
     async def _connect_to_instances(self):
         def connect_to_instances_done_callback(instance_id: str, instance_actor_handle: "ray.actor.ActorHandle", fut):
@@ -479,9 +478,9 @@ class Manager:
             if not isinstance(ret, Exception):
                 scale_up_instance_ids.append(instance_id)
                 scale_up_instance_actor_handles.append(instance_actor_handle)
-                logger.info("[_connect_to_instances] connect to instance {}.".format(instance_id))
+                logger.info("Connect to instance {}".format(instance_id))
             else:
-                logger.warning("[_connect_to_instances] connect to instance {} failed, exception: {}".format(instance_id, ret))
+                logger.warning("Connect to instance {} failed, exception: {}".format(instance_id, ret))
 
         # Must set True despite set namespance to llumnix.
         actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
@@ -543,7 +542,7 @@ class Manager:
     def _init_server(self,
                      server_name: str,
                      placement_group: PlacementGroup,
-                     entrypoints_args: EntrypointsArgs) -> FastAPIServerActor:
+                     entrypoints_args: EntrypointsArgs) -> APIServerActor:
         entrypoints_args = copy.deepcopy(entrypoints_args)
         if self.manager_args.enable_port_increment:
             entrypoints_args.port += self.port_offset
@@ -551,8 +550,8 @@ class Manager:
             self.port_offset += 1
             if self.manager_args.enable_port_offset_store:
                 put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
-        fastapi_server = FastAPIServerActor.from_args(server_name, placement_group, entrypoints_args)
-        return fastapi_server
+        api_server = APIServerActor.from_args(server_name, placement_group, entrypoints_args)
+        return api_server
 
     def _init_instance(self,
                        instance_id: str,
@@ -601,8 +600,8 @@ class Manager:
                 self.scale_up(instance_id, instance)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("[_init_server_and_instance] unexpected exception occurs: {}".format(e))
-                logger.error("[_init_server_and_instance] exception traceback: {}".format(traceback.format_exc()))
+                logger.error("Unexpected exception: {}".format(e))
+                logger.error("Exception traceback: {}".format(traceback.format_exc()))
                 self._clear_instance_ray_resources(instance_id)
 
         request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
@@ -626,7 +625,7 @@ class Manager:
                     break
             pg_created, server_alive, instance_alive = self._get_instance_deployment_states(instance_id)
             if pg_created and (not server_alive or not instance_alive):
-                logger.warning("instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
+                logger.warning("Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
                                .format(instance_id, pg_created, server_alive, instance_alive))
                 self.scale_down(instance_id)
 
@@ -642,8 +641,8 @@ class Manager:
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("[_check_deployment_states_loop] unexpected exception occurs: {}".format(e))
-                logger.error("[_check_deployment_states_loop] exception traceback: {}".format(traceback.format_exc()))
+                logger.error("Unexpected exception: {}".format(e))
+                logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""
@@ -655,10 +654,10 @@ class Manager:
         def check_instance_error_done_callback(idx: int, instance_id: str, fut):
             ret = fut.result()[0]
             if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
-                logger.info("[_check_instance_error] instance {} is alive".format(instance_id))
+                logger.info("Instance {} is alive.".format(instance_id))
                 results[idx] = False
             else:
-                logger.info("[_check_instance_error] instance {} is dead".format(instance_id))
+                logger.info("Instance {} is dead.".format(instance_id))
                 results[idx] = True
 
         results = [None, None]
@@ -671,7 +670,7 @@ class Manager:
 
         return results
 
-    def _get_cluster_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, FastAPIServerActor], Dict[str, Llumlet]]:
+    def _get_cluster_deployment(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, APIServerActor], Dict[str, Llumlet]]:
         curr_pgs: Dict[str, PlacementGroup] = {}
         curr_servers: Dict[str, PlacementGroup] = {}
         curr_instances: Dict[str, Llumlet] = {}
@@ -709,7 +708,7 @@ class Manager:
                 instance_requests.append(ret)
                 instance_ids.append(instance_id)
             else:
-                logger.info("[_get_request_instance] instance {} is dead".format(instance_id))
+                logger.info("Instance {} is dead.".format(instance_id))
                 self.scale_down(instance_id)
 
         instance_requests = []
@@ -720,8 +719,8 @@ class Manager:
             task.add_done_callback(partial(get_request_instance_done_callback, instance_id))
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info("instance_ids: {}".format(instance_ids))
-        logger.info("instance_requests: {}".format(instance_requests))
+        logger.debug("instance_ids: {}".format(instance_ids))
+        logger.debug("instance_requests: {}".format(instance_requests))
         for (instance_id, requests) in zip(instance_ids, instance_requests):
             for request_id in requests:
                 self.request_instance[request_id] = instance_id

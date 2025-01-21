@@ -21,11 +21,13 @@ import zmq
 import zmq.asyncio
 import cloudpickle
 
-from llumnix.queue.zmq_utils import (RPC_ZMQ_HWM, RPC_SUCCESS_STR, RPC_SOCKET_LIMIT_CUTOFF,
-                                     RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
-from llumnix.logger import init_logger
+from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
+                                     RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)
+from llumnix.logging.logger import init_logger
+from llumnix.constants import RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM
 
 logger = init_logger(__name__)
+
 
 class Empty(Exception):
     pass

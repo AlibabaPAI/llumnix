@@ -54,6 +54,8 @@ _C.SERVER.DISABLE_KEEP_SERVE_PROCESS_ALIVE = False
 _C.SERVER.LAUNCH_RAY_CLUSTER = False
 # Port number for the Ray cluster
 _C.SERVER.RAY_CLUSTER_PORT = 6379
+# Disable redirecting all worker logs to driver
+_C.SERVER.DISABLE_LOG_TO_DRIVER = False
 
 # -----------------------------------------------------------------------------
 # MANAGER CONFIGURATION

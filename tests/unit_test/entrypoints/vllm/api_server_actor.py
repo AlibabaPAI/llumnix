@@ -36,7 +36,7 @@ class MockManagerServer(MockManager):
         ray.get(self.server.run.remote())
 
     def init_server(self, entrypoints_args):
-        server = FastAPIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME,
+        server = APIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME,
                                        namespace='llumnix').remote(entrypoints_args)
         return server
 
@@ -52,7 +52,7 @@ class MockManagerServer(MockManager):
 
 
 @ray.remote(num_cpus=1, lifetime="detached")
-class FastAPIServerActor:
+class APIServerActor:
     def __init__(self, entrypoints_args):
         self.host = entrypoints_args.host
         self.port = entrypoints_args.port
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     parser.add_argument("--request-output-queue-type", type=str, choices=["zmq", "rayqueue"])
     entrypoints_args = parser.parse_args()
 
-    # magic actor, without this actor, FastAPIServer cannot initialize correctly.
+    # magic actor, without this actor, APIServer cannot initialize correctly.
     # If this actor is placed globally,
     # pylint will hangs if testing api_server_manager and api_server_service concurrently (--jobs > 1).
     request_output_queue = RayQueue()

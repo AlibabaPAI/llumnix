@@ -29,7 +29,7 @@ from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
 from vllm.usage.usage_lib import UsageContext
 
-from llumnix.logger import init_logger
+from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
@@ -274,8 +274,8 @@ class BackendVLLM(BackendInterface):
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("error in engine loop: {}".format(e))
-                logger.error("exception traceback: {}".format(traceback.format_exc()))
+                logger.error("Error in engine loop: {}".format(e))
+                logger.error("Exception traceback: {}".format(traceback.format_exc()))
                 self._run_workers("shutdown")
 
                 previous_state = self.state

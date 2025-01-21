@@ -109,7 +109,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Initialize the cluster and specify the executor class.
         # pylint: disable=import-outside-toplevel
         if latency_mem is not None:
-            from llumnix.backends.vllm.executor import SimGPUExecutor
+            from llumnix.backends.vllm.sim_executor import SimGPUExecutor
             executor_class = SimGPUExecutor
             executor_class.latency_mem = latency_mem
         elif engine_config.parallel_config.use_ray:
@@ -274,6 +274,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+
 
 class BackendVLLM(BackendInterface):
     def __init__(

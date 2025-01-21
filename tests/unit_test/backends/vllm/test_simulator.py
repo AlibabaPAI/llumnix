@@ -7,8 +7,8 @@ from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
 from vllm.sequence import ExecuteModelRequest
 
-from llumnix.backends.vllm.executor import SimGPUExecutor
-from llumnix.backends.vllm.simulator import BackendSimVLLM
+from llumnix.backends.vllm.sim_executor import SimGPUExecutor
+from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType

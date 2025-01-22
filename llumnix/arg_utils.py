@@ -205,6 +205,8 @@ class ManagerArgs:
         assert not args.enable_port_offset_store or args.enable_port_increment, \
             "Set enable_port_increment when enable_port_offset_store"
 
+        assert not args.enable_scaling, "Proactive scaling is deprecated now, all scaling related args will not take effects."
+
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--initial-instances',

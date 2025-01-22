@@ -96,9 +96,9 @@ _C.MANAGER.ENABLE_SCALING = False
 # Instance scaling load metric
 _C.MANAGER.SCALING_LOAD_METRIC = 'remaining_steps'
 # Minimum number of instances
-_C.MANAGER.MIN_INSTANCES = 1
+_C.MANAGER.MIN_INSTANCES = -1
 # Maximum number of instances
-_C.MANAGER.MAX_INSTANCES = 1
+_C.MANAGER.MAX_INSTANCES = -1
 # Interval time to check scaling
 _C.MANAGER.SCALING_INTERVAL = 10
 # Scaling policy

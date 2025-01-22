@@ -29,6 +29,7 @@ logger = init_logger(__name__)
 
 class SimGPUExecutor(RayGPUExecutor):
     latency_mem: LatencyMemData = None
+
     def __init__(self, *args, **kwargs) -> None:
         RayGPUExecutor.__init__(self, *args, **kwargs)
         self.last_inference_latency = 0

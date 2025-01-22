@@ -149,8 +149,8 @@ class Manager:
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
             logger.warning("No instance available now, sleep {}s, "
-                           "and regenerate request {}.".format(NO_INSTANCE_RETRY_INTERVAL, request_id))
-            await asyncio.sleep(NO_INSTANCE_RETRY_INTERVAL)
+                           "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
+            await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:

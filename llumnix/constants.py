@@ -13,7 +13,7 @@
 
 # llumnix/manager.py
 CLEAR_REQUEST_INSTANCE_INTERVAL: float = 1000.0
-NO_INSTANCE_RETRY_INTERVAL: float = 1.0
+NO_INSTANCE_RETRY_GENERATE_INTERVAL: float = 1.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL: float = 0.1
 AUTO_SCALE_UP_INTERVAL: float = 1.0
 WAIT_PLACEMENT_GROUP_TIMEOUT: float = 5.0
@@ -25,7 +25,7 @@ WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE: float = 120.0
 DISPATCH_LOG_FREQUENCY = 100
 
 # llumnix/entrypoints/setup.py
-MAX_RAY_RESTARTS: int = 10
+MAX_RAY_RESTART_TIMES: int = 10
 RAY_RESTART_INTERVAL: float = 10.0
 
 # llumnix/entrypoints/vllm/client.py, llumnix/entrypoints/bladellm/client.py
@@ -40,11 +40,15 @@ CHECK_ENGINE_STATE_INTERVAL: float = 1.0
 # llumnix/backends/vllm/llm_engine.py
 NO_OUTPUTS_STEP_INTERVAL: float = 0.01
 
-# llumnix/queue/zmq_utils.py
+# llumnix/queue/zmq_client.py
 RPC_GET_DATA_TIMEOUT_MS: int = 5000
+
+# llumnix/queue/zmq_server.py
 RPC_SOCKET_LIMIT_CUTOFF: int = 2000
 RPC_ZMQ_HWM: int = 0
+RETRY_BIND_ADDRESS_INTERVAL: float = 10.0
+MAX_BIND_ADDRESS_RETRY_TIMES: int = 10
 
 # llumnix/entrypoints/utils.py
-MAX_TASK_RETRIES: int = 10
-RETRIES_INTERVAL: float = 5.0
+MAX_MANAGER_RETRY_TIMES: int = 10
+RETRY_MANAGER_INTERVAL: float = 5.0

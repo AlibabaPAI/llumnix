@@ -7,7 +7,7 @@ import time
 import ray
 
 from llumnix.logging.logger import init_logger
-from llumnix.constants import MAX_TASK_RETRIES, RETRIES_INTERVAL
+from llumnix.constants import MAX_MANAGER_RETRY_TIMES, RETRY_MANAGER_INTERVAL
 
 logger = init_logger(__name__)
 
@@ -48,29 +48,29 @@ def is_gpu_available() -> bool:
         return False
 
 def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
-    for attempt in range(MAX_TASK_RETRIES):
+    for attempt in range(MAX_MANAGER_RETRY_TIMES):
         try:
             ret = ray.get(ray_call(*args, **kwargs))
             break
         except ray.exceptions.RayActorError:
-            if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRIES_INTERVAL, method_name))
-                time.sleep(RETRIES_INTERVAL)
+            if attempt < MAX_MANAGER_RETRY_TIMES - 1:
+                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRY_MANAGER_INTERVAL, method_name))
+                time.sleep(RETRY_MANAGER_INTERVAL)
             else:
-                logger.error("Manager is still unavailable after {} times retries.".format(MAX_TASK_RETRIES))
+                logger.error("Manager is still unavailable after {} times retries.".format(MAX_MANAGER_RETRY_TIMES))
                 raise
     return ret
 
 async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
-    for attempt in range(MAX_TASK_RETRIES):
+    for attempt in range(MAX_MANAGER_RETRY_TIMES):
         try:
             ret = await ray_call(*args, **kwargs)
             break
         except ray.exceptions.RayActorError:
-            if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRIES_INTERVAL, method_name))
-                await asyncio.sleep(RETRIES_INTERVAL)
+            if attempt < MAX_MANAGER_RETRY_TIMES - 1:
+                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRY_MANAGER_INTERVAL, method_name))
+                await asyncio.sleep(RETRY_MANAGER_INTERVAL)
             else:
-                logger.error("Manager is still unavailable after {} times retries.".format(MAX_TASK_RETRIES))
+                logger.error("Manager is still unavailable after {} times retries.".format(MAX_MANAGER_RETRY_TIMES))
                 raise
     return ret

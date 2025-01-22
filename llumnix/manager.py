@@ -318,6 +318,9 @@ class Manager:
                     if new_pg is not None and instance_id == new_instance_id:
                         continue
                     self.scale_down(instance_id)
+                alive_pg_states = list_placement_groups(filters=[("state", "!=", "REMOVED")])
+                if self.max_instances != -1 and len(alive_pg_states) >= self.max_instances:
+                    time.sleep(interval)
                 if new_pg is None:
                     new_instance_id = random_uuid()
                     new_pg = self.launcher.init_placement_group(get_placement_group_name(new_instance_id), self.engine_args, self.backend_type,

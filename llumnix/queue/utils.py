@@ -17,7 +17,6 @@ from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.queue.zmq_client import ZmqClient
 from llumnix.queue.ray_queue_client import RayQueueClient
-from llumnix.queue.zmq_utils import get_open_zmq_ipc_path
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
 

@@ -18,8 +18,8 @@ from typing_extensions import Never
 
 import zmq
 import zmq.asyncio
-import cloudpickle
 import zmq.error
+import cloudpickle
 
 from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
                                      RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest)

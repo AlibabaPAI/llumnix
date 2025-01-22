@@ -20,7 +20,6 @@ from vllm.outputs import CompletionOutput, RequestOutput
 
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.zmq_client import ZmqClient
-from llumnix.queue.utils import get_open_zmq_ipc_path
 from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
 
@@ -30,8 +29,7 @@ from tests.conftest import ray_env
 @ray.remote(num_cpus=1)
 class Server:
     def __init__(self, ip, port):
-        rpc_path = get_open_zmq_ipc_path(ip, port)
-        self.server = ZmqServer(rpc_path)
+        self.server = ZmqServer(ip, port)
         asyncio.create_task(self.server.run_server_loop())
         request_output_queue = self.server
         self.stop_signal = asyncio.Event()

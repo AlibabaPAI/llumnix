@@ -27,6 +27,7 @@ from llumnix.queue.queue_type import QueueType
 
 logger = init_logger(__name__)
 
+
 class BackendSimVLLM(BackendVLLM):
     # pylint: disable=super-init-not-called
     def __init__(

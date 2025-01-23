@@ -23,7 +23,8 @@ from vllm.transformers_utils.detokenizer import Detokenizer
 from vllm.utils import Counter
 
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix
-from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor, SimGPUExecutor
+from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor
+from llumnix.backends.vllm.sim_executor import SimGPUExecutor
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType

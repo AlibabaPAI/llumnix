@@ -25,7 +25,7 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
-from llumnix.backends.vllm.simulator import BackendSimVLLM
+from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
 from llumnix.backends.backend_interface import BackendType
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.entrypoints.utils import LaunchMode
@@ -87,7 +87,7 @@ class MockLlumlet:
         migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
         ray.get(migrate_in_ray_actor.migrate_in.remote(self.actor_name))
         time.sleep(0.1)
-        return self.num_migrate_out
+        return []
 
     def migrate_in(self, src_instance_name):
         self.num_migrate_in += 1
@@ -190,8 +190,8 @@ def test_init_instances(ray_env, manager):
 def test_init_instances_sim(ray_env, manager):
     manager.profiling_result_file_path="//"
     # pylint: disable=import-outside-toplevel
-    import llumnix.backends.vllm.simulator
-    llumnix.backends.vllm.simulator.BackendSimVLLM = MockBackendSim
+    import llumnix.backends.vllm.sim_llm_engine
+    llumnix.backends.vllm.sim_llm_engine.BackendSimVLLM = MockBackendSim
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM, engine_args))
     num_instances = len(instances)
@@ -280,7 +280,7 @@ def get_instance_info_migrate_out(instance_id):
     instance_info.instance_type = InstanceType.NO_CONSTRAINTS
     return instance_info
 
-def test_update_instance_info_loop_and_migrate(ray_env, manager):
+def test_poll_instance_info_loop_and_migrate(ray_env, manager):
     num_instances = 5
     instance_ids, instances = init_instances(num_instances)
 

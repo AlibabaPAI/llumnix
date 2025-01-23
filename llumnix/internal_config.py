@@ -43,7 +43,7 @@ class GlobalSchedulerConfig:
             initial_instances: int,
             load_metric: str,
             dispatch_policy: str,
-            num_dispatch_instances: int,
+            power_of_k_choice: int,
             pair_migration_policy: str,
             migrate_out_threshold: float,
             enable_defrag: bool,
@@ -51,11 +51,13 @@ class GlobalSchedulerConfig:
             scale_up_threshold: float,
             scale_down_threshold: float,
             enable_pd_disagg: bool,
+            num_dispatch_instances: int,
             migration_backend: str,) -> None:
         self.initial_instances = initial_instances
         self.load_metric = load_metric
 
         self.dispatch_policy = dispatch_policy
+        self.power_of_k_choice = power_of_k_choice
 
         self.pair_migration_policy = pair_migration_policy
         # TODO(KuilongCui): Use a better way to set the threshold, as having both positive and negative

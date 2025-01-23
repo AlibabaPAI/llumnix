@@ -43,10 +43,11 @@ from llumnix.entrypoints.utils import LaunchMode
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.queue.queue_type import QueueType
 from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
-from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_INTERVAL,
+from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_GENERATE_INTERVAL,
                                WAIT_ALL_MIGRATIONS_DONE_INTERVAL, AUTO_SCALE_UP_INTERVAL,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
                                WATCH_DEPLOYMENT_INTERVAL, WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE)
+from llumnix.metrics.timestamps import set_timestamp
 
 
 logger = init_logger(__name__)
@@ -130,7 +131,7 @@ class Manager:
         # tasks
         # When manager starts, it automatically connects to all existing instances.
         run_async_func_sync(self._connect_to_instances())
-        asyncio.create_task(self._update_instance_info_loop(self.polling_interval))
+        asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
         if self.manager_args.enable_port_increment:
@@ -148,13 +149,12 @@ class Manager:
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
             logger.warning("No instance available now, sleep {}s, "
-                           "and regenerate request {}.".format(NO_INSTANCE_RETRY_INTERVAL, request_id))
-            await asyncio.sleep(NO_INSTANCE_RETRY_INTERVAL)
+                           "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
+            await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
         try:
-            if hasattr(server_info, 'request_timestamps'):
-                server_info.request_timestamps.manager_generate_timestamp = time.time()
+            set_timestamp(server_info, 'manager_generate_timestamp', time.time())
             await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
             if self.log_requests:
                 logger.info("manager receive request {}".format(request_id))
@@ -195,8 +195,8 @@ class Manager:
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _update_instance_info_loop(self, interval: float) -> None:
-        def update_instance_info_done_callback(instance_id: str, fut):
+    async def _poll_instance_info_loop(self, interval: float) -> None:
+        def get_instance_info_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
             if not isinstance(ret, ray.exceptions.RayActorError):
                 if ret is not None:
@@ -214,9 +214,13 @@ class Manager:
                 for instance_id, instance in self.instances.items():
                     # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
-                    task.add_done_callback(partial(update_instance_info_done_callback, instance_id))
+                    task.add_done_callback(partial(get_instance_info_done_callback, instance_id))
                     tasks.append(task)
+                if self.num_instance_info_updates % 100 == 0:
+                    logger.debug("Polling instance infos of {} instances starts.".format(self.num_instances))
                 await asyncio.gather(*tasks, return_exceptions=True)
+                if self.num_instance_info_updates % 100 == 0:
+                    logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \
@@ -263,10 +267,10 @@ class Manager:
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
                     self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
-                logger.info("instance {}->{} migrate done, migrate request {}".format(
+                logger.info("Instance {}->{} migrate done, migrate request {}".format(
                     migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
-            ret = fut.result()
+            ret = fut.result()[0]
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
 
@@ -284,7 +288,11 @@ class Manager:
                                       return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
+            if len(migration_tasks) > 0:
+                logger.info("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
+            if len(migration_tasks) > 0:
+                logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Unexpected exception: {}".format(e))
@@ -310,6 +318,9 @@ class Manager:
                     if new_pg is not None and instance_id == new_instance_id:
                         continue
                     self.scale_down(instance_id)
+                alive_pg_states = list_placement_groups(filters=[("state", "!=", "REMOVED")])
+                if self.max_instances != -1 and len(alive_pg_states) >= self.max_instances:
+                    time.sleep(interval)
                 if new_pg is None:
                     new_instance_id = random_uuid()
                     new_pg = self._init_placement_group(get_placement_group_name(new_instance_id), self.engine_args, self.backend_type,
@@ -533,7 +544,7 @@ class Manager:
             placement_group = initialize_placement_group(placement_group_name,
                                                          num_cpus=3+int(init_server), num_gpus=world_size, detached=True, block=block)
         else:
-            # num_cpus=1, for Llumlet + AsyncPutQueueActor
+            # num_cpus=2, for Llumlet + AsyncPutQueueActor
             placement_group = initialize_placement_group(placement_group_name,
                                                          num_cpus=2+int(init_server), num_gpus=0, detached=True, block=block)
 
@@ -602,7 +613,7 @@ class Manager:
             except Exception as e:
                 logger.error("Unexpected exception: {}".format(e))
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
-                self._clear_instance_ray_resources(instance_id)
+                self._clear_instance_ray_states(instance_id)
 
         request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         instance = self._init_instance(instance_id, placement_group, request_output_queue_type, self.backend_type, self.engine_args)

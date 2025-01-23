@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 
 from llumnix.metrics.variable import _REGISTRY, Status
 from llumnix.metrics.dumper import Dumper, DummyDumper
+
 from llumnix.instance_info import InstanceInfo
 
 
@@ -30,8 +31,7 @@ class LlumnixMetrics(ABC):
         self.num_running_requests = Status("num_running_requests")
         self.num_waiting_requests = Status("num_waiting_requests")
 
-        self.dumper: Dumper = None
-        self._init_dumper()
+        self.dumper: Dumper = self._init_dumper()
 
     def dump(self):
         self.dumper.dump(_REGISTRY.describe_all())
@@ -40,7 +40,8 @@ class LlumnixMetrics(ABC):
         return InstanceInfo(**(_REGISTRY.describe_all()))
 
     def _init_dumper(self,):
-        self.dumper = DummyDumper()
+        dumper = DummyDumper()
+        return dumper
 
     @abstractmethod
     def block_manager_init_metrics(self, block_manager):
@@ -57,4 +58,3 @@ class LlumnixMetrics(ABC):
     @abstractmethod
     def engine_step_metrics(self, scheduler):
         ...
-    

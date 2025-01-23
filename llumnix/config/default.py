@@ -87,6 +87,8 @@ _C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
 _C.MANAGER.LOAD_METRIC = 'remaining_steps'
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
+# Number of candidate instances for dispatch policy
+_C.MANAGER.POWER_OF_K_CHOICE = 1
 
 # -----------------------------------------------------------------------------
 # MIGRATION CONFIGURATION
@@ -129,9 +131,9 @@ _C.MANAGER.KVTRANSFER_MIGRATION_BACKEND_NAMING_URL = "file:/tmp/llumnix/naming/"
 # Enable auto scaling
 _C.MANAGER.ENABLE_SCALING = False
 # Minimum number of instances
-_C.MANAGER.MIN_INSTANCES = 1
+_C.MANAGER.MIN_INSTANCES = -1
 # Maximum number of instances
-_C.MANAGER.MAX_INSTANCES = 1
+_C.MANAGER.MAX_INSTANCES = -1
 # Interval time to check scaling
 _C.MANAGER.SCALING_INTERVAL = 10
 # Scaling policy

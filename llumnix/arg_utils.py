@@ -121,6 +121,7 @@ class ManagerArgs:
     polling_interval: float = None
 
     dispatch_policy: str = None
+    power_of_k_choice: int = None
 
     enable_migration: bool = None
     enable_defrag: bool = None
@@ -178,7 +179,7 @@ class ManagerArgs:
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.load_metric,
                                                         self.dispatch_policy,
-                                                        self.num_dispatch_instances,
+                                                        self.power_of_k_choice,
                                                         self.pair_migration_policy,
                                                         self.migrate_out_threshold,
                                                         self.enable_defrag,
@@ -186,6 +187,7 @@ class ManagerArgs:
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
+                                                        self.num_dispatch_instances,
                                                         self.migration_backend)
         return global_scheduler_config
 
@@ -231,6 +233,8 @@ class ManagerArgs:
         assert not args.enable_port_offset_store or args.enable_port_increment, \
             "Set enable_port_increment when enable_port_offset_store"
 
+        assert not args.enable_scaling, "Proactive auto-scaling is deprecated now, all auto-scaling related args will not take effects."
+
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--initial-instances',
@@ -254,6 +258,12 @@ class ManagerArgs:
                             '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
                             '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
                             '* "rr" dispatch requests with round-robin policy.\n')
+        parser.add_argument('--power-of-k-choice',
+                            type=int,
+                            help='number of candidate instances for dispatch policy.\n\n'
+                            'The candidate instances are first selected according to the load'
+                            '(including factors such as load, queue size, etc.) based on the dispatch policy,'
+                            'and then one of them is randomly chosen to receive the request for better load balancing.')
 
         parser.add_argument('--enable-migration',
                             action='store_true',

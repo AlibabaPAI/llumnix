@@ -30,7 +30,7 @@ from llumnix.entrypoints.utils import (LaunchMode, EntrypointsContext, get_ip_ad
                                        retry_manager_method_sync)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix.constants import MAX_RAY_RESTARTS, RAY_RESTART_INTERVAL
+from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL
 
 
 logger = init_logger(__name__)
@@ -59,13 +59,13 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
             sys.exit(1)
     else:
         ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
-        for attempt in range(MAX_RAY_RESTARTS):
+        for attempt in range(MAX_RAY_RESTART_TIMES):
             try:
                 # wait about 2 mins by default
                 result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'], check=True, text=True, capture_output=True)
                 break
             except subprocess.CalledProcessError as e:
-                if attempt < MAX_RAY_RESTARTS:
+                if attempt < MAX_RAY_RESTART_TIMES:
                     logger.warning("Execute '{}' repeatedly until the head node starts.".format(ray_start_command))
                     time.sleep(RAY_RESTART_INTERVAL)
                 else:

@@ -30,22 +30,20 @@ class GlobalScheduler:
                  global_scheduler_config: GlobalSchedulerConfig) -> None:
         self.global_scheduler_config = global_scheduler_config
         # instance load and instance info args
-        self.load_metric = global_scheduler_config.load_metric
-        self.enable_defrag = global_scheduler_config.enable_defrag
         self.enable_pd_disagg = global_scheduler_config.enable_pd_disagg
-        self.instance_load_calculator = InstanceLoadCalculator(load_metric=self.load_metric,
-                                                               enable_defrag=self.enable_defrag)
-        # dispatch args
-        self.dispatch_policy = global_scheduler_config.dispatch_policy
+        self.instance_load_calculator = InstanceLoadCalculator(load_metric=global_scheduler_config.load_metric,
+                                                               enable_defrag=global_scheduler_config.enable_defrag)
+
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
+                                                    global_scheduler_config.power_of_k_choice,
                                                     self.instance_load_calculator,
                                                     global_scheduler_config.num_dispatch_instances)
-        # migrate args
+
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
                                                       self.instance_load_calculator,
                                                       global_scheduler_config.migration_backend)
-        # auto-scaling args
+
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,
                                                   global_scheduler_config.scaling_policy,

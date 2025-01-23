@@ -3,7 +3,7 @@ Llumnix can generate latency data from logs. After run a real benchmark with `--
 
 After running profiling with `python llumnix.backends.profiling.py`. You can get a `$PROFILING_RESULT_FILE_PATH.pkl`
 
-Then, you can run simulator with `--profiling-result-file-path PROFILING_RESULT_FILE_PATH`.
+Then, you can run simulator with `--simulator-mode` and `--profiling-result-file-path PROFILING_RESULT_FILE_PATH`.
 
 
 ```

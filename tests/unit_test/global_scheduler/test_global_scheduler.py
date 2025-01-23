@@ -23,7 +23,7 @@ from .test_manager import get_instance_info_migrate_in, get_instance_info_migrat
 
 
 def init_global_scheduler():
-    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', math.inf,
+    global_scheduler_config = GlobalSchedulerConfig(0, 'remaining_steps', 'load', 1, math.inf,
                                                     'defrag_constrained', 3.0, True, 'avg_load',
                                                     10, 60, False, 'rayrpc')
     global_scheduler = GlobalScheduler(global_scheduler_config)

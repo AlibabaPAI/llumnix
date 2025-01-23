@@ -24,7 +24,6 @@ from vllm.sampling_params import SamplingParams
 
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
-from llumnix.entrypoints.utils import init_per_token_latency_breakdown_dict, record_per_token_latency_breakdown
 from llumnix.entrypoints.vllm.arg_utils import add_cli_args, get_args
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 from llumnix.logging.logger import init_logger
@@ -33,6 +32,7 @@ from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
 from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE
+from llumnix.metrics.timestamps import set_timestamp
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm.api_server")
@@ -126,7 +126,7 @@ async def generate_benchmark(request: Request) -> Response:
     # Non-streaming case
     final_output = None
     per_token_latency = []
-    per_token_latency_breakdown_dict = init_per_token_latency_breakdown_dict()
+    per_token_latency_breakdown_list = []
     async for request_output in results_generator:
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
@@ -136,9 +136,9 @@ async def generate_benchmark(request: Request) -> Response:
         per_token_latency.append([now, (now - start)*1000])
         start = now
         final_output = request_output
+        set_timestamp(request_output, 'api_server_generate_timestamp_end', now)
         if hasattr(request_output, 'request_timestamps'):
-            request_output.request_timestamps.api_server_generate_benchmark_timestamp_end = now
-            record_per_token_latency_breakdown(per_token_latency_breakdown_dict, request_output.request_timestamps)
+            per_token_latency_breakdown_list.append(request_output.request_timestamps.to_latency_breakdown_dict())
     assert final_output is not None
 
     if llumnix_client.log_requests:
@@ -158,8 +158,9 @@ async def generate_benchmark(request: Request) -> Response:
         'generated_text': generation,
         'num_output_tokens_cf': num_output_tokens,
         'per_token_latency': per_token_latency,
-        'per_token_latency_breakdown_dict': per_token_latency_breakdown_dict
     }
+    if per_token_latency_breakdown_list:
+        ret['per_token_latency_breakdown_list'] = per_token_latency_breakdown_list
     return JSONResponse(ret)
 
 

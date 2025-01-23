@@ -29,6 +29,7 @@ class PairMigrationConstraints(str, Enum):
     DECODING_2_DECODING = "DECODING_2_DECODING"
     PREFILL_2_DECODING = "PREFILL_2_DECODING"
 
+
 class PairMigrationPolicy(ABC):
     def __init__(self, migrate_out_load_threshold: float) -> None:
         self.migrate_out_load_threshold = migrate_out_load_threshold
@@ -48,6 +49,7 @@ class PairMigrationPolicy(ABC):
             reverse=descending
         )
         return sorted_instance_infos
+
 
 class Balanced(PairMigrationPolicy):
     def pair_migration(self,
@@ -70,6 +72,7 @@ class Balanced(PairMigrationPolicy):
                                                sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
+
 class DefragConstrained(PairMigrationPolicy):
     def pair_migration(self,
                        src_instance_infos: List[InstanceInfo],
@@ -82,6 +85,7 @@ class DefragConstrained(PairMigrationPolicy):
             # without any constrain in order to make prefill migrate happens as soon as possible
             migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
+
 
 class PairMigrationPolicyFactory:
     _POLICY_REGISTRY = {

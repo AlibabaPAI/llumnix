@@ -12,8 +12,6 @@
 # limitations under the License.
 
 from typing import Dict, List, Set
-from abc import ABC, abstractmethod
-import random
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType
@@ -24,8 +22,11 @@ logger = init_logger(__name__)
 
 
 class DispatchScheduler:
-    def __init__(self, dispatch_policy: str,) -> None:
+    def __init__(self,
+                 dispatch_policy: str,
+                 power_of_k_choice: int) -> None:
         self.dispatch_policy = DispatchPolicyFactory.get_policy(dispatch_policy)
+        self.power_of_k_choice = power_of_k_choice
         self.available_dispatch_instance_set: Set[str] = set()
         self.instance_info: Dict[str, InstanceInfo] = {}
         # statistics
@@ -35,7 +36,8 @@ class DispatchScheduler:
     def dispatch(self) -> str:
         self.total_num_requests += 1
         dispatch_instance_id = self.dispatch_policy.dispatch(self.instance_num_requests,
-                                                             self.instance_info.values())
+                                                             self.instance_info.values(),
+                                                             self.power_of_k_choice)
         self.instance_num_requests[dispatch_instance_id] += 1
         if self.total_num_requests % DISPATCH_LOG_FREQUENCY == 0:
             logger.info("dispatch scheduler total_dispatched_requests: {}".format(self.total_num_requests))
@@ -58,80 +60,3 @@ class DispatchScheduler:
         if instance_id in self.available_dispatch_instance_set:
             self.available_dispatch_instance_set.remove(instance_id)
             self.instance_num_requests.pop(instance_id, None)
-
-class DispatchPolicy(ABC):
-    @abstractmethod
-    def dispatch(self,
-                 instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo]) -> int:
-        pass
-
-# Dispatch all requests to a single instance, used only for testing
-class Flood(DispatchPolicy):
-    def dispatch(self,
-                 instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo]) -> str:
-        instance_id = max(instance_num_requests, key=instance_num_requests.get)
-        return instance_id
-
-class Balanced(DispatchPolicy):
-    def dispatch(self,
-                 instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo]) -> str:
-        # dispatch request according to the number of requests dispatched to instance by manager
-        instance_id = min(instance_num_requests, key=instance_num_requests.get)
-        return instance_id
-
-class Load(DispatchPolicy):
-    def dispatch(self,
-                 instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo]) -> str:
-        sorted_instance_infos = sorted(
-            available_instance_infos,
-            key=lambda instance_info: getattr(instance_info, 'dispatch_load_metric'),
-        )
-        instance_id = sorted_instance_infos[0].instance_id
-        logger.debug("dispatch to {}, load: {}".format(instance_id, sorted_instance_infos[0].dispatch_load_metric))
-        return instance_id
-
-class Queue(DispatchPolicy):
-    def dispatch(self,
-                 instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo]) -> str:
-        sorted_instance_infos = sorted(
-            available_instance_infos,
-            key=lambda instance_info: getattr(instance_info, 'num_waiting_requests'),
-        )
-        min_queue_size = sorted_instance_infos[0].num_waiting_requests
-        instance_id_list = []
-        for instance_info in sorted_instance_infos:
-            if instance_info.num_waiting_requests == min_queue_size:
-                instance_id_list.append(instance_info.instance_id)
-        instance_id = random.choice(instance_id_list)
-        logger.debug("dispatch to {}, queue size: {}".format(instance_id, sorted_instance_infos[0].num_waiting_requests))
-        return instance_id
-
-class RoundRobin(DispatchPolicy):
-    next_instance_idx: int = 0
-
-    def dispatch(self,
-                 instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo]) -> str:
-        all_instance_ids = sorted(instance_num_requests.keys())
-        assert len(all_instance_ids) > 0
-        target_instance_id = all_instance_ids[self.next_instance_idx % len(all_instance_ids)]
-        self.next_instance_idx += 1
-        return target_instance_id
-
-class DispatchPolicyFactory:
-    _POLICY_REGISTRY = {
-        'flood': Flood,
-        'balanced': Balanced,
-        'load': Load,
-        'queue': Queue,
-        'rr': RoundRobin,
-    }
-
-    @classmethod
-    def get_policy(cls, policy_name: str, **kwargs) -> DispatchPolicy:
-        return cls._POLICY_REGISTRY[policy_name](**kwargs)

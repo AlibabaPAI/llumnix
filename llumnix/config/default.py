@@ -79,6 +79,8 @@ _C.MANAGER.PD_RATIO = "1:1"
 # -------------------------- DISPATCH CONFIGURATION ---------------------------
 # Request dispatch policy
 _C.MANAGER.DISPATCH_POLICY = 'load'
+# Number of candidate instances for dispatch policy
+_C.MANAGER.POWER_OF_K_CHOICE = 1
 
 # -------------------------- MIGRATION CONFIGURATION --------------------------
 # Enable migrate requests between instances

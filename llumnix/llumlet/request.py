@@ -28,6 +28,10 @@ class RequestStatus(str, Enum):
     RUNNING_MIGRATING = "running_migrating"
     WAITING_MIGRATING = "waiting_migrating"
 
+    @staticmethod
+    def is_migrating(status) -> bool:
+        return status in [RequestStatus.RUNNING_MIGRATING, RequestStatus.WAITING_MIGRATING]
+
 class LlumnixRequest:
     def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
         self.request_id = request_id

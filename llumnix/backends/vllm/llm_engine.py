@@ -53,6 +53,8 @@ class LlumnixRequestOutputFactory(RequestOutputFactory):
         if hasattr(seq_group,
                    'embeddings') and seq_group.embeddings is not None:
             return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
+        if RequestStatus.is_migrating(seq_group.status):
+            return None
         # pylint: disable=too-many-function-args
         return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
@@ -306,7 +308,7 @@ class BackendVLLM(BackendInterface):
         pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_args_dst()
-        assert backend_request.status in [RequestStatus.WAITING_MIGRATING, RequestStatus.RUNNING_MIGRATING], \
+        assert RequestStatus.is_migrating(backend_request.status), \
             "The status of request migrated to dst instance should be  \
              RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
         if backend_request.status == RequestStatus.WAITING_MIGRATING:

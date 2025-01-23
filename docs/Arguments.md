@@ -1,4 +1,4 @@
-Below, you can find an explanation of each argument for Llumnix, and the explanation of arguments for vLLM is shown in the following link: [vLLM Engine Arguments](https://docs.vllm.ai/en/v0.4.2/models/engine_args.html). Please note that Llumnix does not currently support all features of vLLM. The vLLM features that are not supported by Llumnix are listed at the end of this document.
+Below, you can find an explanation of each argument for Llumnix, and the explanation of arguments for vLLM is shown in the following link: [vLLM Engine Arguments](https://docs.vllm.ai/en/v0.6.3.post1/models/engine_args.html). Please note that Llumnix does not currently support all features of vLLM. The vLLM features that are not supported by Llumnix are listed at the end of this document.
 
 # Llumnix arguments
 
@@ -259,10 +259,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-chunked-prefill`
 - Llumnix does not support chunked prefill currently.
 
-`--use-v2-block-manager`
-- Llumnix does not support speculative decoding currently.
-
 `--speculative-model`
 - Llumnix does not support speculative decoding currently.
+
+`--pipeline-parallel-size`
+- Llumnix does not support pipeline parallel currently.
+
+`--num-schedule-steps`
+- Llumnix does not support multi-step scheduling.
 
 Besides, Llumnix does not support sampling algorithms whose number of ouput sequences is greater than one (vllm.SamplingParams.n > 1), such as beam search.

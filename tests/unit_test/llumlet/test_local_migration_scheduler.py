@@ -46,7 +46,7 @@ class MockRequest(LlumnixRequest):
         return self.length
 
     @property
-    def arrival_time(self) -> float:
+    def request_arrival_time(self) -> float:
         pass
 
     @property
@@ -55,6 +55,18 @@ class MockRequest(LlumnixRequest):
 
     @property
     def prefill_num_blocks(self) -> int:
+        pass
+
+    @property
+    def n_blocks(self) -> int:
+        pass
+
+    @property
+    def token_ids(self) -> int:
+        pass
+
+    @property
+    def block_size(self) -> int:
         pass
 
 class MockeEngine():

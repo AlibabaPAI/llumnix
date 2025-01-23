@@ -353,7 +353,7 @@ def test_init_server_and_get_instance_deployment_states_and_instance_and_clear_i
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
 def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_output_queue_type):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
-    time.sleep(30.0)
+    time.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(manager._get_cluster_deployment.remote())
@@ -365,7 +365,7 @@ def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_output_q
     assert len(instance_ids) == 4
     ray.get(manager._clear_instance_ray_states.remote(instance_ids[0]))
     ray.get(manager._clear_instance_ray_states.remote(instance_ids[1]))
-    time.sleep(30.0)
+    time.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(manager._get_cluster_deployment.remote())
@@ -374,7 +374,7 @@ def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_output_q
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
 def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_output_queue_type):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
-    time.sleep(30.0)
+    time.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(manager._get_cluster_deployment.remote())

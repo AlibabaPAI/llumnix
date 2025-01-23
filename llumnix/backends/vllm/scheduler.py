@@ -12,12 +12,13 @@
 # limitations under the License.
 
 import time
+import bisect
 from typing import Dict, List, Optional, Tuple, Deque
 from collections import deque
 
-from vllm.core.block_manager_v1 import BlockSpaceManagerV1, BlockTable
+from vllm.utils import Device
+from vllm.core.block_manager import SelfAttnBlockSpaceManager, BlockTable
 from vllm.core.scheduler import (Scheduler, PreemptionMode, SequenceStatus, SequenceGroupMetadata, SchedulerOutputs)
-from vllm.core.policy import PolicyFactory
 from vllm.sequence import SequenceGroup
 from vllm.core.interfaces import AllocStatus
 
@@ -31,22 +32,24 @@ logger = init_logger(__name__)
 
 
 # TODO(ZeldaHuang): adapt prefix cache and sliding window, now use v1 manager
-class BlockManagerLlumnix(BlockSpaceManagerV1):
-    def get_free_blocks(self, num_required_blocks: int) -> BlockTable:
-        num_free_gpu_blocks = self.gpu_allocator.get_num_free_blocks()
-        if (num_free_gpu_blocks - num_required_blocks <
+class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
+    def get_free_blocks(self, num_required_blocks: int, token_ids: List[int]) -> BlockTable:
+        num_free_gpu_blocks = self.block_allocator.get_num_free_blocks(device=Device.GPU)
+        block_table = BlockTable(
+            block_size=self.block_size,
+            block_allocator=self.block_allocator,
+            max_block_sliding_window=self.max_block_sliding_window,
+        )
+        if (num_free_gpu_blocks - num_required_blocks >=
                 self.watermark_blocks):
-            return []
-        blocks = []
-        for _ in range(num_required_blocks):
-            block = self.gpu_allocator.allocate()
-            # Set the reference counts of the token blocks.
-            block.ref_count = 1
-            blocks.append(block)
-        return blocks
+            block_table.allocate(token_ids)
+
+        return block_table
 
     def add_block_table(self, block_table: BlockTable, seq_id: int) -> None:
-        self.block_tables[seq_id] = block_table.copy()
+        self.block_tables[seq_id] = block_table
+        self._computed_blocks_tracker.add_seq(seq_id)
+        self._last_access_blocks_tracker.add_seq(seq_id)
 
 class SchedulerLlumnix(Scheduler):
     def __init__(self, *args, **kwargs) -> None:
@@ -93,13 +96,15 @@ class SchedulerLlumnix(Scheduler):
                 request_ids.append(seq_group.request_id)
         return request_ids
 
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
+    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         seq = backend_request.get_seqs()[0]
         blocks = self.block_manager.get_block_table(seq)
-        return blocks[pre_stage_num_blocks:]
+        block_table = self.block_manager.block_tables[seq.seq_id]
+        token_ids = backend_request.token_ids
+        return blocks[pre_stage_num_blocks:], token_ids[pre_stage_num_blocks * self.block_manager.block_size:block_table.num_full_slots]
 
     def remove_running_request(self, request_id: str) -> bool:
-        for seq_group in self.running:
+        for seq_group in reversed(self.running):
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
                 seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
@@ -129,20 +134,25 @@ class SchedulerLlumnix(Scheduler):
                   request_id: str,
                   request_status: RequestStatus,
                   request_arrival_time: float,
-                  block_num: int) -> List[int]:
+                  block_num: int,
+                  token_ids: List[int]) -> List[int]:
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
-            if (self.waiting and request_arrival_time > self.waiting[0].arrival_time) \
-                or block_num * self.cache_config.block_size > self.prompt_limit:
+            if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
                 return []
-        blocks = self.block_manager.get_free_blocks(block_num)
-        pre_blocks = self.pre_alloc_cache_dict.get(request_id, [])
-        pre_blocks.extend(blocks)
-        logger.info("add request {} to pre_alloc_cache_dict".format(request_id))
-        self.pre_alloc_cache_dict[request_id] = pre_blocks
-        blocks = [block.block_number for block in blocks]
-        return blocks
+        block_table = self.pre_alloc_cache_dict.get(request_id, None)
+        if not block_table:
+            block_table = self.block_manager.get_free_blocks(block_num, token_ids)
+            self.pre_alloc_cache_dict[request_id] = block_table
+        elif self.block_manager.get_num_free_gpu_blocks() >= block_num:
+            block_table.append_token_ids(token_ids)
+
+        if len(block_table.blocks) == self.block_manager.max_block_sliding_window:
+            # abort migration due to sliding window
+            return []
+
+        return block_table.physical_block_ids[-block_num:]
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
         self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
@@ -151,9 +161,12 @@ class SchedulerLlumnix(Scheduler):
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
         self._set_status(backend_request, status_to=SequenceStatus.WAITING)
         # pylint: disable=E0203
-        self.waiting.append(backend_request)
-        fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
-        self.waiting = fcfs_policy.sort_by_priority(time.time(), self.waiting)
+        arrival_time_list = [request.arrival_time for request in self.waiting]
+        idx = bisect.bisect_right(arrival_time_list, backend_request.arrival_time)
+        if idx < len(self.waiting):
+            self.waiting.insert(idx, backend_request)
+        else:
+            self.waiting.append(backend_request)
 
     def can_allocate(self, seq_group: SequenceGroup) -> AllocStatus:
         if seq_group.status == RequestStatus.WAITING_MIGRATING:
@@ -178,19 +191,17 @@ class SchedulerLlumnix(Scheduler):
 
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
         if request_id:
-            logger.info("pop request {} from pre_alloc_cache_dict".format(request_id))
-            blocks = self.pre_alloc_cache_dict.pop(request_id, [])
-            # pylint: disable=protected-access
-            self.block_manager._free_block_table(blocks)
+            block_table = self.pre_alloc_cache_dict.pop(request_id, None)
+            if block_table:
+                block_table.free()
         else:
             # TODO(s5u13b): Only effective with one-to-one migration restriction.
             # Clear all pre-allocated cache of dst instance when src instance encounters exception.
             request_ids = list(self.pre_alloc_cache_dict.keys())
             for req_id in request_ids:
-                logger.info("pop request {} from pre_alloc_cache_dict".format(req_id))
-                blocks = self.pre_alloc_cache_dict.pop(req_id, [])
-                # pylint: disable=protected-access
-                self.block_manager._free_block_table(blocks)
+                block_table = self.pre_alloc_cache_dict.pop(req_id, None)
+                if block_table:
+                    block_table.free()
 
     def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
@@ -243,15 +254,17 @@ class SchedulerLlumnix(Scheduler):
         instance_info.finished_request_ids = [seq_group.request_id for seq_group in self.running if seq_group.finished]
         return instance_info
 
-    def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
-        seq_group_metadata_list, scheduler_outputs = super().schedule()
+    def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs, bool]:
+        seq_group_metadata_list, scheduler_outputs, allow_async_output_proc = super().schedule()
         self.update_instance_info_callback(self._get_instance_info([scheduled_seq_group.seq_group \
                                             for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups]))
         for seq_group in self.waiting:
             seq_group.try_schedule_times += 1
-        return seq_group_metadata_list, scheduler_outputs
+        return seq_group_metadata_list, scheduler_outputs, allow_async_output_proc
 
-    def _schedule_running(self, running_queue: deque, *args, **kwargs):
+    def _schedule_running(self, *args, **kwargs):
+        # pylint: disable=access-member-before-definition
+        running_queue = self.running
         filtered_running_queue = deque()
         remove_running = deque()
         for seq_group in running_queue:
@@ -259,7 +272,9 @@ class SchedulerLlumnix(Scheduler):
                 remove_running.extend([seq_group])
             else:
                 filtered_running_queue.extend([seq_group])
-        remaining_running, running_scheduled = super()._schedule_running(filtered_running_queue, *args, **kwargs)
+
+        self.running = filtered_running_queue
+        ret = super()._schedule_running(*args, **kwargs)
         for seq_group in remove_running:
-            remaining_running.extend([seq_group])
-        return remaining_running, running_scheduled
+            self.running.extend([seq_group])
+        return ret

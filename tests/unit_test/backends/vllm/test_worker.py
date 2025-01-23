@@ -51,7 +51,6 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
         rank=rank,
         distributed_init_method=get_distributed_init_method(get_ip(), get_open_port()),
         lora_config=engine_config.lora_config,
-        vision_language_config=engine_config.vision_language_config,
         is_driver_worker = False
     )
 

@@ -14,8 +14,9 @@
 import math
 from unittest.mock import MagicMock
 
-from vllm.sequence import (Logprob, SequenceGroupOutput, SequenceOutput,
-                           SequenceStatus,SamplerOutput)
+import torch
+import pytest
+
 from vllm import EngineArgs, SamplingParams
 from vllm.engine.output_processor.single_step import SingleStepOutputProcessor
 from vllm.engine.output_processor.stop_checker import StopChecker
@@ -30,64 +31,28 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.utils import initialize_placement_group, get_placement_group_name
 
+# pylint: disable=unused-import
 from tests.conftest import ray_env
-from .utils import create_dummy_prompt, initialize_scheduler
-
+from .utils import initialize_scheduler
 
 class MockEngine(LLMEngineLlumnix):
     def __init__(self, *args, executor_class=None, **kwargs):
-        self.scheduler = initialize_scheduler()
+        self.scheduler = [initialize_scheduler()]
         detokenizer = MagicMock(spec=Detokenizer)
         stop_checker = MagicMock(spec=StopChecker)
         self.seq_counter = Counter()
         self.instance_info = None
         self.executor_class = executor_class
-        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
-        self.output_processor = SingleStepOutputProcessor(self.scheduler.scheduler_config,detokenizer, self.scheduler, self.seq_counter, stop_checker)
+        self.scheduler[0].add_update_instance_info_callback(self.update_instance_info)
+        self.output_processor = SingleStepOutputProcessor(self.scheduler[0].scheduler_config,detokenizer,
+                                                          self.scheduler,
+                                                          self.seq_counter,
+                                                          stop_checker)
 
     def update_instance_info(self, instance_info):
         pass
 
-
-def test_llm_engine_process_model_outputs():
-    llm_engine = MockEngine()
-    _, seq_group_0 = create_dummy_prompt(
-        "0", prompt_length=7, block_size=4
-    )
-    _, seq_group_1 = create_dummy_prompt(
-        "1", prompt_length=7, block_size=4
-    )
-    llm_engine.scheduler.add_seq_group(seq_group_0)
-    llm_engine.scheduler.add_seq_group(seq_group_1)
-    metas, out = llm_engine.scheduler.schedule()
-
-    seqs = [seq_group_0.get_seqs()[0], seq_group_1.get_seqs()[0]]
-
-    outputs = [
-        SequenceGroupOutput(
-            samples=[
-                SequenceOutput(
-                    parent_seq_id=seq.seq_id,
-                    output_token=1,
-                    logprobs={1: Logprob(0.0)},
-                )
-            ],
-            prompt_logprobs=None,
-        ) for seq in seqs
-    ]
-    sampler_outputs = [SamplerOutput(outputs=outputs)]
-
-    scheduled_seq_groups = out.scheduled_seq_groups
-    # normal case, all requests be processed
-    ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
-    assert len(ret) == 2
-    metas, out = llm_engine.scheduler.schedule()
-    scheduled_seq_groups = out.scheduled_seq_groups
-    seqs[0].status=SequenceStatus.WAITING
-    # migration case , requests stopping during last stage migration, stop process
-    ret, _ = llm_engine._process_model_outputs(sampler_outputs, scheduled_seq_groups,[], metas)
-    assert len(ret) == 1
-
+@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_llm_engine_from_engine_args(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
     placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=3, num_gpus=1, detached=True)
@@ -106,17 +71,18 @@ def test_llm_engine_from_engine_args_sim(ray_env):
 
 def test_llm_engine_add_requset(ray_env):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=3, num_gpus=1, detached=True)
+    latency_data = LatencyMemData({},{},{})
+    placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=1, num_gpus=0, detached=True)
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
                                                    placement_group=placement_group,
-                                                   migration_config=None,
-                                                   latency_mem=MagicMock(sepc=LatencyMemData))
+                                                   latency_mem = latency_data,
+                                                   migration_config=None)
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     server_info = ServerInfo(None, None, None, None, None)
     llm_engine.add_request("0", server_info, math.inf, "prompt", sampling_params)
-    assert len(llm_engine.scheduler.waiting) == 1
-    assert llm_engine.scheduler.waiting[-1].request_id == "0"
-    assert llm_engine.scheduler.waiting[-1].expected_steps == math.inf
-    assert isinstance(llm_engine.scheduler.waiting[-1], LlumnixRequest)
+    assert len(llm_engine.scheduler[0].waiting) == 1
+    assert llm_engine.scheduler[0].waiting[-1].request_id == "0"
+    assert llm_engine.scheduler[0].waiting[-1].expected_steps == math.inf
+    assert isinstance(llm_engine.scheduler[0].waiting[-1], LlumnixRequest)

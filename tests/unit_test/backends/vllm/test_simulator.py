@@ -43,11 +43,12 @@ async def test_executor():
             scheduler_config=engine_config.scheduler_config,
             device_config=engine_config.device_config,
             lora_config=engine_config.lora_config,
-            vision_language_config=engine_config.vision_language_config,
             speculative_config=engine_config.speculative_config,
-            load_config=engine_config.load_config)
+            load_config=engine_config.load_config,
+            prompt_adapter_config=engine_config.prompt_adapter_config,
+            observability_config=engine_config.observability_config)
     scheduler = initialize_scheduler()
-    scheduler.schedule()
+    metas, out, _ = scheduler.schedule()
     _, seq_group_0 = create_dummy_prompt(
         "0", prompt_length=7, block_size=4
     )
@@ -56,7 +57,7 @@ async def test_executor():
     )
     scheduler.add_seq_group(seq_group_0)
     scheduler.add_seq_group(seq_group_1)
-    metas, out = scheduler.schedule()
+    metas, out, _ = scheduler.schedule()
     execute_model_req = ExecuteModelRequest(
                 seq_group_metadata_list=metas,
                 blocks_to_swap_in=out.blocks_to_swap_in,

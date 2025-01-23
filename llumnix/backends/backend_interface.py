@@ -13,7 +13,7 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Iterable, List, Union, Deque
+from typing import Iterable, List, Union, Deque, Tuple
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
@@ -71,7 +71,7 @@ class BackendInterface(ABC):
 
     # Methods for migration
     @abstractmethod
-    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> List[int]:
+    def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         """Retrieves the incremental block table for a given request.
 
         This method is used to fetch a list of block numbers that represent the incremental
@@ -88,7 +88,7 @@ class BackendInterface(ABC):
                                    need to be fetched in the current stage.
 
         Returns:
-            A list of integers, where each integer represents a block number that indicates
+            A list of integers and its token ids, where each integer represents a block number that indicates
             physical index of kv cache block tensor. These block numbers can then be used
             to transfer to dstination instance.
         """
@@ -191,7 +191,8 @@ class BackendInterface(ABC):
                   request_id: str,
                   request_status: RequestStatus,
                   request_arrival_time: float,
-                  block_num: int) -> List[int]:
+                  block_num: int,
+                  token_ids: List[int]) -> List[int]:
         """Pre-allocates cache blocks for a migrating request.
 
         This method selects a specified number of free cache blocks to be reserved for an incoming
@@ -207,7 +208,7 @@ class BackendInterface(ABC):
             request_status: The status (waiting/running) of the request.
             request_arrival_time: The arrival time of the request.
             block_num: The number of cache blocks that need to be pre-allocated for the request.
-
+            token_ids: The token IDs of the request.
         Returns:
             A list of integers where each integer represents the block table reserved for the migration request.
         """

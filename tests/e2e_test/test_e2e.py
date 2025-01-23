@@ -54,7 +54,7 @@ def run_vllm(model, max_model_len, sampling_params):
     vllm_output = {}
     raw_vllm = LLM(model=model, trust_remote_code=True, max_model_len=max_model_len)
     outputs = raw_vllm.generate(prompts, SamplingParams(**sampling_params))
-
+    # pylint: disable=not-an-iterable
     for output in outputs:
         vllm_output[output.prompt] = output.prompt + output.outputs[0].text
 
@@ -69,7 +69,6 @@ async def test_e2e(ray_env, shutdown_llumnix_service, model, migration_backend):
     sampling_params = {
         "n": 1,
         "best_of": 1,
-        "use_beam_search": False,
         "temperature": 0.0,
         "top_k": 1,
         "ignore_eos": False,
@@ -88,13 +87,14 @@ async def test_e2e(ray_env, shutdown_llumnix_service, model, migration_backend):
     ip = "127.0.0.1"
     base_port = 37037
     launch_command = generate_launch_command(model=model,
-                                             max_model_len=max_model_len,
-                                             ip=ip,
-                                             port=base_port,
-                                             migration_backend=migration_backend)
+                                      max_model_len=max_model_len,
+                                      ip=ip,
+                                      port=base_port,
+                                      migration_backend=migration_backend,
+                                      launch_ray_cluster=False)
     subprocess.run(launch_command, shell=True, check=True)
 
-    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
+    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"], timeout=120)
 
     llumnix_output = {}
     for prompt in prompts:

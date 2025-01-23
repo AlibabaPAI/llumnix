@@ -259,7 +259,7 @@ class Manager:
                         logger.info("Instance {} is dead.".format(instance_id))
                         self.scale_down(instance_id)
             else:
-                migrate_out_request_ids = ret
+                migrate_out_request_ids = ret[0]
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
                     self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]

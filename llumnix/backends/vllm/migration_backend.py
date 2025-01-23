@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Tuple
 import torch
 from func_timeout import func_set_timeout, FunctionTimedOut
 
@@ -41,7 +41,7 @@ class ProxyActor:
 NUMPY_SUPPORTED_DTYPES = [torch.float32, torch.float16]
 
 class RayRpcMigrationBackend(MigrationBackendBase):
-    def __init__(self, migration_config: MigrationConfig, cache_engine: CacheEngine,  worker_rank, worker_handle_list, \
+    def __init__(self, migration_config: MigrationConfig, cache_engine: List[CacheEngine],  worker_rank, worker_handle_list, \
                   scheduling_strategy, is_driver_worker, gpu_cache) -> None:
         super().__init__()
 
@@ -52,23 +52,22 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.worker_handle_list = worker_handle_list
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
 
-        self.rpc_dtype = self.cache_engine.dtype
-        if self.cache_engine.dtype in NUMPY_SUPPORTED_DTYPES:
-            self.rpc_dtype = self.cache_engine.dtype
+        if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES:
+            self.rpc_dtype = self.cache_engine[0].dtype
         else:
             self.rpc_dtype = torch.float32
-            logger.warning("Detect numpy unsupported dtype: {}, using torch.float32.".format(self.cache_engine.dtype))
+            logger.warning("Detect numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine[0].dtype))
 
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
         self.cache_device = "cpu"
         self.num_migration_buffer_blocks = self.migration_config.migration_buffer_blocks
-        self.num_layers = self.cache_engine.num_layers
-        self.migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
+        self.num_layers = self.cache_engine[0].num_attention_layers
+        self.migration_cache_size = self.cache_engine[0].block_size * self.cache_engine[0].num_kv_heads * self.cache_engine[0].head_size
 
         self.dummy_cache = torch.empty(
             size=(self.num_migration_buffer_blocks, self.num_layers, 2, self.migration_cache_size),
-            dtype=self.cache_engine.dtype,
+            dtype=self.cache_engine[0].dtype,
             device=self.cache_device,
             pin_memory=True
         )
@@ -104,26 +103,40 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
         self.do_recv(rpc_numpy_cache, recv_blocks)
 
-    def do_send(self, dst_handle, blocks: List[int]):
+    def do_send(self, dst_handle, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
-        src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
+        # src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
+        src_to_dst: List[Tuple[int, int]] = []
+        for idx in range(num_blocks):
+            src_to_dst.append((blocks[idx], idx))
+        block_mapping_tensor = torch.tensor(src_to_dst,
+                                        dtype=torch.int64,
+                                        device="cpu", pin_memory=True).view(-1, 2)
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
-                self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], send_cache[layer_idx], src_to_dst)
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(self.gpu_cache[virtuel_engine][layer_idx], send_cache[layer_idx], block_mapping_tensor)
         torch.cuda.Stream.synchronize(self.migration_stream)
         return send_cache.to(self.rpc_dtype).numpy()
 
-    def do_recv(self, src_handle, blocks: List[int]):
+    def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
-        src_to_dst = dict(enumerate(blocks))
+        # src_to_dst = dict(enumerate(blocks))
+        src_to_dst: List[Tuple[int, int]] = []
+        for idx in range(num_blocks):
+            src_to_dst.append((idx, blocks[idx]))
+        block_mapping_tensor = torch.tensor(src_to_dst,
+                                        dtype=torch.int64,
+                                        device="cpu", pin_memory=True).view(-1, 2)
         recv_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         # use pin memory dummy_cache to speed up data transfer
         recv_cache.copy_(torch.from_numpy(src_handle))
 
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
-                self.cache_engine.attn_backend.swap_blocks(recv_cache[layer_idx], self.gpu_cache[layer_idx], src_to_dst)
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(recv_cache[layer_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         torch.cuda.Stream.synchronize(self.migration_stream)
 
 def try_import_gloo():
@@ -140,7 +153,7 @@ def try_import_gloo():
         raise ImportError("Gloo is not installed. Please install it first.") from e
 
 class RayColMigrationBackend(MigrationBackendBase):
-    def __init__(self, migration_config: MigrationConfig, cache_engine: CacheEngine, local_rank,
+    def __init__(self, migration_config: MigrationConfig, cache_engine: List[CacheEngine], local_rank,
                  scheduling_strategy, is_driver_worker, gpu_cache) -> None:
         super().__init__()
 
@@ -150,7 +163,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.migration_config = migration_config
         self.cache_engine = cache_engine
         self.backend = migration_config.migration_backend
-        self.migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine.num_layers)
+        self.migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine[0].num_attention_layers)
         self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
 
         self.backend = migration_config.migration_backend
@@ -163,7 +176,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
 
-        self.migration_cache_size = self.cache_engine.block_size * self.cache_engine.num_heads * self.cache_engine.head_size
+        self.migration_cache_size = self.cache_engine[0].block_size * self.cache_engine[0].num_kv_heads * self.cache_engine[0].head_size
 
         if self.backend == 'gloo':
             try_import_gloo()
@@ -174,7 +187,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         pin_memory = (self.backend == 'gloo')
         self.dummy_cache = torch.empty(
             size=(self.num_migration_buffer_blocks, self.migration_num_layers, 2, self.migration_cache_size),
-            dtype=self.cache_engine.dtype,
+            dtype=self.cache_engine[0].dtype,
             device=self.cache_device,
             pin_memory=pin_memory
         )
@@ -248,44 +261,55 @@ class RayColMigrationBackend(MigrationBackendBase):
             self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", self.global_rank, send_blocks)
             self.do_recv(src_rank, recv_blocks)
 
-    def do_send(self, dst_handle, blocks: List[int]):
+    def do_send(self, dst_handle, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
-        src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
-
+        src_to_dst: List[Tuple[int, int]] = []
+        for idx in range(num_blocks):
+            src_to_dst.append((blocks[idx], idx))
+        block_mapping_tensor = torch.tensor(src_to_dst,
+                                        dtype=torch.int64,
+                                        device="cpu", pin_memory=True).view(-1, 2)
         with self.migration_stream:
-            for layer_idx in range(self.cache_engine.num_layers):
+            for layer_idx in range(self.cache_engine[0].num_attention_layers):
                 cache_idx = layer_idx % self.migration_num_layers
-                self.cache_engine.attn_backend.swap_blocks(self.gpu_cache[layer_idx], send_cache[cache_idx], src_to_dst)
-                if cache_idx + 1 == self.migration_num_layers or layer_idx + 1 == self.cache_engine.num_layers:
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(self.gpu_cache[virtuel_engine][layer_idx], send_cache[cache_idx], block_mapping_tensor)
+                if cache_idx + 1 == self.migration_num_layers or layer_idx + 1 == self.cache_engine[0].num_attention_layers:
                     # TODO(KuilongCui): check the error code if peer is dead
                     col.send(send_cache, dst_handle, self.group_name)
         self.migration_stream.synchronize()
 
-    def do_recv(self, src_handle, blocks: List[int]):
+    def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
-        src_to_dst = dict(enumerate(blocks))
+        src_to_dst: List[Tuple[int, int]] = []
+        for idx in range(num_blocks):
+            src_to_dst.append((idx, blocks[idx]))
+        block_mapping_tensor = torch.tensor(src_to_dst,
+                                        dtype=torch.int64,
+                                        device="cpu", pin_memory=True).view(-1, 2)
         recv_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
 
         with self.migration_stream:
-            for layer_idx in range(self.cache_engine.num_layers):
+            for layer_idx in range(self.cache_engine[0].num_attention_layers):
                 cache_idx = layer_idx % self.migration_num_layers
                 if cache_idx == 0:
                     col.recv(recv_cache, src_handle, self.group_name)
-                self.cache_engine.attn_backend.swap_blocks(recv_cache[cache_idx], self.gpu_cache[layer_idx], src_to_dst)
+                self.cache_engine[virtuel_engine].attn_backend \
+                    .swap_blocks(recv_cache[cache_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         self.migration_stream.synchronize()
 
-def get_migration_backend(migration_config: MigrationConfig, cache_engine: CacheEngine, worker_handle_list, scheduling_strategy,
-                          is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
-    if cache_engine.num_gpu_blocks < migration_config.migration_buffer_blocks:
-        logger.warning("migration_buffer_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
-                       .format(migration_config.migration_buffer_blocks, cache_engine.num_gpu_blocks))
-        migration_config.migration_buffer_blocks = cache_engine.num_gpu_blocks
+def get_migration_backend(migration_config: MigrationConfig, cache_engine: List[CacheEngine], worker_handle_list, scheduling_strategy,
+                        is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
+    if cache_engine[0].num_gpu_blocks < migration_config.migration_buffer_blocks:
+        logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
+                       .format(migration_config.migration_buffer_blocks, cache_engine[0].num_gpu_blocks))
+        migration_config.migration_buffer_blocks = cache_engine[0].num_gpu_blocks
 
     target_migration_backend = None
     backend = migration_config.migration_backend
 
-    assert backend in ['nccl', 'gloo', 'rayrpc'], "Unsupported migration backend: {} for llumnix".format(backend)
+    assert backend in ['nccl', 'rayrpc', 'gloo'], "Unsupported migration backend: {} for llumnix".format(backend)
 
     if backend in ['nccl', 'gloo']:
         target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,

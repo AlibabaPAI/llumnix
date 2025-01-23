@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import time
+import traceback
 import enum
 from typing import List
 
@@ -72,8 +73,9 @@ class MigrationCoordinator:
             dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                     .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
                                                                     migrate_out_request.status,
-                                                                    migrate_out_request.arrival_time,
-                                                                    migrate_out_request.prefill_num_blocks)
+                                                                    migrate_out_request.request_arrival_time,
+                                                                    migrate_out_request.prefill_num_blocks,
+                                                                    migrate_out_request.token_ids)
             if len(dst_blocks) != migrate_out_request.prefill_num_blocks:
                 self.backend_engine.add_waiting_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
@@ -117,18 +119,20 @@ class MigrationCoordinator:
                 return MigrationStatus.ABORTED_SRC
 
             pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
-            incremental_blocks = self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
+            incremental_blocks, incremental_token_ids = self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
             # live migration, transfer all blocks except last one(currently updating)
             is_last_stage = (len(incremental_blocks) <= self.last_stage_max_blocks) or migrate_out_request.blocking_migration
             if not is_last_stage:
                 migration_status = MigrationStatus.RUNNING
                 src_blocks = incremental_blocks[:-1]
+                incremental_token_ids = incremental_token_ids[:len(src_blocks)*migrate_out_request.block_size]
                 stage_block_num = len(incremental_blocks) - 1
                 dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                         .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
                                                                         migrate_out_request.status,
-                                                                        migrate_out_request.arrival_time,
-                                                                        stage_block_num)
+                                                                        migrate_out_request.request_arrival_time,
+                                                                        stage_block_num,
+                                                                        incremental_token_ids)
             else:
                 # last stage migration, stop inference, transfer all blocks
                 migration_status = MigrationStatus.FINISHED
@@ -141,8 +145,9 @@ class MigrationCoordinator:
                 dst_blocks = await migrate_in_ray_actor.execute_migration_method \
                                         .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
                                                                         migrate_out_request.status,
-                                                                        migrate_out_request.arrival_time,
-                                                                        stage_block_num)
+                                                                        migrate_out_request.request_arrival_time,
+                                                                        stage_block_num,
+                                                                        incremental_token_ids)
 
             if len(dst_blocks) != len(src_blocks):
                 # migrate-in instance failed to pre alloc
@@ -174,13 +179,15 @@ class MigrationCoordinator:
                              request_id: str,
                              request_status: RequestStatus,
                              request_arrival_time: float,
-                             block_num: int) -> List[int]:
+                             block_num: int,
+                             token_ids: List[int]) -> List[int]:
         """prev alloc blocks to migrate in request
         """
         pre_alloc_blocks = self.backend_engine.pre_alloc(request_id,
                                                          request_status,
                                                          request_arrival_time,
-                                                         block_num)
+                                                         block_num,
+                                                         token_ids)
         if len(pre_alloc_blocks) != block_num:
             # failed to alloc, abort request
             self.free_dst_pre_alloc_cache(request_id)

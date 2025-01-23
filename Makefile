@@ -62,7 +62,7 @@ test: check_pytest_installed
 .PHONY: unit_test
 unit_test: check_pytest_installed
 	@pytest -v --ignore=third_party --ignore=tests/e2e_test --disable-warnings
-	
+
 .PHONY: offline_test
 offline_test:
 	@python examlpes/offline_inference.py

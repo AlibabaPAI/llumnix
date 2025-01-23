@@ -28,6 +28,10 @@ class RequestStatus(str, Enum):
     RUNNING_MIGRATING = "running_migrating"
     WAITING_MIGRATING = "waiting_migrating"
 
+    @staticmethod
+    def is_migrating(status) -> bool:
+        return status in [RequestStatus.RUNNING_MIGRATING, RequestStatus.WAITING_MIGRATING]
+
 class LlumnixRequest:
     def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:
         self.request_id = request_id
@@ -93,7 +97,7 @@ class LlumnixRequest:
         raise NotImplementedError
 
     @property
-    def arrival_time(self) -> float:
+    def request_arrival_time(self) -> float:
         raise NotImplementedError
 
     @property
@@ -102,6 +106,18 @@ class LlumnixRequest:
 
     @property
     def prefill_num_blocks(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def n_blocks(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def token_ids(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def block_size(self) -> int:
         raise NotImplementedError
 
     # Whether the migration of request is completed within one stage. For requests that have already reached

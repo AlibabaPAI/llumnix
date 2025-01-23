@@ -40,14 +40,16 @@ class BackendSimVLLM(BackendVLLM):
     ) -> None:
         # multi-instance args
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(instance_id,
-                                                                          placement_group,
-                                                                          request_output_queue_type,
-                                                                          migration_config,
-                                                                          engine_args,
-                                                                          latency_mem)
-        self.engine.scheduler = SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
-        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
+                                                                          request_output_queue_type=request_output_queue_type,
+                                                                          migration_config=migration_config,
+                                                                          instance_id=instance_id,
+                                                                          placement_group=placement_group,
+                                                                          latency_mem=latency_mem)
+        self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
+                                 for _ in range(engine_args.pipeline_parallel_size)]
+        for vid in range(engine_args.pipeline_parallel_size):
+            self.engine.scheduler[vid].add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
         self.instance_id = instance_id
 

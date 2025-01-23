@@ -4,7 +4,7 @@
 
 Llumnix requires python `3.8.1~3.10.0` and is currently built on top of vLLM (version 0.4.2). Therefore, the installation requirements are almost identical to those of vLLM. You can view the specific installation requirements for vLLM at the following link:
 
-[vLLM Installation](https://docs.vllm.ai/en/v0.4.2/getting_started/installation.html)
+[vLLM Installation](https://docs.vllm.ai/en/v0.6.3.post1/getting_started/installation.html)
 
 ### Install from Pypi
 
@@ -49,7 +49,7 @@ python -m llumnix.entrypoints.vllm.api_server \
 ```
 
 Upon starting the server, Llumnix's components are automatically configured.
-In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.4.2/models/engine_args.html). Lluminx arguments from cli will override the corresponding configuration in config file.
+In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.6.3.post1/models/engine_args.html). Lluminx arguments from cli will override the corresponding configuration in config file.
 
 2. Launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster.
 ```
@@ -96,12 +96,11 @@ HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
                 --initial-instances $INITIAL_INSTANCES \
                 --launch-ray-cluster \
                 --model $MODEL_PATH \
-                --engine-use-ray \
                 --worker-use-ray \
                 --max-model-len 4096 \
                 --migration-backend rayrpc \
 ```
-`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node, 
+`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node,
 
 Second, you can run the benchmark to evaluate the serving performance:
 

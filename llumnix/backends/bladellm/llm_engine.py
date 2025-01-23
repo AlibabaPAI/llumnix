@@ -308,7 +308,8 @@ class BackendBladeLLM(BackendInterface):
                   request_id: str,
                   request_status: RequestStatus,
                   request_arrival_time: float,
-                  block_num: int) -> List[int]:
+                  block_num: int,
+                  token_ids: List[int]) -> List[int]:
         pass
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:

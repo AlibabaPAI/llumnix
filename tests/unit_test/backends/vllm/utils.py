@@ -14,11 +14,12 @@
 import math
 import time
 from unittest.mock import MagicMock
-from typing import Iterable, Optional, Tuple
+from typing import Optional, Tuple
 
 from vllm import SamplingParams
 from vllm.lora.request import LoRARequest
-from vllm.sequence import Logprob, Sequence, SequenceStatus
+from vllm.sequence import Sequence, SequenceStatus
+from vllm.inputs import token_inputs
 from vllm.config import SchedulerConfig, CacheConfig
 from vllm.core.scheduler import SchedulingBudget
 
@@ -47,7 +48,6 @@ def create_dummy_prompt(
     block_size: Optional[int] = None,
     status: SequenceStatus = SequenceStatus.WAITING,
     lora_request: Optional[LoRARequest] = None,
-    use_beam_search: bool = False,
     best_of: int = 1,
     expected_steps: int = math.inf,
 ) -> Tuple[Sequence, SequenceGroupLlumnix]:
@@ -57,58 +57,15 @@ def create_dummy_prompt(
     # Create dummy prompt sequence with tokens 0...block_size-1
     # and prompt "0 ... block_size".
     prompt_tokens = list(range(prompt_length))
-    prompt_str = " ".join([str(t) for t in prompt_tokens])
-    prompt = Sequence(int(request_id), prompt_str, prompt_tokens, block_size)
+    seq = Sequence(int(request_id), token_inputs(prompt_tokens), block_size)
     server_info = ServerInfo(None, None, None, None, None)
     seq_group = SequenceGroupLlumnix(
-        request_id, server_info, expected_steps, [prompt],
-        SamplingParams(use_beam_search=use_beam_search, best_of=best_of),
-        time.time(), lora_request)
-    seq_group.get_seqs()[0].status = status
+        request_id, server_info, expected_steps, [seq],
+        time.time(),
+        SamplingParams(best_of=best_of),
+        lora_request)
 
-    return prompt, seq_group
-
-
-def create_seq_group(
-        seq_prompt_len: int = 1024,
-        seq_output_lens: Iterable[int] = (128, ),
-        request_id: str = '0',
-        seq_id_start: int = 0,
-        sampling_params: Optional[SamplingParams] = None) -> SequenceGroupLlumnix:
-
-    assert len(seq_output_lens) > 0
-
-    if sampling_params is None:
-        sampling_params = SamplingParams()
-
-    prompt_token_ids = [0] * seq_prompt_len
-
-    seqs = []
-    for seq_id_offset, output_len in enumerate(seq_output_lens):
-        seq = Sequence(
-            seq_id=seq_id_start + seq_id_offset,
-            prompt="",
-            prompt_token_ids=prompt_token_ids,
-            block_size=16,
-        )
-
-        for i in range(output_len):
-            seq.append_token_id(
-                token_id=i,
-                logprobs={i: Logprob(0.0)},
-            )
-        seqs.append(seq)
-
-    seq_group = SequenceGroupLlumnix(
-        request_id=request_id,
-        server_info=None,
-        expected_steps=math.inf,
-        seqs=seqs,
-        sampling_params=sampling_params,
-        arrival_time=time.time(),
-    )
-
-    return seq_group
+    return seq, seq_group
 
 def create_token_budget(token_budget: int = 10000,
                         max_num_seqs: int = 10000) -> SchedulingBudget:

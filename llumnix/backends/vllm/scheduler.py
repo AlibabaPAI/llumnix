@@ -107,6 +107,7 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in reversed(self.running):
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
+                self._set_status(seq_group, status_to=SequenceStatus.FINISHED_STOPPED)
                 seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
                 return True
         return False
@@ -115,6 +116,7 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in self.waiting:
             if seq_group.request_id == request_id:
                 self.waiting.remove(seq_group)
+                self._set_status(seq_group, status_to=SequenceStatus.FINISHED_STOPPED)
                 seq_group.set_status(RequestStatus.WAITING_MIGRATING)
                 return True
         return False

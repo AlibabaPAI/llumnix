@@ -25,6 +25,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--scaling-load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue,rr}]
+            [--power-of-k-choice POWER_OF_K_CHOICE]
             [--enable-migration]
             [--enable-defrag]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
@@ -138,6 +139,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Request dispatch policy.
 - Possible choices: balanced, load, queue, rr
 - Default: "load"
+
+`--power-of-k-choice`
+- Number of candidate instances for dispatch policy
+- Default: 1
 
 `--enable-migration`
 - Enable migrate requests between instances.

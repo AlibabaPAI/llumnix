@@ -24,7 +24,7 @@ from .test_manager import get_instance_info_migrate_in, get_instance_info_migrat
 
 
 def init_global_scheduler():
-    global_scheduler_config = GlobalSchedulerConfig(0, 'load', 'defrag_constrained', 3.0,
+    global_scheduler_config = GlobalSchedulerConfig(0, 'load', 1, 'defrag_constrained', 3.0,
                                                     'avg_load', 'remaining_steps', 10, 60, False, False)
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler

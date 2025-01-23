@@ -63,7 +63,7 @@ class DispatchPolicy(ABC):
     @abstractmethod
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo]) -> str:
+                 available_instance_infos: List[InstanceInfo]) -> int:
         pass
 
 # Dispatch all requests to a single instance, used only for testing

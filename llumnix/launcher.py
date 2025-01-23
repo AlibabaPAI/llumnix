@@ -152,22 +152,22 @@ class Launcher:
         assert not self.enablde_engine_pd_disagg, \
             "Currently not support engine based pd-disaggregation in global launch mode."
 
-        config: InstanceArgs = copy.deepcopy(instance_args)
+        next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
         cur_num_prefill = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
         cur_num_decode = len(self.global_scheduler.instance_id_set -
                                 self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        config.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pd_ratio)
-        return config
+        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pd_ratio)
+        return next_instance_args
 
     def _get_next_entrypoints_args(self, entrypoints_args: EntrypointsArgs) -> EntrypointsArgs:
-        config = copy.deepcopy(entrypoints_args)
+        next_entrypoints_args = copy.deepcopy(entrypoints_args)
         if self.enable_port_increment:
-            config.port += self.port_offset
-            config.request_output_queue_port += self.port_offset
+            next_entrypoints_args.port += self.port_offset
+            next_entrypoints_args.request_output_queue_port += self.port_offset
             self.port_offset += 1
             if self.enable_port_offset_store:
                 put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
-        return config
+        return next_entrypoints_args
 
     def init_server_and_instance(self, instance_id: str, entrypoints_args: EntrypointsArgs,
                                  instance_args: InstanceArgs, engine_args, backend_type: BackendType,

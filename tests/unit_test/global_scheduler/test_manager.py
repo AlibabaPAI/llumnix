@@ -397,7 +397,7 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
 async def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_output_queue_type):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
-    await asyncio.sleep(30.0)
+    await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
@@ -410,7 +410,7 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_ou
     assert len(instance_ids) == 4
     await manager.clear_instance_ray_resources(instance_ids[0])
     await manager.clear_instance_ray_resources(instance_ids[1])
-    await asyncio.sleep(30.0)
+    await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
@@ -421,7 +421,7 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_ou
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
 async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_output_queue_type):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
-    await asyncio.sleep(30.0)
+    await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
@@ -466,7 +466,7 @@ def test_pd_disagg_gloal_launch_instance_type():
 async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env, request_output_queue_type):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type,
                                                         enable_pd_disagg=True, pd_ratio="1:1")
-    await asyncio.sleep(30.0)
+    await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4

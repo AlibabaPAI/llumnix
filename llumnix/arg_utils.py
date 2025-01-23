@@ -25,6 +25,8 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 
 
+# All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None for default.
+
 class LlumnixArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"

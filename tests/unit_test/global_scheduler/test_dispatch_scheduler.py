@@ -117,7 +117,7 @@ def test_dispatch_queue():
         dispatch_scheduler = DispatchScheduler('queue')
         instance_num_requests = {}
         instance_info_dict = {}
-        for instance_id in [f'instance_{i}' for i in range(1, 4 + 1)]:
+        for instance_id in [f'instance_{i}' for i in range(1, instance_num + 1)]:
             instance_info = InstanceInfo()
             instance_info.instance_id = instance_id
             instance_info.num_waiting_requests = random.randint(1, 10)
@@ -163,7 +163,7 @@ def test_dispatch_power_of_k_choice():
         dispatch_scheduler = DispatchScheduler('load', power_of_k_choice, instance_load_calculator, 2)
         instance_num_requests = {}
         instance_info_dict = {}
-        for instance_id in [f'instance_{i}' for i in range(1, 4 + 1)]:
+        for instance_id in [f'instance_{i}' for i in range(1, instance_num + 1)]:
             instance_info = InstanceInfo()
             instance_info.instance_id = instance_id
             instance_info.num_waiting_requests = random.randint(1, 10)
@@ -174,6 +174,6 @@ def test_dispatch_power_of_k_choice():
         dispatch_scheduler.instance_num_requests = instance_num_requests
         dispatch_scheduler.instance_info = instance_info_dict
         instance_id_set = set()
-        for i in range(num_tests):
+        for _ in range(num_tests):
             instance_id_set.add(dispatch_scheduler.dispatch())
     assert len(instance_id_set) == 2

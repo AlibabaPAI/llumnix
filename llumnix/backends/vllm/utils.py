@@ -24,7 +24,7 @@ from vllm.model_executor.layers.sampler import SamplingMetadata, SamplingTensors
                                                 VLLM_INVALID_TOKEN_ID, _multinomial, _modify_greedy_probs_inplace, get_pythonized_sample_results
 
 from llumnix.logging.logger import init_logger
-from llumnix.arg_utils import ManagerArgs
+from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
 
@@ -46,15 +46,14 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
     if unsupported_feature:
         raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
 
-def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs) -> None:
-    assert engine_args.worker_use_ray, \
-            ("In Llumnix, engine and worker must be ray actor.")
-    migration_config = manager_args.create_migration_config()
+def check_engine_args(engine_args: AsyncEngineArgs, intance_args: InstanceArgs) -> None:
+    assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
+    migration_config = intance_args.create_migration_config()
     engine_config = engine_args.create_engine_config()
     parallel_config = engine_config.parallel_config
     if parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl':
         logger.warning("Llumnix does not support TP or PP when the migration backend is nccl, change migration backend to gloo.")
-        manager_args.migration_backend = 'gloo'
+        intance_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
 
 def _get_dtype_size(dtype: torch.dtype) -> int:

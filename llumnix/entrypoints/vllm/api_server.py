@@ -179,9 +179,9 @@ if __name__ == "__main__":
 
     cli_args = add_cli_args(parser)
     cfg = get_llumnix_config(cli_args.config_file, cli_args)
-    entrypoints_args, manager_args, engine_args = get_args(cfg, parser, cli_args)
 
-    backend_type = BackendType.VLLM if not manager_args.simulator_mode else BackendType.SIM_VLLM
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(cfg, LaunchMode.LOCAL, parser, cli_args)
+    backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=backend_type)
 
     # Launch or connect to the ray cluster for multi-node serving.
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
     # if gpu is not available, it means that this node is head pod without any llumnix components
     if is_gpu_available():
-        entrypoints_context = setup_llumnix(manager_args, entrypoints_args, engine_args, launch_args)
+        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
         llumnix_client = LlumnixClientVLLM(entrypoints_context)
 
         # Start the api server after all the components of llumnix are ready.

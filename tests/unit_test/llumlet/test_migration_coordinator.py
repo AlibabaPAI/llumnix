@@ -38,7 +38,7 @@ async def test_migrate_out_onestage(ray_env):
     migrate_out_request = MagicMock()
 
     # Create an instance of MigrationCoordinator
-    coordinator = MigrationCoordinator(backend_engine, last_stage_max_blocks=1, max_stages=3)
+    coordinator = MigrationCoordinator(backend_engine, migration_last_stage_max_blocks=1, migration_max_stages=3)
 
     # Mock method return values and test data
     src_blocks = [1, 2, 3]
@@ -97,8 +97,8 @@ async def test_migrate_out_running_request(_, ray_env):
     migrate_out_request = MockRequest("1", 1, math.inf)
 
     # Create an instance of MigrationCoordinator
-    max_stages = 3
-    coordinator = MigrationCoordinator(backend_engine, 1, max_stages)
+    migration_max_stages = 3
+    coordinator = MigrationCoordinator(backend_engine, 1, migration_max_stages)
     migrate_in_ray_actor = MagicMock()
     migrate_in_ray_actor.execute_engine_method = MagicMock()
     migrate_in_ray_actor.execute_engine_method.remote = MagicMock()
@@ -109,13 +109,13 @@ async def test_migrate_out_running_request(_, ray_env):
     assert coordinator._migrate_out_onestage.call_count == 1
     assert status == MigrationStatus.FINISHED
 
-    max_stages = 3
+    migration_max_stages = 3
     coordinator._migrate_out_onestage.side_effect = [MigrationStatus.RUNNING,
                                                      MigrationStatus.RUNNING,
                                                      MigrationStatus.RUNNING,
                                                      MigrationStatus.RUNNING]
     status = await coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
-    assert coordinator._migrate_out_onestage.call_count == max_stages + 1
+    assert coordinator._migrate_out_onestage.call_count == migration_max_stages + 1
     assert status == MigrationStatus.ABORTED_SRC
 
 @pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_migrate_out_waiting_request():
     migrate_out_request = MagicMock()
 
     # Create an instance of MigrationCoordinator
-    coordinator = MigrationCoordinator(backend_engine, last_stage_max_blocks=1, max_stages=3)
+    coordinator = MigrationCoordinator(backend_engine, migration_last_stage_max_blocks=1, migration_max_stages=3)
 
     # Test FINISHED
     migrate_out_request.prefill_num_blocks = 3

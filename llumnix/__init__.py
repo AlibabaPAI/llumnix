@@ -15,7 +15,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.setup import (launch_ray_cluster,
                                        connect_to_ray_cluster,
                                        init_manager)
-from llumnix.arg_utils import ManagerArgs
+from llumnix.arg_utils import ManagerArgs, InstanceArgs
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
@@ -29,6 +29,7 @@ __all__ = [
     "connect_to_ray_cluster",
     "init_manager",
     "ManagerArgs",
+    "InstanceArgs",
     "Manager",
     "Llumlet",
     "QueueType",

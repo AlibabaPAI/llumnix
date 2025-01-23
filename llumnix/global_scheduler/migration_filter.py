@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.global_scheduler.scaling_scheduler import InstanceType
+from llumnix.instance_info import InstanceType
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 
 logger = init_logger(__name__)
@@ -80,12 +80,12 @@ class LoadConstrainedFilter(MigrationFilterPolicy):
     def filter_src_condition(self, filter_config: MigrationFilterConfig,
                              pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
         return lambda instance_info: instance_info.num_killed_requests > 0 \
-            or instance_info.instance_load_migrate > filter_config.migrate_out_load_threshold
+            or instance_info.migration_load_metric > filter_config.migrate_out_load_threshold
 
     def filter_dst_condition(self, filter_config: MigrationFilterConfig,
                              pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
         return lambda instance_info: instance_info.num_killed_requests == 0 \
-            and instance_info.instance_load_migrate < filter_config.migrate_out_load_threshold
+            and instance_info.migration_load_metric < filter_config.migrate_out_load_threshold
 
 class PddFilter(MigrationFilterPolicy):
     INSTANCE_FILTER_RULES = {
@@ -102,7 +102,7 @@ class PddFilter(MigrationFilterPolicy):
             inner_policy = MigrationFilterPolicyFactory.get_policy('load')
             policy_filter = inner_policy.filter_src_condition(filter_config, pair_migration_type)
         else:
-            policy_filter = lambda instance_info: True
+            policy_filter = lambda _: True
 
         return lambda instance_info: instance_type_filter(instance_info) and policy_filter(instance_info)
 

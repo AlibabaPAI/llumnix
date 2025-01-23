@@ -18,8 +18,8 @@ class MigrationConfig:
             migration_backend: str,
             migration_buffer_blocks: int,
             migration_num_layers: int,
-            last_stage_max_blocks: int,
-            max_stages: int,
+            migration_last_stage_max_blocks: int,
+            migration_max_stages: int,
             migration_backend_init_timeout: float,
             migration_backend_transfer_type: str = "",
             grpc_migration_backend_server_address: str = "",
@@ -30,8 +30,8 @@ class MigrationConfig:
         self.migration_backend_transfer_type = migration_backend_transfer_type
         self.migration_num_layers = migration_num_layers
         self.migration_buffer_blocks = migration_buffer_blocks
-        self.last_stage_max_blocks = last_stage_max_blocks
-        self.max_stages = max_stages
+        self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
+        self.migration_max_stages = migration_max_stages
         self.migration_backend_init_timeout = migration_backend_init_timeout
         self.grpc_migration_backend_server_address = grpc_migration_backend_server_address
         self.kvtransfer_migration_backend_naming_url = kvtransfer_migration_backend_naming_url
@@ -41,33 +41,24 @@ class GlobalSchedulerConfig:
     def __init__(
             self,
             initial_instances: int,
-            load_metric: str,
             dispatch_policy: str,
-            num_dispatch_instances: int,
             pair_migration_policy: str,
             migrate_out_threshold: float,
-            enable_defrag: bool,
             scaling_policy: str,
+            scaling_load_metric: str,
             scale_up_threshold: float,
             scale_down_threshold: float,
             enable_pd_disagg: bool,
-            migration_backend: str,) -> None:
+            is_group_kind_migration_backend: bool,) -> None:
         self.initial_instances = initial_instances
-        self.load_metric = load_metric
-
         self.dispatch_policy = dispatch_policy
-
         self.pair_migration_policy = pair_migration_policy
-        # TODO(KuilongCui): Use a better way to set the threshold, as having both positive and negative
-        # values can cause confusion.
-        self.migrate_out_load_threshold = migrate_out_threshold*(-1)
-        self.enable_defrag = enable_defrag
+        self.migrate_out_load_threshold = migrate_out_threshold
 
         self.scaling_policy = scaling_policy
-        self.scale_up_threshold = scale_up_threshold*(-1)
-        self.scale_down_threshold = scale_down_threshold*(-1)
+        self.scaling_load_metric = scaling_load_metric
+        self.scale_up_threshold = scale_up_threshold
+        self.scale_down_threshold = scale_down_threshold
 
         self.enable_pd_disagg = enable_pd_disagg
-        self.num_dispatch_instances = num_dispatch_instances
-
-        self.migration_backend = migration_backend
+        self.is_group_kind_migration_backend = is_group_kind_migration_backend

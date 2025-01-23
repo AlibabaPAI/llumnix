@@ -55,7 +55,7 @@ proto-clean:
 test: check_pytest_installed
 	@pytest -v --ignore=third_party --ignore=tests/e2e_test --disable-warnings
 	@python examlpes/offline_inference.py
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_e2e.py
+	@pytest -v -x -s --tb=long ./tests/e2e_test/test_correctness.py
 	@pytest -v -x -s --tb=long ./tests/e2e_test/test_bench.py
 	@pytest -v -x -s --tb=long ./tests/e2e_test/test_migration.py
 
@@ -67,9 +67,9 @@ unit_test: check_pytest_installed
 offline_test:
 	@python examlpes/offline_inference.py
 
-.PHONY: e2e_test
-e2e_test:
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_e2e.py
+.PHONY: correctness_test
+correctness_test:
+	@pytest -v -x -s --tb=long ./tests/e2e_test/test_correctness.py
 
 .PHONY: bench_test
 bench_test:

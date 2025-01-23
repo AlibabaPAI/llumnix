@@ -22,7 +22,7 @@ from vllm import LLM, SamplingParams
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
-from .utils import (generate_launch_command, wait_for_llumnix_service_ready,
+from .utils import (generate_launch_command, generate_serve_command, wait_for_llumnix_service_ready,
                     shutdown_llumnix_service)
 
 
@@ -61,10 +61,11 @@ def run_vllm(model, max_model_len, sampling_params):
     return vllm_output
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for e2e test")
+@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for correctness test")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo'])
-async def test_e2e(ray_env, shutdown_llumnix_service, model, migration_backend):
+@pytest.mark.parametrize("launch_mode", ['global', 'local'])
+@pytest.mark.parametrize("enable_pd_disagg", [True, False])
+async def test_correctness(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg):
     max_model_len = 370
     sampling_params = {
         "n": 1,
@@ -86,13 +87,38 @@ async def test_e2e(ray_env, shutdown_llumnix_service, model, migration_backend):
     # generate llumnix outputs
     ip = "127.0.0.1"
     base_port = 37037
-    launch_command = generate_launch_command(model=model,
-                                      max_model_len=max_model_len,
-                                      ip=ip,
-                                      port=base_port,
-                                      migration_backend=migration_backend,
-                                      launch_ray_cluster=False)
-    subprocess.run(launch_command, shell=True, check=True)
+
+    launch_commands = []
+    if launch_mode == "local":
+        if enable_pd_disagg:
+            launch_commands.append(generate_launch_command(result_filename=str(base_port)+".out",
+                                                    model=model,
+                                                    max_model_len=max_model_len,
+                                                    port=base_port,
+                                                    enable_pd_disagg=enable_pd_disagg,
+                                                    instance_type="prefill"))
+            launch_commands.append(generate_launch_command(result_filename=str(base_port+1)+".out",
+                                                    launch_ray_cluster=False,
+                                                    model=model,
+                                                    max_model_len=max_model_len,
+                                                    ip=ip,
+                                                    port=base_port+1,
+                                                    enable_pd_disagg=enable_pd_disagg,
+                                                    instance_type="decode"))
+        else:
+            launch_commands.append(generate_launch_command(model=model,
+                                                    max_model_len=max_model_len,
+                                                    ip=ip,
+                                                    port=base_port))
+    else:
+        launch_commands.append(generate_serve_command(result_filename=str(base_port)+".out",
+                                               ip=ip,
+                                               port=base_port,
+                                               model=model,
+                                               enable_pd_disagg=enable_pd_disagg))
+    for launch_command in launch_commands:
+        subprocess.run(launch_command, shell=True, check=True)
+        await asyncio.sleep(3)
 
     wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"], timeout=120)
 

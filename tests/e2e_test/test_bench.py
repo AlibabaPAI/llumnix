@@ -62,25 +62,57 @@ def parse_log_file():
     return to_markdown_table(prefill_data) + "\n\n" + to_markdown_table(decode_data)
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required for simple benchmark")
+@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
-async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode):
+@pytest.mark.parametrize("enable_pd_disagg", [True, False])
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg):
+    if launch_mode == 'local':
+        num_prompts = 500 if not enable_pd_disagg else 50
+    else:
+        num_prompts = 50 if not enable_pd_disagg else 50
+
     ip = "127.0.0.1"
     base_port = 37037
     ip_ports = []
     if launch_mode == 'local':
         device_count = torch.cuda.device_count()
-        for i in range(device_count):
-            port = base_port+i
-            ip_port = f"{ip}:{port}"
-            ip_ports.append(ip_port)
-            launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                     launch_ray_cluster=False,
-                                                     ip=ip,
-                                                     port=port,
-                                                     model=model)
-            subprocess.run(launch_command, shell=True, check=True)
+        if enable_pd_disagg:
+            for i in range(device_count//2):
+                port = base_port+i
+                ip_port = f"{ip}:{port}"
+                ip_ports.append(ip_port)
+                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                                                        launch_ray_cluster=False,
+                                                        ip=ip,
+                                                        port=port,
+                                                        model=model,
+                                                        enable_pd_disagg=enable_pd_disagg,
+                                                        instance_type="prefill")
+                subprocess.run(launch_command, shell=True, check=True)
+            for i in range(device_count//2):
+                port = base_port+i+device_count//2
+                ip_port = f"{ip}:{port}"
+                ip_ports.append(ip_port)
+                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                                                        launch_ray_cluster=False,
+                                                        ip=ip,
+                                                        port=port,
+                                                        model=model,
+                                                        enable_pd_disagg=enable_pd_disagg,
+                                                        instance_type="decode")
+                subprocess.run(launch_command, shell=True, check=True)
+        else:
+            for i in range(device_count):
+                port = base_port+i
+                ip_port = f"{ip}:{port}"
+                ip_ports.append(ip_port)
+                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                                                        launch_ray_cluster=False,
+                                                        ip=ip,
+                                                        port=port,
+                                                        model=model)
+                subprocess.run(launch_command, shell=True, check=True)
     else: # global
         device_count = torch.cuda.device_count()
         for i in range(device_count):
@@ -90,11 +122,11 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
         serve_command = generate_serve_command(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,
-                                               model=model)
+                                               model=model,
+                                               enable_pd_disagg=enable_pd_disagg)
         # pylint: disable=subprocess-run-check
         subprocess.run('ray start --head', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(serve_command, shell=True, check=True)
-
     wait_for_llumnix_service_ready(ip_ports)
 
     def run_bench_command(command):
@@ -107,7 +139,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
         bench_command = generate_bench_command(
             ip_ports=f"127.0.0.1:{base_port + i}",
             model=model,
-            num_prompts=200,
+            num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=5,
@@ -129,7 +161,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    if launch_mode == 'local':
+    if launch_mode == 'local' and not enable_pd_disagg:
         with open("performance.txt", "w", encoding="utf-8") as f:
             f.write(parse_log_file())
 

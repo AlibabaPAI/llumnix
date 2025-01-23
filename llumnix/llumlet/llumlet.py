@@ -21,7 +21,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
 from llumnix.backends.utils import init_backend_engine, get_engine_world_size
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
@@ -30,6 +30,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
+from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import get_instance_name
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 
@@ -39,12 +40,11 @@ logger = init_logger(__name__)
 class Llumlet:
     def __init__(self,
                  instance_id: str,
+                 instance_args: InstanceArgs,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 migration_config: MigrationConfig,
                  backend_type: BackendType,
-                 engine_args,
-                 profiling_result_file_path: str = None) -> None:
+                 engine_args) -> None:
         try:
             self.job_id = ray.get_runtime_context().get_job_id()
             self.worker_id = ray.get_runtime_context().get_worker_id()
@@ -54,17 +54,24 @@ class Llumlet:
             logger.info("Llumlet(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
                             self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
             logger.info("Llumlet backend type: {}".format(backend_type))
+            self.instance_args = instance_args
             self.actor_name = get_instance_name(instance_id)
+            self.instance_load_calculator = InstanceLoadCalculator(
+                dispatch_load_metric=instance_args.dispatch_load_metric,
+                migration_load_metric=instance_args.migration_load_metric,
+                enable_defrag=instance_args.enable_defrag
+            )
+            migration_config: MigrationConfig = instance_args.create_migration_config()
             self.backend_engine: BackendInterface = init_backend_engine(instance_id,
                                                                         placement_group,
                                                                         request_output_queue_type,
                                                                         migration_config,
                                                                         backend_type,
                                                                         engine_args,
-                                                                        profiling_result_file_path)
+                                                                        instance_args.profiling_result_file_path)
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                              migration_config.last_stage_max_blocks,
-                                                              migration_config.max_stages)
+                                                              migration_config.migration_last_stage_max_blocks,
+                                                              migration_config.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                                self.backend_engine)
             self.log_requests = True
@@ -82,12 +89,11 @@ class Llumlet:
     @classmethod
     def from_args(cls,
                   instance_id: str,
+                  instance_args: InstanceArgs,
                   placement_group: PlacementGroup,
                   request_output_queue_type: QueueType,
-                  migration_config: MigrationConfig,
                   backend_type: BackendType,
-                  engine_args,
-                  profiling_result_file_path: str = None):
+                  engine_args):
         try:
             assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
                 f'unimplemented backend {backend_type}'
@@ -109,12 +115,11 @@ class Llumlet:
                                             )
                                         )
             llumlet = llumlet_class.remote(instance_id,
+                                           instance_args,
                                            placement_group,
                                            request_output_queue_type,
-                                           migration_config,
                                            backend_type,
-                                           engine_args,
-                                           profiling_result_file_path)
+                                           engine_args)
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize Llumlet: {}".format(e))
@@ -131,7 +136,7 @@ class Llumlet:
                 # pylint: disable=protected-access
                 self.backend_engine._stop_event.set()
                 await asyncio.sleep(0)
-                self_actor = ray.get_actor(self.actor_name)
+                self_actor = ray.get_actor(name=self.actor_name, namespace="llumnix")
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:
@@ -192,11 +197,18 @@ class Llumlet:
             raise
         return migrated_request
 
+    # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager
     def get_instance_info(self) -> InstanceInfo:
-        return self.backend_engine.engine.instance_info
+        instance_info: InstanceInfo = self.backend_engine.engine.instance_info
+        instance_info.instance_type = self.instance_args.instance_type
+        self.instance_load_calculator.compute_instance_load(instance_info)
+        return instance_info
 
     def is_ready(self) -> bool:
         return True
+
+    def get_instance_args(self) -> InstanceArgs:
+        return self.instance_args
 
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()

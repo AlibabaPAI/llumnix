@@ -17,7 +17,7 @@ from blade_llm.service.args import ServingArgs
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
-                               LaunchArgs)
+                               LaunchArgs, InstanceArgs)
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.bladellm.utils import get_args
@@ -29,19 +29,19 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
     llumnix_parser = LlumnixArgumentParser()
     llumnix_parser = EntrypointsArgs.add_cli_args(llumnix_parser)
     llumnix_parser = ManagerArgs.add_cli_args(llumnix_parser)
+    llumnix_parser = InstanceArgs.add_cli_args(llumnix_parser)
     llumnix_config = get_llumnix_config(bladellm_args.llumnix_config)
-    entrypoints_args, manager_args, engine_args = get_args(llumnix_config, llumnix_parser, bladellm_args)
+    entrypoints_args, manager_args, instance_args, engine_args = \
+        get_args(llumnix_config, llumnix_parser, bladellm_args)
 
-    assert not manager_args.simulator_mode, "Only support the simulator mode for vLLM."
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
-
     setup_ray_cluster(entrypoints_args)
 
     llumnix_client = None
     # if gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():
         llumnix_context: EntrypointsContext = \
-            setup_llumnix(manager_args, entrypoints_args, engine_args, launch_args)
+            setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
         llumnix_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
 
     return llumnix_client

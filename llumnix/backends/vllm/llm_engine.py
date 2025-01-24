@@ -23,7 +23,7 @@ from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
-from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
+from vllm.outputs import RequestOutput
 from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
@@ -45,18 +45,6 @@ logger = init_logger(__name__)
 
 NO_OUTPUTS_STEP_INTERVAL = 0.01
 
-
-class LlumnixRequestOutputFactory(RequestOutputFactory):
-    @staticmethod
-    def create(seq_group: SequenceGroupLlumnix, use_cache: bool = False):
-        # Determine the type based on a condition, for example:
-        if hasattr(seq_group,
-                   'embeddings') and seq_group.embeddings is not None:
-            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
-        if RequestStatus.is_migrating(seq_group.status):
-            return None
-        # pylint: disable=too-many-function-args
-        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
@@ -347,7 +335,7 @@ class BackendVLLM(BackendInterface):
     def get_request_incremental_blocks(self, *args, **kwargs) -> Tuple[List[int], List[int]]:
         return self.engine.scheduler[0].get_request_incremental_blocks(*args, **kwargs)
 
-    def remove_running_request(self, *args, **kwargs) -> None:
+    def remove_running_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].remove_running_request(*args, **kwargs)
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:

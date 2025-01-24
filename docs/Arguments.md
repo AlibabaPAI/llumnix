@@ -284,6 +284,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Llumnix does not support pipeline parallel currently.
 
 `--num-schedule-steps`
-- Llumnix does not support multi-step scheduling.
+- Llumnix does not support multi-step scheduling currently.
 
 Besides, Llumnix does not support sampling algorithms whose number of ouput sequences is greater than one (vllm.SamplingParams.n > 1), such as beam search.

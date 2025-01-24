@@ -21,8 +21,6 @@ class RequestTimestamps:
         self.manager_generate_timestamp = -1.0
         self.llumlet_generate_timestamp = -1.0
         self.engine_add_request_timestamp = -1.0
-        self.engine_process_model_outputs_timestamp_begin = -1.0
-        self.engine_process_model_outputs_timestamp_end = -1.0
         self.engine_step_timestamp_begin = -1.0
         self.engine_step_timestamp_end = -1.0
         self.engine_step_postprocess_timestamp_end = -1.0
@@ -32,10 +30,6 @@ class RequestTimestamps:
         self.queue_server_receive_timestamp = -1.0
         self.api_server_background_process_get_queue_timestamp = -1.0
         self.api_server_generate_benchmark_timestamp_end = -1.0
-
-    @property
-    def process_model_outputs_latency(self):
-        return (self.engine_process_model_outputs_timestamp_end - self.engine_process_model_outputs_timestamp_begin)*1000
 
     @property
     def step_latency_engine(self):

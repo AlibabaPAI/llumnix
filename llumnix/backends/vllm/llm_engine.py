@@ -116,7 +116,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             usage_context=usage_context,
         )
         return engine
-
+    
+    # TODO(s5u13b): 
     def _process_request_outputs(
             self,
             outputs: List[Tuple[RequestOutput,ServerInfo]],
@@ -128,15 +129,9 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             request_outputs, server_infos = zip(*outputs)
             request_outputs = list(request_outputs)
             server_infos = list(server_infos)
-        for request_output, server_info in zip(request_outputs, server_infos):
-            if hasattr(server_info, 'request_timestamps'):
-                request_output.request_timestamps = server_info.request_timestamps
-                request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+        for request_output in request_outputs:
             if request_output.finished:
                 logger.info("engine finished request {}".format(request_output.request_id))
-        for server_info in server_infos:
-            if hasattr(server_info, 'request_timestamps'):
-                server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time

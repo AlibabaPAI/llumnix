@@ -78,7 +78,6 @@ async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
 def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
     per_token_latency_breakdown_dict = {
         'step_latency_engine': [],
-        'process_model_outputs_latency': [],
         'step_postprocess_latency': [],
         'across_async_put_queue_thread_latency': [],
         'across_async_put_queue_actor_latency': [],

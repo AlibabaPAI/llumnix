@@ -157,7 +157,7 @@ def test_dispatch_rr():
 
 def test_dispatch_power_of_k_choice():
     num_tests = 100
-    instance_num = 2
+    instance_num = 4
     for power_of_k_choice in [1, 2, 3]:
         dispatch_scheduler = DispatchScheduler('load', power_of_k_choice)
         instance_num_requests = {}
@@ -174,4 +174,4 @@ def test_dispatch_power_of_k_choice():
         instance_id_set = set()
         for _ in range(num_tests):
             instance_id_set.add(dispatch_scheduler.dispatch())
-    assert len(instance_id_set) == 2
+        assert len(instance_id_set) == power_of_k_choice

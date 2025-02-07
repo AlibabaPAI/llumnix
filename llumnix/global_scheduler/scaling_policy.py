@@ -2,7 +2,7 @@ from typing import List
 from abc import ABC, abstractmethod
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.instance_info import InstanceInfo
 
 logger = init_logger(__name__)
 

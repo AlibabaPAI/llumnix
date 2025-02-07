@@ -1,6 +1,6 @@
 from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
 
-from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
 
 
 class LlumnixRequestOutputFactory(RequestOutputFactory):

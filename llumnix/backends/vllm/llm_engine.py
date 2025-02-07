@@ -28,7 +28,6 @@ from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
 from vllm.usage.usage_lib import UsageContext
-from vllm.engine.output_processor.single_step import SingleStepOutputProcessor
 from vllm.engine.llm_engine import SchedulerContext
 
 from llumnix.logging.logger import init_logger
@@ -119,6 +118,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         )
         return engine
 
+    # pylint: disable=inconsistent-return-statements
     def _process_model_outputs(self,
                                ctx: SchedulerContext,
                                request_id: Optional[str] = None) -> None:
@@ -132,7 +132,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
              is_last_step, is_first_step_output,
              skip) = ctx.output_queue.popleft()
-        
+
         # Filter out outputs of migrating requests.
         server_infos = []
         if outputs:
@@ -150,14 +150,14 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             scheduler_outputs.scheduled_seq_groups = new_scheduled_seq_groups
             outputs[0].outputs = new_outputs
             seq_group_metadata_list = new_seq_group_metadata_list
-        
+
         if request_id:
             ctx.output_queue[0] = (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
                                    is_last_step, is_first_step_output, skip)
         else:
             ctx.output_queue.appendleft((outputs, seq_group_metadata_list, scheduler_outputs, is_async,
                                          is_last_step, is_first_step_output, skip))
-        
+
         for server_info in server_infos:
             if hasattr(server_info, 'request_timestamps'):
                 server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()

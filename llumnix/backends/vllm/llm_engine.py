@@ -41,7 +41,6 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import get_instance_name
-from llumnix.backends.vllm.outputs import LlumnixRequestOutputFactory
 
 logger = init_logger(__name__)
 

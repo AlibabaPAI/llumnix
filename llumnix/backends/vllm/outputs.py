@@ -1,6 +1,6 @@
 from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
 
-from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
+from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
 
 
 class LlumnixRequestOutputFactory(RequestOutputFactory):
@@ -10,5 +10,7 @@ class LlumnixRequestOutputFactory(RequestOutputFactory):
         if hasattr(seq_group,
                    'embeddings') and seq_group.embeddings is not None:
             return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
+        # if RequestStatus.is_migrating(seq_group.status):
+        #     return None
         # pylint: disable=too-many-function-args
         return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info

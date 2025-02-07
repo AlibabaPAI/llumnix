@@ -29,6 +29,7 @@ from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
 from vllm.usage.usage_lib import UsageContext
 from vllm.engine.output_processor.single_step import SingleStepOutputProcessor
+from vllm.engine.llm_engine import SchedulerContext
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
@@ -53,8 +54,8 @@ class SingleStepOutputProcessorLlumnix(SingleStepOutputProcessor):
                                         seq_group: SequenceGroup,
                                         outputs: SequenceGroupOutput,
                                         is_async: bool) -> None:
-        if RequestStatus.is_migrating(seq_group.status):
-            return
+        # if RequestStatus.is_migrating(seq_group.status):
+        #     return
         super()._process_sequence_group_outputs(seq_group, outputs, is_async)
 
 
@@ -128,6 +129,45 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             usage_context=usage_context,
         )
         return engine
+
+    def _process_model_outputs(self,
+                               ctx: SchedulerContext,
+                               request_id: Optional[str] = None) -> None:
+        if len(ctx.output_queue) == 0:
+            return None
+
+        if request_id:
+            (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+             is_last_step, is_first_step_output, skip) = ctx.output_queue[0]
+        else:
+            (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+             is_last_step, is_first_step_output,
+             skip) = ctx.output_queue.popleft()
+        
+        # Filter out outputs of migrating requests.
+        if outputs:
+            new_outputs = []
+            new_scheduled_seq_groups = []
+            new_seq_group_metadata_list = []
+            for scheduled_seq_group, seq_group_meta, seq_group_output in \
+                    zip(scheduler_outputs.scheduled_seq_groups, seq_group_metadata_list, outputs[0].outputs):
+                seq_group = scheduled_seq_group.seq_group
+                if seq_group.get_seqs(SequenceStatus.RUNNING):
+                    new_scheduled_seq_groups.append(scheduled_seq_group)
+                    new_seq_group_metadata_list.append(seq_group_meta)
+                    new_outputs.append(seq_group_output)
+            scheduler_outputs.scheduled_seq_groups = new_scheduled_seq_groups
+            outputs[0].outputs = new_outputs
+            seq_group_metadata_list = new_seq_group_metadata_list
+        
+        if request_id:
+            ctx.output_queue[0] = (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+                                   is_last_step, is_first_step_output, skip)
+        else:
+            ctx.output_queue.appendleft((outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+                                         is_last_step, is_first_step_output, skip))
+        
+        return super()._process_model_outputs(ctx, request_id)
 
     def _process_request_outputs(
             self,

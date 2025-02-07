@@ -48,7 +48,7 @@ class LlumnixClientVLLM:
             raise ValueError("Unsupported feature: multiple sequence decoding")
         logger.info("entrypoints receive request {}".format(request_id))
         # pylint: disable=unexpected-keyword-arg
-        results_generator = AsyncStream(request_id, cancel=partial(self.abort, verbose=False))
+        results_generator = AsyncStream(request_id, cancel=self.abort_request)
         self.request_streams[request_id] = results_generator
         server_info_copy = copy.deepcopy(self.server_info)
 
@@ -116,6 +116,10 @@ class LlumnixClientVLLM:
             await self.manager.abort.remote(request_id)
         except ray.exceptions.RayActorError:
             logger.warning("Manager is unavailable.")
+
+    def abort_request(self, request_id: str) -> None:
+        logger.info("Abort request: {}.".format(request_id))
+        self.manager.abort.remote(request_id)
 
     async def is_ready(self) -> bool:
         ready_status = await self.manager.is_ready.remote()

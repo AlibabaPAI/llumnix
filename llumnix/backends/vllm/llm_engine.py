@@ -23,7 +23,7 @@ from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
-from vllm.outputs import RequestOutput
+from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
 from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
@@ -46,6 +46,17 @@ from llumnix.backends.vllm.outputs import LlumnixRequestOutputFactory
 logger = init_logger(__name__)
 
 NO_OUTPUTS_STEP_INTERVAL = 0.01
+
+
+class LlumnixRequestOutputFactory(RequestOutputFactory):
+    @staticmethod
+    def create(seq_group: SequenceGroupLlumnix, use_cache: bool = False):
+        # Determine the type based on a condition, for example:
+        if hasattr(seq_group,
+                   'embeddings') and seq_group.embeddings is not None:
+            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
+        # pylint: disable=too-many-function-args
+        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
 
 class LLMEngineLlumnix(_AsyncLLMEngine):

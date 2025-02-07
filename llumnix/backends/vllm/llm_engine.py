@@ -170,7 +170,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             ctx.output_queue.appendleft((outputs, seq_group_metadata_list, scheduler_outputs, is_async,
                                          is_last_step, is_first_step_output, skip))
 
-        set_timestamp(server_info, 'engine_process_model_outputs_timestamp_begin', time.time())
+        set_timestamp(server_infos, 'engine_process_model_outputs_timestamp_begin', time.time())
 
         super()._process_model_outputs(ctx, request_id)
 

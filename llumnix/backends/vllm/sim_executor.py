@@ -17,8 +17,9 @@ from typing import List, Tuple
 
 from vllm.executor.ray_gpu_executor import RayGPUExecutor
 
-from vllm.sequence import Logprob, SequenceOutput, SequenceGroupOutput, SamplerOutput, ExecuteModelRequest
-from vllm.config import _GB
+from vllm.sequence import Logprob, SequenceOutput, ExecuteModelRequest
+from vllm.model_executor.layers.sampler import SamplerOutput, CompletionSequenceGroupOutput
+from vllm.utils import GiB_bytes
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import get_cache_block_size
@@ -29,7 +30,6 @@ logger = init_logger(__name__)
 
 class SimGPUExecutor(RayGPUExecutor):
     latency_mem: LatencyMemData = None
-
     def __init__(self, *args, **kwargs) -> None:
         RayGPUExecutor.__init__(self, *args, **kwargs)
         self.last_inference_latency = 0
@@ -38,7 +38,7 @@ class SimGPUExecutor(RayGPUExecutor):
 
         self.cache_block_size = get_cache_block_size(
             self.cache_config.block_size, self.model_config, self.parallel_config)
-        self.cache_block_size /= _GB
+        self.cache_block_size /= GiB_bytes
         self.sim_cache_config = SimCacheConfig(self.cache_config.gpu_memory_utilization,
                                                self.cache_config.block_size,
                                                self.scheduler_config.max_num_batched_tokens)
@@ -85,10 +85,6 @@ class SimGPUExecutor(RayGPUExecutor):
                 dummy_sample_output = SequenceOutput(seq_id, 20, {20: Logprob(1.0)})
                 samples.append(dummy_sample_output)
             if samples:
-                output = SequenceGroupOutput(samples, None)
+                output = CompletionSequenceGroupOutput(samples, None)
                 sampler_outputs.append(output)
         return [SamplerOutput(outputs=sampler_outputs)]
-
-    async def send_blocks(self, blocks_len) -> None:
-        migration_latency = (self.cache_block_size * blocks_len) / self.migration_bandwidth
-        await asyncio.sleep(migration_latency)

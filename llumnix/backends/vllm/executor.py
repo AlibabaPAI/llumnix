@@ -14,14 +14,13 @@
 import time
 
 from collections import defaultdict
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional, Tuple, Type
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 # pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
 
 from vllm.executor.executor_base import ExecutorBase
-from vllm.model_executor.layers.sampler import SamplerOutput, CompletionSequenceGroupOutput
 from vllm.executor.ray_gpu_executor import RayGPUExecutor, RayGPUExecutorAsync, RayWorkerWrapper, envs, \
                                            get_ip, get_vllm_instance_id, get_distributed_init_method, get_open_port
 from vllm.worker.worker_base import WorkerBase

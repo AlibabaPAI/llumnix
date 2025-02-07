@@ -69,7 +69,7 @@ class AsyncPutQueueActor:
                                                                                   server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]
-                self.engine_actor_handle.abort_request.remote(request_ids)
+                self.engine_actor_handle.abort.remote(request_ids)
 
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,

@@ -127,7 +127,7 @@ async def generate_benchmark(request: Request) -> Response:
     final_output = None
     per_token_latency = []
     per_token_latency_breakdown_list = []
-    async for request_output in results_generator:
+    async for request_output in results_generator.generator():
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
             await llumnix_client.abort(request_id)

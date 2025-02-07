@@ -2,7 +2,6 @@ import copy
 import time
 import asyncio
 from typing import Dict
-from functools import partial
 
 import ray
 

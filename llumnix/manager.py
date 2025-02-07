@@ -205,7 +205,6 @@ class Manager:
             else:
                 logger.info("Instance {} is dead.".format(instance_id))
                 self.scale_down(instance_id)
-
         while True:
             try:
                 await asyncio.sleep(interval)
@@ -266,7 +265,7 @@ class Manager:
                 logger.info("instance {}->{} migrate done, migrate request {}".format(
                     migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
-            ret = fut.result()
+            ret = fut.result()[0]
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
 
@@ -481,6 +480,7 @@ class Manager:
                                 if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []
+        scale_up_instance_args = []
         scale_up_instance_actor_handles = []
         scale_up_instance_args = []
         tasks = []

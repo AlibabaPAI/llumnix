@@ -113,6 +113,7 @@ class ZmqClient:
             for request_output in item:
                 if hasattr(request_output, 'request_timestamps'):
                     request_output.request_timestamps.queue_client_send_timestamp = time.time()
+
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitQueueRequest(item=item),
                         rpc_path=rpc_path,

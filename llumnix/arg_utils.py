@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import dataclasses
 from dataclasses import dataclass
-import argparse
 from typing import List, Tuple, Union
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig

@@ -73,9 +73,7 @@ class Llumlet:
                                                               migration_config.migration_last_stage_max_blocks,
                                                               migration_config.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
-                                                               self.backend_engine)
-            self.log_requests = True
-
+                                                            self.backend_engine)
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
@@ -140,19 +138,26 @@ class Llumlet:
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:
-        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
-        if len(migrate_out_requests) == 0:
-            return []
+        try:
+            migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+            logger.info("Migrate out requests: {}".format(len(migrate_out_requests)))
+            if len(migrate_out_requests) == 0:
+                return []
 
-        for migrate_out_request in migrate_out_requests:
-            migrate_out_request.is_migrating = True
+            for migrate_out_request in migrate_out_requests:
+                migrate_out_request.is_migrating = True
 
-        migrated_request_list = []
-        for migrate_out_request in migrate_out_requests:
-            migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
-            migrated_request_list.extend(migrated_request)
-            if len(migrated_request) == 0 and migrate_out_request.eom:
-                break
+            migrated_request_list = []
+            for migrate_out_request in migrate_out_requests:
+                logger.info("Migrate target requests: {}".format(migrate_out_request.request_id))
+                migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
+                migrated_request_list.extend(migrated_request)
+                if len(migrated_request) == 0 and migrate_out_request.eom:
+                    break
+        except Exception as e:
+            logger.exception("Failed to migrate out")
+            raise e
+
         return migrated_request_list
 
     async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
@@ -204,8 +209,9 @@ class Llumlet:
         self.instance_load_calculator.compute_instance_load(instance_info)
         return instance_info
 
-    def is_ready(self) -> bool:
-        return True
+    async def is_ready(self) -> InstanceArgs:
+        await self.backend_engine.is_ready()
+        return self.instance_args
 
     def get_instance_args(self) -> InstanceArgs:
         return self.instance_args
@@ -213,10 +219,11 @@ class Llumlet:
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()
 
-    def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+        # This should not be used for logging, as it is monotonic time.
         if hasattr(server_info, 'request_timestamps'):
             server_info.request_timestamps.llumlet_generate_timestamp = time.time()
-        self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+        await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -251,3 +258,7 @@ class Llumlet:
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
+
+    async def execute_async_engine_method(self, method, *args, **kwargs):
+        executor = getattr(self.backend_engine, method)
+        return await executor(*args, **kwargs)

@@ -21,6 +21,7 @@ class RequestInferenceType(str, Enum):
     PREFILL = "prefill"
     DECODE = "decode"
 
+
 class RequestStatus(str, Enum):
     RUNNING = "running"
     WAITING = "waiting"
@@ -31,6 +32,7 @@ class RequestStatus(str, Enum):
     @staticmethod
     def is_migrating(status) -> bool:
         return status in [RequestStatus.RUNNING_MIGRATING, RequestStatus.WAITING_MIGRATING]
+
 
 class LlumnixRequest:
     def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int) -> None:

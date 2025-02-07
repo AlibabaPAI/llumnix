@@ -65,7 +65,7 @@ def test_dispatch_to_no_constraints_and_prefill():
             assert instance_id not in dispatch_scheduler.available_dispatch_instance_set
 
     instance_dispatch_info = defaultdict(int)
-    for _ in range(INSTANCE_NUM * 2):
+    for _ in range(instance_num * 2):
         instance_id = dispatch_scheduler.dispatch()
         instance_dispatch_info[instance_id] += 1
 

@@ -17,6 +17,7 @@ import numpy as np
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.arg_utils import InstanceArgs
+from llumnix.global_scheduler.scaling_policy import ScalePolicyFactory
 
 logger = init_logger(__name__)
 

@@ -62,7 +62,7 @@ class Load(DispatchPolicy):
         sorted_instance_infos = sort_instance_infos(available_instance_infos, 'dispatch_load_metric')
         instance_info_chosen = random_choice_from_top_k(sorted_instance_infos, power_of_k_choice)
         instance_id = instance_info_chosen.instance_id
-        logger.info("dispatch to {}, load: {}".format(instance_id, instance_info_chosen.instance_load_dispatch_scale))
+        logger.info("dispatch to {}, load: {}".format(instance_id, instance_info_chosen.dispatch_load_metric))
         return instance_id
 
 

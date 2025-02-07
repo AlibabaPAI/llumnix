@@ -17,6 +17,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.arg_utils import InstanceArgs
 from llumnix.constants import DISPATCH_LOG_FREQUENCY
+from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory
 
 logger = init_logger(__name__)
 

@@ -24,7 +24,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.outputs import RequestOutput
-from vllm.sequence import SequenceGroup, SequenceStatus, SequenceGroupOutput
+from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
 from vllm.usage.usage_lib import UsageContext
@@ -49,16 +49,6 @@ logger = init_logger(__name__)
 NO_OUTPUTS_STEP_INTERVAL = 0.01
 
 
-class SingleStepOutputProcessorLlumnix(SingleStepOutputProcessor):
-    def _process_sequence_group_outputs(self,
-                                        seq_group: SequenceGroup,
-                                        outputs: SequenceGroupOutput,
-                                        is_async: bool) -> None:
-        # if RequestStatus.is_migrating(seq_group.status):
-        #     return
-        super()._process_sequence_group_outputs(seq_group, outputs, is_async)
-
-
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
@@ -68,7 +58,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # pylint: disable=import-outside-toplevel
         import vllm.outputs
         vllm.outputs.RequestOutputFactory.create = LlumnixRequestOutputFactory.create
-        vllm.engine.output_processor.single_step.SingleStepOutputProcessor = SingleStepOutputProcessorLlumnix
         super().__init__(*arg, **kwargs)
         self.instance_id = instance_id
         self.step_counter = Counter()

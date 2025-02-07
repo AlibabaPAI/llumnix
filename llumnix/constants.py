@@ -21,6 +21,9 @@ CHECK_DEPLOYMENT_STATES_INTERVAL: float = 30.0
 WATCH_DEPLOYMENT_INTERVAL: float = 10.0
 WATCH_DEPLOYMENT_INTERVAL_PENDING_INSTANCE: float = 120.0
 
+# llumnix/global_scheduler/dispatch_scheduler.py
+DISPATCH_LOG_FREQUENCY = 100
+
 # llumnix/entrypoints/setup.py
 MAX_RAY_RESTARTS: int = 10
 RAY_RESTART_INTERVAL: float = 10.0

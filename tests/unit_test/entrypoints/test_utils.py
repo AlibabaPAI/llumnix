@@ -33,8 +33,7 @@ def test_launch_ray_cluster():
     assert result.returncode == 0
 
 def test_init_manager(ray_env):
-    manager_args = ManagerArgs()
-    manager = init_manager(manager_args)
+    manager = init_manager(ManagerArgs())
     assert manager is not None
     manager_actor_handle = ray.get_actor(get_manager_name(), namespace='llumnix')
     assert manager_actor_handle is not None
@@ -47,14 +46,12 @@ def test_init_zmq(ray_env):
     assert request_output_queue is not None
 
 def test_retry_manager_method_sync(ray_env):
-    manager_args = ManagerArgs()
-    manager = init_manager(manager_args)
+    manager = init_manager(ManagerArgs())
     ret = retry_manager_method_sync(manager.is_ready.remote, 'is_ready')
     assert ret is True
 
 @pytest.mark.asyncio
 async def test_retry_manager_method_async(ray_env):
-    manager_args = ManagerArgs()
-    manager = init_manager(manager_args)
+    manager = init_manager(ManagerArgs())
     ret = await retry_manager_method_async(manager.is_ready.remote, 'is_ready')
     assert ret is True

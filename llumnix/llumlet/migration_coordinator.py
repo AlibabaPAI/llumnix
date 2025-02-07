@@ -44,10 +44,10 @@ class MigrationStatus(enum.Enum):
 class MigrationCoordinator:
     def __init__(self,
                  backend_engine: BackendInterface,
-                 last_stage_max_blocks: int,
-                 max_stages: int) -> None:
-        self.last_stage_max_blocks = last_stage_max_blocks
-        self.max_stages = max_stages
+                 migration_last_stage_max_blocks: int,
+                 migration_max_stages: int) -> None:
+        self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
+        self.migration_max_stages = migration_max_stages
         self.backend_engine = backend_engine
 
     async def migrate_out_running_request(self,
@@ -97,7 +97,7 @@ class MigrationCoordinator:
         """
         try:
             stage_count = 0
-            while stage_count < self.max_stages:
+            while stage_count < self.migration_max_stages:
                 stage_count += 1
                 status = await self._migrate_out_onestage(migrate_in_ray_actor, migrate_out_request)
                 if MigrationStatus.is_finished(status):
@@ -121,7 +121,7 @@ class MigrationCoordinator:
             pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
             incremental_blocks, incremental_token_ids = self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
             # live migration, transfer all blocks except last one(currently updating)
-            is_last_stage = (len(incremental_blocks) <= self.last_stage_max_blocks) or migrate_out_request.blocking_migration
+            is_last_stage = (len(incremental_blocks) <= self.migration_last_stage_max_blocks) or migrate_out_request.blocking_migration
             if not is_last_stage:
                 migration_status = MigrationStatus.RUNNING
                 src_blocks = incremental_blocks[:-1]

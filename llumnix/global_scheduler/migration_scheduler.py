@@ -11,66 +11,56 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Set, Tuple
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.instance_info import InstanceInfo
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig, CustomFilter
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
+from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
 
 
 class MigrationScheduler:
-    def __init__(self,
-                 pair_migration_policy: str,
+    def __init__(self, pair_migration_policy: str,
                  migrate_out_load_threshold: float,
-                 instance_load_calculator: InstanceLoadCalculator,
-                 migration_backend: str,) -> None:
-        self.filter_config = MigrationFilterConfig(migrate_out_load_threshold=migrate_out_load_threshold)
-        self.migration_filter = MigrationInstanceFilter(self.filter_config)
+                 is_group_kind_migration_backend: bool) -> None:
+        filter_config = MigrationFilterConfig(migrate_out_load_threshold=migrate_out_load_threshold)
+        self.migration_filter = MigrationInstanceFilter(filter_config)
+        self._register_migration_backend_init_filter(is_group_kind_migration_backend)
 
-        # Some migration backends require init_process_group before passing the KV cache. Here, we add a filter
-        # to prevent instances of migration backends that have not been initialized from participating in migration.
-        migration_backend_init_filter = CustomFilter()
-        migration_backend_init_filter.set_filter_condtition(
-            src_filter=lambda _: migration_backend not in ['gloo', 'nccl'],
-            dst_filter=lambda _: migration_backend not in ['gloo', 'nccl'])
-        self.migration_filter.register_filter("migration_backend_init_filter",
-                                              migration_backend_init_filter)
-
-        self.instance_load_calculator = instance_load_calculator
-        self.enable_defrag = instance_load_calculator.enable_defrag
-        if not self.enable_defrag:
-            self.pair_migration_policy \
-                = PairMigrationPolicyFactory.get_policy("balanced",
-                                                        migrate_out_load_threshold=migrate_out_load_threshold,
-                                                        instance_load_calculator=instance_load_calculator)
-        else:
-            self.pair_migration_policy \
-                = PairMigrationPolicyFactory.get_policy(pair_migration_policy,
-                                                        migrate_out_load_threshold=migrate_out_load_threshold,
-                                                        instance_load_calculator=instance_load_calculator)
+        self.pair_migration_policy = PairMigrationPolicyFactory.get_policy(
+            pair_migration_policy, migrate_out_load_threshold=migrate_out_load_threshold)
 
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
-        # instance info args
         self.instance_info: Dict[str, InstanceInfo] = None
-        self.sorted_instance_infos: List[InstanceInfo] = None
 
+    def _register_migration_backend_init_filter(self, is_group_kind_migration_backend: bool) -> None:
+        # some migration backends require init_process_group before passing the KV cache. Here, we add a filter
+        # to prevent instances of migration backends that have not been initialized from participating in migration.
+        migration_backend_init_filter = CustomFilter()
+        migration_backend_init_filter.set_filter_condtition(
+            src_filter=lambda _: not is_group_kind_migration_backend,
+            dst_filter=lambda _: not is_group_kind_migration_backend)
+        self.migration_filter.register_filter("migration_backend_init_filter", migration_backend_init_filter)
+
+    # migration_filter must ensure that the specific instance_info does not appear in both src and dst simultaneously
     def pair_migration(self, pair_migration_type: PairMigrationConstraints) -> List[Tuple[str, str]]:
         src_instance_infos, dst_instance_infos = self.migration_filter.filter_instances(
             self.instance_info.values(), pair_migration_type)
         return self.pair_migration_policy.pair_migration(src_instance_infos, dst_instance_infos)
 
-    def update_instance_infos(self,
-                              instance_info: Dict[str, InstanceInfo]) -> None:
+    def update_instance_infos(self, instance_info: Dict[str, InstanceInfo]) -> None:
         self.instance_info = instance_info
 
-    def add_instance(self, instance_id: str) -> None:
+    # pylint: disable=unused-argument
+    def add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
 
     def remove_instance(self, instance_id: str) -> None:
-        self.instance_id_set.remove(instance_id)
+        if instance_id in self.instance_id_set:
+            self.instance_id_set.remove(instance_id)
         self.num_instances = len(self.instance_id_set)

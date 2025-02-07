@@ -1,4 +1,4 @@
-name: e2e_test
+name: correctness_test
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ jobs:
       with:
         all_but_latest: true
 
-  e2e_tests:
+  correctness_tests:
     needs: cancel_previous_workflows
     runs-on: [self-hosted]
     timeout-minutes: 30
@@ -28,4 +28,4 @@ jobs:
       run: |
         [[ -n $(docker ps -q) ]] && docker kill $(docker ps -q) || echo "No running containers to kill."
     - name: Build And Test
-      run: ./tools/run_test.sh e2e_test
+      run: ./tools/run_test.sh correctness_test

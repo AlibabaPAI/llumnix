@@ -99,7 +99,8 @@ def clear_gloo_backend_state():
     try:
         # clear gloo migrate backend intermediate state
         ray.kill(ray.get_actor("gloo_queue", "llumnix"))
-    except ValueError:
+    # pylint: disable=broad-except
+    except Exception:
         # gloo_queue may not have been created yet; just ignore this error.
         pass
 

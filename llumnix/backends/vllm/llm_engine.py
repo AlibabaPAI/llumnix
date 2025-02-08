@@ -152,7 +152,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             for scheduled_seq_group, seq_group_meta, seq_group_output in \
                     zip(scheduler_outputs.scheduled_seq_groups, seq_group_metadata_list, outputs[0].outputs):
                 seq_group = scheduled_seq_group.seq_group
-                if seq_group.get_seqs(SequenceStatus.RUNNING):
+                if not RequestStatus.is_migrating(seq_group.status):
                     new_scheduled_seq_groups.append(scheduled_seq_group)
                     new_seq_group_metadata_list.append(seq_group_meta)
                     new_outputs.append(seq_group_output)

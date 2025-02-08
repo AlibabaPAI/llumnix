@@ -28,6 +28,7 @@ from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
 from vllm.utils import Counter
 from vllm.usage.usage_lib import UsageContext
+from vllm.engine.llm_engine import SchedulerContext
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
@@ -53,10 +54,9 @@ class LlumnixRequestOutputFactory(RequestOutputFactory):
         if hasattr(seq_group,
                    'embeddings') and seq_group.embeddings is not None:
             return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
-        if RequestStatus.is_migrating(seq_group.status):
-            return None
         # pylint: disable=too-many-function-args
         return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
+
 
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
@@ -128,9 +128,64 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         )
         return engine
 
+    # pylint: disable=inconsistent-return-statements
+    def _process_model_outputs(self,
+                               ctx: SchedulerContext,
+                               request_id: Optional[str] = None) -> None:
+        if len(ctx.output_queue) == 0:
+            return None
+
+        if request_id:
+            (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+             is_last_step, is_first_step_output, skip) = ctx.output_queue[0]
+        else:
+            (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+             is_last_step, is_first_step_output,
+             skip) = ctx.output_queue.popleft()
+
+        # Filter out outputs of migrating requests.
+        server_infos = []
+        if outputs:
+            new_outputs = []
+            new_scheduled_seq_groups = []
+            new_seq_group_metadata_list = []
+            for scheduled_seq_group, seq_group_meta, seq_group_output in \
+                    zip(scheduler_outputs.scheduled_seq_groups, seq_group_metadata_list, outputs[0].outputs):
+                seq_group = scheduled_seq_group.seq_group
+                if not RequestStatus.is_migrating(seq_group.status):
+                    new_scheduled_seq_groups.append(scheduled_seq_group)
+                    new_seq_group_metadata_list.append(seq_group_meta)
+                    new_outputs.append(seq_group_output)
+                    server_infos.append(seq_group.server_info)
+            scheduler_outputs.scheduled_seq_groups = new_scheduled_seq_groups
+            outputs[0].outputs = new_outputs
+            seq_group_metadata_list = new_seq_group_metadata_list
+
+        if request_id:
+            ctx.output_queue[0] = (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+                                   is_last_step, is_first_step_output, skip)
+        else:
+            ctx.output_queue.appendleft((outputs, seq_group_metadata_list, scheduler_outputs, is_async,
+                                         is_last_step, is_first_step_output, skip))
+
+        for server_info in server_infos:
+            if hasattr(server_info, 'request_timestamps'):
+                server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
+
+        super()._process_model_outputs(ctx, request_id)
+
+        if ctx.request_outputs:
+            request_outputs, server_infos = zip(*ctx.request_outputs)
+            for request_output, server_info in zip(request_outputs, server_infos):
+                if hasattr(server_info, 'request_timestamps'):
+                    request_output.request_timestamps = server_info.request_timestamps
+                    request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+
+        return
+
     def _process_request_outputs(
             self,
-            outputs: List[Tuple[RequestOutput,ServerInfo]],
+            outputs: List[Tuple[RequestOutput, ServerInfo]],
             step_begin_time: float
     ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         request_outputs = []
@@ -139,19 +194,15 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             request_outputs, server_infos = zip(*outputs)
             request_outputs = list(request_outputs)
             server_infos = list(server_infos)
-        for request_output, server_info in zip(request_outputs, server_infos):
-            if hasattr(server_info, 'request_timestamps'):
-                request_output.request_timestamps = server_info.request_timestamps
-                request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
-            if request_output.finished:
-                logger.info("engine finished request {}".format(request_output.request_id))
-        for server_info in server_infos:
-            if hasattr(server_info, 'request_timestamps'):
-                server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
+
         for request_output in request_outputs:
             if hasattr(request_output, 'request_timestamps'):
                 request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
                 request_output.request_timestamps.engine_step_timestamp_end = time.time()
+
+        for request_output in request_outputs:
+            if request_output.finished:
+                logger.info("engine finished request {}".format(request_output.request_id))
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -347,7 +398,7 @@ class BackendVLLM(BackendInterface):
     def get_request_incremental_blocks(self, *args, **kwargs) -> Tuple[List[int], List[int]]:
         return self.engine.scheduler[0].get_request_incremental_blocks(*args, **kwargs)
 
-    def remove_running_request(self, *args, **kwargs) -> None:
+    def remove_running_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].remove_running_request(*args, **kwargs)
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:

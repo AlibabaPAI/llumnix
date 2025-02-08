@@ -20,7 +20,7 @@ jobs:
   correctness_tests:
     needs: cancel_previous_workflows
     runs-on: [self-hosted]
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
     - name: Checkout
       uses: actions/checkout@v4

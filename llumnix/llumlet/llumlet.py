@@ -141,6 +141,7 @@ class Llumlet:
 
     async def migrate_out(self, dst_instance_name: str) -> List[str]:
         migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+
         if len(migrate_out_requests) == 0:
             return []
 

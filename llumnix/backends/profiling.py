@@ -35,6 +35,7 @@ SimCacheConfig = namedtuple("SimCacheConfig", ("gpu_memory_utilization", "block_
 def _pad_to_alignment(x, multiple_of):
     return x + ((-1*x) % multiple_of)
 
+
 @dataclasses.dataclass
 class LatencyMemData:
     # The latency of each stage
@@ -68,6 +69,7 @@ class LatencyMemData:
 
     def get_decode_dict_kv(self):
         return map(list, zip(*self.decode_latency.items()))
+
 
 @dataclasses.dataclass
 class ProfilingResult:
@@ -126,6 +128,7 @@ class ProfilingResult:
             sim_lat = model_decode((bs, seq_len), *params)
             avg_loss += abs(sim_lat - latency_list[idx])
         print(f"decode sim avg_loss={avg_loss/len(latency_list)}")
+
 
 class ProfilingDatabase:
     """Store the profiling results of all the models"""
@@ -197,6 +200,7 @@ def get_latency_mem(backend_type: BackendType, profiling_database: ProfilingData
         latency_mem: LatencyMemData = profiling_result.para_dict[sim_parallel_config]
         return latency_mem
     raise ValueError(f'Unsupported simulator backend: {backend_type}')
+
 
 if __name__ == "__main__":
     import argparse

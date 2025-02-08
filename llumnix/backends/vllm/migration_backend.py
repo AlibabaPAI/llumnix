@@ -40,6 +40,7 @@ class ProxyActor:
 
 NUMPY_SUPPORTED_DTYPES = [torch.float32, torch.float16]
 
+
 class RayRpcMigrationBackend(MigrationBackendBase):
     def __init__(self, migration_config: MigrationConfig, cache_engine: List[CacheEngine],  worker_rank, worker_handle_list, \
                   scheduling_strategy, is_driver_worker, gpu_cache) -> None:
@@ -151,6 +152,7 @@ def try_import_gloo():
         gloo_util.TORCH_GLOO_DTYPE_MAP[torch.bfloat16] = pygloo.glooDataType_t.glooFloat16
     except ImportError as e:
         raise ImportError("Gloo is not installed. Please install it first.") from e
+
 
 class RayColMigrationBackend(MigrationBackendBase):
     def __init__(self, migration_config: MigrationConfig, cache_engine: List[CacheEngine], local_rank,

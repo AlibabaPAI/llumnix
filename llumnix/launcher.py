@@ -36,6 +36,7 @@ from llumnix.utils import (remove_placement_group, get_manager_name, INSTANCE_NA
 
 logger = init_logger(__name__)
 
+
 class Launcher:
     def __init__(self, global_scheduler: GlobalScheduler, enable_port_increment: bool,
                  enable_port_offset_store: bool, enable_pd_disagg: bool,
@@ -58,19 +59,18 @@ class Launcher:
         self.inflight_num_decode = 0
 
     def init_placement_group(self,
-                              placement_group_name: str,
-                              engine_args,
-                              backend_type: BackendType,
-                              init_server: bool = False,
-                              block: bool = True) -> PlacementGroup:
+                             placement_group_name: str,
+                             engine_args,
+                             backend_type: BackendType,
+                             init_server: bool = False,
+                             block: bool = True) -> PlacementGroup:
+        # num_cpus=2+(0/1), for Llumlet + AsyncPutQueueActor + (ApiServerActor)
         if not BackendType.is_sim_backend(backend_type):
-            # num_cpus=3, for Llumlet + AsyncPutQueueActor + ProxyActor
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
             placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
                                                          num_gpus=world_size, detached=True, block=block)
         else:
-            # num_cpus=1, for Llumlet + AsyncPutQueueActor
             placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
                                                          num_gpus=0, detached=True, block=block)
 

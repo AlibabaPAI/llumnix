@@ -339,7 +339,7 @@ class Manager:
                     continue
                 self.launcher.init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
                                                        self.engine_args, self.backend_type, new_pg,
-                                                       instance_finish_cb=self.scale_up)
+                                                       instance_ready_cb=self.scale_up)
                 logger.info("Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id))
             # pylint: disable=broad-except
             except Exception as e:
@@ -405,16 +405,17 @@ class Manager:
         # Restore migrate config
         self.enable_migration = origin_config
 
-    def scale_up(self, instance_id: Union[str, Iterable[str]],
-                 instance_actor_handle: Union[ray.actor.ActorHandle, List[ray.actor.ActorHandle]],
-                 instance_arg: Union[InstanceArgs, Iterable[InstanceArgs]]) -> None:
+    def scale_up(self,
+                 instance_id: Union[str, Iterable[str]],
+                 instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
+                 instance_args: Union[InstanceArgs, Iterable[InstanceArgs]]) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
             instance_actor_handle = [instance_actor_handle,]
-            instance_arg = [instance_arg,]
+            instance_args = [instance_args,]
         instance_ids = list(instance_id)
         instance_actor_handles = list(instance_actor_handle)
-        instance_args = list(instance_arg)
+        instance_args_list = list(instance_args)
 
         indeed_update = False
         no_pending_instance = (self.pending_rebuild_migration_instances == 0)
@@ -427,7 +428,7 @@ class Manager:
                 if self.log_instance_info:
                     self.instance_last_logged_empty[ins_id] = False
                 self.pending_rebuild_migration_instances += 1
-        self.global_scheduler.scale_up(instance_ids, instance_args)
+        self.global_scheduler.scale_up(instance_ids, instance_args_list)
         self.num_instances = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
@@ -559,13 +560,13 @@ class Manager:
         scale_down_instance_id = ""
         if cur_num_prefill == 0 and cur_num_decode > 0:
             scale_down_instance_id = random.choice(list(decode_instance_ids))
-            logger.info("[_inner_check_pd_deployment] pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
+            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
                         "all decode, scale down decode instance {}".format(self.manager_args.pd_ratio,
                         cur_num_prefill, cur_num_decode, scale_down_instance_id))
 
         if cur_num_decode == 0 and cur_num_prefill > 0:
             scale_down_instance_id = random.choice(list(prefill_instance_ids))
-            logger.info("[_inner_check_pd_deployment] pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
+            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
                         "all prefill, scale down prefill instance {}".format(self.manager_args.pd_ratio,
                         cur_num_prefill, cur_num_decode, scale_down_instance_id))
 
@@ -638,7 +639,7 @@ class Manager:
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""
         tasks = [instance.is_ready.remote() for instance in self.instances.values()]
-        is_ready_list = await asyncio.gather(*tasks)
+        is_ready_list = await asyncio.gather(*tasks, return_exceptions=True)
         return all(is_ready_list)
 
     async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:

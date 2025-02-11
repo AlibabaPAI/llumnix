@@ -147,8 +147,8 @@ class MockManager(Manager):
 
 def init_manager_with_launch_mode(launch_mode, request_output_queue_type="rayqueue",
                                   enable_pd_disagg=False, pd_ratio="1:3", max_instances=-1):
-    manager_args = ManagerArgs(enable_port_increment=True, enable_port_offset_store=True,
-                               enable_pd_disagg=enable_pd_disagg, pd_ratio=pd_ratio, max_instances=max_instances)
+    manager_args = ManagerArgs(enable_port_increment=True, enable_pd_disagg=enable_pd_disagg,
+                               pd_ratio=pd_ratio, max_instances=max_instances)
     instance_args = InstanceArgs(migration_backend="rayrpc")
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type=request_output_queue_type)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
@@ -544,8 +544,10 @@ async def test_pd_disagg_deployment_states():
     manager.scale_up(prefill_instance_ids, [None]*len(prefill_instance_ids),
                      [InstanceArgs(instance_type="prefill")]*len(prefill_instance_ids))
     assert not manager._inner_check_pd_deployment()
-def test_auto_scale_up_loop_max_instances(ray_env):
+
+@pytest.mark.asyncio
+async def test_auto_scale_up_loop_max_instances(ray_env):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, "rayqueue", max_instances=2)
-    time.sleep(30.0)
-    num_instances = ray.get(manager.scale_up.remote([], []))
+    await asyncio.sleep(60.0)
+    num_instances = manager.scale_up([], [], [])
     assert num_instances == 2

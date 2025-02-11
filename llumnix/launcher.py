@@ -38,9 +38,13 @@ logger = init_logger(__name__)
 
 
 class Launcher:
-    def __init__(self, global_scheduler: GlobalScheduler, enable_port_increment: bool,
-                 enable_port_offset_store: bool, enable_pd_disagg: bool,
-                 enablde_engine_pd_disagg: bool, pd_ratio: List[int]):
+    def __init__(self,
+                 global_scheduler: GlobalScheduler,
+                 enable_port_increment: bool,
+                 enable_port_offset_store: bool,
+                 enable_pd_disagg: bool,
+                 enablde_engine_pd_disagg: bool,
+                 pd_ratio: List[int]):
         self.global_scheduler = global_scheduler
         self.enable_port_increment = enable_port_increment
         self.enable_port_offset_store = enable_port_offset_store
@@ -115,7 +119,10 @@ class Launcher:
         if not kill_instance(instance_id):
             logger.debug("Failed to kill instance {}.".format(instance_id))
 
-    def _get_next_instance_type(self, cur_num_prefill, cur_num_decode, pd_ratio) -> str:
+    def _get_next_instance_type(self,
+                                cur_num_prefill: int,
+                                cur_num_decode: int,
+                                pd_ratio: List[int]) -> str:
         instance_type = InstanceType.NO_CONSTRAINTS
 
         if self.enable_pd_disagg:
@@ -148,7 +155,7 @@ class Launcher:
 
         return instance_type
 
-    def _get_next_instance_args(self, instance_args) -> InstanceArgs:
+    def _get_next_instance_args(self, instance_args: InstanceArgs) -> InstanceArgs:
         assert not self.enablde_engine_pd_disagg, \
             "Currently not support engine based pd-disaggregation in global launch mode."
 
@@ -169,10 +176,15 @@ class Launcher:
                 put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
         return next_entrypoints_args
 
-    def init_server_and_instance(self, instance_id: str, entrypoints_args: EntrypointsArgs,
-                                 instance_args: InstanceArgs, engine_args, backend_type: BackendType,
-                                 placement_group: PlacementGroup, instance_finish_cb: Callable = None,
-                                 server_finish_cb: Callable = None):
+    def init_server_and_instance(self,
+                                 instance_id: str,
+                                 entrypoints_args: EntrypointsArgs,
+                                 instance_args: InstanceArgs,
+                                 engine_args,
+                                 backend_type: BackendType,
+                                 placement_group: PlacementGroup,
+                                 instance_ready_cb: Callable = None,
+                                 server_ready_cb: Callable = None):
         async def done_scale_up(instance_args: InstanceArgs, entrypoint_args: EntrypointsArgs):
             try:
                 manager = ray.get_actor(get_manager_name(), namespace="llumnix")
@@ -180,15 +192,15 @@ class Launcher:
                 await server.run.remote(manager, instance_id, instance)
                 self.inflight_num_prefill -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
                 self.inflight_num_decode -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
-                if instance_finish_cb:
+                if instance_ready_cb:
                     # manager.scale_up will be called here after the instance is ready
-                    instance_finish_cb(instance_id, instance, instance_args)
-                if server_finish_cb:
-                    server_finish_cb(instance_id, server)
-                logger.info("Launcher init_server_and_instance done, instance_id: {}, instance_type: {}, "
-                            "api_server_port: {}, request_output_queue_port: {}".format(instance_id,
-                            instance_args.instance_type, entrypoint_args.port,
-                            entrypoint_args.request_output_queue_port))
+                    instance_ready_cb(instance_id, instance, instance_args)
+                if server_ready_cb:
+                    server_ready_cb(instance_id, server)
+                logger.info("Init server and instance done, instance_id: {}, instance_type: {}, "
+                            "api_server_port: {}, request_output_queue_port: {}".format(
+                                instance_id, instance_args.instance_type,
+                                entrypoint_args.port, entrypoint_args.request_output_queue_port))
             # pylint: disable=broad-except
             except Exception as e:
                 self.inflight_num_prefill -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
@@ -208,18 +220,20 @@ class Launcher:
         self.inflight_num_decode += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
         asyncio.create_task(done_scale_up(next_instance_args, next_entrypoints_args))
 
-    def init_server(self, server_name: str, placement_group: PlacementGroup,
+    def init_server(self,
+                    server_name: str,
+                    placement_group: PlacementGroup,
                     entrypoints_args: EntrypointsArgs) -> APIServerActor:
         fastapi_server = APIServerActor.from_args(server_name, placement_group, entrypoints_args)
         return fastapi_server
 
     def init_instance(self,
-                       instance_id: str,
-                       instance_args: InstanceArgs,
-                       placement_group: PlacementGroup,
-                       request_output_queue_type: QueueType,
-                       backend_type: BackendType,
-                       engine_args
+                      instance_id: str,
+                      instance_args: InstanceArgs,
+                      placement_group: PlacementGroup,
+                      request_output_queue_type: QueueType,
+                      backend_type: BackendType,
+                      engine_args
                       ) -> Tuple[str, Llumlet]:
         instance = Llumlet.from_args(
                         instance_id,

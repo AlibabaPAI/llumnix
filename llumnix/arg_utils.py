@@ -245,13 +245,11 @@ class ManagerArgs:
                             help='pair migration frequency')
         parser.add_argument('--pair-migration-policy',
                             type=str,
-                            choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
+                            choices=['balanced', 'defrag'],
                             help='The pair migration policy.\n\n'
                             '* "balanced" pair migration to make the instance load of instance more balanced.\n'
-                            '* "defrag_constrained" pair migration without balanced constraint to '
-                            'achieve defragmentation thoroughly (with instance constraints).\n'
-                            '* "defrag_relaxed" pair migration to without balanced constraint '
-                            'to achieve defragmentation thoroughly (without instance constraints).\n')
+                            '* "defrag" pair migration without balanced constraint to '
+                            'achieve defragmentation thoroughly (with instance constraints).\n')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
                             help='migrate out instance load threshold')

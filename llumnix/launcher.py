@@ -68,7 +68,7 @@ class Launcher:
         if not BackendType.is_sim_backend(backend_type):
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
-            placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
+            placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
                                                          num_gpus=world_size, detached=True, block=block)
         else:
             placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),

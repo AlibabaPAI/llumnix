@@ -93,8 +93,8 @@ def get_instance_num_blocks():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rayrpc'])
-@pytest.mark.parametrize("migrated_request_status", ['running'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
 async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rayrpc':
         pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")

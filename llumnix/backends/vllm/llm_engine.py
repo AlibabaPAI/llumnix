@@ -176,17 +176,17 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
         if ctx.request_outputs:
             request_outputs, server_infos = zip(*ctx.request_outputs)
+
             for request_output, server_info in zip(request_outputs, server_infos):
                 if hasattr(server_info, 'request_timestamps'):
                     request_output.request_timestamps = server_info.request_timestamps
-                    request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+            set_timestamp(request_outputs, 'engine_process_model_outputs_timestamp_end', time.time())
 
         return
 
     def _process_request_outputs(
             self,
             outputs: List[Tuple[RequestOutput, ServerInfo]],
-            step_begin_time: float
     ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         request_outputs = []
         server_infos = []
@@ -195,7 +195,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             request_outputs = list(request_outputs)
             server_infos = list(server_infos)
 
-        set_timestamp(request_outputs, 'engine_step_timestamp_begin', step_begin_time)
+        set_timestamp(request_outputs, 'engine_step_timestamp_begin', self.step_begin_time)
         set_timestamp(request_outputs, 'engine_step_timestamp_end', time.time())
 
         for request_output in request_outputs:
@@ -232,10 +232,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         return request_outputs, server_infos
 
     async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
-        step_begin_time = time.time()
+        self.step_begin_time = time.time()
         # pylint: disable=too-many-function-args
         outputs = await super().step_async(0)
-        return self._process_request_outputs(outputs, step_begin_time)
+        return self._process_request_outputs(outputs)
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.

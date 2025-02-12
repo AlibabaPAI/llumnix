@@ -29,9 +29,7 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
-from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
 from llumnix.backends.backend_interface import BackendType
-from llumnix.backends.profiling import LatencyMemData
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
                            remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
@@ -223,6 +221,7 @@ def test_init_instances_sim(ray_env, manager):
         engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
         _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM,
                                                             InstanceArgs(profiling_result_file_path="/"), engine_args))
+    # pylint: disable=broad-except
     except Exception as e:
         assert isinstance(e, IsADirectoryError)
 

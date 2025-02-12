@@ -132,8 +132,11 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
             ray.get(instance.is_ready.remote())
             available_instance_ids.append(instance_id)
             available_instances.append(instance)
-        except:
-            logger.info("Instance {} is dead.".format(instance_id))
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.error("Instance {} is dead.".format(instance_id))
+            logger.error("Unexpected exception occurs: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
             retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
 
     ip = get_ip_address()

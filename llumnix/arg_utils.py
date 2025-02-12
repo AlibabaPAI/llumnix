@@ -44,6 +44,7 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
                 kwargs['default'] = None
         super().add_argument(*args, **kwargs)
 
+
 @dataclass
 class EntrypointsArgs:
     host: str = None
@@ -111,6 +112,7 @@ class EntrypointsArgs:
                             type=str,
                             help="path to config file of arguments")
         return parser
+
 
 @dataclass
 class ManagerArgs:
@@ -298,10 +300,12 @@ class ManagerArgs:
                             help='the prefill decode ratio used in gloabl launch model e.g. "1:1"')
         return parser
 
+
 @dataclass
 class LaunchArgs:
     launch_mode: LaunchMode = None
     backend_type: BackendType = None
+
 
 @dataclass
 class InstanceArgs:

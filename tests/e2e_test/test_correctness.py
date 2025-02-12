@@ -18,9 +18,9 @@ import aiohttp
 import ray
 import torch
 
-from llumnix.entrypoints.utils import get_ip_address
-
 from vllm import LLM, SamplingParams
+
+from llumnix.entrypoints.utils import get_ip_address
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

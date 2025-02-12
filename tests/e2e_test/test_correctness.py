@@ -18,6 +18,8 @@ import aiohttp
 import ray
 import torch
 
+from llumnix.entrypoints.utils import get_ip_address
+
 from vllm import LLM, SamplingParams
 
 # pylint: disable=unused-import
@@ -85,7 +87,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, model, launch_mode
     await asyncio.sleep(5)
 
     # generate llumnix outputs
-    ip = "127.0.0.1"
+    ip = get_ip_address()
     base_port = 37037
 
     launch_commands = []

@@ -31,6 +31,7 @@ from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -87,7 +88,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             if self.llumnix_context.log_request_timestamps:
                 # Hack request timestamps in server_info for latency breakdown.
                 server_info_copy.request_timestamps = RequestTimestamps()
-                server_info_copy.request_timestamps.api_server_generate_timestamp = time.time()
+                set_timestamp(server_info_copy, "api_server_generate_timestamp", time.time())
             # await to catch exception
             await self.llumnix_context.manager.generate.remote(str(request_id), server_info_copy, server_request=request)
             self.llumnix_context.manager_available = True

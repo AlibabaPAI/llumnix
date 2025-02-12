@@ -15,6 +15,7 @@ import time
 import asyncio
 import pickle
 
+import ray
 from aiohttp import web
 
 from blade_llm.service.args import ServingArgs
@@ -32,6 +33,7 @@ from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 
 logger = init_logger(__name__)
 
+llumnix_context: EntrypointsContext = None
 
 class LlumnixEntrypoint(Entrypoint):
     def __init__(self, *arg, **kwargs):
@@ -79,6 +81,7 @@ class LlumnixEntrypoint(Entrypoint):
             web.post('/generate_benchmark', self.generate_benchmark),
             web.get('/is_ready', self.is_ready)
         ])
+        app.on_cleanup.append(clean_up_llumnix_components)
         return app
 
 def detect_unsupported_engine_feature(engine_args: ServingArgs) -> None:
@@ -144,8 +147,17 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
         llumnix_engine_args.engine_args = pickle.dumps(engine_args)
         llumnix_engine_args.world_size = bladellm_args.tensor_parallel_size*bladellm_args.pipeline_parallel_size
 
-        llumnix_context: EntrypointsContext = \
+        global llumnix_context
+        llumnix_context = \
             setup_llumnix(entrypoints_args, manager_args, instance_args, llumnix_engine_args, launch_args)
         llumnix_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
 
     return llumnix_client
+
+async def clean_up_llumnix_components(app):
+    for instance in llumnix_context.instances.values():
+        try:
+            ray.kill(instance)
+        # pylint: disable=broad-except
+        except:
+            pass

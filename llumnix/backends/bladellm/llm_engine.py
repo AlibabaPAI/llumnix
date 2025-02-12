@@ -165,6 +165,7 @@ class AsyncLLMEngineLlumnixMixin:
 
         self._worker_processes = launch_worker(self._args, instance_id, migration_config)
         self.src_worker_ip_address = src_worker_ip_address
+
         self._migration_semaphore = asyncio.Semaphore(0)
         self.request_barriers: queue.Queue = request_barriers
 
@@ -180,6 +181,9 @@ class AsyncLLMEngineLlumnixMixin:
                                                                           self.request_output_queue_type)
         self._scheduler.request_server_map = self.msg_producer.request_server_map
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
+
+        self.worker_channels = [grpc.aio.insecure_channel(worker) for worker in self.src_worker_ip_address]
+        self.worker_stubs = [migration_worker_pb2_grpc.MigrationWorkerStub(channel) for channel in self.worker_channels]
 
     def inject_request_barriers(self):
         async def finish_callback(resp_list, request_barriers: List[RequestBarrier], running_filter_request_ids: List[int]):
@@ -234,6 +238,9 @@ class AsyncLLMEngineLlumnixMixin:
         if self.state == EngineState.RUNNING:
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+        
+        for channel in self.worker_channels:
+            await channel.close()
 
     async def _handle_dropped_request(self):
         if self._dropped_req.qsize() > 0:
@@ -266,14 +273,10 @@ class AsyncLLMEngineLlumnixMixin:
 
     async def run_workers(self, worker_method, *args, **kwargs):
         coros = []
-        channels = [grpc.aio.insecure_channel(worker) for worker in self.src_worker_ip_address]
-        for channel in channels:
-            stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
+        for stub in self.worker_stubs:
             method = getattr(stub, worker_method)
             coros.append(method(*args, **kwargs))
         result = await asyncio.gather(*coros, return_exceptions=True)
-        for channel in channels:
-            await channel.close()
         return result
 
     async def wake_engine(self):
@@ -438,7 +441,7 @@ class BackendBladeLLM(BackendInterface):
             await request_barrier.wait()
             incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
 
-        return incremental_blocks, is_last_stage
+        return incremental_blocks, [], is_last_stage
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler.remove_waiting_request(*args, **kwargs)

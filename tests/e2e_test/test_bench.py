@@ -82,8 +82,9 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
     ip = "127.0.0.1"
     base_port = 37037
     ip_ports = []
+    device_count = torch.cuda.device_count()
+
     if launch_mode == 'local':
-        device_count = torch.cuda.device_count()
         if enable_pd_disagg:
             for i in range(device_count//2):
                 port = base_port+i
@@ -152,7 +153,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
     tasks = []
     for i in range(device_count):
         bench_command = generate_bench_command(
-            backend="vLLM",
+            backend=engine,
             ip_ports=f"127.0.0.1:{base_port + i}",
             model=model,
             num_prompts=num_prompts,

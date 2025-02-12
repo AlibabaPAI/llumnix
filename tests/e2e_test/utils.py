@@ -118,6 +118,7 @@ def generate_bladellm_launch_command(
         f"{'--enable_llumnix' if enable_llumnix else ''} "
         f"--llumnix-config {config_file} "
         f"--disable_prompt_cache "
+        f"--log_level INFO "
         f"-tp 1 "
         f"--attn_cls ragged_flash "
         f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
@@ -227,7 +228,6 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
     subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
-    subprocess.run('pkill -f multiprocessing', shell=True, check=False)
 
 @pytest.fixture
 def shutdown_llumnix_service():

@@ -192,7 +192,8 @@ class GrpcMigrationBackend(MigrationBackendBase):
             if request.request_id in self.state_manager._request_groups:
                 responce.state_manager_meta = pickle.dumps(self.state_manager._request_groups[request.request_id])
             else:
-                logger.error("Request id {} not found in state manager {}".format(request.request_id, self.state_manager._request_groups.keys()))
+                logger.error("Request id {} not found in state manager {}".format(
+                    request.request_id, self.state_manager._request_groups.keys()))
 
         return responce
 

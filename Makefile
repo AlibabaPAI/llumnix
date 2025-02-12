@@ -61,13 +61,13 @@ vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctn
 .PHONY: bladellm_test
 bladellm_test: check_pytest_installed bladellm_unit_test bladellm_correctness_test bladellm_bench_test bladellm_migration_test
 
-.PHONY: bladellm_unit_test
-bladellm_unit_test: check_pytest_installed
-	@pytest -v -k 'engine_bladeLLM or not engine_' --ignore=third_party --ignore=tests/e2e_test --disable-warnings
-
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed
 	@pytest -v --ignore=third_party --ignore=tests/e2e_test --disable-warnings
+
+.PHONY: bladellm_unit_test
+bladellm_unit_test: check_pytest_installed
+	@pytest -v -k 'engine_bladeLLM or not engine_' --ignore=third_party --ignore=tests/e2e_test --disable-warnings
 
 .PHONY: vllm_offline_test
 vllm_offline_test:

@@ -122,7 +122,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, model, launch_mode
         subprocess.run(launch_command, shell=True, check=True)
         await asyncio.sleep(3)
 
-    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"], timeout=120)
+    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
 
     llumnix_output = {}
     for prompt in prompts:

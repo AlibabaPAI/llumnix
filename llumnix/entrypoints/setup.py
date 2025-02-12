@@ -125,11 +125,22 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
         manager.init_instances.remote, 'init_instances', request_output_queue_type,
         backend_type, instance_args, engine_args)
 
+    available_instance_ids = []
+    available_instances = []
+    for instance_id, instance in zip(instance_ids, instances):
+        try:
+            ray.get(instance.is_ready.remote())
+            available_instance_ids.append(instance_id)
+            available_instances.append(instance)
+        except:
+            logger.info("Instance {} is dead.".format(instance_id))
+            retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
+
     ip = get_ip_address()
     request_output_queue_port: str = entrypoints_args.request_output_queue_port
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
-    return manager, instance_ids, instances, request_output_queue
+    return manager, available_instance_ids, available_instances, request_output_queue
 
 def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue) -> EntrypointsContext:
     instances_dict: Dict[str, Llumlet] = {}

@@ -547,20 +547,10 @@ class Manager:
             instance_ids.append(instance_id)
             instances.append(instance)
 
-        available_instance_ids = []
-        available_instances = []
-        for instance_id, instance in zip(instance_ids, instances):
-            try:
-                ray.get(instance.is_ready.remote())
-                available_instance_ids.append(instance_id)
-                available_instances.append(instance)
-            except ray.exceptions.RayActorError:
-                logger.error("Instance {} is dead".format(instance_id))
-                self.launcher.clear_instance_ray_resources(instance_id)
+        # Because init_instances is called by multiple nodes simultaneously, we dot not wait instances ready here.
+        self.scale_up(instance_ids, instances, [instance_args]*len(instance_ids))
 
-        self.scale_up(available_instance_ids, available_instances, [instance_args]*len(available_instance_ids))
-
-        return available_instance_ids, available_instances
+        return instance_ids, instances
 
     def _inner_check_pd_deployment(self) -> str:
         prefill_instance_ids = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set

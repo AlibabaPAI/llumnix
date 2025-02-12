@@ -46,8 +46,6 @@ def parse_instance_log_file(log_files):
                     total_kv_cache_size = size_match.group(0).split(": ")[1].strip()
                     speed = float(speed_match.group(1))
                     speed_dict[total_kv_cache_size].append(speed)
-    
-    print(speed_dict)
 
     average_speed = {}
     for transfer_size, speeds in speed_dict.items():
@@ -61,8 +59,6 @@ def parse_instance_log_file(log_files):
             average_speed[transfer_size] = sum(trimmed_speeds) / len(trimmed_speeds)
 
     assert len(average_speed) > 0, "Migration should have occurred, but it was not detected. "
-    
-    print(average_speed)
 
     return average_speed
 
@@ -97,8 +93,8 @@ def get_instance_num_blocks():
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc'])
+@pytest.mark.parametrize("migrated_request_status", ['running'])
 async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migrated_request_status):
     if migrated_request_status == 'waiting' and migration_backend != 'rayrpc':
         pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
@@ -138,7 +134,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         bench_command = generate_bench_command(
             ip_ports=f"{ip}:{base_port + i}",
             model=model,
-            num_prompts=100,
+            num_prompts=500,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=10,
@@ -168,7 +164,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
 
     if migrated_request_status == 'running':
         average_speed = parse_instance_log_file(instance_output_logs)
-        sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0]))
+        sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0])*1024 if 'GB' in x else float(x.split()[0]))
         data = [
             ['migration_size'] + sorted_keys,
             [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]

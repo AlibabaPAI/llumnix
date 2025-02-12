@@ -547,9 +547,20 @@ class Manager:
             instance_ids.append(instance_id)
             instances.append(instance)
 
-        self.scale_up(instance_ids, instances, [instance_args]*len(instance_ids))
+        available_instance_ids = []
+        available_instances = []
+        for instance_id, instance in zip(instance_ids, instances):
+            try:
+                ray.get(instance.is_ready.remote())
+                available_instance_ids.append(instance_id)
+                available_instances.append(instance)
+            except ray.exceptions.RayActorError:
+                logger.error("Instance {} is dead".format(instance_id))
+                self.launcher.clear_instance_ray_resources(instance_id)
 
-        return instance_ids, instances
+        self.scale_up(available_instance_ids, available_instances, [instance_args]*len(available_instance_ids))
+
+        return available_instance_ids, available_instances
 
     def _inner_check_pd_deployment(self) -> str:
         prefill_instance_ids = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set
@@ -561,13 +572,13 @@ class Manager:
         if cur_num_prefill == 0 and cur_num_decode > 0:
             scale_down_instance_id = random.choice(list(decode_instance_ids))
             logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
-                        "all decode, scale down decode instance {}".format(self.manager_args.pd_ratio,
+                        "all decode instances is decode instance, scale down decode instance {}".format(self.manager_args.pd_ratio,
                         cur_num_prefill, cur_num_decode, scale_down_instance_id))
 
         if cur_num_decode == 0 and cur_num_prefill > 0:
             scale_down_instance_id = random.choice(list(prefill_instance_ids))
             logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
-                        "all prefill, scale down prefill instance {}".format(self.manager_args.pd_ratio,
+                        "all instances is prefill instance, scale down prefill instance {}".format(self.manager_args.pd_ratio,
                         cur_num_prefill, cur_num_decode, scale_down_instance_id))
 
         if scale_down_instance_id:

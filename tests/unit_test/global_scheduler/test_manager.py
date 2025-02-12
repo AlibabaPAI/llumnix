@@ -106,13 +106,6 @@ class MockLlumlet:
     def get_num_migrate_in(self):
         return self.num_migrate_in
 
-class MockBackendSim(BackendSimVLLM):
-    def _get_lantecy_mem(self, *args, **kwargs):
-        latency_mem = LatencyMemData({}, {}, {})
-        latency_mem.prefill_model_params = (0,0)
-        latency_mem.decode_model_params = (0,0,0)
-        return latency_mem
-
 def init_manager():
     try:
         manager_args = ManagerArgs(enable_migration=True)
@@ -224,15 +217,14 @@ def test_init_instances(ray_env, manager):
     assert num_instances == manager_args.initial_instances
 
 def test_init_instances_sim(ray_env, manager):
-    manager.profiling_result_file_path="//"
     # pylint: disable=import-outside-toplevel
-    import llumnix.backends.vllm.sim_llm_engine
-    llumnix.backends.vllm.sim_llm_engine.BackendSimVLLM = MockBackendSim
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM, InstanceArgs(), engine_args))
-    num_instances = len(instances)
-    manager_args = ManagerArgs()
-    assert num_instances == manager_args.initial_instances
+    try:
+        engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+        _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM,
+                                                            InstanceArgs(profiling_result_file_path="/"), engine_args))
+        assert False
+    except Exception as e:
+        assert isinstance(e, IsADirectoryError)
 
 def test_scale_up_and_down(ray_env, manager):
     initial_instances = 4

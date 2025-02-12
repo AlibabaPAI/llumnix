@@ -22,7 +22,7 @@ import ray
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
-from tests.e2e_test.utils import (generate_launch_command, generate_bench_command, to_markdown_table,
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service)
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
@@ -93,7 +93,10 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
-async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migrated_request_status):
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
+async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model,
+                                   migration_backend, migrated_request_status, engine):
+    
     if migrated_request_status == 'waiting' and migration_backend != 'rayrpc':
         pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
 
@@ -108,7 +111,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         ip_ports.append(f"{ip}:{base_port+i}")
         output_log = f"{base_port+i}.out"
         instance_output_logs.append("instance_"+output_log)
-        launch_command = generate_launch_command(result_filename=output_log,
+        launch_command = generate_vllm_launch_command(result_filename=output_log,
                                                  launch_ray_cluster=False,
                                                  ip=ip,
                                                  port=port,
@@ -130,6 +133,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
     tasks = []
     for i in range(device_count // 2):
         bench_command = generate_bench_command(
+            backend="vLLM",
             ip_ports=f"127.0.0.1:{base_port + i}",
             model=model,
             num_prompts=500,

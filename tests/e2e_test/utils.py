@@ -17,7 +17,7 @@ import pytest
 import requests
 
 
-def generate_launch_command(result_filename: str = "",
+def generate_vllm_launch_command(result_filename: str = "",
                             launch_ray_cluster: bool = True,
                             HEAD_NODE_IP: str = "127.0.0.1",
                             ip: str = "127.0.0.1",
@@ -31,7 +31,8 @@ def generate_launch_command(result_filename: str = "",
                             request_migration_policy: str = 'SR',
                             max_num_batched_tokens: int = 16000,
                             enable_pd_disagg: bool = False,
-                            instance_type: str = "no_constraints"):
+                            instance_type: str = "no_constraints",
+                            **kwargs):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -59,7 +60,7 @@ def generate_launch_command(result_filename: str = "",
     )
     return command
 
-def generate_serve_command(result_filename: str = "",
+def generate_vllm_serve_command(result_filename: str = "",
                            ip: str = "127.0.0.1",
                            port: int = 37000,
                            dispatch_policy: str = "load",
@@ -97,6 +98,76 @@ def generate_serve_command(result_filename: str = "",
     )
     return command
 
+def generate_bladellm_launch_command(
+    config_file: str = "configs/bladellm.yml",
+    result_filename: str = "",
+    model = "facebook/opt-125m",
+    HEAD_NODE_IP: str = "127.0.0.1",
+    ip: str = "127.0.0.1",
+    port: int = 37000,
+    max_num_batched_tokens: int = 16000,
+    enable_llumnix: bool = True,
+    **kwargs
+):
+    command = (
+        f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+        f"nohup blade_llm_server "
+        f"--host {ip} "
+        f"--port {port} "
+        f"--model {model} "
+        f"{'--enable_llumnix' if enable_llumnix else ''} "
+        f"--llumnix-config {config_file} "
+        f"--disable_prompt_cache "
+        f"-tp 1 "
+        f"--attn_cls ragged_flash "
+        f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
+        f"--disable_frontend_multiprocessing "
+        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+    )
+    return command
+
+
+def generate_vllm_request(prompt):
+    request = {
+        "prompt": prompt,
+        "stream": False,
+        "n": 1,
+        "best_of": 1,
+        "temperature": 0.0,
+        "top_k": 1,
+        "ignore_eos": False,
+    }
+    return request
+
+def process_vllm_api_server_output(output):
+    return output['text'][0]
+
+def generate_bladellm_request(prompt):
+    request = {
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "n": 1,
+        "best_of": 1,
+        "temperature": 0.0,
+        "stream": "false",
+        "ignore_eos": "false",
+        "presence_penalty": 0.0,
+        "repetition_penalty": 1.0,
+    }
+    return request
+
+def process_bladellm_api_server_output(output):
+    return output['choices'][0]['message']['content']
+
+
 def wait_for_llumnix_service_ready(ip_ports, timeout=120):
     start_time = time.time()
     while True:
@@ -120,7 +191,8 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
 
         time.sleep(1)
 
-def generate_bench_command(ip_ports: str,
+def generate_bench_command(backend: str,
+                           ip_ports: str,
                            model: str,
                            num_prompts: int,
                            dataset_type: str,
@@ -133,7 +205,7 @@ def generate_bench_command(ip_ports: str,
     command = (
         f"python -u ./benchmark/benchmark_serving.py "
         f"--ip_ports {ip_ports} "
-        f"--backend vLLM "
+        f"--backend {backend} "
         f"--tokenizer {model} "
         f"--trust_remote_code "
         f"--log_filename bench_{ip_ports.split(':')[1]} "
@@ -154,6 +226,8 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
+    subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
+    subprocess.run('pkill -f multiprocessing', shell=True, check=False)
 
 @pytest.fixture
 def shutdown_llumnix_service():

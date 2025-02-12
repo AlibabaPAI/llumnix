@@ -11,10 +11,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import asyncio
 import pickle
 
+from aiohttp import web
+
 from blade_llm.service.args import ServingArgs
+from blade_llm.service.server import Entrypoint
 
 from llumnix.logging.logger import init_logger
 from llumnix.config import get_llumnix_config
@@ -28,6 +32,54 @@ from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 
 logger = init_logger(__name__)
 
+
+class LlumnixEntrypoint(Entrypoint):
+    def __init__(self, *arg, **kwargs):
+        super().__init__(*arg, **kwargs)
+
+    async def generate_benchmark(self, request: web.Request):
+        oai_req, server_req = await self._web_request_to_inner_request(request)
+        start = time.time()
+        results_generator = await self._client.add_request(server_req)
+
+        # Non-streaming case
+        tokens = []
+        per_token_latency = []
+        streamer = results_generator.async_stream()
+        async for r in streamer:
+            now = time.time()
+            per_token_latency.append([now, (now - start)*1000])
+            start = now
+            tokens.extend(r.tokens)
+
+        assert len(tokens) > 0
+        logger.info("entrypoints finished request {}".format(server_req.id))
+
+        output_text = "".join([tok.text for tok in tokens])
+        num_output_tokens = len(tokens)
+        expected_resp_len = oai_req.max_tokens
+
+        assert max(expected_resp_len, 1) == max(num_output_tokens, 1)
+
+        ret = {
+            'request_id': server_req.external_id,
+            'generated_text': oai_req.messages[1]["content"] + output_text,
+            'num_output_tokens_cf': num_output_tokens,
+            'per_token_latency': per_token_latency,
+        }
+        return web.json_response(data=ret)
+    
+    async def is_ready(self, request):
+        responce = await self._client.is_ready()
+        return web.json_response(text=str(responce))
+
+    def create_web_app(self):
+        app = super().create_web_app()
+        app.add_routes([
+            web.post('/generate_benchmark', self.generate_benchmark),
+            web.get('/is_ready', self.is_ready)
+        ])
+        return app
 
 def detect_unsupported_engine_feature(engine_args: ServingArgs) -> None:
     unsupported_feature = None
@@ -86,7 +138,7 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
     llumnix_client = None
     # If gpu is not available, it means that this node is head pod x any llumnix components
     if is_gpu_available():
-        # Since the bladellm engine arguments require a GPU, serialize the engine parameters 
+        # Since importing the bladellm engine arguments require a GPU, serialize the engine parameters 
         # before passing them to the manager.
         llumnix_engine_args = BladellmEngineArgs()
         llumnix_engine_args.engine_args = pickle.dumps(engine_args)

@@ -45,6 +45,10 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.request_streams: Dict[str, asyncio.Queue] = {}
         loop.create_task(self.background_process_outputs())
 
+    async def is_ready(self) -> bool:
+        ready_status = await self.llumnix_context.manager.is_ready.remote()
+        return ready_status
+    
     async def background_process_outputs(self):
         while True:
             request_output_jsons = await self.llumnix_context.request_output_queue.get()
@@ -73,6 +77,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         llumnix_id = random.randint(0, (1 << 31) - 1)
         self.llumnix_id2entrypoint_id[llumnix_id] = request.id
         self.entrypoint_id2llumnix_id[request.id] = llumnix_id
+        logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_id))
         request.id = llumnix_id
 
         resp_stream = await self._manager_generate(llumnix_id, request.model_dump_json())

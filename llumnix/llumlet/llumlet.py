@@ -47,7 +47,9 @@ class Llumlet:
                  backend_type: BackendType,
                  engine_args) -> None:
         try:
-            engine_args = pickle.loads(engine_args.engine_args)
+            # bladellm engine_args is dumped by pickle
+            if hasattr(engine_args, 'engine_args'):
+                engine_args = pickle.loads(engine_args.engine_args)
 
             self.job_id = ray.get_runtime_context().get_job_id()
             self.worker_id = ray.get_runtime_context().get_worker_id()
@@ -214,7 +216,7 @@ class Llumlet:
 
     async def is_ready(self) -> InstanceArgs:
         await self.backend_engine.is_ready()
-        return self.instance_args
+        return True
 
     def get_instance_args(self) -> InstanceArgs:
         return self.instance_args

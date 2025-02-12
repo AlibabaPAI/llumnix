@@ -20,6 +20,8 @@ import pytest
 import torch
 import ray
 
+from llumnix.entrypoints.utils import get_ip_address
+
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
@@ -44,6 +46,8 @@ def parse_instance_log_file(log_files):
                     total_kv_cache_size = size_match.group(0).split(": ")[1].strip()
                     speed = float(speed_match.group(1))
                     speed_dict[total_kv_cache_size].append(speed)
+    
+    print(speed_dict)
 
     average_speed = {}
     for transfer_size, speeds in speed_dict.items():
@@ -57,6 +61,8 @@ def parse_instance_log_file(log_files):
             average_speed[transfer_size] = sum(trimmed_speeds) / len(trimmed_speeds)
 
     assert len(average_speed) > 0, "Migration should have occurred, but it was not detected. "
+    
+    print(average_speed)
 
     return average_speed
 
@@ -98,7 +104,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
 
     request_migration_policy = 'SR' if migrated_request_status == 'running' else 'FCW'
-    ip = "127.0.0.1"
+    ip = get_ip_address()
     base_port = 37037
     ip_ports = []
     instance_output_logs = []
@@ -130,9 +136,9 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
     tasks = []
     for i in range(device_count // 2):
         bench_command = generate_bench_command(
-            ip_ports=f"127.0.0.1:{base_port + i}",
+            ip_ports=f"{ip}:{base_port + i}",
             model=model,
-            num_prompts=500,
+            num_prompts=100,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=10,

@@ -35,8 +35,8 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import (random_uuid, clear_gloo_backend_state, get_server_name, 
-                           get_instance_name, get_manager_name, get_placement_group_name, 
+from llumnix.utils import (random_uuid, clear_gloo_backend_state, get_server_name,
+                           get_instance_name, get_manager_name, get_placement_group_name,
                            INSTANCE_NAME_PREFIX, SERVER_NAME_PREFIX, run_async_func_sync)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType

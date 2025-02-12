@@ -218,11 +218,11 @@ def test_init_instances(ray_env, manager):
 
 def test_init_instances_sim(ray_env, manager):
     # pylint: disable=import-outside-toplevel
+    # cannot catch by pytest.raises
     try:
         engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
         _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM,
                                                             InstanceArgs(profiling_result_file_path="/"), engine_args))
-        assert False
     except Exception as e:
         assert isinstance(e, IsADirectoryError)
 

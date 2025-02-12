@@ -94,30 +94,31 @@ async def test_correctness(ray_env, shutdown_llumnix_service, model, launch_mode
     if launch_mode == "local":
         if enable_pd_disagg:
             launch_commands.append(generate_launch_command(result_filename=str(base_port)+".out",
-                                                    model=model,
-                                                    max_model_len=max_model_len,
-                                                    port=base_port,
-                                                    enable_pd_disagg=enable_pd_disagg,
-                                                    instance_type="prefill"))
+                                                           model=model,
+                                                           max_model_len=max_model_len,
+                                                           ip=ip,
+                                                           port=base_port,
+                                                           enable_pd_disagg=enable_pd_disagg,
+                                                           instance_type="prefill"))
             launch_commands.append(generate_launch_command(result_filename=str(base_port+1)+".out",
-                                                    launch_ray_cluster=False,
-                                                    model=model,
-                                                    max_model_len=max_model_len,
-                                                    ip=ip,
-                                                    port=base_port+1,
-                                                    enable_pd_disagg=enable_pd_disagg,
-                                                    instance_type="decode"))
+                                                           launch_ray_cluster=False,
+                                                           model=model,
+                                                           max_model_len=max_model_len,
+                                                           ip=ip,
+                                                           port=base_port+1,
+                                                           enable_pd_disagg=enable_pd_disagg,
+                                                           instance_type="decode"))
         else:
             launch_commands.append(generate_launch_command(model=model,
-                                                    max_model_len=max_model_len,
-                                                    ip=ip,
-                                                    port=base_port))
+                                                           max_model_len=max_model_len,
+                                                           ip=ip,
+                                                           port=base_port))
     else:
         launch_commands.append(generate_serve_command(result_filename=str(base_port)+".out",
-                                               ip=ip,
-                                               port=base_port,
-                                               model=model,
-                                               enable_pd_disagg=enable_pd_disagg))
+                                                      ip=ip,
+                                                      port=base_port,
+                                                      model=model,
+                                                      enable_pd_disagg=enable_pd_disagg))
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)
         await asyncio.sleep(3)

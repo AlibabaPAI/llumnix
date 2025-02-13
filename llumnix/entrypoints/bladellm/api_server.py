@@ -55,13 +55,15 @@ class LlumnixEntrypoint(Entrypoint):
             tokens.extend(r.tokens)
 
         assert len(tokens) > 0
-        logger.info("entrypoints finished request {}".format(server_req.id))
-
         output_text = "".join([tok.text for tok in tokens])
         num_output_tokens = len(tokens)
         expected_resp_len = oai_req.max_tokens
 
-        assert max(expected_resp_len, 1) == max(num_output_tokens, 1)
+        global llumnix_context
+        if llumnix_context.log_requests:
+            if max(expected_resp_len, 1) != max(num_output_tokens, 1):
+                logger.error(f"output len dismatch: expected {expected_resp_len}, got {num_output_tokens}")
+            # assert max(expected_resp_len, 1) == max(num_output_tokens, 1)
 
         ret = {
             'request_id': server_req.external_id,

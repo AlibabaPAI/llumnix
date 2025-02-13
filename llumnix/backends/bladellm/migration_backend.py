@@ -151,7 +151,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 if not src_handle.has_more:
                     assert response.state_manager_meta and len(response.state_manager_meta) > 0, "Invalid state manager meta"
                     self.state_manager._request_groups[response.request_id] = pickle.loads(response.state_manager_meta)
-                    logger.info(f"set _request_groups {response.request_id}")
+                    logger.info(f"set _request_groups {response.request_id} {self.worker_address}")
             for layer_idx in range(self.kv_cache_arena.num_layers):
                 self.kv_cache_arena.events[layer_idx].wait()
 
@@ -191,8 +191,9 @@ class GrpcMigrationBackend(MigrationBackendBase):
         if not request.has_more:
             if request.request_id in self.state_manager._request_groups:
                 responce.state_manager_meta = pickle.dumps(self.state_manager._request_groups[request.request_id])
+                logger.info(f"pickle state manager meta for request id {request.request_id}, data: {len(responce.state_manager_meta)}")
             else:
-                logger.error("Request id {} not found in state manager {}".format(
+                logger.warning("Request id {} not found in state manager {}".format(
                     request.request_id, self.state_manager._request_groups.keys()))
 
         return responce

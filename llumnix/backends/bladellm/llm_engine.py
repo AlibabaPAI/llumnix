@@ -512,6 +512,8 @@ class BackendBladeLLM(BackendInterface):
         seq.block_table_id = next(self.engine.scheduler.block_manager.block_table_counter)
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.add_block_table(pre_alloc_blocks, seq.block_table_id)
+        seq = backend_request.paged_reqs[0]
+        logger.info(f"commit_dst_request: {backend_request.request_id} {seq.block_table_id} {pre_alloc_blocks}")
 
         backend_request.reset_migration_args_dst()
         self.engine.msg_producer.add_request(backend_request.request_id, backend_request.server_info)

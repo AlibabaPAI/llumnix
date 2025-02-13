@@ -20,7 +20,8 @@ import heapq
 from loguru import logger
 
 from blade_llm.service.paged_utils import PreemptionMode
-from blade_llm.service.proto.bladellm_pb2 import BlockTable, FinishedInfo
+from blade_llm.service.block_space_manager import BlockTable
+from blade_llm.service.proto.bladellm_pb2 import FinishedInfo
 from blade_llm.service.schedulers import PagedScheduler
 from blade_llm.service.scheduler_types import SchedulerStepOutput, GenerationGroupState, SchedulerUpdateOutput
 from blade_llm.service.args import ServingArgs
@@ -40,7 +41,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self.migrating_out_request_last_stage: Set[int] = set()
         self.llumnix_metrics.block_manager_init_metrics(self.block_manager)
         self.llumnix_metrics.scheduler_init_metrics(self)
-
 
         self.running_filter_request_ids: Set[int] = set()
         # init in engine.start
@@ -151,6 +151,9 @@ class PagedSchedulerLlumnix(PagedScheduler):
         pre_blocks.extend(blocks)
         self.pre_alloc_cache_dict[request_id] = pre_blocks
         blocks = [block.block_number for block in blocks]
+
+        logger.info(f"pre alloc blocks: {request_id} {blocks}")
+
         return blocks
 
     def free_src_request(self, backend_request: GenerationGroupStateLlumnix) -> None:

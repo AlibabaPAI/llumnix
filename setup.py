@@ -34,7 +34,7 @@ def readme():
 setup(
     name='llumnix',
     version='0.0.2',
-    python_requires='>=3.8.1, <3.11',
+    python_requires='>=3.9.0, <3.11',
     description='Efficient and easy multi-instance LLM serving',
     long_description=readme(),
     long_description_content_type="text/markdown",
@@ -49,7 +49,6 @@ setup(
     platforms=["all"],
     classifiers=[
           'Programming Language :: Python',
-          'Programming Language :: Python :: 3.8',
           'Programming Language :: Python :: 3.9',
           'Programming Language :: Python :: 3.10',
           "License :: OSI Approved :: Apache Software License",

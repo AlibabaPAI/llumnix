@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Llumnix requires python `3.8.1~3.10.0` and is currently built on top of vLLM (version 0.4.2). Therefore, the installation requirements are almost identical to those of vLLM. You can view the specific installation requirements for vLLM at the following link:
+Llumnix requires python `3.9~3.10` and is currently built on top of vLLM (version 0.6.3.post1). Therefore, the installation requirements are almost identical to those of vLLM. You can view the specific installation requirements for vLLM at the following link:
 
 [vLLM Installation](https://docs.vllm.ai/en/v0.6.3.post1/getting_started/installation.html)
 

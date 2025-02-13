@@ -2,7 +2,7 @@
 
 Llumnix serves as the request scheduling layer on top of the LLM backend engines. Therefore, all the models supported by the backend LLM engine should ideally be supported by Llumnix. We are also conducting full compatibility tests on different models.
 
-Currently, Llumnix is developed on top of the vLLM (version 0.4.2), making its supported models identical to those of vLLM. Up to now, our primary testing of Llumnix has been conducted on Qwen and Llama models, including:
+Currently, Llumnix is developed on top of the vLLM (version 0.6.3.post1), making its supported models identical to those of vLLM. Up to now, our primary testing of Llumnix has been conducted on Qwen and Llama models, including:
 
 - Llama
 - Llama2

@@ -135,7 +135,8 @@ class PagedSchedulerLlumnix(PagedScheduler):
     def remove_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.migrating_out_request_last_stage.remove(backend_request.request_id)
 
-    def pre_alloc(self, request_id: int, request_status: RequestStatus, request_arrival_time: float, block_num: int) -> List[int]:
+    def pre_alloc(self, request_id: int, request_status: RequestStatus, request_arrival_time: float,
+                  block_num: int, token_ids: List[int]) -> List[int]:
         if request_status == RequestStatus.WAITING_MIGRATING:
             if (self.waiting and request_arrival_time > self.waiting[0].arrival_time):
                 return []

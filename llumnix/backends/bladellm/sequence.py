@@ -14,31 +14,9 @@
 import math
 from typing import Any
 
-from pydantic import Field
-
 from blade_llm.service.scheduler_types import GenerationGroupState
-from blade_llm.protocol import GenerateStreamResponse, RemoteGenerateStreamResponse
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
-from llumnix.server_info import ServerInfo
-
-class RemoteGenerateStreamResponseLlumnix(RemoteGenerateStreamResponse):
-    request_id: str = Field(default="", description="Request ID associated with the request")
-    server_info: Any = Field(default=None, description="Server info associated with the response")
-
-    def __init__(self, resp: RemoteGenerateStreamResponse, request_id: str = None, server_info: ServerInfo = None) -> None:
-        super().__init__(**resp.model_dump())
-        self.request_id = request_id
-        self.server_info = server_info
-
-class GenerateStreamResponseLlumnix(GenerateStreamResponse):
-    request_id: str = Field(default="", description="Request ID associated with the request")
-    server_info: Any = Field(default=None, description="Server info associated with the response")
-
-    def __init__(self, resp: GenerateStreamResponse, request_id: str = None, server_info: ServerInfo = None) -> None:
-        super().__init__(**resp.model_dump())
-        self.request_id = request_id
-        self.server_info = server_info
 
 class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
     def __init__(self, gen_group: GenerationGroupState, *args) -> None:

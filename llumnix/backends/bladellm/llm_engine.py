@@ -13,6 +13,7 @@
 
 # pylint: disable=protected-access
 
+import sys
 from functools import partial
 import json
 import traceback
@@ -26,7 +27,9 @@ import ray
 import grpc
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+from loguru import logger as loguru_logger
 
+from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
 from blade_llm.protocol import ServerRequest
@@ -112,7 +115,7 @@ class AsyncBackQueueWrapper(APIWrapper):
             server_request_outputs[server_id].append(request_output.model_dump_json())
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        logger.debug("server_request_outputs: {}".format(server_request_outputs))
+        # logger.debug("server_request_outputs: {}".format(server_request_outputs))
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     # pylint: disable=unused-argument
@@ -214,7 +217,7 @@ class AsyncLLMEngineLlumnixMixin:
                     RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
     async def update_callback(self, resp_list, step_requests):
-        logger.debug("update_callback {} {}", resp_list, step_requests)
+        # logger.debug("update_callback {} {}", resp_list, step_requests)
         await super().update_callback(resp_list, step_requests)
         self._update_request_inference_type(resp_list)
         self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
@@ -351,6 +354,8 @@ class BackendBladeLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: ServingArgs
     ) -> None:
+        self._config_inner_engine_logger(engine_args)
+
         engine_args.worker_socket_path = engine_args.worker_socket_path + "_" + str(instance_id)
         self.instance_id = instance_id
         self.engine_args = engine_args
@@ -370,6 +375,15 @@ class BackendBladeLLM(BackendInterface):
 
         self._engine_ready_event = asyncio.Event()
         asyncio.create_task(self._start_engine())
+
+    def _config_inner_engine_logger(self, engine_args: ServingArgs):
+        loguru_logger.remove()
+        loguru_logger.add(
+            sys.stderr,
+            level=engine_args.log_level,
+            format=LOGGER_FORMAT,
+        )
+
 
     async def _start_engine(self):
         await self.engine.start(asyncio.get_event_loop())
@@ -433,7 +447,7 @@ class BackendBladeLLM(BackendInterface):
             return [], False
 
         incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
-        is_last_stage = (len(incremental_blocks) <= self.migration_config.last_stage_max_blocks) or backend_request.blocking_migration
+        is_last_stage = (len(incremental_blocks) <= self.migration_config.migration_last_stage_max_blocks) or backend_request.blocking_migration
         if is_last_stage:
             request_barrier = RequestBarrier(backend_request.request_id)
             self.request_barriers.put_nowait(request_barrier)

@@ -15,8 +15,8 @@
 init:
 	@git submodule update --init --recursive
 
-.PHONY: install
-install:
+.PHONY: vllm_install
+vllm_install:
 	@pip install -e .[vllm]
 
 .PHONY: lint

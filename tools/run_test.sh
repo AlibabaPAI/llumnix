@@ -7,5 +7,5 @@ pgrep -f llumnix.entrypoints.vllm.api_server | { while read pid; do kill -9 "$pi
 pgrep -f benchmark_serving.py | { while read pid; do kill -9 "$pid"; done; }
 
 nvidia-docker run --rm -t --net host --ipc host -v ${PWD}:/workspace -v /mnt:/mnt -w /workspace \
-  registry.cn-beijing.aliyuncs.com/llumnix/llumnix-dev:20240909_action_678a439 \
-  sh -c "make install > /dev/null && make $test_mode"
+  registry.cn-beijing.aliyuncs.com/llumnix/llumnix-dev:20250213_image_65d0368 \
+  sh -c "make vllm_install > /dev/null && make $test_mode"

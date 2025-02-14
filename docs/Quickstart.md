@@ -19,7 +19,7 @@ You can build and install Llumnix from source:
 ```
 git clone https://github.com/AlibabaPAI/llumnix.git
 cd llumnix
-make install
+make vllm_install
 ```
 
 The default migration backend is rayrpc. If you want to use NCCL as the migration backend, run `make cupy-cuda` to install [cupy-cuda](https://pypi.org/search/?q=cupy-cuda) manually, as it is related to the CUDA version.

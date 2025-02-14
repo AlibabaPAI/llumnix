@@ -20,6 +20,8 @@ import pytest
 import torch
 import ray
 
+from llumnix.entrypoints.utils import get_ip_address
+
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
@@ -98,7 +100,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
 
     request_migration_policy = 'SR' if migrated_request_status == 'running' else 'FCW'
-    ip = "127.0.0.1"
+    ip = get_ip_address()
     base_port = 37037
     ip_ports = []
     instance_output_logs = []
@@ -130,7 +132,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
     tasks = []
     for i in range(device_count // 2):
         bench_command = generate_bench_command(
-            ip_ports=f"127.0.0.1:{base_port + i}",
+            ip_ports=f"{ip}:{base_port + i}",
             model=model,
             num_prompts=500,
             dataset_type="sharegpt",
@@ -162,7 +164,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
 
     if migrated_request_status == 'running':
         average_speed = parse_instance_log_file(instance_output_logs)
-        sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0]))
+        sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0])*1024 if 'GB' in x else float(x.split()[0]))
         data = [
             ['migration_size'] + sorted_keys,
             [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]

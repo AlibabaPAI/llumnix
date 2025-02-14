@@ -28,10 +28,8 @@ from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
-from llumnix.instance_info import InstanceType
-from llumnix.backends.vllm.simulator import BackendSimVLLM
+from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.backends.backend_interface import BackendType
-from llumnix.backends.profiling import LatencyMemData
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
                            remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
@@ -94,7 +92,7 @@ class MockLlumlet:
         migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
         ray.get(migrate_in_ray_actor.migrate_in.remote(self.actor_name))
         time.sleep(0.1)
-        return self.num_migrate_out
+        return []
 
     def migrate_in(self, src_instance_name):
         self.num_migrate_in += 1
@@ -105,13 +103,6 @@ class MockLlumlet:
 
     def get_num_migrate_in(self):
         return self.num_migrate_in
-
-class MockBackendSim(BackendSimVLLM):
-    def _get_lantecy_mem(self, *args, **kwargs):
-        latency_mem = LatencyMemData({}, {}, {})
-        latency_mem.prefill_model_params = (0,0)
-        latency_mem.decode_model_params = (0,0,0)
-        return latency_mem
 
 def init_manager():
     try:
@@ -129,26 +120,22 @@ def init_manager():
     ray.get(manager.is_ready.remote())
     return manager
 
+
 class MockManager(Manager):
-    async def init_placement_group(self, *args, **kwargs):
+    def init_placement_group(self, *args, **kwargs):
         return self.launcher.init_placement_group(*args, **kwargs)
 
-    async def init_server_and_instance(self, *args, **kwargs):
+    def init_server_and_instance(self, *args, **kwargs):
         return self.launcher.init_server_and_instance(*args, **kwargs)
 
-    async def clear_instance_ray_resources(self, instance_id: str):
+    def clear_instance_ray_resources(self, instance_id: str):
         return self.launcher.clear_instance_ray_resources(instance_id)
 
-    async def get_cluster_deployment(self):
-        return self.launcher.get_cluster_deployment()
-
-    async def get_instance_deployment_states(self, instance_id: str):
-        return self.launcher.get_instance_deployment_states(instance_id)
 
 def init_manager_with_launch_mode(launch_mode, request_output_queue_type="rayqueue",
-                                  enable_pd_disagg=False, pd_ratio="1:3"):
-    manager_args = ManagerArgs(enable_port_increment=True, enable_port_offset_store=True,
-                               enable_pd_disagg=enable_pd_disagg, pd_ratio=pd_ratio)
+                                  enable_pd_disagg=False, pd_ratio="1:3", max_instances=-1):
+    manager_args = ManagerArgs(enable_port_increment=True, enable_pd_disagg=enable_pd_disagg,
+                               pd_ratio=pd_ratio, max_instances=max_instances)
     instance_args = InstanceArgs(migration_backend="rayrpc")
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type=request_output_queue_type)
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
@@ -224,15 +211,15 @@ def test_init_instances(ray_env, manager):
     assert num_instances == manager_args.initial_instances
 
 def test_init_instances_sim(ray_env, manager):
-    manager.profiling_result_file_path="//"
     # pylint: disable=import-outside-toplevel
-    import llumnix.backends.vllm.simulator
-    llumnix.backends.vllm.simulator.BackendSimVLLM = MockBackendSim
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM, InstanceArgs(), engine_args))
-    num_instances = len(instances)
-    manager_args = ManagerArgs()
-    assert num_instances == manager_args.initial_instances
+    # cannot catch by pytest.raises
+    try:
+        engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
+        _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM,
+                                                            InstanceArgs(profiling_result_file_path="/"), engine_args))
+    # pylint: disable=broad-except
+    except Exception as e:
+        assert isinstance(e, IsADirectoryError)
 
 def test_scale_up_and_down(ray_env, manager):
     initial_instances = 4
@@ -321,7 +308,7 @@ def get_instance_info_migrate_out(instance_id):
     )
     return instance_info
 
-def test_update_instance_info_loop_and_migrate(ray_env, manager):
+def test_poll_instance_info_loop_and_migrate(ray_env, manager):
     num_instances = 5
     instance_ids, instances = init_instances(num_instances)
 
@@ -360,11 +347,11 @@ def test_update_instance_info_loop_and_migrate(ray_env, manager):
 async def test_init_server_and_get_instance_deployment_states_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_launch_mode(LaunchMode.LOCAL)
     instance_id = random_uuid()
-    pg = await manager.init_placement_group(get_placement_group_name(instance_id),
-                                                      engine_args, BackendType.VLLM, init_server=True)
+    pg = manager.init_placement_group(get_placement_group_name(instance_id),
+                                      engine_args, BackendType.VLLM, init_server=True)
     pg = ray.util.get_placement_group(get_placement_group_name(instance_id))
     ray.get(pg.ready())
-    await manager.init_server_and_instance(instance_id, EntrypointsArgs(), InstanceArgs(), engine_args, BackendType.VLLM, pg)
+    manager.init_server_and_instance(instance_id, EntrypointsArgs(), InstanceArgs(), engine_args, BackendType.VLLM, pg)
 
     # wait for scale up
     await asyncio.sleep(5.0)
@@ -375,11 +362,11 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     num_instances = manager.scale_up(instance_id, instance, InstanceArgs())
     assert num_instances == 1
 
-    pg_created, server_alive, instance_alive = await manager.get_instance_deployment_states(instance_id)
+    pg_created, server_alive, instance_alive = manager._get_instance_deployment_states(instance_id)
     assert pg_created and server_alive and instance_alive
 
     # test clear_instance_ray_resources
-    await manager.clear_instance_ray_resources(instance_id)
+    manager.clear_instance_ray_resources(instance_id)
     # wait for remove and kill
     await asyncio.sleep(5.0)
 
@@ -390,31 +377,31 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     instance_exists = is_actor_exists(get_instance_name(instance_id))
     assert not instance_exists
 
-    pg_created, server_alive, instance_alive = await manager.get_instance_deployment_states(instance_id)
+    pg_created, server_alive, instance_alive = manager._get_instance_deployment_states(instance_id)
     assert not pg_created and not server_alive and not instance_alive
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
-async def test_auto_scale_up_loop_and_get_cluster_deployment(ray_env, request_output_queue_type):
+async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env, request_output_queue_type):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
     await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = await manager.get_cluster_deployment()
+    curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
     actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
     instance_ids = [actor_name_dict['name'].split("_")[-1] for actor_name_dict in actor_names_dict
                     if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
     assert len(instance_ids) == 4
-    await manager.clear_instance_ray_resources(instance_ids[0])
-    await manager.clear_instance_ray_resources(instance_ids[1])
+    manager.clear_instance_ray_resources(instance_ids[0])
+    manager.clear_instance_ray_resources(instance_ids[1])
     await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = await manager.get_cluster_deployment()
+    curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 @pytest.mark.asyncio
@@ -425,7 +412,7 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, requ
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = await manager.get_cluster_deployment()
+    curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
     actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
@@ -440,20 +427,20 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, requ
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = await manager.get_cluster_deployment()
+    curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 def test_pd_disagg_gloal_launch_instance_type():
     launcher = Launcher(None, True, False, True, False, [1, 2])
 
     assert launcher._get_next_instance_type(0, 0, [1, 2]) == InstanceType.PREFILL
-    launcher.inflight_num_prefill += 1
+    launcher.inflight_num_prefill_instance += 1
 
     assert launcher._get_next_instance_type(0, 0, [1, 2]) == InstanceType.DECODE
-    launcher.inflight_num_decode += 1
+    launcher.inflight_num_decode_instance += 1
 
-    launcher.inflight_num_prefill = 0
-    launcher.inflight_num_decode = 0
+    launcher.inflight_num_prefill_instance = 0
+    launcher.inflight_num_decode_instance = 0
     assert launcher._get_next_instance_type(1, 1, [1, 2]) == InstanceType.DECODE
     assert launcher._get_next_instance_type(1, 2, [1, 2]) == InstanceType.PREFILL
 
@@ -470,7 +457,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env,
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = await manager.get_cluster_deployment()
+    curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
     num_prefill_instances = 0
@@ -502,7 +489,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env,
 
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 4
-    curr_pgs, curr_servers, curr_instances = await manager.get_cluster_deployment()
+    curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
     num_prefill_instances = 0
@@ -527,20 +514,27 @@ async def test_pd_disagg_deployment_states():
                       instance_args=InstanceArgs(migration_backend="rayrpc"),
                       engine_args=engine_args, launch_args=LaunchArgs(LaunchMode.LOCAL, BackendType.VLLM),
                       work_dir=os.getcwd())
-    assert not manager._inner_check_pd_deployment()
+    assert not manager._check_pd_deployment_states()
 
     prefill_instance_ids = [random_uuid() for _ in range(3)]
     decode_instance_ids = [random_uuid() for _ in range(3)]
 
     manager.scale_up(prefill_instance_ids, [None]*len(prefill_instance_ids),
                      [InstanceArgs(instance_type="prefill")]*len(prefill_instance_ids))
-    assert manager._inner_check_pd_deployment() in prefill_instance_ids
+    assert manager._check_pd_deployment_states() in prefill_instance_ids
 
     manager.scale_down(prefill_instance_ids)
     manager.scale_up(decode_instance_ids, [None]*len(decode_instance_ids),
                      [InstanceArgs(instance_type="decode")]*len(decode_instance_ids))
-    assert manager._inner_check_pd_deployment() in decode_instance_ids
+    assert manager._check_pd_deployment_states() in decode_instance_ids
 
     manager.scale_up(prefill_instance_ids, [None]*len(prefill_instance_ids),
                      [InstanceArgs(instance_type="prefill")]*len(prefill_instance_ids))
-    assert not manager._inner_check_pd_deployment()
+    assert not manager._check_pd_deployment_states()
+
+@pytest.mark.asyncio
+async def test_auto_scale_up_loop_max_instances():
+    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, "rayqueue", max_instances=2)
+    await asyncio.sleep(60.0)
+    num_instances = manager.scale_up([], [], [])
+    assert num_instances == 2

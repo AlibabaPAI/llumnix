@@ -7,7 +7,7 @@ import time
 import ray
 
 from llumnix.logging.logger import init_logger
-from llumnix.constants import MAX_TASK_RETRIES, RETRIES_INTERVAL
+from llumnix.constants import MAX_MANAGER_RETRY_TIMES, RETRY_MANAGER_INTERVAL
 
 logger = init_logger(__name__)
 
@@ -48,45 +48,29 @@ def is_gpu_available() -> bool:
         return False
 
 def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
-    for attempt in range(MAX_TASK_RETRIES):
+    for attempt in range(MAX_MANAGER_RETRY_TIMES):
         try:
             ret = ray.get(ray_call(*args, **kwargs))
             break
         except ray.exceptions.RayActorError:
-            if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRIES_INTERVAL, method_name))
-                time.sleep(RETRIES_INTERVAL)
+            if attempt < MAX_MANAGER_RETRY_TIMES - 1:
+                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRY_MANAGER_INTERVAL, method_name))
+                time.sleep(RETRY_MANAGER_INTERVAL)
             else:
-                logger.error("Manager is still unavailable after {} times retries.".format(MAX_TASK_RETRIES))
+                logger.error("Manager is still unavailable after {} times retries.".format(MAX_MANAGER_RETRY_TIMES))
                 raise
     return ret
 
 async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
-    for attempt in range(MAX_TASK_RETRIES):
+    for attempt in range(MAX_MANAGER_RETRY_TIMES):
         try:
             ret = await ray_call(*args, **kwargs)
             break
         except ray.exceptions.RayActorError:
-            if attempt < MAX_TASK_RETRIES - 1:
-                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRIES_INTERVAL, method_name))
-                await asyncio.sleep(RETRIES_INTERVAL)
+            if attempt < MAX_MANAGER_RETRY_TIMES - 1:
+                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRY_MANAGER_INTERVAL, method_name))
+                await asyncio.sleep(RETRY_MANAGER_INTERVAL)
             else:
-                logger.error("Manager is still unavailable after {} times retries.".format(MAX_TASK_RETRIES))
+                logger.error("Manager is still unavailable after {} times retries.".format(MAX_MANAGER_RETRY_TIMES))
                 raise
     return ret
-
-def init_per_token_latency_breakdown_dict() -> Dict[str, int]:
-    per_token_latency_breakdown_dict = {
-        'step_latency_engine': [],
-        'step_postprocess_latency': [],
-        'across_async_put_queue_thread_latency': [],
-        'across_async_put_queue_actor_latency': [],
-        'queue_rpc_latency': [],
-        'background_process_get_queue_latency': [],
-        'generate_benchmark_return_output_latency': []
-    }
-    return per_token_latency_breakdown_dict
-
-def record_per_token_latency_breakdown(per_token_latency_breakdown_dict: Dict[str, int], request_timestamps: "RequestTimestamps"):
-    for key in per_token_latency_breakdown_dict.keys():
-        per_token_latency_breakdown_dict[key].append(getattr(request_timestamps, key))

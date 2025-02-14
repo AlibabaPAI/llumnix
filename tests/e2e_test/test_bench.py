@@ -20,6 +20,8 @@ import pytest
 import torch
 import numpy as np
 
+from llumnix.entrypoints.utils import get_ip_address
+
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
@@ -72,7 +74,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
     else:
         num_prompts = 50 if not enable_pd_disagg else 50
 
-    ip = "127.0.0.1"
+    ip = get_ip_address()
     base_port = 37037
     ip_ports = []
     if launch_mode == 'local':
@@ -137,7 +139,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
     tasks = []
     for i in range(device_count):
         bench_command = generate_bench_command(
-            ip_ports=f"127.0.0.1:{base_port + i}",
+            ip_ports=f"{ip}:{base_port + i}",
             model=model,
             num_prompts=num_prompts,
             dataset_type="sharegpt",

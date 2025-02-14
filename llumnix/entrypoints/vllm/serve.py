@@ -26,7 +26,7 @@ if __name__ == "__main__":
     entrypoints_args, manager_args, instance_args, engine_args = get_args(cfg, LaunchMode.GLOBAL, parser, cli_args)
 
     backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
-    launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=BackendType.VLLM)
+    launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=backend_type)
 
     # Assume that there is an existing ray cluster when using centralized deployment.
     connect_to_ray_cluster()

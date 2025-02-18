@@ -105,6 +105,8 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         pytest.skip("When the tensor parallel size is 2, only test the gloo migration backend.")
 
     if use_ray_spmd_worker:
+        if migration_backend in ['gloo', 'nccl']:
+            pytest.skip("When use_ray_spmd_worker is True, only test the rayrpc migration backend.")
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
         os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "1"
     else:

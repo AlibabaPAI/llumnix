@@ -20,6 +20,7 @@ import torch
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
+from vllm import envs as vllm_envs
 from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
 from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
@@ -102,6 +103,7 @@ class MigrationWorker(Worker):
         self.instance_id = instance_id
         self.global_world_size = 0
         self.global_rank = -1
+        self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
         self.migration_backend: MigrationBackendBase = get_migration_backend(migration_config=migration_config,
                                                                              cache_engine=self.cache_engine,
                                                                              worker_handle_list=src_worker_handle_list,
@@ -110,6 +112,7 @@ class MigrationWorker(Worker):
                                                                              gpu_cache=self.gpu_cache,
                                                                              worker_rank=self.rank,
                                                                              local_rank=self.local_rank,
+                                                                             use_ray_spmd_worker=self.use_ray_spmd_worker,
                                                                              worker_put_data_dst_callback=self.put_data_dst)
 
     def migrate_cache(self,

@@ -101,12 +101,14 @@ class Llumlet:
         try:
             assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
                 f'unimplemented backend {BackendType}'
-            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup when use_ray_spmd_worker.
             if backend_type == BackendType.VLLM:
-                num_gpus = 0.5
+                if vllm_envs.VLLM_USE_RAY_SPMD_WORKER:
+                    num_gpus = 0.5
+                else:
+                    num_gpus = 0
             elif backend_type == BackendType.BLADELLM:
-                world_size = get_engine_world_size(engine_args, backend_type)
-                num_gpus = world_size
+                num_gpus = get_engine_world_size(engine_args, backend_type)
             else: # backend_type == BackendType.SIM_VLLM:
                 num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,

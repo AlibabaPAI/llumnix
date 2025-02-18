@@ -263,7 +263,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     async def execute_model_async(self, execute_model_req: ExecuteModelRequest) -> List[SamplerOutput]:
         t0 = time.time()
         if not self.use_ray_spmd_worker:
-            request_outputs = await super().execute_model_async(execute_model_req)
+            return await super().execute_model_async(execute_model_req)
 
         # pylint: disable=access-member-before-definition
         if self.forward_dag is None:

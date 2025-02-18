@@ -282,7 +282,9 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     # _check_ray_adag_installation here (follows vllm-v0.7.2) requires ray version >= 2.40.
     # Llumnix requires ray version == 3.0.0.dev0, so we override the `_check_ray_adag_installation` method.
     def _check_ray_adag_installation(self):
+        # pylint: disable=import-outside-toplevel
         import pkg_resources
+        # pylint: disable=import-outside-toplevel
         from packaging import version
 
         required_version = version.parse("2.40")
@@ -292,6 +294,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
             raise ValueError(f"Ray version {required_version} is "
                              f"required, but found {current_version}")
 
+        # pylint: disable=import-outside-toplevel
         import importlib.util
         adag_spec = importlib.util.find_spec(
             "ray.experimental.compiled_dag_ref")

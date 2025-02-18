@@ -276,4 +276,32 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
 
         t1 = time.time()
         self.last_inference_latency = (t1 - t0) * 1000
-        return outputs
+        return request_outputs
+
+    # _check_ray_adag_installation in vllm-v0.6.3.post1 requires ray version == 2.35.
+    # _check_ray_adag_installation here (follows vllm-v0.7.2) requires ray version >= 2.40.
+    # Llumnix requires ray version == 3.0.0.dev0, so we override the `_check_ray_adag_installation` method.
+    def _check_ray_adag_installation(self):
+        import pkg_resources
+        from packaging import version
+
+        required_version = version.parse("2.40")
+        current_version = version.parse(
+            pkg_resources.get_distribution("ray").version)
+        if current_version < required_version:
+            raise ValueError(f"Ray version {required_version} is "
+                             f"required, but found {current_version}")
+
+        import importlib.util
+        adag_spec = importlib.util.find_spec(
+            "ray.experimental.compiled_dag_ref")
+        if adag_spec is None:
+            raise ValueError("Ray accelerated DAG is not installed. "
+                             "Run `pip install ray[adag]` to install it.")
+
+        cupy_spec = importlib.util.find_spec("cupy")
+        if cupy_spec is None and envs.VLLM_USE_RAY_COMPILED_DAG_NCCL_CHANNEL:
+            raise ValueError(
+                "cupy is not installed but required since "
+                "VLLM_USE_RAY_COMPILED_DAG_NCCL_CHANNEL is set."
+                "Run `pip install ray[adag]` and check cupy installation.")

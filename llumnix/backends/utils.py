@@ -14,6 +14,7 @@
 from typing import Dict, List
 import asyncio
 import time
+import os
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -97,6 +98,7 @@ def init_backend_engine(instance_id: str,
     elif backend_type == BackendType.SIM_VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.simulator import BackendSimVLLM
+        os.environ["VLLM_NO_USAGE_STATS"] = "1"
         backend_engine = BackendSimVLLM(instance_id,
                                         placement_group,
                                         request_output_queue_type,

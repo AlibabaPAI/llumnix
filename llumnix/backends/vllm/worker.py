@@ -12,17 +12,20 @@
 # limitations under the License.
 
 import time
-from typing import Dict, List
+from typing import Dict, List, Any, Union
 import math
 import ray
 import torch
 
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+from ray.util.placement_group import PlacementGroup
+
 from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
 from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
 from vllm.worker.cache_engine import CacheEngine
 from vllm.utils import GiB_bytes
+from vllm.sequence import SequenceGroupMetadata, SequenceGroupMetadataDelta
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
@@ -49,8 +52,11 @@ class MigrationWorker(Worker):
     def get_global_rank(self):
         return self.global_rank
 
-    def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
-                                     cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
+    def reserve_memory_for_migration(self,
+                                     migration_config: MigrationConfig,
+                                     model_config: ModelConfig,
+                                     cache_config: CacheConfig,
+                                     parallel_config: ParallelConfig) -> int:
         migrate_cache_blocks_size = migration_config.migration_buffer_blocks
         migration_num_layers = migration_config.migration_num_layers
         dummy_cache_size = migration_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
@@ -74,8 +80,11 @@ class MigrationWorker(Worker):
 
         return dummy_cache_size
 
-    def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list,
-                       placement_group) -> None:
+    def init_migration(self,
+                       instance_id: str,
+                       migration_config: MigrationConfig,
+                       src_worker_handle_list: List["ray.actor.ActorHandle"],
+                       placement_group: PlacementGroup) -> None:
         # for proxy actor
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
@@ -100,14 +109,20 @@ class MigrationWorker(Worker):
                                                                              is_driver_worker=self.is_driver_worker,
                                                                              gpu_cache=self.gpu_cache,
                                                                              worker_rank=self.rank,
-                                                                             local_rank=self.local_rank)
+                                                                             local_rank=self.local_rank,
+                                                                             worker_put_data_dst_callback=self.put_data_dst)
 
-    def migrate_cache(self, src_worker_handle_list, src_blocks: List[int], dst_blocks: List[int]) -> None:
+    def migrate_cache(self,
+                      src_worker_handle_list: List["ray.actor.ActorHandle"],
+                      src_blocks: List[int],
+                      dst_blocks: List[int],
+                      request_id: str,
+                      recv_worker_data: bool = False) -> None:
         src_worker_handle = src_worker_handle_list[self.rank]
 
         start_time = time.time()
         try:
-            self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks)
+            self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks, request_id, recv_worker_data)
         except ray.exceptions.RayActorError:
             logger.info("rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
         end_time = time.time()
@@ -121,8 +136,47 @@ class MigrationWorker(Worker):
     def do_recv(self, *args, **kwargs):
         return self.migration_backend.do_recv(*args, **kwargs)
 
-    def do_send(self, *args, **kwargs):
-        return self.migration_backend.do_send(*args, **kwargs)
+    def do_send(self, *args, request_id: str = None, send_worker_data: bool = False, **kwargs):
+        if not send_worker_data:
+            return self.migration_backend.do_send(*args, **kwargs)
+        return self.migration_backend.do_send(*args, **kwargs), self.get_data_src(request_id)
+
+    def get_data_src(self, request_id: str) -> Dict[str, Any]:
+        src_data = {
+            "_seq_group_metadata_cache": {}
+        }
+        # the request_id is in self._seq_group_metadata_cache when the request is in running states.
+        if request_id in self._seq_group_metadata_cache:
+            src_data["_seq_group_metadata_cache"][request_id] = self._seq_group_metadata_cache[request_id]
+            del self._seq_group_metadata_cache[request_id]
+
+        return src_data
+
+    def put_data_dst(self, src_data: Dict[str, Any]) -> None:
+        if "_seq_group_metadata_cache" in src_data:
+            # Only support migrate one request at once currently.
+            if src_data["_seq_group_metadata_cache"].keys():
+                request_id = list(src_data["_seq_group_metadata_cache"].keys())[0]
+                self._seq_group_metadata_cache[request_id] = src_data["_seq_group_metadata_cache"][request_id]
+
+    def _get_cached_seq_group_metadata(
+            self,
+            seq_group_metadata_list: List[Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]],
+            finished_request_ids: List[str]) -> List[SequenceGroupMetadata]:
+        # Change seq_data for cached seq_grou_metadata in worker (the src seq_id is different from the dst seq_id).
+        for metadata_or_delta in seq_group_metadata_list:
+            request_id = metadata_or_delta.request_id
+            if request_id in self._seq_group_metadata_cache:
+                seq_group_metadata = self._seq_group_metadata_cache[request_id]
+                if isinstance(metadata_or_delta, SequenceGroupMetadataDelta):
+                    # TODO(s5u13b): Only support one sequence.
+                    for new_seq_id, old_seq_id in zip(metadata_or_delta.seq_data_delta.keys(), \
+                                                      seq_group_metadata.seq_data.keys()):
+                        if new_seq_id != old_seq_id:
+                            seq_group_metadata.seq_data[new_seq_id] = seq_group_metadata.seq_data[old_seq_id]
+                            del seq_group_metadata.seq_data[old_seq_id]
+
+        return super()._get_cached_seq_group_metadata(seq_group_metadata_list, finished_request_ids)
 
     def rebuild_migration_backend(self, instance_rank: Dict[str, int], group_name: str) -> bool:
         self.migration_backend.destory_backend()

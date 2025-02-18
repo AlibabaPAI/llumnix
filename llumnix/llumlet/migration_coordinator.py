@@ -45,10 +45,12 @@ class MigrationCoordinator:
     def __init__(self,
                  backend_engine: BackendInterface,
                  migration_last_stage_max_blocks: int,
-                 migration_max_stages: int) -> None:
+                 migration_max_stages: int,
+                 use_ray_spmd_worker: bool = False) -> None:
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages
         self.backend_engine = backend_engine
+        self.use_ray_spmd_worker = use_ray_spmd_worker
 
     async def migrate_out_running_request(self,
                                           migrate_in_ray_actor: "ray.actor.ActorHandle",
@@ -162,8 +164,9 @@ class MigrationCoordinator:
             # do stage send/recv
             migrate_out_request.stage_timestamps.append(time.time())
             migrate_out_request.stage_num_blocks_list.append(stage_block_num)
+            send_worker_data = self.use_ray_spmd_worker and is_last_stage
             # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
-            await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks)
+            await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks, migrate_out_request.request_id, send_worker_data)
 
             if not is_last_stage and migrate_out_request.should_abort_migration():
                 # migrate-out request abort by scheduler during send/recv

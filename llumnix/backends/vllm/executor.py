@@ -70,14 +70,18 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         # Create the workers.
         driver_ip = get_ip()
         worker_wrapper_kwargs = self._get_worker_wrapper_args()
-        for rank in range(self.parallel_config.world_size):
-            bundle = placement_group.bundle_specs[rank + 1]
+        for bundle_id, bundle in enumerate(placement_group.bundle_specs):
             if not bundle.get("GPU", 0):
                 raise Exception("GPU resource cannot be 0.")
+            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            if self.use_ray_spmd_worker and bundle_id == 0:
+                num_gpus = 0.5
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
                 placement_group_capture_child_tasks=True,
+                placement_group_bundle_index=bundle_id
             )
+
             worker = ray.remote(
                 num_cpus=0,
                 num_gpus=num_gpus,
@@ -165,6 +169,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 " network configuration. If you set `VLLM_HOST_IP` or "
                 "`HOST_IP` environment variable, make sure it is unique for"
                 " each node.")
+
         # pylint: disable=invalid-name
         VLLM_INSTANCE_ID = get_vllm_instance_id()
 
@@ -255,9 +260,20 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         worker_class_name = "MigrationWorker"
         return (worker_module_name, worker_class_name, worker_class_fn)
 
-    async def execute_model_async(self, *args, **kwargs):
+    async def execute_model_async(self, execute_model_req: ExecuteModelRequest) -> List[SamplerOutput]:
         t0 = time.time()
-        outputs = await super().execute_model_async(*args, **kwargs)
+        if not self.use_ray_spmd_worker:
+            request_outputs = await super().execute_model_async(execute_model_req)
+
+        # pylint: disable=access-member-before-definition
+        if self.forward_dag is None:
+            self.forward_dag = self._compiled_ray_dag(enable_asyncio=True)
+
+        serialized_data = self.input_encoder.encode(execute_model_req)
+        dag_future = await self.forward_dag.execute_async(serialized_data)
+        outputs = await dag_future[0]
+        request_outputs = self.output_decoder.decode(outputs)
+
         t1 = time.time()
         self.last_inference_latency = (t1 - t0) * 1000
         return outputs

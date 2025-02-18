@@ -15,10 +15,11 @@ import asyncio
 import traceback
 from typing import List, Union, Iterable
 import time
-
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
+
+from vllm import envs as vllm_envs
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
@@ -70,9 +71,11 @@ class Llumlet:
                                                                         backend_type,
                                                                         engine_args,
                                                                         instance_args.profiling_result_file_path)
+            use_ray_spmd_worker = backend_type == BackendType.VLLM and vllm_envs.VLLM_USE_RAY_SPMD_WORKER
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
                                                               migration_config.migration_last_stage_max_blocks,
-                                                              migration_config.migration_max_stages)
+                                                              migration_config.migration_max_stages,
+                                                              use_ray_spmd_worker=use_ray_spmd_worker)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                                self.backend_engine)
             self.log_requests = True
@@ -96,12 +99,16 @@ class Llumlet:
                   backend_type: BackendType,
                   engine_args):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
-                f'unimplemented backend {backend_type}'
-            num_gpus = 0
-            if backend_type == backend_type.BLADELLM:
+            assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
+                f'unimplemented backend {BackendType}'
+            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            if backend_type == BackendType.VLLM:
+                num_gpus = 0.5
+            elif backend_type == BackendType.BLADELLM:
                 world_size = get_engine_world_size(engine_args, backend_type)
                 num_gpus = world_size
+            else: # backend_type == BackendType.SIM_VLLM:
+                num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,
                                        num_gpus=num_gpus,
                                        name=get_instance_name(instance_id),

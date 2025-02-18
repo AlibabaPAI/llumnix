@@ -13,6 +13,7 @@
 
 import asyncio
 import math
+import os
 from unittest.mock import MagicMock
 import pytest
 import ray
@@ -68,7 +69,7 @@ class MockLlumlet(Llumlet):
         self.backend_engine = MockBackendVLLM()
 
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=1, num_gpus=0.5, max_concurrency=4)
 class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, num_gpus=1, **kwargs):
         instance_id = kwargs["instance_id"]
@@ -102,18 +103,25 @@ class MockLlumletDoNotSchedule(Llumlet):
 
         self.backend_engine.engine.step_async = step_async_try_schedule
 
-
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
-@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.asyncio
-async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size):
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
+@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
+@pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
+async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size, use_ray_spmd_worker):
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
 
+    if use_ray_spmd_worker:
+        os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
+        os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "1"
+    else:
+        os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "0"
+        os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "0"
+
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
                              disable_async_output_proc=True)
-    id_rank_map = {"0": 0, "1": 1}
+
     if migration_request_status == 'running':
         request_migration_policy = "SR"
     elif migration_request_status == 'waiting':
@@ -135,6 +143,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         if all(res):
             break
 
+    id_rank_map = {"0": 0, "1": 1}
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
              llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
@@ -225,11 +234,11 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         await test_correctness(prompt, origin_output)
     que.cleanup()
 
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 async def test_pd_diaggregation_correctness(ray_env, migration_backend):
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, disable_async_output_proc=True)
-    id_rank_map = {"0":0, "1":1}
+    id_rank_map = {"0": 0, "1": 1}
 
     instance_args = InstanceArgs()
     instance_args.request_migration_policy = "SR"

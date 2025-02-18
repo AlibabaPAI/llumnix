@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import uuid
 import asyncio
 import threading
@@ -23,7 +24,10 @@ from ray.experimental.internal_kv import (
     _internal_kv_put,
 )
 
+from vllm import envs as vllm_envs
+
 from llumnix.logging.logger import init_logger
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -66,8 +70,11 @@ def initialize_placement_group(
             "The number of required GPUs exceeds the total number of "
             "available GPUs in the cluster.")
     # Create a new placement group
-    # bundle_0: Llumlet + AsyncPutQueueActor, bundle_(1-num_gpus): Workers
-    placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
+    # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
+    if num_gpus >= 1:
+        placement_group_specs = ([{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1))
+    else:
+        placement_group_specs = ([{"CPU": num_cpus}])
     current_placement_group = ray.util.placement_group(
         placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
     # Wait until PG is ready - this will block until all
@@ -183,3 +190,14 @@ def put_actor_data_to_ray_internal_kv(actor_name: str, data_name: str, value: An
     if _internal_kv_initialized():
         _internal_kv_put(_make_key(actor_name, data_name), f"{value}".encode(), overwrite=True)
         logger.debug("Put {}.{} to ray internal key-value store, value: {}.".format(actor_name, data_name, value))
+
+def get_llumnix_env_vars():
+    llumnix_env_vars = {}
+    env_vars = dict(os.environ)
+    llumnix_keys = list(llumnix_envs.environment_variables.keys())
+    llumnix_keys.extend(list(vllm_envs.environment_variables.keys()))
+    for key, value in env_vars.items():
+        if key in llumnix_keys:
+            llumnix_env_vars[key] = value
+
+    return llumnix_env_vars

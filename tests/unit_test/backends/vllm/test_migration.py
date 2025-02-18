@@ -14,7 +14,6 @@
 import asyncio
 import math
 import os
-import time
 from unittest.mock import MagicMock
 import pytest
 import ray
@@ -108,8 +107,8 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
-@pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
-async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size, use_ray_spmd_worker):
+@pytest.mark.parametrize("use_ray_spmd_worker", [False, True])
+async def test_migration_correctness(migration_backend, migration_request_status, tensor_parallel_size, use_ray_spmd_worker):
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
 

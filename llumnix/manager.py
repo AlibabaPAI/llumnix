@@ -391,7 +391,7 @@ class Manager:
                     continue
                 self.launcher.init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
                                                        self.engine_args, self.backend_type, new_pg,
-                                                       instance_ready_cb=self.scale_up)
+                                                       instance_finish_callback=self.scale_up)
                 logger.info("Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id))
             # pylint: disable=broad-except
             except Exception as e:

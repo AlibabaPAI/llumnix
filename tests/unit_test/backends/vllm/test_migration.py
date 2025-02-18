@@ -14,6 +14,7 @@
 import asyncio
 import math
 import os
+import time
 from unittest.mock import MagicMock
 import pytest
 import ray
@@ -28,12 +29,12 @@ from llumnix.backends.utils import BackendType
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import (initialize_placement_group, get_placement_group_name,
+from llumnix.utils import (initialize_placement_group, get_placement_group_name, get_llumnix_env_vars,
                            remove_placement_group, kill_instance)
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
-from tests.conftest import ray_env
+from tests.conftest import ray_env, cleanup_ray_env_func
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt
@@ -118,6 +119,8 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     else:
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "0"
         os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "0"
+
+    ray.init(namespace="llumnix", ignore_reinit_error=True, runtime_env={"env_vars": get_llumnix_env_vars()})
 
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
                              disable_async_output_proc=True)
@@ -233,6 +236,8 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         origin_output = origin_outputs[i]
         await test_correctness(prompt, origin_output)
     que.cleanup()
+
+    cleanup_ray_env_func()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])

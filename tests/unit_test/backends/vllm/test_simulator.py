@@ -20,6 +20,7 @@ from tests.unit_test.queue.utils import request_output_queue_server
 
 from .utils import create_dummy_prompt, initialize_scheduler
 
+
 class MockBackendSim(BackendSimVLLM):
 
     def _get_lantecy_mem(self, *args, **kwargs):
@@ -27,6 +28,7 @@ class MockBackendSim(BackendSimVLLM):
         latency_mem.prefill_model_params = (0,0)
         latency_mem.decode_model_params = (0,0,0)
         return latency_mem
+
 
 @pytest.mark.asyncio
 async def test_executor():
@@ -84,8 +86,7 @@ async def test_backend(ray_env):
             pass
     dummy_actor = ray.remote(num_cpus=1,
                              name="instance_0",
-                             namespace='llumnix',
-                             max_concurrency=4)(DummyActor)
+                             namespace='llumnix')(DummyActor)
     dummy_actor = dummy_actor.remote()
     placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=2, num_gpus=0, detached=True)
     sim_backend = MockBackendSim(instance_id="0",

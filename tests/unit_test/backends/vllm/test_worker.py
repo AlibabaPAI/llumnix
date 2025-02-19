@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import pytest
 import torch
 import ray
@@ -24,23 +25,43 @@ from vllm.executor.ray_gpu_executor import RayWorkerWrapper
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import random_uuid
 from llumnix.utils import initialize_placement_group, get_placement_group_name
+from llumnix.backends.vllm.worker import MigrationWorker
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 
+
+class MockMigrationWorker(MigrationWorker):
+    def __init__(self, *args, **kwargs):
+        self.do_a_started = False
+        self.do_a_finished = False
+        super().__init__(*args, **kwargs)
+
+    def do_a(self):
+        self.do_a_started = True
+        self.do_a_finished = False
+        time.sleep(3.0)
+        self.do_a_finished = True
+
+    def do_b(self):
+        return self.do_a_started, self.do_a_finished
+
+
 def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
                   worker_module_name="llumnix.backends.vllm.worker",
-                  worker_class_name="MigrationWorker"):
+                  worker_class_name="MigrationWorker",
+                  max_concurrency=1):
     worker = ray.remote(
         num_cpus=0,
-        num_gpus=1
+        num_gpus=1,
+        max_concurrency=max_concurrency
     )(RayWorkerWrapper).remote(
         worker_module_name=worker_module_name,
         worker_class_name=worker_class_name,
         trust_remote_code=True
     )
 
-    worker.init_worker.remote(
+    ray.get(worker.init_worker.remote(
         model_config=engine_config.model_config,
         parallel_config=engine_config.parallel_config,
         scheduler_config=engine_config.scheduler_config,
@@ -52,7 +73,7 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
         distributed_init_method=get_distributed_init_method(get_ip(), get_open_port()),
         lora_config=engine_config.lora_config,
         is_driver_worker = False
-    )
+    ))
 
     return worker
 
@@ -126,3 +147,24 @@ def test_rebuild_migration_backend(ray_env, backend):
     assert ray.get(worker0.execute_method.remote('rebuild_migration_backend', instance_rank=instance_rank,
                                                 group_name=random_uuid()))
     assert ray.get(worker0.execute_method.remote('warmup'))
+
+def test_max_concurrency(ray_env):
+    engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
+    worker_no_concurrency = create_worker(rank=0, local_rank=0, engine_config=engine_config,
+                                          worker_module_name="tests.unit_test.backends.vllm.test_worker",
+                                          worker_class_name="MockMigrationWorker",
+                                          max_concurrency=1)
+
+    worker_no_concurrency.execute_method.remote('do_a')
+    do_a_started, do_a_finished = ray.get(worker_no_concurrency.execute_method.remote('do_b'))
+    assert do_a_started and do_a_finished
+
+    worker_with_concurrency = create_worker(rank=0, local_rank=0, engine_config=engine_config,
+                                            worker_module_name="tests.unit_test.backends.vllm.test_worker",
+                                            worker_class_name="MockMigrationWorker",
+                                            max_concurrency=2)
+
+    worker_with_concurrency.execute_method.remote('do_a')
+    time.sleep(1.0)
+    do_a_started, do_a_finished = ray.get(worker_with_concurrency.execute_method.remote('do_b'))
+    assert do_a_started and not do_a_finished

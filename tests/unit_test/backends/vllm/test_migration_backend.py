@@ -26,9 +26,9 @@ from llumnix.utils import random_uuid, initialize_placement_group, get_placement
 from tests.conftest import ray_env
 from .test_worker import create_worker
 
+
 class MockMigrationWorker(MigrationWorker):
     def set_gpu_cache(self, data):
-        print(f"data shape:::{self.gpu_cache[0][0].shape, data[0].shape}")
         for layer_idx in range(self.cache_engine[0].num_attention_layers):
             self.gpu_cache[0][layer_idx].copy_(data[layer_idx])
         torch.cuda.synchronize()

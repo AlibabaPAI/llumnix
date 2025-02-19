@@ -28,7 +28,8 @@ from llumnix.utils import initialize_placement_group, get_placement_group_name
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 
-@ray.remote(num_cpus=1, max_concurrency=4)
+
+@ray.remote(num_cpus=1)
 class MockLlumlet(Llumlet):
     def __init__(self, *args, **kwargs) -> None:
         instance_id = kwargs["instance_id"]

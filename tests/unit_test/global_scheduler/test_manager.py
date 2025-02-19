@@ -41,7 +41,7 @@ from llumnix.utils import (get_placement_group_name, get_server_name, get_instan
 from tests.conftest import ray_env
 
 
-@ray.remote(num_cpus=1, max_concurrency=4)
+@ray.remote(num_cpus=1)
 class MockLlumlet:
     def __init__(self, instance_id):
         self.instance_id = instance_id

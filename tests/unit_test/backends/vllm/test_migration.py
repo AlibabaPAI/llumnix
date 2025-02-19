@@ -55,16 +55,19 @@ def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_a
                 engine_args=engine_args)
     return llumlet
 
+
 class MockBackendVLLM(BackendVLLM):
     def __init__(self):
         self.engine = MockEngine()
+
 
 class MockLlumlet(Llumlet):
     def __init__(self):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
 
-@ray.remote(num_cpus=1, max_concurrency=4)
+
+@ray.remote(num_cpus=1)
 class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, **kwargs):
         instance_id = kwargs["instance_id"]
@@ -97,6 +100,7 @@ class MockLlumletDoNotSchedule(Llumlet):
             return request_outputs, server_infos
 
         self.backend_engine.engine.step_async = step_async_try_schedule
+
 
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])

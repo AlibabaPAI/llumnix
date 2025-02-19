@@ -24,7 +24,7 @@ from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=1, max_concurrency=2)
 class ProxyActor:
     def exec_method(self, is_driver_worker, handle, *args, **kwargs):
         try:
@@ -83,7 +83,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         pass
 
     def warmup(self) -> bool:
-        self.actor.exec_method.remote(self.is_driver_worker, "do_send", [0])
+        self.actor.exec_method.remote(self.is_driver_worker, self.worker_handle_list[self.worker_rank], "do_send", [0])
         logger.info("Rayrpc migration backend warmup successfully.")
         return True
 

@@ -71,11 +71,9 @@ class Llumlet:
                                                                         backend_type,
                                                                         engine_args,
                                                                         instance_args.profiling_result_file_path)
-            use_ray_spmd_worker = backend_type == BackendType.VLLM and vllm_envs.VLLM_USE_RAY_SPMD_WORKER
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
                                                               migration_config.migration_last_stage_max_blocks,
-                                                              migration_config.migration_max_stages,
-                                                              use_ray_spmd_worker=use_ray_spmd_worker)
+                                                              migration_config.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                                self.backend_engine)
             self.log_requests = True

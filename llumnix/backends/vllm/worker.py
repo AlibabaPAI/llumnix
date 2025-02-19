@@ -14,6 +14,7 @@
 import time
 from typing import Dict, List, Any, Union
 import math
+import traceback
 import ray
 import torch
 
@@ -120,14 +121,19 @@ class MigrationWorker(Worker):
                       src_blocks: List[int],
                       dst_blocks: List[int],
                       request_id: str,
-                      recv_worker_data: bool = False) -> None:
+                      is_last_stage: bool = False) -> None:
         src_worker_handle = src_worker_handle_list[self.rank]
 
         start_time = time.time()
         try:
-            self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks, request_id, recv_worker_data)
+            self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks, request_id, is_last_stage)
         except ray.exceptions.RayActorError:
             logger.info("rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.error("Unexpected exception occurs: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            raise
         end_time = time.time()
 
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(

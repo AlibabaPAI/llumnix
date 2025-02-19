@@ -376,14 +376,14 @@ class BackendVLLM(BackendInterface):
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: str,
-                          send_worker_data: bool) -> None:
+                          is_last_stage: bool) -> None:
         await dst_ray_actor.execute_engine_method.remote("_run_workers",
                                                          "migrate_cache",
                                                          src_worker_handle_list=self.worker_handle_list,
                                                          dst_blocks=dst_blocks,
                                                          src_blocks=src_blocks,
                                                          request_id=request_id,
-                                                         recv_worker_data=send_worker_data)
+                                                         is_last_stage=is_last_stage)
 
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access

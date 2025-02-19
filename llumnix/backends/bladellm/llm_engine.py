@@ -329,7 +329,7 @@ class BackendBladeLLM(BackendInterface):
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: str,
-                          send_worker_data: bool):
+                          is_last_stage: bool):
         pass
 
     def commit_dst_request(self, backend_request: LlumnixRequest) -> None:

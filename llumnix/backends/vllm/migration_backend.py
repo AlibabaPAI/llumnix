@@ -77,6 +77,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             logger.warning("Detect numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine[0].dtype))
 
         self.gpu_cache = gpu_cache
+        self.use_ray_spmd_worker = use_ray_spmd_worker
         self.worker_put_data_dst_callback = worker_put_data_dst_callback
 
         self.cache_device = "cpu"
@@ -102,7 +103,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         pass
 
     def warmup(self) -> bool:
-        self.actor.exec_method.remote(self.worker_handle_list[self.worker_rank], "do_send", [0])
+        self.actor.exec_method.remote(self.worker_handle_list[self.worker_rank], "do_send", None, [0])
         logger.info("Rayrpc migration backend warmup successfully.")
         return True
 
@@ -114,7 +115,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
                       src_blocks: List[int],
                       dst_blocks: List[int],
                       request_id: str,
-                      recv_worker_data: bool) -> None:
+                      is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
         src_data = None
@@ -122,7 +123,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
             is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
             send_blocks = src_blocks[start_idx:start_idx+offset]
-            send_worker_data = is_last_comm and recv_worker_data
+            send_worker_data = self.use_ray_spmd_worker and is_last_stage and is_last_comm
             ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
                                                     None, send_blocks, request_id=request_id, send_worker_data=send_worker_data)
             if rpc_numpy_cache is not None:
@@ -218,6 +219,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.local_rank = local_rank
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote(is_driver_worker, use_ray_spmd_worker)
         self.gpu_cache = gpu_cache
+        self.use_ray_spmd_worker = use_ray_spmd_worker
         self.worker_put_data_dst_callback = worker_put_data_dst_callback
 
         self.migration_cache_size = self.cache_engine[0].block_size * self.cache_engine[0].num_kv_heads * self.cache_engine[0].head_size
@@ -299,7 +301,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                       src_blocks: List[int],
                       dst_blocks: List[int],
                       request_id: str,
-                      recv_worker_data: bool) -> None:
+                      is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         src_rank = ray.get(self.actor.exec_method.remote(src_handle, "get_global_rank"))
 
@@ -309,7 +311,7 @@ class RayColMigrationBackend(MigrationBackendBase):
             is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
-            send_worker_data = is_last_comm and recv_worker_data
+            send_worker_data = self.use_ray_spmd_worker and is_last_stage and is_last_comm
             ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
                                                     self.global_rank, send_blocks, request_id=request_id, send_worker_data=send_worker_data)
             self.do_recv(src_rank, recv_blocks)

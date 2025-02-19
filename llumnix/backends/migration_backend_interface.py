@@ -34,7 +34,7 @@ class MigrationBackendBase(ABC):
                       src_blocks: List[int],
                       dst_blocks: List[int],
                       request_id: str,
-                      recv_worker_data: bool) -> None:
+                      is_last_stage: bool) -> None:
         raise NotImplementedError
 
     @abstractmethod

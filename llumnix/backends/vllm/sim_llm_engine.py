@@ -86,5 +86,5 @@ class BackendSimVLLM(BackendVLLM):
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: str,
-                          send_worker_data: bool) -> None:
+                          is_last_stage: bool) -> None:
         await self.engine.model_executor.send_blocks(len(src_blocks))

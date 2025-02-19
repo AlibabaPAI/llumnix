@@ -69,7 +69,7 @@ class MockLlumlet(Llumlet):
         self.backend_engine = MockBackendVLLM()
 
 
-@ray.remote(num_cpus=1, num_gpus=0.5, max_concurrency=4)
+@ray.remote(num_cpus=1, num_gpus=0.5)
 class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, *args, num_gpus=1, **kwargs):
         instance_id = kwargs["instance_id"]

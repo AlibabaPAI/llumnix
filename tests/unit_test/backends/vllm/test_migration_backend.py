@@ -13,7 +13,6 @@
 
 import random
 import os
-import time
 import pytest
 import torch
 import ray
@@ -114,8 +113,6 @@ def test_migrate_cache(ray_env, backend, send_worker_data):
     if send_worker_data:
         ray.get(worker0.execute_method.remote('set_worker_data', request_id=request_id))
         worker0_data = ray.get(worker0.execute_method.remote('get_worker_data', request_id=request_id))
-
-    time.sleep(3.0)
 
     dst_blocks = list(range(num_gpu_blocks))
     random.shuffle(dst_blocks)

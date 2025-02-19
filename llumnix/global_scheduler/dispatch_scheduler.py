@@ -25,9 +25,9 @@ logger = init_logger(__name__)
 class DispatchScheduler:
     def __init__(self,
                  dispatch_policy: str,
-                 power_of_k_choice: int) -> None:
+                 topk_random_dispatch: int) -> None:
         self.dispatch_policy = DispatchPolicyFactory.get_policy(dispatch_policy)
-        self.power_of_k_choice = power_of_k_choice
+        self.topk_random_dispatch = topk_random_dispatch
         self.available_dispatch_instance_set: Set[str] = set()
         self.instance_info: Dict[str, InstanceInfo] = {}
         # statistics
@@ -38,7 +38,7 @@ class DispatchScheduler:
         self.total_num_requests += 1
         dispatch_instance_id = self.dispatch_policy.dispatch(self.instance_num_requests,
                                                              self.instance_info.values(),
-                                                             self.power_of_k_choice)
+                                                             self.topk_random_dispatch)
         self.instance_num_requests[dispatch_instance_id] += 1
         if self.total_num_requests % DISPATCH_LOG_FREQUENCY == 0:
             logger.info("dispatch scheduler total_dispatched_requests: {}".format(self.total_num_requests))

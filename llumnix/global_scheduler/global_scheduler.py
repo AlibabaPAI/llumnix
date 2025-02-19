@@ -35,7 +35,7 @@ class GlobalScheduler:
 
         # dispatch args
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
-                                                    global_scheduler_config.power_of_k_choice)
+                                                    global_scheduler_config.topk_random_dispatch)
         # migrate args
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,

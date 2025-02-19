@@ -19,8 +19,8 @@ def sort_instance_infos(available_instance_infos: List[InstanceInfo],
     )
 
 def random_choice_from_top_k(sorted_instance_infos: List[InstanceInfo],
-                             power_of_k_choice: int):
-    k = min(power_of_k_choice, len(sorted_instance_infos))
+                             topk_random_dispatch: int):
+    k = min(topk_random_dispatch, len(sorted_instance_infos))
     top_k_instance_infos = sorted_instance_infos[:k]
     return random.choice(top_k_instance_infos)
 
@@ -30,7 +30,7 @@ class DispatchPolicy(ABC):
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: List[InstanceInfo],
-                 power_of_k_choice: int) -> int:
+                 topk_random_dispatch: int) -> int:
         pass
 
 
@@ -39,7 +39,7 @@ class Flood(DispatchPolicy):
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: List[InstanceInfo],
-                 power_of_k_choice: int) -> str:
+                 topk_random_dispatch: int) -> str:
         instance_id = max(instance_num_requests, key=instance_num_requests.get)
         return instance_id
 
@@ -48,7 +48,7 @@ class Balanced(DispatchPolicy):
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: List[InstanceInfo],
-                 power_of_k_choice: int) -> str:
+                 topk_random_dispatch: int) -> str:
         # dispatch request according to the number of requests dispatched to instance by manager
         instance_id = min(instance_num_requests, key=instance_num_requests.get)
         return instance_id
@@ -58,9 +58,9 @@ class Load(DispatchPolicy):
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: List[InstanceInfo],
-                 power_of_k_choice: int) -> str:
+                 topk_random_dispatch: int) -> str:
         sorted_instance_infos = sort_instance_infos(available_instance_infos, 'dispatch_load_metric')
-        instance_info_chosen = random_choice_from_top_k(sorted_instance_infos, power_of_k_choice)
+        instance_info_chosen = random_choice_from_top_k(sorted_instance_infos, topk_random_dispatch)
         instance_id = instance_info_chosen.instance_id
         logger.info("dispatch to {}, load: {}".format(instance_id, instance_info_chosen.dispatch_load_metric))
         return instance_id
@@ -70,9 +70,9 @@ class Queue(DispatchPolicy):
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: List[InstanceInfo],
-                 power_of_k_choice: int) -> str:
+                 topk_random_dispatch: int) -> str:
         sorted_instance_infos = sort_instance_infos(available_instance_infos, 'num_waiting_requests')
-        instance_info_chosen = random_choice_from_top_k(sorted_instance_infos, power_of_k_choice)
+        instance_info_chosen = random_choice_from_top_k(sorted_instance_infos, topk_random_dispatch)
         instance_id = instance_info_chosen.instance_id
         logger.info("dispatch to {}, queue size: {}".format(instance_id, instance_info_chosen.num_waiting_requests))
         return instance_id
@@ -84,7 +84,7 @@ class RoundRobin(DispatchPolicy):
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: List[InstanceInfo],
-                 power_of_k_choice: int) -> str:
+                 topk_random_dispatch: int) -> str:
         all_instance_ids = sorted(instance_num_requests.keys())
         cur_instance_idx = (self.prev_instance_idx + 1) % len(all_instance_ids)
         target_instance_id = all_instance_ids[cur_instance_idx]

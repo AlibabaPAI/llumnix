@@ -16,7 +16,7 @@ class GlobalSchedulerConfig:
             self,
             initial_instances: int,
             dispatch_policy: str,
-            power_of_k_choice: int,
+            topk_random_dispatch: int,
             pair_migration_policy: str,
             migrate_out_threshold: float,
             scaling_policy: str,
@@ -27,7 +27,7 @@ class GlobalSchedulerConfig:
             is_group_kind_migration_backend: bool) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy
-        self.power_of_k_choice = power_of_k_choice
+        self.topk_random_dispatch = topk_random_dispatch
 
         self.pair_migration_policy = pair_migration_policy
         self.migrate_out_load_threshold = migrate_out_threshold

@@ -121,7 +121,7 @@ class ManagerArgs:
     polling_interval: float = None
     dispatch_policy: str = None
     scaling_load_metric: str = None
-    power_of_k_choice: int = None
+    topk_random_dispatch: int = None
 
     enable_migration: bool = None
     pair_migration_frequency: int = None
@@ -177,7 +177,7 @@ class ManagerArgs:
         # Create the GlobalScheduler Configuration.
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.dispatch_policy,
-                                                        self.power_of_k_choice,
+                                                        self.topk_random_dispatch,
                                                         self.pair_migration_policy,
                                                         self.migrate_out_threshold,
                                                         self.scaling_policy,
@@ -232,9 +232,9 @@ class ManagerArgs:
                             '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
                             '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
                             '* "rr" dispatch requests with round-robin policy.\n')
-        parser.add_argument('--power-of-k-choice',
+        parser.add_argument('--topk-random-dispatch',
                             type=int,
-                            help='number of candidate instances for dispatch policy.\n\n'
+                            help='number of candidate random dispatch instances for dispatch policy.\n\n'
                             'The candidate instances are first selected according to the load'
                             '(including factors such as load, queue size, etc.) based on the dispatch policy,'
                             'and then one of them is randomly chosen to receive the request for better load balancing.')

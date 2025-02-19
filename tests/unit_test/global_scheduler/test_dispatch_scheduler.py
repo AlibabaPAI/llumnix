@@ -155,11 +155,11 @@ def test_dispatch_rr():
         target_instance_id = idx%instance_num
         assert instance_id == f'instance_{target_instance_id}'
 
-def test_dispatch_power_of_k_choice():
+def test_dispatch_topk_random_dispatch():
     num_tests = 100
     instance_num = 4
-    for power_of_k_choice in [1, 2, 3]:
-        dispatch_scheduler = DispatchScheduler('load', power_of_k_choice)
+    for topk_random_dispatch in [1, 2, 3]:
+        dispatch_scheduler = DispatchScheduler('load', topk_random_dispatch)
         instance_num_requests = {}
         instance_info_dict = {}
         for instance_id in [f'instance_{i}' for i in range(1, instance_num + 1)]:
@@ -174,4 +174,4 @@ def test_dispatch_power_of_k_choice():
         instance_id_set = set()
         for _ in range(num_tests):
             instance_id_set.add(dispatch_scheduler.dispatch())
-        assert len(instance_id_set) == power_of_k_choice
+        assert len(instance_id_set) == topk_random_dispatch

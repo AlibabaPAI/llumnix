@@ -25,10 +25,11 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--scaling-load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue,rr}]
+            [--topk-random-dispatch TOPK_RANDOM_DISPATCH]
             [--enable-migration]
             [--enable-defrag]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
-            [--pair-migration-policy {balanced,defrag_constrained,defrag_relaxed}]
+            [--pair-migration-policy {balanced,defrag}]
             [--migrate-out-threshold MIGRATE_OUT_THRESHOLD]
             [--request-migration-policy {LCR,SR,LR,FCW,FCWSR}]
             [--enable-scaling]
@@ -139,6 +140,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: balanced, load, queue, rr
 - Default: "load"
 
+`--topk-random-dispatch`
+- Number of candidate random dispatch instances for dispatch policy.
+- Default: 1
+
 `--enable-migration`
 - Enable migrate requests between instances.
 
@@ -151,8 +156,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--pair-migration-policy`
 - Pair migration policy.
-- Possible choices: balanced, defrag_constrained, defrag_relaxed
-- Default: "defrag_constrained"
+- Possible choices: balanced, defrag
+- Default: "defrag"
 
 `--migrate-out-threshold`
 - Migrate out instance load threshold.

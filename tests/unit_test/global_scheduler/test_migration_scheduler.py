@@ -96,7 +96,7 @@ def test_migration_filter(pair_migration_type):
                 assert instance.instance_type == InstanceType.DECODE
                 assert instance.num_killed_requests == 0
 
-@pytest.mark.parametrize("policy", ['balanced', 'defrag_constrained'])
+@pytest.mark.parametrize("policy", ['balanced', 'defrag'])
 def test_pair_migration(policy):
     num_tests = 1000
     exist_migration = False

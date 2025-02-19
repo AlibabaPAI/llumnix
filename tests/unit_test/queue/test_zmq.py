@@ -20,7 +20,6 @@ from vllm.outputs import CompletionOutput, RequestOutput
 
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.zmq_client import ZmqClient
-from llumnix.queue.utils import get_open_zmq_ipc_path
 from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
 
@@ -29,8 +28,8 @@ from tests.conftest import ray_env
 
 @ray.remote(num_cpus=1)
 class Server:
-    def __init__(self, rpc_path):
-        self.server = ZmqServer(rpc_path)
+    def __init__(self, ip, port):
+        self.server = ZmqServer(ip, port)
         asyncio.create_task(self.server.run_server_loop())
         request_output_queue = self.server
         self.stop_signal = asyncio.Event()
@@ -77,10 +76,9 @@ def timeout_handler(signum, frame):
     raise TimeoutException("Function call timed out")
 
 async def benchmark_queue(qps, ip=None, port=None):
-    rpc_path = get_open_zmq_ipc_path(ip, port)
     rpc_client = ZmqClient()
     request_output_queue = rpc_client
-    server = Server.remote(rpc_path)
+    server = Server.remote(ip, port)
     server_id = random_uuid()
     server_info = ServerInfo(server_id, 'zmq', None, ip, port)
     await rpc_client.wait_for_server_rpc(server_info)

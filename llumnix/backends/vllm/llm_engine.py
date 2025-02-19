@@ -41,10 +41,12 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import get_instance_name
+from llumnix import constants
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
-NO_OUTPUTS_STEP_INTERVAL = 0.01
+NO_OUTPUTS_STEP_INTERVAL = constants.NO_OUTPUTS_STEP_INTERVAL
 
 
 class LlumnixRequestOutputFactory(RequestOutputFactory):
@@ -107,7 +109,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Initialize the cluster and specify the executor class.
         # pylint: disable=import-outside-toplevel
         if latency_mem is not None:
-            from llumnix.backends.vllm.executor import SimGPUExecutor
+            from llumnix.backends.vllm.sim_executor import SimGPUExecutor
             executor_class = SimGPUExecutor
             executor_class.latency_mem = latency_mem
         elif engine_config.parallel_config.use_ray:
@@ -168,25 +170,23 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             ctx.output_queue.appendleft((outputs, seq_group_metadata_list, scheduler_outputs, is_async,
                                          is_last_step, is_first_step_output, skip))
 
-        for server_info in server_infos:
-            if hasattr(server_info, 'request_timestamps'):
-                server_info.request_timestamps.engine_process_model_outputs_timestamp_begin = time.time()
+        set_timestamp(server_infos, 'engine_process_model_outputs_timestamp_begin', time.time())
 
         super()._process_model_outputs(ctx, request_id)
 
         if ctx.request_outputs:
             request_outputs, server_infos = zip(*ctx.request_outputs)
+
             for request_output, server_info in zip(request_outputs, server_infos):
                 if hasattr(server_info, 'request_timestamps'):
                     request_output.request_timestamps = server_info.request_timestamps
-                    request_output.request_timestamps.engine_process_model_outputs_timestamp_end = time.time()
+            set_timestamp(request_outputs, 'engine_process_model_outputs_timestamp_end', time.time())
 
         return
 
     def _process_request_outputs(
             self,
             outputs: List[Tuple[RequestOutput, ServerInfo]],
-            step_begin_time: float
     ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         request_outputs = []
         server_infos = []
@@ -195,10 +195,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             request_outputs = list(request_outputs)
             server_infos = list(server_infos)
 
-        for request_output in request_outputs:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.engine_step_timestamp_begin = step_begin_time
-                request_output.request_timestamps.engine_step_timestamp_end = time.time()
+        set_timestamp(request_outputs, 'engine_step_timestamp_begin', self.step_begin_time)
+        set_timestamp(request_outputs, 'engine_step_timestamp_end', time.time())
 
         for request_output in request_outputs:
             if request_output.finished:
@@ -224,20 +222,20 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
         self.instance_info = instance_info
 
+        set_timestamp(request_outputs, 'engine_put_queue_timestamp', time.time())
+
         if request_outputs:
             self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
 
-        for request_output in request_outputs:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.engine_step_postprocess_timestamp_end = time.time()
+        set_timestamp(request_outputs, 'engine_step_postprocess_timestamp_end', time.time())
 
         return request_outputs, server_infos
 
     async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
-        step_begin_time = time.time()
+        self.step_begin_time = time.time()
         # pylint: disable=too-many-function-args
         outputs = await super().step_async(0)
-        return self._process_request_outputs(outputs, step_begin_time)
+        return self._process_request_outputs(outputs)
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
@@ -252,20 +250,17 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
     def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler[0].waiting[-1]
-        if hasattr(server_info, 'request_timestamps'):
-            server_info.request_timestamps.engine_add_request_timestamp = time.time()
+        set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
         self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
-                                                          seq_group.metrics.arrival_time, seq_group.sampling_params, seq_group.lora_request,
-                                                          seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
-                                                          seq_group.priority)
+                                                             seq_group.metrics.arrival_time, seq_group.sampling_params, seq_group.lora_request,
+                                                             seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
+                                                             seq_group.priority)
 
     def _start_put_queue_loop(self):
         while True:
             args = self.put_queue_args_queue.get()
             request_outputs, server_infos = args
-            for request_output in request_outputs:
-                if hasattr(request_output, 'request_timestamps'):
-                    request_output.request_timestamps.engine_thread_put_queue_timestamp = time.time()
+            set_timestamp(request_outputs, 'engine_thread_put_queue_timestamp', time.time())
             self._put_request_outputs_to_server(request_outputs, server_infos)
 
     def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
@@ -279,6 +274,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+
 
 class BackendVLLM(BackendInterface):
     def __init__(

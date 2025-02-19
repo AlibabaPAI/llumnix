@@ -12,6 +12,7 @@
 # limitations under the License.
 
 from datetime import datetime
+import time
 import shutil
 import os
 import subprocess
@@ -28,9 +29,6 @@ import pytest
 
 from llumnix.utils import random_uuid
 
-def pytest_sessionstart(session):
-    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def cleanup_ray_env_func():
     try:
@@ -70,9 +68,15 @@ def cleanup_ray_env_func():
 
 @pytest.fixture
 def ray_env():
+    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(3.0)
     ray.init(namespace="llumnix", ignore_reinit_error=True)
     yield
     cleanup_ray_env_func()
+    time.sleep(1.0)
+    subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(3.0)
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

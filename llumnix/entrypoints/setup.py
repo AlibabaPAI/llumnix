@@ -30,7 +30,7 @@ from llumnix.entrypoints.utils import (LaunchMode, EntrypointsContext, get_ip_ad
                                        retry_manager_method_sync)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix.constants import MAX_RAY_RESTARTS, RAY_RESTART_INTERVAL
+from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL
 
 
 logger = init_logger(__name__)
@@ -59,13 +59,13 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
             sys.exit(1)
     else:
         ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
-        for attempt in range(MAX_RAY_RESTARTS):
+        for attempt in range(MAX_RAY_RESTART_TIMES):
             try:
                 # wait about 2 mins by default
                 result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'], check=True, text=True, capture_output=True)
                 break
             except subprocess.CalledProcessError as e:
-                if attempt < MAX_RAY_RESTARTS:
+                if attempt < MAX_RAY_RESTART_TIMES:
                     logger.warning("Execute '{}' repeatedly until the head node starts.".format(ray_start_command))
                     time.sleep(RAY_RESTART_INTERVAL)
                 else:
@@ -125,11 +125,25 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
         manager.init_instances.remote, 'init_instances', request_output_queue_type,
         backend_type, instance_args, engine_args)
 
+    available_instance_ids = []
+    available_instances = []
+    for instance_id, instance in zip(instance_ids, instances):
+        try:
+            ray.get(instance.is_ready.remote())
+            available_instance_ids.append(instance_id)
+            available_instances.append(instance)
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.error("Instance {} is dead.".format(instance_id))
+            logger.error("Unexpected exception occurs: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
+
     ip = get_ip_address()
     request_output_queue_port: str = entrypoints_args.request_output_queue_port
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
-    return manager, instance_ids, instances, request_output_queue
+    return manager, available_instance_ids, available_instances, request_output_queue
 
 def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue) -> EntrypointsContext:
     instances_dict: Dict[str, Llumlet] = {}

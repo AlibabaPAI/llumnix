@@ -33,6 +33,7 @@ from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import get_instance_name
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -183,7 +184,7 @@ class Llumlet:
                 if status == MigrationStatus.ABORTED_SRC:
                     await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
             t1 = time.time()
-            logger.info("{}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
+            logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
                         .format(self.instance_id, dst_instance_id, migrated_request, status, \
                                 sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:
@@ -213,8 +214,7 @@ class Llumlet:
         return self.backend_engine.get_all_request_ids()
 
     def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        if hasattr(server_info, 'request_timestamps'):
-            server_info.request_timestamps.llumlet_generate_timestamp = time.time()
+        set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
         self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:

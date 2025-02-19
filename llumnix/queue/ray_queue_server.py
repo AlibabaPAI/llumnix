@@ -11,13 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Iterable
 import time
 import ray
 from ray.util.queue import Queue as RayQueue
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.queue.queue_server_base import QueueServerBase
+from llumnix.metrics.timestamps import set_timestamp
 
 
 class RayQueueServer(QueueServerBase):
@@ -34,18 +34,13 @@ class RayQueueServer(QueueServerBase):
 
     async def get(self):
         item = await self.queue.actor.get.remote()
-        if isinstance(item, Iterable):
-            for request_output in item:
-                if hasattr(request_output, 'request_timestamps'):
-                    request_output.request_timestamps.queue_server_receive_timestamp = time.time()
+        set_timestamp(item, 'queue_server_receive_timestamp', time.time())
         return item
 
     async def get_nowait_batch(self):
         qsize = await self.queue.actor.qsize.remote()
         items = await self.queue.actor.get_nowait_batch.remote(qsize)
-        for request_output in items:
-            if hasattr(request_output, 'request_timestamps'):
-                request_output.request_timestamps.queue_server_receive_timestamp = time.time()
+        set_timestamp(items, 'queue_server_receive_timestamp', time.time())
         return items
 
     async def run_server_loop(self):

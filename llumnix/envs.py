@@ -44,7 +44,6 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     # if set, llumnix will routing all logs to stream
     "LLUMNIX_LOG_STREAM":
     lambda: os.getenv("LLUMNIX_LOG_STREAM", "1"),
-
     # if set, llumnix will routing all node logs to this path
     "LLUMNIX_LOG_NODE_PATH":
     lambda: os.getenv("LLUMNIX_LOG_NODE_PATH", ""),

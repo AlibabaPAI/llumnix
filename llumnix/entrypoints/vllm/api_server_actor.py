@@ -25,11 +25,11 @@ class APIServerActor:
         logger.info("APIServerActor(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
                         self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
         self.entrypoints_args = entrypoints_args
+        self.host = get_ip_address()
         self.request_output_queue_port = self.entrypoints_args.request_output_queue_port
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
-        ip = get_ip_address()
         self.request_output_queue = init_request_output_queue_server(
-                                        ip, self.request_output_queue_port, self.request_output_queue_type)
+                                        self.host, self.request_output_queue_port, self.request_output_queue_type)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -53,9 +53,9 @@ class APIServerActor:
         llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(entrypoints_context)
         app = llumnix.entrypoints.vllm.api_server.app
 
-        logger.info("Start api server on '{}:{}'.".format(entrypoints_args.host, entrypoints_args.port))
+        logger.info("Start api server on '{}:{}'.".format(self.host, entrypoints_args.port))
         uvicorn.run(app,
-                    host=entrypoints_args.host,
+                    host=self.host,
                     port=entrypoints_args.port,
                     log_level=entrypoints_args.log_level,
                     timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE,

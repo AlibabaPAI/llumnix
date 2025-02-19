@@ -23,10 +23,12 @@ from llumnix.llumlet.request import RequestInferenceType
 
 logger = init_logger(__name__)
 
+
 class InstanceType(str, Enum):
     NO_CONSTRAINTS = "no_constraints"
     PREFILL = "prefill"
     DECODE = "decode"
+
 
 @dataclass
 class InstanceInfo:
@@ -71,6 +73,7 @@ class InstanceInfo:
         self.num_available_gpu_blocks = self.num_free_gpu_blocks - self.num_watermark_blocks
         self.num_available_gpu_blocks_waiting = self.num_available_gpu_blocks - self.num_blocks_all_waiting_requests
 
+
 class InstanceLoadCalculator:
     def __init__(self, dispatch_load_metric: str, migration_load_metric: str, enable_defrag: bool) -> None:
         self.dispatch_load_calculator = DispatchLoadComputation(migration_load_metric)
@@ -84,6 +87,7 @@ class InstanceLoadCalculator:
         instance_info.migration_load_metric_after_migrate_in = self.migration_load_calculator.\
             compute_instance_load_after_migrate(instance_info, is_migrate_in=True)
 
+
 class LoadComputationStrategy(ABC):
     def __init__(self, load_metric: str, enable_defrag: bool = False) -> None:
         self.load_metric = load_metric
@@ -92,6 +96,7 @@ class LoadComputationStrategy(ABC):
     @abstractmethod
     def compute_instance_load(self, instance_info: InstanceInfo) -> float:
         pass
+
 
 class DispatchLoadComputation(LoadComputationStrategy):
     def compute_instance_load(self, instance_info: InstanceInfo) -> float:
@@ -106,6 +111,7 @@ class DispatchLoadComputation(LoadComputationStrategy):
                 return -np.inf
             instance_load = (num_available_gpu_blocks / num_requests)*(-1)
         return instance_load
+
 
 class MigrationLoadComputation(LoadComputationStrategy):
     def compute_instance_load_after_migrate(self, instance_info: InstanceInfo, is_migrate_in: bool) -> float:
@@ -140,6 +146,7 @@ class MigrationLoadComputation(LoadComputationStrategy):
                 return -np.inf
             instance_load = (num_available_gpu_blocks / num_requests) * (-1)
         return instance_load
+
 
 # TODO(KuilongCui): currently scaling and dispatch use the same load calculator, leave
 # it in the future to refine

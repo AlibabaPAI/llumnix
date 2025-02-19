@@ -44,6 +44,7 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
                 kwargs['default'] = None
         super().add_argument(*args, **kwargs)
 
+
 @dataclass
 class EntrypointsArgs:
     host: str = None
@@ -112,6 +113,7 @@ class EntrypointsArgs:
                             help="path to config file of arguments")
         return parser
 
+
 @dataclass
 class ManagerArgs:
     initial_instances: int = None
@@ -119,6 +121,7 @@ class ManagerArgs:
     polling_interval: float = None
     dispatch_policy: str = None
     scaling_load_metric: str = None
+    topk_random_dispatch: int = None
 
     enable_migration: bool = None
     pair_migration_frequency: int = None
@@ -174,6 +177,7 @@ class ManagerArgs:
         # Create the GlobalScheduler Configuration.
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.dispatch_policy,
+                                                        self.topk_random_dispatch,
                                                         self.pair_migration_policy,
                                                         self.migrate_out_threshold,
                                                         self.scaling_policy,
@@ -205,6 +209,8 @@ class ManagerArgs:
         assert not args.enable_port_offset_store or args.enable_port_increment, \
             "Set enable_port_increment when enable_port_offset_store"
 
+        assert not args.enable_scaling, "Proactive auto-scaling is deprecated now, all auto-scaling related args will not take effects."
+
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--initial-instances',
@@ -226,6 +232,13 @@ class ManagerArgs:
                             '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
                             '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
                             '* "rr" dispatch requests with round-robin policy.\n')
+        parser.add_argument('--topk-random-dispatch',
+                            type=int,
+                            help='number of candidate random dispatch instances for dispatch policy.\n\n'
+                            'The candidate instances are first selected according to the load'
+                            '(including factors such as load, queue size, etc.) based on the dispatch policy,'
+                            'and then one of them is randomly chosen to receive the request for better load balancing.')
+
         parser.add_argument('--enable-migration',
                             action='store_true',
                             help='enable migrate requests between instances')
@@ -234,13 +247,11 @@ class ManagerArgs:
                             help='pair migration frequency')
         parser.add_argument('--pair-migration-policy',
                             type=str,
-                            choices=['balanced', 'defrag_constrained', 'defrag_relaxed'],
+                            choices=['balanced', 'defrag'],
                             help='The pair migration policy.\n\n'
                             '* "balanced" pair migration to make the instance load of instance more balanced.\n'
-                            '* "defrag_constrained" pair migration without balanced constraint to '
-                            'achieve defragmentation thoroughly (with instance constraints).\n'
-                            '* "defrag_relaxed" pair migration to without balanced constraint '
-                            'to achieve defragmentation thoroughly (without instance constraints).\n')
+                            '* "defrag" pair migration without balanced constraint to '
+                            'achieve defragmentation thoroughly (with instance constraints).\n')
         parser.add_argument('--migrate-out-threshold',
                             type=float,
                             help='migrate out instance load threshold')
@@ -289,10 +300,12 @@ class ManagerArgs:
                             help='the prefill decode ratio used in gloabl launch model e.g. "1:1"')
         return parser
 
+
 @dataclass
 class LaunchArgs:
     launch_mode: LaunchMode = None
     backend_type: BackendType = None
+
 
 @dataclass
 class InstanceArgs:

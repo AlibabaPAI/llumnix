@@ -11,6 +11,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+class GlobalSchedulerConfig:
+    def __init__(
+            self,
+            initial_instances: int,
+            dispatch_policy: str,
+            topk_random_dispatch: int,
+            pair_migration_policy: str,
+            migrate_out_threshold: float,
+            scaling_policy: str,
+            scaling_load_metric: str,
+            scale_up_threshold: float,
+            scale_down_threshold: float,
+            enable_pd_disagg: bool,
+            is_group_kind_migration_backend: bool) -> None:
+        self.initial_instances = initial_instances
+        self.dispatch_policy = dispatch_policy
+        self.topk_random_dispatch = topk_random_dispatch
+
+        self.pair_migration_policy = pair_migration_policy
+        self.migrate_out_load_threshold = migrate_out_threshold
+
+        self.scaling_policy = scaling_policy
+        self.scaling_load_metric = scaling_load_metric
+        self.scale_up_threshold = scale_up_threshold
+        self.scale_down_threshold = scale_down_threshold
+
+        self.enable_pd_disagg = enable_pd_disagg
+        self.is_group_kind_migration_backend = is_group_kind_migration_backend
+
+
 class MigrationConfig:
     def __init__(
             self,
@@ -35,30 +65,3 @@ class MigrationConfig:
         self.migration_backend_init_timeout = migration_backend_init_timeout
         self.grpc_migration_backend_server_address = grpc_migration_backend_server_address
         self.kvtransfer_migration_backend_naming_url = kvtransfer_migration_backend_naming_url
-
-
-class GlobalSchedulerConfig:
-    def __init__(
-            self,
-            initial_instances: int,
-            dispatch_policy: str,
-            pair_migration_policy: str,
-            migrate_out_threshold: float,
-            scaling_policy: str,
-            scaling_load_metric: str,
-            scale_up_threshold: float,
-            scale_down_threshold: float,
-            enable_pd_disagg: bool,
-            is_group_kind_migration_backend: bool,) -> None:
-        self.initial_instances = initial_instances
-        self.dispatch_policy = dispatch_policy
-        self.pair_migration_policy = pair_migration_policy
-        self.migrate_out_load_threshold = migrate_out_threshold
-
-        self.scaling_policy = scaling_policy
-        self.scaling_load_metric = scaling_load_metric
-        self.scale_up_threshold = scale_up_threshold
-        self.scale_down_threshold = scale_down_threshold
-
-        self.enable_pd_disagg = enable_pd_disagg
-        self.is_group_kind_migration_backend = is_group_kind_migration_backend

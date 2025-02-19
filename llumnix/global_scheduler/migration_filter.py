@@ -26,6 +26,7 @@ class MigrationFilterConfig:
     def __init__(self, migrate_out_load_threshold):
         self.migrate_out_load_threshold: float = migrate_out_load_threshold
 
+
 # TODO(KuilongCui): A filter might contain other filters; leave this for the future.
 class MigrationFilterPolicy(ABC):
     @abstractmethod
@@ -35,6 +36,7 @@ class MigrationFilterPolicy(ABC):
     @abstractmethod
     def filter_dst_condition(self, filter_config, pair_migration_type) -> Callable[[InstanceInfo], bool]:
         raise NotImplementedError
+
 
 class MigrationInstanceFilter(ABC):
     def __init__(self, filter_config: MigrationFilterConfig) -> None:
@@ -65,7 +67,7 @@ class MigrationInstanceFilter(ABC):
         if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
             policy_filter = MigrationFilterPolicyFactory.get_policy("load")
         elif pair_migration_type in [PairMigrationConstraints.PREFILL_2_DECODING, PairMigrationConstraints.DECODING_2_DECODING]:
-            policy_filter = MigrationFilterPolicyFactory.get_policy('prefill_decode')
+            policy_filter = MigrationFilterPolicyFactory.get_policy('pdd')
         else:
             raise ValueError(f"Unsupported pair migration type: {pair_migration_type}")
         src_filter_conditions.append(policy_filter.filter_src_condition(self.filter_config, pair_migration_type))
@@ -76,7 +78,8 @@ class MigrationInstanceFilter(ABC):
 
         return filtered_src_instance_infos, filtered_dst_instance_infos
 
-class LoadConstrainedFilter(MigrationFilterPolicy):
+
+class LoadFilter(MigrationFilterPolicy):
     def filter_src_condition(self, filter_config: MigrationFilterConfig,
                              pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
         return lambda instance_info: instance_info.num_killed_requests > 0 \
@@ -86,6 +89,7 @@ class LoadConstrainedFilter(MigrationFilterPolicy):
                              pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
         return lambda instance_info: instance_info.num_killed_requests == 0 \
             and instance_info.migration_load_metric < filter_config.migrate_out_load_threshold
+
 
 class PddFilter(MigrationFilterPolicy):
     INSTANCE_FILTER_RULES = {
@@ -119,6 +123,7 @@ class PddFilter(MigrationFilterPolicy):
 
         return lambda instance_info: instance_type_filter(instance_info) and policy_filter(instance_info)
 
+
 class CustomFilter(MigrationFilterPolicy):
     def __init__(self):
         super().__init__()
@@ -140,10 +145,11 @@ class CustomFilter(MigrationFilterPolicy):
                              pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
         return self.dst_filter
 
+
 class MigrationFilterPolicyFactory:
     _POLICY_REGISTRY = {
-        'load': LoadConstrainedFilter,
-        'prefill_decode': PddFilter,
+        'load': LoadFilter,
+        'pdd': PddFilter,
         'custom': CustomFilter,
     }
 

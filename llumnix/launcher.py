@@ -79,50 +79,6 @@ class Launcher:
 
         return placement_group
 
-    def init_server_and_instance(self,
-                                 instance_id: str,
-                                 entrypoints_args: EntrypointsArgs,
-                                 instance_args: InstanceArgs,
-                                 engine_args,
-                                 backend_type: BackendType,
-                                 placement_group: PlacementGroup,
-                                 instance_ready_cb: Callable = None,
-                                 server_ready_cb: Callable = None):
-        async def done_scale_up(instance_args: InstanceArgs, entrypoint_args: EntrypointsArgs):
-            try:
-                manager = ray.get_actor(get_manager_name(), namespace="llumnix")
-                await instance.is_ready.remote()
-                await server.run.remote(manager, instance_id, instance)
-                self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
-                if instance_ready_cb:
-                    # manager.scale_up will be called here after the instance is ready
-                    instance_ready_cb(instance_id, instance, instance_args)
-                if server_ready_cb:
-                    server_ready_cb(instance_id, server)
-                logger.info("Init server and instance done, instance_id: {}, instance_type: {}, "
-                            "api_server_port: {}, request_output_queue_port: {}".format(
-                                instance_id, instance_args.instance_type,
-                                entrypoint_args.port, entrypoint_args.request_output_queue_port))
-            # pylint: disable=broad-except
-            except Exception as e:
-                self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
-                logger.error("Unexpected exception occurs: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
-                self.clear_instance_ray_resources(instance_id)
-
-        request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
-        next_instance_args = self._get_next_instance_args(instance_args)
-        instance = self.init_instance(instance_id, next_instance_args, placement_group,
-                                       request_output_queue_type, backend_type, engine_args)
-        next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
-        server = self.init_server(get_server_name(instance_id), placement_group, next_entrypoints_args)
-
-        self.inflight_num_prefill_instance += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
-        self.inflight_num_decode_instance += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
-        asyncio.create_task(done_scale_up(next_instance_args, next_entrypoints_args))
-
     def init_server(self,
                     server_name: str,
                     placement_group: PlacementGroup,
@@ -162,10 +118,10 @@ class Launcher:
             "Currently not support engine based pd-disaggregation in global launch mode."
 
         next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
-        cur_num_prefill = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        cur_num_decode = len(self.global_scheduler.instance_id_set -
+        cur_num_prefill_instance = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
+        cur_num_decode_instance = len(self.global_scheduler.instance_id_set -
                                 self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pd_ratio)
+        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill_instance, cur_num_decode_instance, self.pd_ratio)
 
         return next_instance_args
 
@@ -181,34 +137,34 @@ class Launcher:
         return next_entrypoints_args
 
     def _get_next_instance_type(self,
-                                cur_num_prefill: int,
-                                cur_num_decode: int,
+                                cur_num_prefill_instance: int,
+                                cur_num_decode_instance: int,
                                 pd_ratio: List[int]) -> str:
         instance_type = InstanceType.NO_CONSTRAINTS
 
         if self.enable_pd_disagg:
             # Note: There are no instances simultaneously in inflight_num_prefill and cur_num_prefill as
             # inflight_num will decrease before scaling up the instances. The same applies to num_decode.
-            total_num_prefill = self.inflight_num_prefill_instance + cur_num_prefill
-            total_num_decode = self.inflight_num_decode_instance + cur_num_decode
+            total_num_prefill_instance = self.inflight_num_prefill_instance + cur_num_prefill_instance
+            total_num_decode_instance = self.inflight_num_decode_instance + cur_num_decode_instance
 
-            if total_num_prefill == 0:
+            if total_num_prefill_instance == 0:
                 instance_type = InstanceType.PREFILL
-            elif total_num_decode == 0:
+            elif total_num_decode_instance == 0:
                 instance_type = InstanceType.DECODE
             else:
                 # compute distance if launch prefill or decode
                 normal_distance = pd_ratio[0] - pd_ratio[1]
 
-                base_num_ratio = min(total_num_prefill//pd_ratio[0], total_num_decode//pd_ratio[1])
-                total_num_prefill = total_num_prefill - base_num_ratio * pd_ratio[0]
-                total_num_decode = total_num_decode - base_num_ratio * pd_ratio[1]
+                base_num_ratio = min(total_num_prefill_instance//pd_ratio[0], total_num_decode_instance//pd_ratio[1])
+                total_num_prefill_instance = total_num_prefill_instance - base_num_ratio * pd_ratio[0]
+                total_num_decode_instance = total_num_decode_instance - base_num_ratio * pd_ratio[1]
 
-                if total_num_prefill + total_num_decode == 0:
+                if total_num_prefill_instance + total_num_decode_instance == 0:
                     instance_type = InstanceType.PREFILL
                 else:
-                    distance_if_prefill = total_num_prefill + 1 - total_num_decode
-                    distance_if_decode = total_num_prefill - (total_num_decode + 1)
+                    distance_if_prefill = total_num_prefill_instance + 1 - total_num_decode_instance
+                    distance_if_decode = total_num_prefill_instance - (total_num_decode_instance + 1)
                     gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
                     gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
                     instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode \
@@ -216,38 +172,22 @@ class Launcher:
 
         return instance_type
 
-    def _get_next_instance_args(self, instance_args) -> InstanceArgs:
-        assert not self.enablde_engine_pd_disagg, \
-            "Currently not support engine based pd-disaggregation in global launch mode."
-
-        next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
-        cur_num_prefill = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        cur_num_decode = len(self.global_scheduler.instance_id_set -
-                                self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pd_ratio)
-        return next_instance_args
-
-    def _get_next_entrypoints_args(self, entrypoints_args: EntrypointsArgs) -> EntrypointsArgs:
-        next_entrypoints_args = copy.deepcopy(entrypoints_args)
-        if self.enable_port_increment:
-            next_entrypoints_args.port += self.port_offset
-            next_entrypoints_args.request_output_queue_port += self.port_offset
-            self.port_offset += 1
-            if self.enable_port_offset_store:
-                put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
-        return next_entrypoints_args
-
-    def init_server_and_instance(self, instance_id: str, entrypoints_args: EntrypointsArgs,
-                                 instance_args: InstanceArgs, engine_args, backend_type: BackendType,
-                                 placement_group: PlacementGroup, instance_finish_callback: Callable = None,
+    def init_server_and_instance(self,
+                                 instance_id: str,
+                                 entrypoints_args: EntrypointsArgs,
+                                 instance_args: InstanceArgs,
+                                 engine_args,
+                                 backend_type: BackendType,
+                                 placement_group: PlacementGroup,
+                                 instance_finish_callback: Callable = None,
                                  server_finish_callback: Callable = None):
         async def done_scale_up(instance_args: InstanceArgs, entrypoint_args: EntrypointsArgs):
             try:
                 manager = ray.get_actor(get_manager_name(), namespace="llumnix")
                 await instance.is_ready.remote()
                 await server.run.remote(manager, instance_id, instance)
-                self.inflight_num_prefill -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
+                self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
+                self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
                 if instance_finish_callback:
                     # manager.scale_up will be called here after the instance is ready
                     instance_finish_callback(instance_id, instance, instance_args)
@@ -259,8 +199,8 @@ class Launcher:
                             entrypoint_args.request_output_queue_port))
             # pylint: disable=broad-except
             except Exception as e:
-                self.inflight_num_prefill -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
+                self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
+                self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
                 logger.error("Unexpected exception occurs: {}".format(e))
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
                 self.clear_instance_ray_resources(instance_id)
@@ -272,29 +212,6 @@ class Launcher:
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         server = self.init_server(get_server_name(instance_id), placement_group, next_entrypoints_args)
 
-        self.inflight_num_prefill += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
-        self.inflight_num_decode += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
+        self.inflight_num_prefill_instance += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
+        self.inflight_num_decode_instance += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
         asyncio.create_task(done_scale_up(next_instance_args, next_entrypoints_args))
-
-    def init_server(self, server_name: str, placement_group: PlacementGroup,
-                    entrypoints_args: EntrypointsArgs) -> APIServerActor:
-        fastapi_server = APIServerActor.from_args(server_name, placement_group, entrypoints_args)
-        return fastapi_server
-
-    def init_instance(self,
-                       instance_id: str,
-                       instance_args: InstanceArgs,
-                       placement_group: PlacementGroup,
-                       request_output_queue_type: QueueType,
-                       backend_type: BackendType,
-                       engine_args
-                      ) -> Tuple[str, Llumlet]:
-        instance = Llumlet.from_args(
-                        instance_id,
-                        instance_args,
-                        placement_group,
-                        request_output_queue_type,
-                        backend_type,
-                        engine_args)
-
-        return instance

@@ -27,6 +27,7 @@ from vllm.worker.worker_base import WorkerBase
 
 from vllm.sequence import Logprob, SequenceOutput, ExecuteModelRequest
 from vllm.utils import GiB_bytes
+from vllm.model_executor.layers.sampler import SamplerOutput
 
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger

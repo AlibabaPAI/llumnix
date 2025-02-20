@@ -163,9 +163,9 @@ def generate_bench_command(ip_ports: str,
     return command
 
 def shutdown_llumnix_service_func():
-    subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
-    subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
-    subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
+    subprocess.run(r"ps aux | grep 'llumnix.entrypoints.vllm.api_server' | grep -v 'vim' | awk '{print $2}' | xargs kill -9", shell=True, check=False)
+    subprocess.run(r"ps aux | grep 'benchmark_serving.py' | grep -v 'vim' | awk '{print $2}' | xargs kill -9", shell=True, check=False)
+    subprocess.run(r"ps aux | grep 'llumnix.entrypoints.vllm.serve' | grep -v 'vim' | awk '{print $2}' | xargs kill -9", shell=True, check=False)
 
 @pytest.fixture
 def shutdown_llumnix_service():

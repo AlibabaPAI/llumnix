@@ -27,7 +27,7 @@ from vllm.worker.worker import Worker
 from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
 from vllm.worker.cache_engine import CacheEngine
 from vllm.utils import GiB_bytes
-from vllm.sequence import SequenceGroupMetadata, SequenceGroupMetadataDelta
+from vllm.sequence import SequenceGroupMetadata, SequenceGroupMetadataDelta, ExecuteModelRequest
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
@@ -157,22 +157,23 @@ class MigrationWorker(Worker):
         # the request_id is in self._seq_group_metadata_cache when the request is in running states.
         if request_id in self._seq_group_metadata_cache:
             src_metadata["_seq_group_metadata_cache"][request_id] = self._seq_group_metadata_cache[request_id]
-            del self._seq_group_metadata_cache[request_id]
+            self._seq_group_metadata_cache.pop(request_id)
 
         return src_metadata
 
     def _put_seq_group_metadata(self, src_metadata: Dict[str, Any]) -> None:
         if "_seq_group_metadata_cache" in src_metadata:
-            # Only support migrate one request at once currently.
-            if src_metadata["_seq_group_metadata_cache"].keys():
-                request_id = list(src_metadata["_seq_group_metadata_cache"].keys())[0]
-                self._seq_group_metadata_cache[request_id] = src_metadata["_seq_group_metadata_cache"][request_id]
+            self._seq_group_metadata_cache.update(src_metadata["_seq_group_metadata_cache"])
 
-    def _get_cached_seq_group_metadata(
+    def _execute_model_spmd(self, execute_model_req: ExecuteModelRequest, *args, **kwargs):
+        if execute_model_req is not None:
+            self._update_cached_seq_group_metadata(execute_model_req.seq_group_metadata_list)
+        return super()._execute_model_spmd(execute_model_req, *args, **kwargs)
+
+    def _update_cached_seq_group_metadata(
             self,
-            seq_group_metadata_list: List[Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]],
-            finished_request_ids: List[str]) -> List[SequenceGroupMetadata]:
-        # Change seq_data for cached seq_grou_metadata in worker (the src seq_id is different from the dst seq_id).
+            seq_group_metadata_list: List[Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]]) -> None:
+        # Update seq_data of cached seq_grou_metadata in worker (the src seq_id is different from the dst seq_id).
         for metadata_or_delta in seq_group_metadata_list:
             request_id = metadata_or_delta.request_id
             if request_id in self._seq_group_metadata_cache:
@@ -182,10 +183,7 @@ class MigrationWorker(Worker):
                     for new_seq_id, old_seq_id in zip(metadata_or_delta.seq_data_delta.keys(), \
                                                       seq_group_metadata.seq_data.keys()):
                         if new_seq_id != old_seq_id:
-                            seq_group_metadata.seq_data[new_seq_id] = seq_group_metadata.seq_data[old_seq_id]
-                            del seq_group_metadata.seq_data[old_seq_id]
-
-        return super()._get_cached_seq_group_metadata(seq_group_metadata_list, finished_request_ids)
+                            seq_group_metadata.seq_data[new_seq_id] = seq_group_metadata.seq_data.pop(old_seq_id)
 
     def rebuild_migration_backend(self, instance_rank: Dict[str, int], group_name: str) -> bool:
         self.migration_backend.destory_backend()

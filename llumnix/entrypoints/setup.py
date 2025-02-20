@@ -16,6 +16,7 @@ import sys
 import os
 import time
 from typing import Dict, Optional, List, Tuple
+import traceback
 import ray
 
 from llumnix.manager import Manager

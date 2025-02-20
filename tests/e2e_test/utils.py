@@ -163,9 +163,12 @@ def generate_bench_command(ip_ports: str,
     return command
 
 def shutdown_llumnix_service_func():
-    subprocess.run(r"ps aux | grep 'llumnix.entrypoints.vllm.api_server' | grep -v 'vim' | awk '{print $2}' | xargs kill -9", shell=True, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(r"ps aux | grep 'benchmark_serving.py' | grep -v 'vim' | awk '{print $2}' | xargs kill -9", shell=True, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(r"ps aux | grep 'llumnix.entrypoints.vllm.serve' | grep -v 'vim' | awk '{print $2}' | xargs kill -9", shell=True, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(r"ps aux | grep 'llumnix.entrypoints.vllm.api_server' | grep -v 'vim' | awk '{print $2}' | xargs kill -9",
+                   shell=True, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(r"ps aux | grep 'benchmark_serving.py' | grep -v 'vim' | awk '{print $2}' | xargs kill -9",
+                   shell=True, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(r"ps aux | grep 'llumnix.entrypoints.vllm.serve' | grep -v 'vim' | awk '{print $2}' | xargs kill -9",
+                   shell=True, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 @pytest.fixture
 def shutdown_llumnix_service():

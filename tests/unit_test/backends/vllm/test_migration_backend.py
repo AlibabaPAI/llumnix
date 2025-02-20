@@ -31,7 +31,7 @@ from .test_worker import create_worker
 class MockMigrationWorker(MigrationWorker):
     def __init__(self, *args, **kwargs):
         # Set 'VLLM_USE_RAY_SPMD_WORKER' to True and therefore, once is_last_stage of migrate_cache is True,
-        # send_worker_data of do_send will be True.
+        # send_worker_metadata of do_send will be True.
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
         super().__init__(*args, **kwargs)
 
@@ -44,17 +44,17 @@ class MockMigrationWorker(MigrationWorker):
         torch.cuda.synchronize()
         return self.gpu_cache[0]
 
-    def set_worker_data(self, request_id):
-        self._seq_group_metadata_cache[request_id] = "worker_data"
+    def set_worker_metadata(self, request_id):
+        self._seq_group_metadata_cache[request_id] = "worker_metadata"
 
-    def get_worker_data(self, request_id):
+    def get_worker_metadata(self, request_id):
         return self._seq_group_metadata_cache[request_id]
 
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("send_worker_data", [False, True])
-def test_migrate_cache(ray_env, backend, send_worker_data):
+@pytest.mark.parametrize("send_worker_metadata", [False, True])
+def test_migrate_cache(ray_env, backend, send_worker_metadata):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = InstanceArgs(migration_buffer_blocks=3, migration_num_layers=5).create_migration_config()
     migraiton_config.migration_backend = backend
@@ -110,9 +110,9 @@ def test_migrate_cache(ray_env, backend, send_worker_data):
     worker0_cache = ray.get(worker0.execute_method.remote('get_gpu_cache'))
 
     request_id = random_uuid()
-    if send_worker_data:
-        ray.get(worker0.execute_method.remote('set_worker_data', request_id=request_id))
-        worker0_data = ray.get(worker0.execute_method.remote('get_worker_data', request_id=request_id))
+    if send_worker_metadata:
+        ray.get(worker0.execute_method.remote('set_worker_metadata', request_id=request_id))
+        worker0_data = ray.get(worker0.execute_method.remote('get_worker_metadata', request_id=request_id))
 
     dst_blocks = list(range(num_gpu_blocks))
     random.shuffle(dst_blocks)
@@ -123,7 +123,7 @@ def test_migrate_cache(ray_env, backend, send_worker_data):
         src_blocks=list(src_to_dst.keys()),
         dst_blocks=list(src_to_dst.values()),
         request_id=request_id,
-        is_last_stage=send_worker_data))
+        is_last_stage=send_worker_metadata))
 
     worker1_cache = ray.get(worker1.execute_method.remote('get_gpu_cache'))
 
@@ -132,6 +132,6 @@ def test_migrate_cache(ray_env, backend, send_worker_data):
             assert torch.allclose(worker0_cache[layer_idx][0][src_idx], worker1_cache[layer_idx][0][dst_idx])
             assert torch.allclose(worker0_cache[layer_idx][1][src_idx], worker1_cache[layer_idx][1][dst_idx])
 
-    if send_worker_data:
-        worker1_data = ray.get(worker1.execute_method.remote('get_worker_data', request_id=request_id))
+    if send_worker_metadata:
+        worker1_data = ray.get(worker1.execute_method.remote('get_worker_metadata', request_id=request_id))
         assert worker0_data == worker1_data

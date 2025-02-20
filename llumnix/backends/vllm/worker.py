@@ -114,7 +114,7 @@ class MigrationWorker(Worker):
                                                                              worker_rank=self.rank,
                                                                              local_rank=self.local_rank,
                                                                              use_ray_spmd_worker=self.use_ray_spmd_worker,
-                                                                             worker_put_data_dst_callback=self.put_data_dst)
+                                                                             worker_put_metadata_callback=self._put_seq_group_metadata)
 
     def migrate_cache(self,
                       src_worker_handle_list: List["ray.actor.ActorHandle"],
@@ -145,28 +145,28 @@ class MigrationWorker(Worker):
     def do_recv(self, *args, **kwargs):
         return self.migration_backend.do_recv(*args, **kwargs)
 
-    def do_send(self, *args, request_id: str = None, send_worker_data: bool = False, **kwargs):
-        if not send_worker_data:
+    def do_send(self, *args, request_id: str = None, send_worker_metadata: bool = False, **kwargs):
+        if not send_worker_metadata:
             return self.migration_backend.do_send(*args, **kwargs)
-        return self.migration_backend.do_send(*args, **kwargs), self.get_data_src(request_id)
+        return self.migration_backend.do_send(*args, **kwargs), self._get_seq_group_metadata(request_id)
 
-    def get_data_src(self, request_id: str) -> Dict[str, Any]:
-        src_data = {
+    def _get_seq_group_metadata(self, request_id: str) -> Dict[str, Any]:
+        src_metadata = {
             "_seq_group_metadata_cache": {}
         }
         # the request_id is in self._seq_group_metadata_cache when the request is in running states.
         if request_id in self._seq_group_metadata_cache:
-            src_data["_seq_group_metadata_cache"][request_id] = self._seq_group_metadata_cache[request_id]
+            src_metadata["_seq_group_metadata_cache"][request_id] = self._seq_group_metadata_cache[request_id]
             del self._seq_group_metadata_cache[request_id]
 
-        return src_data
+        return src_metadata
 
-    def put_data_dst(self, src_data: Dict[str, Any]) -> None:
-        if "_seq_group_metadata_cache" in src_data:
+    def _put_seq_group_metadata(self, src_metadata: Dict[str, Any]) -> None:
+        if "_seq_group_metadata_cache" in src_metadata:
             # Only support migrate one request at once currently.
-            if src_data["_seq_group_metadata_cache"].keys():
-                request_id = list(src_data["_seq_group_metadata_cache"].keys())[0]
-                self._seq_group_metadata_cache[request_id] = src_data["_seq_group_metadata_cache"][request_id]
+            if src_metadata["_seq_group_metadata_cache"].keys():
+                request_id = list(src_metadata["_seq_group_metadata_cache"].keys())[0]
+                self._seq_group_metadata_cache[request_id] = src_metadata["_seq_group_metadata_cache"][request_id]
 
     def _get_cached_seq_group_metadata(
             self,

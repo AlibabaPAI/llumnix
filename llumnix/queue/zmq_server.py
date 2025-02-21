@@ -66,7 +66,8 @@ class ZmqServer:
                 self.socket.bind(rpc_path)
                 logger.info("QueueServer's socket bind to: {}".format(rpc_path))
                 break
-            except zmq.error.ZMQError as e:
+            # pylint: disable=broad-except
+            except Exception as e:
                 logger.warning("QueueServer's socket bind to {} failed, exception: {}".format(rpc_path, e))
                 if attempt < MAX_BIND_ADDRESS_RETRY_TIMES - 1:
                     logger.warning("{} already in use, sleep {}s, and retry bind to it again.".format(rpc_path, RETRY_BIND_ADDRESS_INTERVAL))

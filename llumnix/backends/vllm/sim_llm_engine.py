@@ -47,8 +47,9 @@ class BackendSimVLLM(BackendVLLM):
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           latency_mem=latency_mem)
-        self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
-                                 for _ in range(engine_args.pipeline_parallel_size)]
+        self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config,
+                             engine_args.pipeline_parallel_size, self.engine.async_callbacks[v_id])
+            for v_id in range(engine_args.pipeline_parallel_size)]
         for vid in range(engine_args.pipeline_parallel_size):
             self.engine.scheduler[vid].add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler

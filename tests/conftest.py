@@ -85,6 +85,12 @@ def cleanup_ray_env_func():
 
 @pytest.fixture
 def ray_env():
+    subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     ray.init(namespace="llumnix", ignore_reinit_error=True)
     yield
     cleanup_ray_env_func()

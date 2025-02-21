@@ -77,16 +77,8 @@ def cleanup_ray_env_func():
 
     time.sleep(1.0)
 
-    try:
-        # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
-        ray.shutdown()
-    # pylint: disable=bare-except
-    except:
-        pass
-
 @pytest.fixture
 def ray_env():
-    ray_start()
     ray.init(namespace="llumnix", ignore_reinit_error=True)
     yield
     cleanup_ray_env_func()

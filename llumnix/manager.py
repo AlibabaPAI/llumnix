@@ -757,7 +757,9 @@ class Manager:
         for instance_info in instance_infos:
             instance_id = instance_info.instance_id
             gpu_cache_usage = instance_info.gpu_cache_usage
-            should_log = (gpu_cache_usage > 0) or (gpu_cache_usage == 0 and not self.instance_last_logged_empty[instance_id])
+            should_log = (gpu_cache_usage > 0) or (gpu_cache_usage == 0 and \
+                                                   instance_id in self.instance_last_logged_empty and \
+                                                   not self.instance_last_logged_empty[instance_id])
             if should_log:
                 self.instance_last_logged_empty[instance_id] = (gpu_cache_usage == 0)
                 self.instance_info_csv.writerow([

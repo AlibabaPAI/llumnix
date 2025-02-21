@@ -35,7 +35,7 @@ def ray_start():
     for _ in range(5):
         subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
         subprocess.run(["ray", "start", "--head", "--port=6379"], check=False, stdout=subprocess.DEVNULL)
-        time.sleep(3.0)
+        time.sleep(5.0)
         result = subprocess.run(["ray", "status"], check=False, capture_output=True, text=True)
         if result.returncode == 0:
             return

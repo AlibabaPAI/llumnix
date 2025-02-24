@@ -15,6 +15,7 @@ from datetime import datetime
 import time
 import shutil
 import os
+import subprocess
 import ray
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary

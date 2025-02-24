@@ -44,14 +44,11 @@ def pytest_sessionstart(session):
 def cleanup_ray_env_func():
     try:
         actor_states = list_actors()
-        num_anonymous_actors = 0
         for actor_state in actor_states:
             try:
-                if actor_state['name']:
+                if actor_state['name'] and actor_state['ray_namespace']:
                     actor_handle = ray.get_actor(actor_state['name'], namespace=actor_state['ray_namespace'])
                     ray.kill(actor_handle)
-                else:
-                    num_anonymous_actors += 1
             # pylint: disable=bare-except
             except:
                 continue
@@ -77,7 +74,9 @@ def cleanup_ray_env_func():
 
     time.sleep(1.0)
 
-    if num_anonymous_actors > 0:
+    alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")])
+    if alive_actor_states:
+        print("There are still alive actors, alive_actor_states: {}".format(alive_actor_states))
         ray.shutdown()
 
 @pytest.fixture

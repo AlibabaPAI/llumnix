@@ -25,6 +25,21 @@ import pytest
 from llumnix.utils import random_uuid
 
 
+def ray_start():
+    for _ in range(5):
+        subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
+        subprocess.run(["ray", "start", "--head", "--port=6379"], check=False, stdout=subprocess.DEVNULL)
+        time.sleep(5.0)
+        result = subprocess.run(["ray", "status"], check=False, capture_output=True, text=True)
+        if result.returncode == 0:
+            return
+        print("Ray start failed, exception: {}".format(result.stderr.strip()))
+        time.sleep(3.0)
+    raise Exception("Ray start failed after 5 attempts.")
+
+def pytest_sessionstart(session):
+    ray_start()
+
 def cleanup_ray_env_func():
     try:
         actor_states = list_actors()

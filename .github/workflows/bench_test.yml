@@ -35,14 +35,10 @@ jobs:
       with:
         script: |
           try {
+            const fs = require('fs');
             const filePath = 'performance.txt';
             console.log(`Attempting to read file: ${filePath}`);
-            
-            // Check if the file exists
-            if (!fs.existsSync(filePath)) {
-              throw new Error(`File not found: ${filePath}`);
-            }
-            
+
             const commentBody = fs.readFileSync(filePath, 'utf8');
             console.log('File read successfully, attempting to create comment...');
             

@@ -19,39 +19,36 @@ import subprocess
 import ray
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
-from ray.util.placement_group import (
-    PlacementGroup,
-    placement_group_table,
-    remove_placement_group,
-)
-
+from ray.util.placement_group import PlacementGroup
+from ray.util.state import list_actors, list_placement_groups
 import pytest
 
 from llumnix.utils import random_uuid
 
 
+def ray_start():
+    for _ in range(5):
+        subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
+        subprocess.run(["ray", "start", "--head", "--port=6379"], check=False, stdout=subprocess.DEVNULL)
+        time.sleep(5.0)
+        result = subprocess.run(["ray", "status"], check=False, capture_output=True, text=True)
+        if result.returncode == 0:
+            return
+        print("Ray start failed, exception: {}".format(result.stderr.strip()))
+        time.sleep(3.0)
+    raise Exception("Ray start failed after 5 attempts.")
+
+def pytest_sessionstart(session):
+    ray_start()
+
 def cleanup_ray_env_func():
     try:
-        # list_placement_groups cannot take effects.
-        for placement_group_info in placement_group_table().values():
+        actor_states = list_actors()
+        for actor_state in actor_states:
             try:
-                pg = PlacementGroup(
-                    PlacementGroupID(hex_to_binary(placement_group_info["placement_group_id"]))
-                )
-                remove_placement_group(pg)
-            # pylint: disable=bare-except
-            except:
-                pass
-    # pylint: disable=bare-except
-    except:
-        pass
-
-    try:
-        named_actors = ray.util.list_named_actors(True)
-        for actor in named_actors:
-            try:
-                actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
-                ray.kill(actor_handle)
+                if actor_state['name'] and actor_state['ray_namespace']:
+                    actor_handle = ray.get_actor(actor_state['name'], namespace=actor_state['ray_namespace'])
+                    ray.kill(actor_handle)
             # pylint: disable=bare-except
             except:
                 continue
@@ -60,23 +57,37 @@ def cleanup_ray_env_func():
         pass
 
     try:
-        # Should to be placed after killing actors, otherwise it may occur some unexpected errors when re-init ray.
-        ray.shutdown()
+        # list_placement_groups cannot take effects.
+        pg_states = list_placement_groups()
+        for pg_state in pg_states:
+            try:
+                pg = PlacementGroup(
+                    PlacementGroupID(hex_to_binary(pg_state["placement_group_id"]))
+                )
+                ray.util.remove_placement_group(pg)
+            # pylint: disable=bare-except
+            except:
+                pass
     # pylint: disable=bare-except
     except:
         pass
 
+    time.sleep(1.0)
+
+    alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")])
+    if alive_actor_states:
+        print("There are still alive actors, alive_actor_states: {}".format(alive_actor_states))
+        try:
+            ray.shutdown()
+        # pylint: disable=bare-except
+        except:
+            pass
+
 @pytest.fixture
 def ray_env():
-    subprocess.run(["ray", "start", "--head", "--disable-usage-stats", "--port=6379"], check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(3.0)
     ray.init(namespace="llumnix", ignore_reinit_error=True)
     yield
     cleanup_ray_env_func()
-    time.sleep(1.0)
-    subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(3.0)
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

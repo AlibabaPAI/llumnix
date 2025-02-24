@@ -24,3 +24,31 @@ jobs:
       run: |
         python3 -m pip install --upgrade setuptools wheel
         python3 setup.py bdist_wheel --universal
+    - name: Create comment from file
+      if: ${{ github.event_name != 'push' }}
+      uses: actions/github-script@v7
+      with:
+        script: |
+          try {
+            const filePath = 'test.txt';
+            console.log(`Attempting to read file: ${filePath}`);
+            
+            // Check if the file exists
+            if (!fs.existsSync(filePath)) {
+              throw new Error(`File not found: ${filePath}`);
+            }
+            
+            const commentBody = fs.readFileSync(filePath, 'utf8');
+            console.log('File read successfully, attempting to create comment...');
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+            
+            console.log('Comment created successfully.');
+          } catch (error) {
+            console.log('Failed to create comment:', error.message);
+          }

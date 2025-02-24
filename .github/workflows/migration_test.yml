@@ -34,12 +34,16 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          const fs = require('fs');
-          const filePath = 'performance.txt';
-          const commentBody = fs.readFileSync(filePath, 'utf8');
-          await github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: commentBody
-          });
+          try {
+            const fs = require('fs');
+            const filePath = 'performance.txt';
+            const commentBody = fs.readFileSync(filePath, 'utf8');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+          } catch (error) {
+            console.log('Failed to create comment:', error.message);
+          }

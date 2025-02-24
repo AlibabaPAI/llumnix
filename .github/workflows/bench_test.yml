@@ -35,7 +35,7 @@ jobs:
       with:
         script: |
           try {
-            const filePath = 'test.txt';
+            const filePath = 'performance.txt';
             console.log(`Attempting to read file: ${filePath}`);
             
             // Check if the file exists

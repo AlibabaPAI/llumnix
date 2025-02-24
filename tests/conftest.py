@@ -17,15 +17,10 @@ import shutil
 import os
 import subprocess
 import ray
-from ray.util.state import list_actors
+from ray.util.state import list_actors, list_placement_groups
+from ray.util.placement_group import PlacementGroup
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
-from ray.util.placement_group import (
-    PlacementGroup,
-    placement_group_table,
-    remove_placement_group,
-)
-
 import pytest
 
 from llumnix.utils import random_uuid
@@ -49,10 +44,14 @@ def pytest_sessionstart(session):
 def cleanup_ray_env_func():
     try:
         actor_states = list_actors()
+        num_anonymous_actors = 0
         for actor_state in actor_states:
             try:
-                actor_handle = ray.get_actor(actor_state['name'], namespace=actor_state['ray_namespace'])
-                ray.kill(actor_handle)
+                if actor_state['name']:
+                    actor_handle = ray.get_actor(actor_state['name'], namespace=actor_state['ray_namespace'])
+                    ray.kill(actor_handle)
+                else:
+                    num_anonymous_actors += 1
             # pylint: disable=bare-except
             except:
                 continue
@@ -62,12 +61,13 @@ def cleanup_ray_env_func():
 
     try:
         # list_placement_groups cannot take effects.
-        for placement_group_info in placement_group_table().values():
+        pg_states = list_placement_groups()
+        for pg_state in pg_states:
             try:
                 pg = PlacementGroup(
-                    PlacementGroupID(hex_to_binary(placement_group_info["placement_group_id"]))
+                    PlacementGroupID(hex_to_binary(pg_state["placement_group_id"]))
                 )
-                remove_placement_group(pg)
+                ray.util.remove_placement_group(pg)
             # pylint: disable=bare-except
             except:
                 pass
@@ -76,6 +76,9 @@ def cleanup_ray_env_func():
         pass
 
     time.sleep(1.0)
+
+    if num_anonymous_actors > 0:
+        ray.shutdown()
 
 @pytest.fixture
 def ray_env():

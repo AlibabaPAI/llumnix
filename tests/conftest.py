@@ -17,29 +17,14 @@ import shutil
 import os
 import subprocess
 import ray
-from ray.util.state import list_actors, list_placement_groups
-from ray.util.placement_group import PlacementGroup
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
+from ray.util.placement_group import PlacementGroup
+from ray.util.state import list_actors, list_placement_groups
 import pytest
 
 from llumnix.utils import random_uuid
 
-
-def ray_start():
-    for _ in range(5):
-        subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
-        subprocess.run(["ray", "start", "--head", "--port=6379"], check=False, stdout=subprocess.DEVNULL)
-        time.sleep(5.0)
-        result = subprocess.run(["ray", "status"], check=False, capture_output=True, text=True)
-        if result.returncode == 0:
-            return
-        print("Ray start failed, exception: {}".format(result.stderr.strip()))
-        time.sleep(3.0)
-    raise Exception("Ray start failed after 5 attempts.")
-
-def pytest_sessionstart(session):
-    ray_start()
 
 def cleanup_ray_env_func():
     try:
@@ -77,7 +62,11 @@ def cleanup_ray_env_func():
     alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")])
     if alive_actor_states:
         print("There are still alive actors, alive_actor_states: {}".format(alive_actor_states))
-        ray.shutdown()
+        try:
+            ray.shutdown()
+        # pylint: disable=bare-except
+        except:
+            pass
 
 @pytest.fixture
 def ray_env():

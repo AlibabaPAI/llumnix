@@ -1,4 +1,5 @@
 import copy
+import math
 import time
 import asyncio
 from typing import Dict
@@ -87,7 +88,8 @@ class LlumnixClientVLLM:
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
-                await self.instances[instance_id].generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
+                expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
+                await self.instances[instance_id].generate.remote(request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs)
                 logger.warning("Manager is unavailable temporarily, dispatch request {} to instance {}".format(
                     request_id, instance_id))
             else:

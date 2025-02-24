@@ -32,7 +32,8 @@ def generate_launch_command(result_filename: str = "",
                             request_migration_policy: str = 'SR',
                             max_num_batched_tokens: int = 16000,
                             enable_pd_disagg: bool = False,
-                            instance_type: str = "no_constraints"):
+                            instance_type: str = "no_constraints",
+                            tensor_parallel_size: int = 1):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -51,7 +52,7 @@ def generate_launch_command(result_filename: str = "",
         f"--request-migration-policy {request_migration_policy} "
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
-        f"--tensor-parallel-size 1 "
+        f"--tensor-parallel-size {tensor_parallel_size} "
         f"--request-output-queue-port {1234+port} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"

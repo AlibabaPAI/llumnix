@@ -37,19 +37,13 @@ jobs:
           try {
             const fs = require('fs');
             const filePath = 'performance.txt';
-            console.log(`Attempting to read file: ${filePath}`);
-
             const commentBody = fs.readFileSync(filePath, 'utf8');
-            console.log('File read successfully, attempting to create comment...');
-            
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: commentBody
             });
-            
-            console.log('Comment created successfully.');
           } catch (error) {
             console.log('Failed to create comment:', error.message);
           }

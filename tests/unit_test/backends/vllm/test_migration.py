@@ -27,7 +27,8 @@ from llumnix.backends.utils import BackendType
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import initialize_placement_group, get_placement_group_name
+from llumnix.utils import (initialize_placement_group, get_placement_group_name,
+                           remove_placement_group, kill_instance)
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -44,8 +45,8 @@ TEST_PROMPTS = [
     "Swahili: 'The early bird catches the worm.'\n"
 ]
 
-def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_args):
-    placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=1, detached=True)
+def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_args, num_gpus=1):
+    placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=num_gpus, detached=True)
     llumlet = Llumlet.from_args(
                 instance_id=instance_id,
                 instance_args=instance_args,
@@ -69,9 +70,9 @@ class MockLlumlet(Llumlet):
 
 @ray.remote(num_cpus=1)
 class MockLlumletDoNotSchedule(Llumlet):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, num_gpus=1, **kwargs):
         instance_id = kwargs["instance_id"]
-        placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=1, detached=True)
+        placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=num_gpus, detached=True)
         kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop
@@ -104,10 +105,14 @@ class MockLlumletDoNotSchedule(Llumlet):
 
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
+@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.asyncio
-async def test_migration_correctness(ray_env, migration_backend, migration_request_status):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True)
-    id_rank_map = {"0": 0, "1": 1, "2": 2}
+async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size):
+    if migration_backend == 'nccl' and tensor_parallel_size == 2:
+        pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
+
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size)
+    id_rank_map = {"0": 0, "1": 1}
     if migration_request_status == 'running':
         request_migration_policy = "SR"
     elif migration_request_status == 'waiting':
@@ -121,38 +126,25 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     que, server_info = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
-    llumlet_0: Llumlet = init_llumlet(request_output_queue_type, "0", instance_args, engine_args)
-    llumlet_1: Llumlet = init_llumlet(request_output_queue_type, "1", instance_args, engine_args)
-
-    llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
-        name='instance_2',
-        namespace='llumnix').remote(
-            instance_id="2",
-            instance_args=instance_args,
-            request_output_queue_type=request_output_queue_type,
-            backend_type=BackendType.VLLM,
-            engine_args=engine_args,
-        )
+    llumlet_0: Llumlet = init_llumlet(request_output_queue_type, "0", instance_args, engine_args, num_gpus=tensor_parallel_size)
+    llumlet_1: Llumlet = init_llumlet(request_output_queue_type, "1", instance_args, engine_args, num_gpus=tensor_parallel_size)
 
     while True:
-        res = ray.get([llumlet_0.is_ready.remote(), llumlet_1.is_ready.remote(), llumlet_2.is_ready.remote()])
-        print("--------", res)
+        res = ray.get([llumlet_0.is_ready.remote(), llumlet_1.is_ready.remote()])
         if all(res):
             break
 
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
-             llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
-             llumlet_2.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
+             llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
     # empty instance migrate out
     res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
     assert not res
-    res = ray.get(llumlet_2.migrate_out.remote("instance_1"))
-    assert not res
 
+    sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
+    origin_outputs = []
     # running without migration
-    async def test_correctness(prompt):
-        sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
+    async def gen_origin_outputs(prompt):
         request_id0 = random_uuid()
         llumlet_0.generate.remote(request_id0, server_info, math.inf, prompt, sampling_params)
         request_output_queue = que
@@ -163,7 +155,9 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
             for request_output in request_outputs:
                 origin_output = request_output.outputs[0]
                 finished = request_output.finished
+        origin_outputs.append(origin_output)
 
+    async def test_correctness(prompt, origin_output):
         if migration_request_status == 'running':
             request_id1 = random_uuid()
             ray.get(llumlet_0.generate.remote(request_id1, server_info, math.inf, prompt, sampling_params))
@@ -175,7 +169,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
             # migrate request
             res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
             assert len(res) == 1
-        elif migration_request_status == 'waiting':
+        else: # migration_request_status == 'waiting'
             request_id1 = random_uuid()
             ray.get(llumlet_2.generate.remote(request_id1, server_info, math.inf, prompt, sampling_params))
             # wait try schedule done
@@ -200,7 +194,34 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         assert output.cumulative_logprob == origin_output.cumulative_logprob
 
     for prompt in TEST_PROMPTS:
-        await test_correctness(prompt)
+        await gen_origin_outputs(prompt)
+
+    if migration_request_status == 'waiting':
+        kill_instance("0")
+        remove_placement_group("0")
+        llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
+            name='instance_2',
+            namespace='llumnix').remote(
+                instance_id="2",
+                instance_args=instance_args,
+                request_output_queue_type=request_output_queue_type,
+                backend_type=BackendType.VLLM,
+                engine_args=engine_args,
+                num_gpus=tensor_parallel_size
+            )
+        while True:
+            res = ray.get(llumlet_2.is_ready.remote())
+            if res:
+                break
+        id_rank_map = {"2": 0, "1": 1}
+        ray.get([llumlet_2.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
+                    llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
+        res = ray.get(llumlet_2.migrate_out.remote("instance_1"))
+        assert not res
+
+    for i, prompt in enumerate(TEST_PROMPTS):
+        origin_output = origin_outputs[i]
+        await test_correctness(prompt, origin_output)
     que.cleanup()
 
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])

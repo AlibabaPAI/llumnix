@@ -88,3 +88,7 @@ class SimGPUExecutor(RayGPUExecutor):
                 output = CompletionSequenceGroupOutput(samples, None)
                 sampler_outputs.append(output)
         return [SamplerOutput(outputs=sampler_outputs)]
+
+    async def send_blocks(self, blocks_len) -> None:
+        migration_latency = (self.cache_block_size * blocks_len) / self.migration_bandwidth
+        await asyncio.sleep(migration_latency)

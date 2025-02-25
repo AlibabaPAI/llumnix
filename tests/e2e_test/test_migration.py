@@ -94,18 +94,22 @@ def get_instance_num_blocks():
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("migrated_request_status", ['running', 'waiting'])
-async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migrated_request_status):
-    if migrated_request_status == 'waiting' and migration_backend != 'rayrpc':
-        pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
+@pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
+@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
+async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migration_request_status, tensor_parallel_size):
+    if migration_request_status == 'waiting' and migration_backend != 'gloo':
+        pytest.skip("When the migrated request status is waiting, only test the gloo migration backend.")
+    if tensor_parallel_size == 2 and migration_backend != 'gloo':
+        pytest.skip("When the tensor parallel size is 2, only test the gloo migration backend.")
 
-    request_migration_policy = 'SR' if migrated_request_status == 'running' else 'FCW'
+    request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
     base_port = 37037
     ip_ports = []
     instance_output_logs = []
     device_count = torch.cuda.device_count()
-    for i in range(device_count):
+    num_instances = device_count // tensor_parallel_size
+    for i in range(num_instances):
         port = base_port + i
         ip_ports.append(f"{ip}:{base_port+i}")
         output_log = f"{base_port+i}.out"
@@ -117,7 +121,8 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
                                                  model=model,
                                                  dispatch_policy="flood",
                                                  migration_backend=migration_backend,
-                                                 request_migration_policy=request_migration_policy)
+                                                 request_migration_policy=request_migration_policy,
+                                                 tensor_parallel_size=tensor_parallel_size)
         subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
@@ -130,7 +135,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         return process
 
     tasks = []
-    for i in range(device_count // 2):
+    for i in range(num_instances // 2):
         bench_command = generate_bench_command(
             ip_ports=f"{ip}:{base_port + i}",
             model=model,
@@ -162,7 +167,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
 
     assert instance_num_blocks_list_before_bench == instance_num_blocks_list_after_bench
 
-    if migrated_request_status == 'running':
+    if migration_request_status == 'running' and tensor_parallel_size == 1:
         average_speed = parse_instance_log_file(instance_output_logs)
         sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0])*1024 if 'GB' in x else float(x.split()[0]))
         data = [

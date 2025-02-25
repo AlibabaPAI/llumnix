@@ -67,8 +67,8 @@ def parse_log_file():
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
-@pytest.mark.parametrize("enable_pd_disagg", [True, False])
-@pytest.mark.parametrize("enable_simulator", [True, False])
+@pytest.mark.parametrize("enable_pd_disagg", [False, True])
+@pytest.mark.parametrize("enable_simulator", [False, True])
 async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg, enable_simulator):
     if enable_simulator and enable_pd_disagg:
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")

@@ -151,6 +151,8 @@ class ProfilingDatabase:
         """Extract the profiling results from a row of the profiling CSV file."""
         # assert pp==1
         profiling_data = row["profiling_data"].strip('"()"').split(",")
+        if profiling_data[0].strip() == '' or profiling_data[1].strip() == 'None' or profiling_data[2] == '0' or profiling_data[3] == '0':
+            return None, None, None, None
         inference_type = RequestInferenceType.PREFILL if profiling_data[0] == "'prefill'" else RequestInferenceType.DECODE
         batch_size = _pad_to_alignment(int(profiling_data[1]), 8)
         tot_seq_len =_pad_to_alignment(int(profiling_data[2]), 8)
@@ -166,6 +168,8 @@ class ProfilingDatabase:
             self.results[model] = ProfilingResult(model, {})
         for _, row in df.iterrows():
             stage_latencies, inference_type, batch_size, tot_seq_len = self._extract_data(row)
+            if not stage_latencies:
+                continue
             self.results[model].add_latency_result(parallel_config, inference_type, batch_size, tot_seq_len, stage_latencies)
 
     def materialize(self):

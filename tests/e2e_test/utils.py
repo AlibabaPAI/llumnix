@@ -33,7 +33,8 @@ def generate_launch_command(result_filename: str = "",
                             max_num_batched_tokens: int = 16000,
                             enable_pd_disagg: bool = False,
                             instance_type: str = "no_constraints",
-                            tensor_parallel_size: int = 1):
+                            tensor_parallel_size: int = 1,
+                            enable_simulator: bool = False):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -58,6 +59,8 @@ def generate_launch_command(result_filename: str = "",
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"--instance-type {instance_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
+        f"{'--simulator-mode ' if enable_simulator else ''}"
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command
@@ -69,12 +72,13 @@ def generate_serve_command(result_filename: str = "",
                            migration_backend = "gloo",
                            model = "facebook/opt-125m",
                            max_model_len: int = 4096,
-                           log_instance_info: bool = True,
+                           log_instance_info: bool = False,
                            log_request_timestamps: bool = True,
                            request_migration_policy: str = 'SR',
                            max_num_batched_tokens: int = 16000,
                            enable_pd_disagg: bool = False,
-                           pd_ratio: str = "1:1"):
+                           pd_ratio: str = "1:1",
+                           enable_simulator: bool = False):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "
@@ -98,6 +102,9 @@ def generate_serve_command(result_filename: str = "",
         f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
+        f"{'--simulator-mode ' if enable_simulator else ''}"
+        f"--max-instances 4 "
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command

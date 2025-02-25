@@ -55,7 +55,7 @@ class Llumlet:
             logger.info("Llumlet(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
                             self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
             logger.info("Llumlet backend type: {}".format(backend_type))
-            self.instance_args = instance_args
+            self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)
             self.instance_load_calculator = InstanceLoadCalculator(
                 dispatch_load_metric=instance_args.dispatch_load_metric,

@@ -77,7 +77,9 @@ class SimGPUExecutor(RayGPUExecutor):
             decode_meta_data = (decode_bs, decode_seq_len)
             latency += self.latency_mem.decode_latency[decode_meta_data][0] if decode_meta_data in self.latency_mem.decode_latency \
                        else model_decode((decode_bs, decode_seq_len), *self.latency_mem.decode_model_params)
+
         await asyncio.sleep(latency/1000)
+
         sampler_outputs = []
         for meta_data in execute_model_req.seq_group_metadata_list:
             samples = []
@@ -87,6 +89,7 @@ class SimGPUExecutor(RayGPUExecutor):
             if samples:
                 output = CompletionSequenceGroupOutput(samples, None)
                 sampler_outputs.append(output)
+
         return [SamplerOutput(outputs=sampler_outputs)]
 
     async def send_blocks(self, blocks_len) -> None:

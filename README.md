@@ -48,6 +48,8 @@ Llumnix is easy to use with:
 
 ## Getting Started
 
+Llumnix provides two entrypoints `api_server` and `serve` for deploying Llumnix. The `api_server` entrypoint provides a compatible deployment method with the default single-instance vLLM. By contrast, using the `serve` entrypoint, user can easily deploy Llumnix via Ray job submission API.
+
 If you are already utilizing vLLM for multi-instance LLM serving deployments, simply replace the vLLM serving deployment command `python -m entrypoints.vllm.api_server ...` for each instance with the command provided below:
 ```
 python -m llumnix.entrypoints.vllm.api_server \
@@ -56,6 +58,9 @@ python -m llumnix.entrypoints.vllm.api_server \
     ...
 ```
 During the serving deployment execution, Llumnix will automatically configure itself and serve as the request scheduling layer on top of the multiple vLLM engine instances.
+
+For deploying Llumnix using the `serve` module, please refer to [QuickStart](./docs/Quickstart.md).
+
 
 Visit our [documentation](./docs/) to get started:
 - [Quick Start](./docs/Quickstart.md)

@@ -45,8 +45,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--simulator-mode]
             [--profiling-result-file-path PROFILING_RESULT_FILE_PATH]
             [--gpu-type GPU_TYPE]
-            [--migration-backend {gloo,nccl,rayrpc,grpc,kvtransfer}]
+            [--migration-backend {gloo,rayrpc,grpc,kvtransfer}]
             [--migration-buffer-blocks MIGRATION_BUFFER_BLOCKS]
+            [--migration-num-buffers MIGRATION_NUM_BUFFERS]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--migration-backend-transfer-type {cuda_ipc,rdma,}]
@@ -219,8 +220,12 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: "gloo"
 
 `--migration-buffer-blocks`
-- Number of buffer blocks in migration.
+- Number of buffer blocks in each migration buffer.
 - Default: 512
+
+`--migration-num-buffers`
+- Number of the buffers in migration backend for migration.
+- Default: 2
 
 `--migration-num-layers`
 - number of kv-cache layers to transfer in each round during migration

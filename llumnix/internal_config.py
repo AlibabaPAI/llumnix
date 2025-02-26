@@ -47,6 +47,7 @@ class MigrationConfig:
             request_migration_policy: str,
             migration_backend: str,
             migration_buffer_blocks: int,
+            migration_num_buffers: int,
             migration_num_layers: int,
             migration_last_stage_max_blocks: int,
             migration_max_stages: int,
@@ -59,6 +60,7 @@ class MigrationConfig:
         self.migration_backend = migration_backend
         self.migration_backend_transfer_type = migration_backend_transfer_type
         self.migration_num_layers = migration_num_layers
+        self.migration_num_buffers = migration_num_buffers
         self.migration_buffer_blocks = migration_buffer_blocks
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages

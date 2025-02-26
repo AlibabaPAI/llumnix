@@ -322,6 +322,7 @@ class InstanceArgs:
 
     migration_backend: str = None
     migration_buffer_blocks: int = None
+    migration_num_buffers: int = None
     migration_num_layers: int = None
     migration_backend_init_timeout: float = None
     migration_backend_transfer_type: str = None
@@ -380,10 +381,14 @@ class InstanceArgs:
             assert args.instance_type in ['prefill', 'decode'], \
                 "instance_type should be prefill or decode if enable_pd_disagg is set."
 
+        assert args.migration_backend != 'nccl', 'NCCL has been temporarily deprecated due to its incompatibility with \
+            concurrent migrations in Llumnix.'
+
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,
                                            self.migration_buffer_blocks,
+                                           self.migration_num_buffers,
                                            self.migration_num_layers,
                                            self.migration_last_stage_max_blocks,
                                            self.migration_max_stages,
@@ -436,12 +441,15 @@ class InstanceArgs:
                             '* "FCWSR" migrate the waiting request first come and running request shortest.\n')
         parser.add_argument('--migration-backend',
                             type=str,
-                            choices=['gloo','nccl','rayrpc','grpc','kvtransfer'],
+                            choices=['gloo', 'rayrpc', 'grpc', 'kvtransfer'],
                             help='communication backend of migration, [gloo, rayrpc, nccl] are available for vllm \
                                 and [grpc, kvtransfer] are available for bladellm')
         parser.add_argument('--migration-buffer-blocks',
                             type=int,
                             help='number of buffer blocks in migration')
+        parser.add_argument('--migration-num-buffers',
+                            type=int,
+                            help='number of the buffers in migration backend for migration')
         parser.add_argument('--migration-num-layers',
                             type=int,
                             help='number of kv-cache layers to transfer in each round during migration')

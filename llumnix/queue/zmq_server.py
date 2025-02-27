@@ -13,6 +13,7 @@
 
 import asyncio
 import time
+import traceback
 from typing import (Coroutine, Any)
 from typing_extensions import Never
 
@@ -21,12 +22,12 @@ import zmq.asyncio
 import zmq.error
 import cloudpickle
 
+from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
                                      RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest,
                                      get_open_zmq_ipc_path)
 from llumnix.logging.logger import init_logger
-from llumnix.constants import (RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RETRY_BIND_ADDRESS_INTERVAL,
-                               MAX_BIND_ADDRESS_RETRY_TIMES)
+from llumnix.constants import (RETRY_BIND_ADDRESS_INTERVAL, MAX_BIND_ADDRESS_RETRY_TIMES)
 from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
@@ -39,41 +40,25 @@ class Full(Exception):
     pass
 
 
-class ZmqServer:
+class ZmqServer(QueueServerBase):
     def __init__(self, ip: str, port: int, maxsize=0):
-        rpc_path = get_open_zmq_ipc_path(ip, port)
-
-        self.context = zmq.asyncio.Context()
-
-        # Maximum number of sockets that can be opened (typically 65536).
-        # ZMQ_SOCKET_LIMIT (http://api.zeromq.org/4-2:zmq-ctx-get)
-        socket_limit = self.context.get(zmq.constants.SOCKET_LIMIT)
-        if socket_limit < RPC_SOCKET_LIMIT_CUTOFF:
-            raise ValueError(
-                f"Found zmq.constants.SOCKET_LIMIT={socket_limit}, which caps "
-                "the number of concurrent requests Llumnix can process.")
-
-        # We only have 1 ipc connection that uses unix sockets, so
-        # safe to set MAX_SOCKETS to the zmq SOCKET_LIMIT (i.e. will
-        # not run into ulimit issues)
-        self.context.set(zmq.constants.MAX_SOCKETS, socket_limit)
-
-        self.socket = self.context.socket(zmq.constants.ROUTER)
-        self.socket.set_hwm(RPC_ZMQ_HWM)
-
+        self.context: zmq.asyncio.Context = zmq.asyncio.Context(8)
+        self.socket = self.context.socket(zmq.ROUTER)
+        self._stop_event = asyncio.Event()
+        endpoint = get_open_zmq_ipc_path(ip, port)
         for attempt in range(MAX_BIND_ADDRESS_RETRY_TIMES):
             try:
-                self.socket.bind(rpc_path)
-                logger.info("QueueServer's socket bind to: {}".format(rpc_path))
+                self.socket.bind(endpoint)
+                logger.info("QueueServer's socket bind to: {}".format(endpoint))
                 break
             # pylint: disable=broad-except
             except Exception as e:
-                logger.warning("QueueServer's socket bind to {} failed, exception: {}".format(rpc_path, e))
+                logger.warning("QueueServer's socket bind to {} failed, exception: {}".format(endpoint, e))
                 if attempt < MAX_BIND_ADDRESS_RETRY_TIMES - 1:
-                    logger.warning("{} already in use, sleep {}s, and retry bind to it again.".format(rpc_path, RETRY_BIND_ADDRESS_INTERVAL))
+                    logger.warning("{} already in use, sleep {}s, and retry bind to it again.".format(endpoint, RETRY_BIND_ADDRESS_INTERVAL))
                     time.sleep(RETRY_BIND_ADDRESS_INTERVAL)
                 else:
-                    logger.error("{} still in use after {} times retries.".format(rpc_path, MAX_BIND_ADDRESS_RETRY_TIMES))
+                    logger.error("{} still in use after {} times retries.".format(endpoint, MAX_BIND_ADDRESS_RETRY_TIMES))
                     raise
 
         self.maxsize = maxsize
@@ -127,15 +112,15 @@ class ZmqServer:
             )
         return [self.queue.get_nowait() for _ in range(num_items)]
 
-    def _make_handler_coro(self, identity,
+    async def _make_handler_coro(self, identity,
                            message) -> Coroutine[Any, Any, Never]:
         request = cloudpickle.loads(message)
         if request == RPCUtilityRequest.IS_SERVER_READY:
-            return self._is_server_ready(identity)
+            return await self._is_server_ready(identity)
         if isinstance(request, RPCPutNoWaitQueueRequest):
-            return self._put_nowait(identity, request)
+            return await self._put_nowait(identity, request)
         if isinstance(request, RPCPutNoWaitBatchQueueRequest):
-            return self._put_nowait_batch(identity, request)
+            return await self._put_nowait_batch(identity, request)
 
         raise ValueError(f"Unknown RPCRequest type: {request}")
 
@@ -166,6 +151,15 @@ class ZmqServer:
             await self.socket.send_multipart([identity, cloudpickle.dumps(e)])
 
     async def run_server_loop(self):
+        # while not self._stop_event.is_set():
+        #     try:
+        #         identity, message = await self.socket.recv_multipart()
+        #     except Exception:
+        #         logger.error('Failed to receive message from zmq clent.')
+        #         logger.error(traceback.format_exc())
+        #         continue
+        #     await self._make_handler_coro(identity, message)
+        
         running_tasks = set()
         while True:
             identity, message = await self.socket.recv_multipart()

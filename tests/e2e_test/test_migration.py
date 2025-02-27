@@ -97,17 +97,17 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
-@pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
+@pytest.mark.parametrize("use_ray_spmd_worker", [False, True])
 async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migration_request_status,
                                    tensor_parallel_size, use_ray_spmd_worker):
     if migration_request_status == 'waiting' and migration_backend != 'gloo':
         pytest.skip("When the migrated request status is waiting, only test the gloo migration backend.")
     if tensor_parallel_size == 2 and migration_backend != 'gloo':
         pytest.skip("When the tensor parallel size is 2, only test the gloo migration backend.")
-
+    if use_ray_spmd_worker and migration_backend in ['gloo', 'nccl']:
+        pytest.skip("When use_ray_spmd_worker is True, only test the rayrpc migration backend.")
+    
     if use_ray_spmd_worker:
-        if migration_backend in ['gloo', 'nccl']:
-            pytest.skip("When use_ray_spmd_worker is True, only test the rayrpc migration backend.")
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
         os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "1"
     else:

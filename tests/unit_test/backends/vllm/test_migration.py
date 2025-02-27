@@ -17,6 +17,7 @@ import os
 from unittest.mock import MagicMock
 import pytest
 import ray
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -69,11 +70,10 @@ class MockLlumlet(Llumlet):
         self.backend_engine = MockBackendVLLM()
 
 
-@ray.remote(num_cpus=1, num_gpus=0.5)
+@ray.remote
 class MockLlumletDoNotSchedule(Llumlet):
-    def __init__(self, *args, num_gpus=1, **kwargs):
+    def __init__(self, placement_group, *args, **kwargs):
         instance_id = kwargs["instance_id"]
-        placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=num_gpus, detached=True)
         kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop
@@ -111,6 +111,8 @@ class MockLlumletDoNotSchedule(Llumlet):
 async def test_migration_correctness(migration_backend, migration_request_status, tensor_parallel_size, use_ray_spmd_worker):
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
+    if use_ray_spmd_worker and tensor_parallel_size == 2:
+        pytest.skip("When using ray spmd worker, ray will raise RayCgraphCapacityExceeded exeception when tensor parallelism is enabled.")
 
     if use_ray_spmd_worker:
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
@@ -211,15 +213,27 @@ async def test_migration_correctness(migration_backend, migration_request_status
     if migration_request_status == 'waiting':
         kill_instance("0")
         remove_placement_group("0")
+        if use_ray_spmd_worker:
+            num_gpus = 0.5
+        else:
+            num_gpus = 0
+        placement_group = initialize_placement_group(get_placement_group_name("2"), num_cpus=3, num_gpus=tensor_parallel_size, detached=True)
         llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
+            num_cpus=1,
+            num_gpus=num_gpus,
             name='instance_2',
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_bundle_index=0,
+                placement_group_capture_child_tasks=True
+            ),
             namespace='llumnix').remote(
                 instance_id="2",
                 instance_args=instance_args,
                 request_output_queue_type=request_output_queue_type,
                 backend_type=BackendType.VLLM,
                 engine_args=engine_args,
-                num_gpus=tensor_parallel_size
+                placement_group=placement_group
             )
         while True:
             res = ray.get(llumlet_2.is_ready.remote())

@@ -15,10 +15,11 @@ import asyncio
 import traceback
 from typing import List, Union, Iterable
 import time
-
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
+
+from vllm import envs as vllm_envs
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
@@ -96,12 +97,18 @@ class Llumlet:
                   backend_type: BackendType,
                   engine_args):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
-                f'unimplemented backend {backend_type}'
-            num_gpus = 0
-            if backend_type == backend_type.BLADELLM:
-                world_size = get_engine_world_size(engine_args, backend_type)
-                num_gpus = world_size
+            assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
+                f'unimplemented backend {BackendType}'
+            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup when use_ray_spmd_worker.
+            if backend_type == BackendType.VLLM:
+                if vllm_envs.VLLM_USE_RAY_SPMD_WORKER:
+                    num_gpus = 0.5
+                else:
+                    num_gpus = 0
+            elif backend_type == BackendType.BLADELLM:
+                num_gpus = get_engine_world_size(engine_args, backend_type)
+            else: # backend_type == BackendType.SIM_VLLM:
+                num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,
                                        num_gpus=num_gpus,
                                        name=get_instance_name(instance_id),

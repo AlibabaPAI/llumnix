@@ -273,7 +273,12 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
+    async def send_blocks(self,
+                          dst_ray_actor: "ray.actor.ActorHandle",
+                          src_blocks: List[int],
+                          dst_blocks: List[int],
+                          request_id: str,
+                          is_last_stage: bool):
         """
         Sends cache blocks from the source instance to the destination instance.
 
@@ -289,6 +294,8 @@ class BackendInterface(ABC):
                              cache that need to be sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's
                              cache where the incoming blocks should be stored.
+            request_id: Request ID.
+            is_last_stage: A boolean indicating whether this is the last stage of the migration.
         """
         raise NotImplementedError
 

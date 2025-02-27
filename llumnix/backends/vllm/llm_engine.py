@@ -371,12 +371,19 @@ class BackendVLLM(BackendInterface):
             backend_request.reset_status()
             self.add_running_request(backend_request)
 
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    async def send_blocks(self,
+                          dst_ray_actor: "ray.actor.ActorHandle",
+                          src_blocks: List[int],
+                          dst_blocks: List[int],
+                          request_id: str,
+                          is_last_stage: bool) -> None:
         await dst_ray_actor.execute_engine_method.remote("_run_workers",
                                                          "migrate_cache",
+                                                         src_worker_handle_list=self.worker_handle_list,
                                                          dst_blocks=dst_blocks,
                                                          src_blocks=src_blocks,
-                                                         src_worker_handle_list=self.worker_handle_list)
+                                                         request_id=request_id,
+                                                         is_last_stage=is_last_stage)
 
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access

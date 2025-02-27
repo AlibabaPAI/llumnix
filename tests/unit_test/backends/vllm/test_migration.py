@@ -73,7 +73,6 @@ class MockLlumlet(Llumlet):
 @ray.remote
 class MockLlumletDoNotSchedule(Llumlet):
     def __init__(self, placement_group, *args, **kwargs):
-        instance_id = kwargs["instance_id"]
         kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop

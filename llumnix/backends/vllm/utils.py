@@ -57,9 +57,6 @@ def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs, i
         logger.warning("Llumnix does not support TP or PP when the migration backend is nccl, change migration backend to gloo.")
         intance_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
-    if not engine_args.disable_async_output_proc and manager_args.enable_migration:
-        logger.warning("Llumnix does not support async output processing when enabling migation, disable async output processing.")
-        engine_args.disable_async_output_proc = True
     if not engine_args.disable_async_output_proc and intance_args.simulator_mode:
         logger.warning("Llumnix does not support async output processing when enabling simualtor mode, disable async output processing.")
         engine_args.disable_async_output_proc = True

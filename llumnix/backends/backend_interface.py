@@ -13,7 +13,7 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Iterable, List, Union, Deque, Tuple
+from typing import Iterable, List, Union, Deque, Tuple, Optional
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
@@ -106,7 +106,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def remove_running_request(self, request_id: str) -> bool:
+    def remove_running_request(self, request_id: str) -> Optional[LlumnixRequest]:
         """
         Remove a request from the running queue of backend.
 
@@ -118,7 +118,7 @@ class BackendInterface(ABC):
             request_id: The ID for the request that is to be removed from the running queue.
 
         Returns:
-            True if the request was successfully removed from the running queue, False otherwise.
+            LlumnixRequest if the request was successfully removed from the running queue, False None.
         """
         raise NotImplementedError
 

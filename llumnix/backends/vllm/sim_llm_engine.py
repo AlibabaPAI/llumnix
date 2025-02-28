@@ -57,6 +57,10 @@ class BackendSimVLLM(BackendVLLM):
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
+        self.disable_async_output_proc = engine_args.disable_async_output_proc
+
+        self._blocking_migration_step_lock = asyncio.Lock()
+
         self._stop_event = asyncio.Event()
         asyncio.create_task(self._start_engine_step_loop())
 

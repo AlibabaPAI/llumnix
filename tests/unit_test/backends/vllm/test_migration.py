@@ -103,17 +103,19 @@ class MockLlumletDoNotSchedule(Llumlet):
         self.backend_engine.engine.step_async = step_async_try_schedule
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
-@pytest.mark.asyncio
-async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size):
+@pytest.mark.parametrize("disable_async_output_proc", [False, True])
+async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size,
+                                     disable_async_output_proc):
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
 
     # TODO(s5u13b): Debug when enforce_eager=True, the migration will be incorrect.
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
-                             disable_async_output_proc=True)
+                             disable_async_output_proc=disable_async_output_proc)
     id_rank_map = {"0": 0, "1": 1}
     if migration_request_status == 'running':
         request_migration_policy = "SR"
@@ -226,10 +228,11 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         await test_correctness(prompt, origin_output)
     que.cleanup()
 
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.asyncio
-async def test_pd_diaggregation_correctness(ray_env, migration_backend):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, disable_async_output_proc=True, enforce_eager=True)
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
+@pytest.mark.parametrize("disable_async_output_proc", [False, True])
+async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_async_output_proc):
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
     id_rank_map = {"0":0, "1":1}
 
     instance_args = InstanceArgs()

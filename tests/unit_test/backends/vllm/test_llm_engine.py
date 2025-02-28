@@ -76,7 +76,6 @@ def test_llm_engine_add_requset(ray_env):
     placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=1, num_gpus=0, detached=True)
     llm_engine = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                    request_output_queue_type=QueueType.RAYQUEUE,
-                                                   disable_async_output_proc=engine_args.disable_async_output_proc,
                                                    instance_id="0",
                                                    placement_group=placement_group,
                                                    latency_mem = latency_data,

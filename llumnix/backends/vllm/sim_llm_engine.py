@@ -43,7 +43,6 @@ class BackendSimVLLM(BackendVLLM):
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
-                                                                          disable_async_output_proc=engine_args.disable_async_output_proc,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,

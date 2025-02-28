@@ -187,7 +187,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
         if not self.disable_async_output_proc:
             self._blocking_migration_output_locks[self._blocking_migration_output_locks_re_idx].release()
-            self._blocking_migration_output_locks_re_idx = int(not self._blocking_migration_output_locks_re_idx)
+            self._blocking_migration_output_locks_ac_idx = self._blocking_migration_output_locks_re_idx
 
         return
 
@@ -326,8 +326,9 @@ class BackendVLLM(BackendInterface):
 
         self._blocking_migration_step_lock = asyncio.Lock()
         if not self.disable_async_output_proc:
-            self._blocking_migration_output_locks = (asyncio.Lock(), asyncio.Lock())
+            self._blocking_migration_output_locks = []
             self._blocking_migration_output_locks_ac_idx = 0
+            self._blocking_migration_output_locks_ac_idx_prev = 0
             self._blocking_migration_output_locks_re_idx = 0
             self.engine._blocking_migration_output_locks = self._blocking_migration_output_locks
             self.engine._blocking_migration_output_locks_re_idx = self._blocking_migration_output_locks_re_idx
@@ -346,8 +347,11 @@ class BackendVLLM(BackendInterface):
             try:
                 async with self._blocking_migration_step_lock:
                     if not self.disable_async_output_proc:
+                        if len(self._blocking_migration_output_locks) <= self._blocking_migration_output_locks_ac_idx:
+                            self._blocking_migration_output_locks.append(asyncio.Lock())
                         await self._blocking_migration_output_locks[self._blocking_migration_output_locks_ac_idx].acquire()
-                        self._blocking_migration_output_locks_ac_idx = int(not self._blocking_migration_output_locks_ac_idx)
+                        self._blocking_migration_output_locks_re_idx = self._blocking_migration_output_locks_ac_idx
+                        self._blocking_migration_output_locks_ac_idx += 1
                     request_outputs, _ = await self.engine.step_async()
                 if len(request_outputs) == 0:
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)

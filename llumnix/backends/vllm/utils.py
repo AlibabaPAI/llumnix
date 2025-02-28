@@ -25,7 +25,7 @@ from vllm.model_executor.layers.sampler import SamplingMetadata, SamplingTensors
 from vllm.config import EngineConfig
 
 from llumnix.logging.logger import init_logger
-from llumnix.arg_utils import ManagerArgs, InstanceArgs
+from llumnix.arg_utils import InstanceArgs
 from llumnix.internal_config import MigrationConfig
 
 logger = init_logger(__name__)

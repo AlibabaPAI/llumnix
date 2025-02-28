@@ -25,7 +25,7 @@ from vllm.model_executor.layers.sampler import SamplingMetadata, SamplingTensors
 from vllm.config import EngineConfig
 
 from llumnix.logging.logger import init_logger
-from llumnix.arg_utils import ManagerArgs, InstanceArgs
+from llumnix.arg_utils import InstanceArgs
 from llumnix.internal_config import MigrationConfig
 
 logger = init_logger(__name__)
@@ -48,7 +48,7 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
     if unsupported_feature:
         raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
 
-def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs, intance_args: InstanceArgs) -> None:
+def check_engine_args(engine_args: AsyncEngineArgs, intance_args: InstanceArgs) -> None:
     assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
     migration_config: MigrationConfig = intance_args.create_migration_config()
     engine_config: EngineConfig = engine_args.create_engine_config()
@@ -57,9 +57,6 @@ def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs, i
         logger.warning("Llumnix does not support TP or PP when the migration backend is nccl, change migration backend to gloo.")
         intance_args.migration_backend = 'gloo'
     detect_unsupported_feature(engine_args)
-    if not engine_args.disable_async_output_proc and manager_args.enable_migration:
-        logger.warning("Llumnix does not support async output processing when enabling migation, disable async output processing.")
-        engine_args.disable_async_output_proc = True
     if not engine_args.disable_async_output_proc and intance_args.simulator_mode:
         logger.warning("Llumnix does not support async output processing when enabling simualtor mode, disable async output processing.")
         engine_args.disable_async_output_proc = True

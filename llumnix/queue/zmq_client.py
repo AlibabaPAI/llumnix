@@ -11,8 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
-from contextlib import contextmanager
+from typing import Any, Dict
+from asyncio import Lock, Queue, QueueEmpty
+import asyncio
 from collections.abc import Iterable
 import time
 
@@ -21,105 +22,160 @@ import zmq.asyncio
 import cloudpickle
 
 from llumnix.logging.logger import init_logger
+from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.server_info import ServerInfo
 
-from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPC_REQUEST_TYPE, RPCClientClosedError,
-                                     RPCUtilityRequest, RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest,
-                                     get_open_zmq_ipc_path)
-from llumnix.constants import RPC_GET_DATA_TIMEOUT_MS, RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM
+from llumnix.queue.zmq_utils import (
+    RPC_SUCCESS_STR,
+    RPC_REQUEST_TYPE,
+    RPCUtilityRequest,
+    RPCPutNoWaitQueueRequest,
+    RPCPutNoWaitBatchQueueRequest,
+    get_open_zmq_ipc_path,
+    get_zmq_pool_name,
+)
+from llumnix.constants import (
+    RPC_GET_DATA_TIMEOUT_MS,
+    SOCKET_POOL_MAXSIZE
+)
 from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
 
-class ZmqClient:
+class AsyncZmqSocketPool:
+    def __init__(self, context: zmq.asyncio.Context, ip, port, pool_size=10):
+        self.context = context
+        self.ip = ip
+        self.port = port
+
+        # max size of the pool
+        # sockets in the pool will be long live
+        # sockets out the poll will be closed after used
+        self.pool_size = pool_size
+
+        self.pool = Queue(maxsize=pool_size)
+
+    async def _create_socket(self) -> zmq.asyncio.Socket:
+        socket = self.context.socket(zmq.DEALER)
+        dst_address = get_open_zmq_ipc_path(self.ip, self.port)
+        socket.connect(dst_address)
+        return socket
+
+    async def get_socket(self) -> zmq.asyncio.Socket:
+        socket = None
+        try:
+            socket = self.pool.get_nowait()
+        except QueueEmpty:
+            socket = await self._create_socket()
+        return socket
+
+    def full(self):
+        return self.pool.full()
+
+    def put(self, socket: zmq.asyncio.Socket):
+        self.pool.put_nowait(socket)
+
+    async def close_all_connections(self):
+        while not self.pool.empty():
+            socket = await self.pool.get()
+            socket.close(linger=0)
+
+
+class ZmqSocketPoolFactory:
+
+    def __init__(self, context: zmq.asyncio.Context, pool_size=10):
+        self.context: zmq.asyncio.Context = context
+        self.pool_size: int = pool_size
+        self.pools: Dict[str, AsyncZmqSocketPool] = {}
+        self.lock: asyncio.Lock = Lock()
+
+    async def get_pool(self, ip, port) -> AsyncZmqSocketPool:
+        async with self.lock:
+            dst_name = get_zmq_pool_name(ip, port)
+            if dst_name not in self.pools:
+                self.pools[dst_name] = AsyncZmqSocketPool(
+                    ip=ip,
+                    port=port,
+                    context=self.context,
+                    pool_size=self.pool_size,
+                )
+            return self.pools[dst_name]
+
+    async def close_all_pools(self):
+        for pool in self.pools.values():
+            await pool.close_all_connections()
+
+
+class ZmqClient(QueueClientBase):
     def __init__(self):
-        self.context = zmq.asyncio.Context()
-        self._data_timeout = RPC_GET_DATA_TIMEOUT_MS
-        self._errored = False
-
-        # Maximum number of sockets that can be opened (typically 65536).
-        # ZMQ_SOCKET_LIMIT (http://api.zeromq.org/4-2:zmq-ctx-get)
-        socket_limit = self.context.get(zmq.constants.SOCKET_LIMIT)
-        if socket_limit < RPC_SOCKET_LIMIT_CUTOFF:
-            raise ValueError(
-                f"Found zmq.constants.SOCKET_LIMIT={socket_limit}, which caps "
-                "the number of concurrent requests Llumnix can process.")
-
-        # We only have 1 ipc connection that uses unix sockets, so
-        # safe to set MAX_SOCKETS to the zmq SOCKET_LIMIT (i.e. will
-        # not run into ulimit issues)
-        self.context.set(zmq.constants.MAX_SOCKETS, socket_limit)
+        self.context = zmq.asyncio.Context(8)
+        self.socket_pool_factory: ZmqSocketPoolFactory = ZmqSocketPoolFactory(
+            context=self.context, pool_size=SOCKET_POOL_MAXSIZE
+        )
+        self.zmq_timeout_ms: int = RPC_GET_DATA_TIMEOUT_MS
+        self._conn_lock: asyncio.Lock = Lock()
 
     # This function is not called explicitly.
     def close(self):
+        self.socket_pool_factory.close_all_pools()
         self.context.destroy()
-
-    @contextmanager
-    def to_socket(self, rpc_path):
-        # Raise a sensible error if the client was already closed.
-        # This can happen if a server shutdown is triggered but some coroutines
-        # are still running requests.
-        # There should not be a race condition with this check because we don't
-        # yield to the event loop between here and opening the socket.
-        if self.context.closed:
-            raise RPCClientClosedError("The ZMQ client has already shut down")
-
-        # Note that we use DEALER to enable asynchronous communication
-        # to enable streaming.
-        socket = self.context.socket(zmq.constants.DEALER)
-        socket.set_hwm(RPC_ZMQ_HWM)
-        try:
-            socket.connect(rpc_path)
-            yield socket
-        finally:
-            socket.close(linger=0)
 
     async def _send_one_way_rpc_request(
             self,
             request: RPC_REQUEST_TYPE,
-            rpc_path: str,
+            ip: str,
+            port: int,
             error_message: str):
         async def do_rpc_call(socket: zmq.asyncio.Socket,
                               request: RPC_REQUEST_TYPE):
 
             await socket.send_multipart([cloudpickle.dumps(request)])
 
-            if await socket.poll(timeout=self._data_timeout) == 0:
+            if await socket.poll(timeout=self.zmq_timeout_ms) == 0:
                 raise TimeoutError("Server didn't reply within "
-                                   f"{self._data_timeout} ms")
+                                    f"{self.zmq_timeout_ms} ms")
 
             return cloudpickle.loads(await socket.recv())
 
-        with self.to_socket(rpc_path) as socket:
-            response = await do_rpc_call(socket, request)
+        socket_pool = await self.socket_pool_factory.get_pool(ip, port)
+        socket = await socket_pool.get_socket()
+        response = await do_rpc_call(socket, request)
 
         if not isinstance(response, str) or response != RPC_SUCCESS_STR:
+            # close the socket if something wrong
+            socket.close(linger=0)
             if isinstance(response, Exception):
                 logger.error(error_message)
                 raise response
             raise ValueError(error_message)
 
+        # drop or put back the socket
+        if not socket_pool.full():
+            socket_pool.put(socket)
+        else:
+            socket.close(linger=0)
+
     async def wait_for_server_rpc(self,
                                   server_info: ServerInfo):
-        rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
         await self._send_one_way_rpc_request(
                         request=RPCUtilityRequest.IS_SERVER_READY,
-                        rpc_path=rpc_path,
+                        ip=server_info.request_output_queue_ip,
+                        port=server_info.request_output_queue_port,
                         error_message="Unable to start RPC Server")
 
     async def put_nowait(self, item: Any, server_info: ServerInfo):
-        rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
         set_timestamp(item, 'queue_client_send_timestamp', time.time())
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitQueueRequest(item=item),
-                        rpc_path=rpc_path,
+                        ip=server_info.request_output_queue_ip,
+                        port=server_info.request_output_queue_port,
                         error_message="Unable to put items into queue.")
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
-        rpc_path = get_open_zmq_ipc_path(server_info.request_output_queue_ip, server_info.request_output_queue_port)
         set_timestamp(items, 'queue_client_send_timestamp', time.time())
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitBatchQueueRequest(items=items),
-                        rpc_path=rpc_path,
+                        ip=server_info.request_output_queue_ip,
+                        port=server_info.request_output_queue_port,
                         error_message="Unable to put items into queue.")

@@ -44,3 +44,7 @@ class RPCClientClosedError(Exception):
 
 def get_open_zmq_ipc_path(ip, port) -> str:
     return "tcp://{}:{}".format(ip, port)
+
+# generate zmq pool name with ip and port
+def get_zmq_pool_name(ip, port) -> str:
+    return "{}:{}".format(ip, port)

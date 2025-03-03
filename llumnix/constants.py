@@ -42,10 +42,11 @@ NO_OUTPUTS_STEP_INTERVAL: float = 0.01
 
 # llumnix/queue/zmq_client.py
 RPC_GET_DATA_TIMEOUT_MS: int = 5000
+SOCKET_POOL_MAXSIZE = 10
 
 # llumnix/queue/zmq_server.py
 RPC_SOCKET_LIMIT_CUTOFF: int = 2000
-RPC_ZMQ_HWM: int = 0
+RPC_ZMQ_HWM: int = int(1e5)
 RETRY_BIND_ADDRESS_INTERVAL: float = 10.0
 MAX_BIND_ADDRESS_RETRY_TIMES: int = 10
 

@@ -103,13 +103,13 @@ class SchedulerLlumnix(Scheduler):
         token_ids = backend_request.token_ids
         return blocks[pre_stage_num_blocks:], token_ids[pre_stage_num_blocks * self.block_manager.block_size:block_table.num_full_slots]
 
-    def remove_running_request(self, request_id: str) -> Optional[SequenceGroupLlumnix]:
+    def remove_running_request(self, request_id: str) -> bool:
         for seq_group in reversed(self.running):
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
                 seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
-                return seq_group
-        return None
+                return True
+        return False
 
     def remove_waiting_request(self, request_id: str) -> bool:
         for seq_group in self.waiting:

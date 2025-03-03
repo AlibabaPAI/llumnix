@@ -186,8 +186,9 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             set_timestamp(request_outputs, 'engine_process_model_outputs_timestamp_end', time.time())
 
         if not self.disable_async_output_proc:
-            self._blocking_migration_output_locks[self._blocking_migration_output_locks_re_idx].release()
-            self._blocking_migration_output_locks_re_idx = int(not self._blocking_migration_output_locks_re_idx)
+            while self._output_proc_done_event_queue.qsize() > 0:
+                output_proc_done_event = self._output_proc_done_event_queue.get()
+                output_proc_done_event.set()
 
         return
 
@@ -324,13 +325,11 @@ class BackendVLLM(BackendInterface):
 
         self.disable_async_output_proc = engine_args.disable_async_output_proc
 
-        self._blocking_migration_step_lock = asyncio.Lock()
+        self._step_done_event_queue = queue.Queue()
+        self._remove_running_request_ret: Dict[str] = {}
         if not self.disable_async_output_proc:
-            self._blocking_migration_output_locks = (asyncio.Lock(), asyncio.Lock())
-            self._blocking_migration_output_locks_ac_idx = 0
-            self._blocking_migration_output_locks_re_idx = 0
-            self.engine._blocking_migration_output_locks = self._blocking_migration_output_locks
-            self.engine._blocking_migration_output_locks_re_idx = self._blocking_migration_output_locks_re_idx
+            self._output_proc_done_event_queue = queue.Queue()
+            self.engine._output_proc_done_event_queue = self._output_proc_done_event_queue
 
         self._stop_event = asyncio.Event()
         asyncio.create_task(self._start_engine_step_loop())
@@ -344,11 +343,12 @@ class BackendVLLM(BackendInterface):
 
         while not self._stop_event.is_set():
             try:
-                async with self._blocking_migration_step_lock:
-                    if not self.disable_async_output_proc:
-                        await self._blocking_migration_output_locks[self._blocking_migration_output_locks_ac_idx].acquire()
-                        self._blocking_migration_output_locks_ac_idx = int(not self._blocking_migration_output_locks_ac_idx)
-                    request_outputs, _ = await self.engine.step_async()
+                while self._step_done_event_queue.qsize() > 0:
+                    request_id, step_done_event = self._step_done_event_queue.get()
+                    self._remove_running_request_ret[request_id] = self._remove_running_request(request_id)
+                    step_done_event.set()
+                await asyncio.sleep(0.0)
+                request_outputs, _ = await self.engine.step_async()
                 if len(request_outputs) == 0:
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
@@ -428,17 +428,19 @@ class BackendVLLM(BackendInterface):
         return self.engine.scheduler[0].get_request_incremental_blocks(*args, **kwargs)
 
     # pylint: disable=invalid-overridden-method
-    async def remove_running_request(self, *args, **kwargs) -> Optional[SequenceGroupLlumnix]:
-        async with self._blocking_migration_step_lock:
-            pass
-        seq_group = self.engine.scheduler[0].remove_running_request(*args, **kwargs)
+    async def remove_running_request(self, request_id: str) -> bool:
+        step_done_event = asyncio.Event()
+        self._step_done_event_queue.put((request_id, step_done_event))
+        await step_done_event.wait()
+        ret = self._remove_running_request_ret[request_id]
         if not self.disable_async_output_proc:
-            async with self._blocking_migration_output_locks[self._blocking_migration_output_locks_re_idx]:
-                pass
-        # request coule be finished by current step output processing.
-        if seq_group.is_finished():
-            return None
-        return seq_group
+            output_proc_done_event = asyncio.Event()
+            self._output_proc_done_event_queue.put(output_proc_done_event)
+            await output_proc_done_event.wait()
+        return ret
+
+    def _remove_running_request(self, request_id: str) -> bool:
+        return self.engine.scheduler[0].remove_running_request(request_id)
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].remove_waiting_request(*args, **kwargs)

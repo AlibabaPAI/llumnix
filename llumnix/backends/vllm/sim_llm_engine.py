@@ -59,7 +59,7 @@ class BackendSimVLLM(BackendVLLM):
 
         self.disable_async_output_proc = engine_args.disable_async_output_proc
 
-        self._blocking_migration_step_lock = asyncio.Lock()
+        self._last_stage_migration_step_lock = asyncio.Lock()
 
         self._stop_event = asyncio.Event()
         asyncio.create_task(self._start_engine_step_loop())

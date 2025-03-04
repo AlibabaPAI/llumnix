@@ -40,7 +40,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
-from llumnix.utils import get_instance_name
+from llumnix.utils import get_instance_name, make_async
 from llumnix import constants
 from llumnix.metrics.timestamps import set_timestamp
 
@@ -343,8 +343,8 @@ class BackendVLLM(BackendInterface):
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
-    def execute_worker_method(self, method, *args, **kwargs):
-        return self.engine.model_executor.driver_worker.execute_method(method, *args, **kwargs)
+    async def execute_worker_method_async(self, method, *args, **kwargs):
+        return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
     def add_request(self,
                     request_id: str,
@@ -372,15 +372,19 @@ class BackendVLLM(BackendInterface):
             self.add_running_request(backend_request)
 
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
-        await dst_ray_actor.execute_engine_method.remote("_run_workers",
-                                                         "migrate_cache",
-                                                         dst_blocks=dst_blocks,
-                                                         src_blocks=src_blocks,
-                                                         src_worker_handle_list=self.worker_handle_list)
+        await dst_ray_actor.execute_engine_method_async.remote("_run_workers_async",
+                                                               "migrate_cache",
+                                                               dst_blocks=dst_blocks,
+                                                               src_blocks=src_blocks,
+                                                               src_worker_handle_list=self.worker_handle_list)
 
     def _run_workers(self, *args, **kwargs):
         # pylint: disable=protected-access
         return self.engine.model_executor._run_workers(*args, **kwargs)
+
+    async def _run_workers_async(self, *args, **kwargs):
+        # pylint: disable=protected-access
+        return await make_async(self.engine.model_executor._run_workers)(*args, **kwargs)
 
     def is_ready(self):
         return True

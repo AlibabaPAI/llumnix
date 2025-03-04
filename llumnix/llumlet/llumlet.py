@@ -98,10 +98,13 @@ class Llumlet:
         try:
             assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
                 f'unimplemented backend {backend_type}'
-            num_gpus = 0
-            if backend_type == backend_type.BLADELLM:
+            if backend_type == BackendType.VLLM:
+                num_gpus = 0.5
+            elif backend_type == backend_type.BLADELLM:
                 world_size = get_engine_world_size(engine_args, backend_type)
                 num_gpus = world_size
+            else: # backend_type == BackendType.SIM_VLLM
+                num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,
                                        num_gpus=num_gpus,
                                        name=get_instance_name(instance_id),
@@ -250,3 +253,7 @@ class Llumlet:
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
+
+    async def execute_engine_method_async(self, method, *args, **kwargs):
+        executor = getattr(self.backend_engine, method)
+        return await executor(*args, **kwargs)

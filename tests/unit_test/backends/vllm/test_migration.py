@@ -104,7 +104,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 
 
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("migration_request_status", ['waiting', 'running'])
+@pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.asyncio
 async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size):

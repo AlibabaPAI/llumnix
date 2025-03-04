@@ -432,7 +432,7 @@ class BackendVLLM(BackendInterface):
         step_done_event = asyncio.Event()
         self._step_done_event_queue.put((request_id, step_done_event))
         await step_done_event.wait()
-        ret = self._remove_running_request_ret[request_id]
+        ret = self._remove_running_request_ret.pop(request_id)
         if not self.disable_async_output_proc:
             output_proc_done_event = asyncio.Event()
             self._output_proc_done_event_queue.put(output_proc_done_event)

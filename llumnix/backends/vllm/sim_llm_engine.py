@@ -13,7 +13,8 @@
 
 import os
 import asyncio
-from typing import List
+import queue
+from typing import List, Dict
 
 from ray.util.placement_group import PlacementGroup
 from vllm.engine.arg_utils import EngineArgs
@@ -59,7 +60,8 @@ class BackendSimVLLM(BackendVLLM):
 
         self.disable_async_output_proc = engine_args.disable_async_output_proc
 
-        self._last_stage_migration_step_lock = asyncio.Lock()
+        self._step_done_event_queue = queue.Queue()
+        self._remove_running_request_ret: Dict[str] = {}
 
         self._stop_event = asyncio.Event()
         asyncio.create_task(self._start_engine_step_loop())

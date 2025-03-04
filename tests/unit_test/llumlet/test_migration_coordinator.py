@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 import math
 import ray
@@ -36,7 +36,6 @@ async def test_migrate_out_onestage(ray_env):
     backend_engine = MagicMock(spec=BackendInterface)
     migrate_in_ray_actor = MagicMock()
     migrate_out_request = MagicMock()
-
     # Create an instance of MigrationCoordinator
     coordinator = MigrationCoordinator(backend_engine, migration_last_stage_max_blocks=1, migration_max_stages=3)
 
@@ -54,6 +53,9 @@ async def test_migrate_out_onestage(ray_env):
     assert status == MigrationStatus.RUNNING
 
     # Test the last stage of migration
+    backend_engine.remove_running_request = AsyncMock()
+    backend_engine.remove_running_request.return_value = True
+    migrate_out_request.finished = False
     src_blocks = [3]
     dst_blocks = [3]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks, []

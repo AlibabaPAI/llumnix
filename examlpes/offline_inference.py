@@ -37,7 +37,7 @@ connect_to_ray_cluster(port=ray_cluster_port)
 manager_args = ManagerArgs()
 instance_args = InstanceArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True,
-                         trust_remote_code=True, max_model_len=370)
+                         trust_remote_code=True, max_model_len=370, enforce_eager=True)
 
 # Create a manager. If the manager is created first, and then the instances are created.
 manager: Manager = init_manager(manager_args)

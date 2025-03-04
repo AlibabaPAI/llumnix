@@ -54,7 +54,7 @@ class MockLlumlet(Llumlet):
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(ray_env):
-    engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", max_model_len=8, worker_use_ray=True, enforce_eager=True)
 
     # wait previous test to release the GPU memory
     time.sleep(5.0)

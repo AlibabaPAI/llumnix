@@ -33,7 +33,8 @@ def get_ready_workers(num_workers, num_gpu_blocks, engine_config, migraiton_conf
         worker_id = random_uuid()
         worker = create_worker(rank=0, local_rank=0, engine_config=engine_config,
                                worker_module_name="tests.unit_test.backends.vllm.test_migration_backend",
-                               worker_class_name="MockMigrationWorker")
+                               worker_class_name="MockMigrationWorker",
+                               max_concurrency=8)
         ray.get(worker.execute_method.remote('initialize_cache', num_gpu_blocks=num_gpu_blocks, num_cpu_blocks=0))
         placement_group = initialize_placement_group(get_placement_group_name(worker_id), num_cpus=1, num_gpus=0, detached=True)
         ray.get(worker.execute_method.remote(
@@ -75,6 +76,7 @@ class MockMigrationWorker(MigrationWorker):
         for layer_idx in range(self.cache_engine[0].num_attention_layers):
             gpu_data.append(self.gpu_cache[0][layer_idx].clone().cpu())
         return gpu_data
+
 
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="Need at least 4 GPUs to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo'])
@@ -139,7 +141,7 @@ def test_many_to_one_migrate_cache(ray_env, backend):
     migraiton_config.migration_backend = backend
 
     num_workers = 4
-    num_gpu_blocks = 6000
+    num_gpu_blocks = 1000
     workers, _ = get_ready_workers(num_workers, num_gpu_blocks, engine_config, migraiton_config)
 
     num_layers = engine_config.model_config.get_num_layers(engine_config.parallel_config)
@@ -197,7 +199,7 @@ def test_many_one_to_one_migrate_cache(ray_env, backend):
     migraiton_config.migration_backend = backend
 
     num_workers = 2
-    num_gpu_blocks = 6000
+    num_gpu_blocks = 1000
     workers, _ = get_ready_workers(num_workers, num_gpu_blocks, engine_config, migraiton_config)
 
     num_layers = engine_config.model_config.get_num_layers(engine_config.parallel_config)
@@ -242,3 +244,89 @@ def test_many_one_to_one_migrate_cache(ray_env, backend):
             for src_idx, dst_idx in src_to_dst.items():
                 assert torch.allclose(worker_datas[1][layer_idx][0][src_idx], dst_worker_data[layer_idx][0][dst_idx])
                 assert torch.allclose(worker_datas[1][layer_idx][1][src_idx], dst_worker_data[layer_idx][1][dst_idx])
+
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="Need at least 4 GPU to run the test.")
+@pytest.mark.parametrize("backend", ['rayrpc'])
+def test_many_to_many_migrate_cache(ray_env, backend):
+    engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
+    migraiton_config = InstanceArgs(migration_buffer_blocks=3, migration_num_layers=5,
+                                    migration_num_buffers=3).create_migration_config()
+    migraiton_config.migration_backend = backend
+
+    num_workers = 4
+    num_gpu_blocks = 1000
+    workers, _ = get_ready_workers(num_workers, num_gpu_blocks, engine_config, migraiton_config)
+
+    num_layers = engine_config.model_config.get_num_layers(engine_config.parallel_config)
+    head_size = engine_config.model_config.get_head_size()
+    num_heads = engine_config.model_config.get_num_kv_heads(engine_config.parallel_config)
+    block_size = engine_config.cache_config.block_size
+
+    worker_datas = []
+    for worker_idx in range(num_workers):
+        torch.manual_seed(worker_idx)
+        dummy_data = torch.randn(size=(num_layers, 2, num_gpu_blocks, block_size, num_heads, head_size))        
+        ray.get(workers[worker_idx].execute_method.remote('set_gpu_cache', data=dummy_data))
+        worker_datas.append(ray.get(workers[worker_idx].execute_method.remote('get_gpu_cache')))
+
+    migration_pairs = [
+        (0, 2),
+        (1, 3),
+        (2, 0),
+        (3, 0),
+    ]
+
+    blocks_per_migration = num_gpu_blocks // 4
+    migration_ranges = [
+        (0, blocks_per_migration),
+        (blocks_per_migration, 2 * blocks_per_migration),
+        (2 * blocks_per_migration, 3 * blocks_per_migration),
+        (3 * blocks_per_migration, 4 * blocks_per_migration),
+    ]
+
+    migration_tasks = []
+    per_step_blocks = 500
+
+    for (src_idx, dst_idx), (start_block, end_block) in zip(migration_pairs, migration_ranges):
+        src_blocks = list(range(start_block, end_block))
+        dst_blocks = list(range(start_block, end_block))
+        
+        for idx in range(0, len(src_blocks), per_step_blocks):
+            cur_src_blocks = src_blocks[idx:idx+per_step_blocks]
+            cur_dst_blocks = dst_blocks[idx:idx+per_step_blocks]
+            
+            migration_tasks.append(workers[dst_idx].execute_method.remote(
+                'migrate_cache',
+                src_worker_handle_list=[workers[src_idx]],
+                src_blocks=cur_src_blocks,
+                dst_blocks=cur_dst_blocks
+            ))
+
+    ray.get(migration_tasks)
+
+    final_worker_datas = []
+    for idx in range(num_workers):
+        final_worker_datas.append(ray.get(workers[idx].execute_method.remote('get_gpu_cache')))
+
+    for (src_idx, dst_idx), (start_block, end_block) in zip(migration_pairs, migration_ranges):
+        for layer_idx in range(num_layers):
+            for block_offset in range(start_block, end_block):
+                assert torch.allclose(
+                    worker_datas[src_idx][layer_idx][0][block_offset],
+                    final_worker_datas[dst_idx][layer_idx][0][block_offset]
+                ), f"Mismatch at layer {layer_idx}, block {block_offset} from worker {src_idx} to {dst_idx}"
+                assert torch.allclose(
+                    worker_datas[src_idx][layer_idx][1][block_offset],
+                    final_worker_datas[dst_idx][layer_idx][1][block_offset]
+                ), f"Mismatch at layer {layer_idx}, block {block_offset} from worker {src_idx} to {dst_idx}"
+
+    for worker_idx in range(num_workers):
+        for (_, dst_idx), (start_block, end_block) in zip(migration_pairs, migration_ranges):
+            if worker_idx == dst_idx:
+                continue
+            for layer_idx in range(num_layers):
+                for block_offset in range(start_block, end_block):
+                    assert torch.allclose(
+                        worker_datas[worker_idx][layer_idx][0][block_offset],
+                        final_worker_datas[worker_idx][layer_idx][0][block_offset]
+                    ), f"Unexpected change at worker {worker_idx}, layer {layer_idx}, block {block_offset}"

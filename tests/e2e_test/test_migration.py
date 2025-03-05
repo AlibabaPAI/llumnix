@@ -127,7 +127,8 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
                                                  dispatch_policy="flood",
                                                  migration_backend=migration_backend,
                                                  request_migration_policy=request_migration_policy,
-                                                 tensor_parallel_size=tensor_parallel_size)
+                                                 tensor_parallel_size=tensor_parallel_size,
+                                                 migration_num_buffers=migration_num_buffers)
         subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)

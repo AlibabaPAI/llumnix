@@ -103,9 +103,9 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, mig
         pytest.skip("When the migrated request status is waiting, only test the gloo migration backend.")
     if tensor_parallel_size == 2 and migration_backend != 'gloo':
         pytest.skip("When the tensor parallel size is 2, only test the gloo migration backend.")
-    if migration_num_buffers == 4 and (migration_backend != 'gloo' or migration_request_status != 'running' or tensor_parallel_size != 1):
-        pytest.skip("When the migration num buffers is 4, only test the gloo migration backend, "
-                    "running migration request status and 1 tensor parallel size.")
+    if migration_num_buffers == 4 and (migration_backend != 'rayrpc' or migration_request_status != 'running'):
+        pytest.skip("When the migration num buffers is 4, only test the rayrpc migration backend and"
+                    "running migration request status.")
 
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()

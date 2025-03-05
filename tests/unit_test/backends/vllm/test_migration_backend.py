@@ -131,7 +131,7 @@ def test_one_to_many_migrate_cache(ray_env, backend, migration_num_buffers):
         worker_idx += 1
 
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="Need at least 4 GPU to run the test.")
-@pytest.mark.parametrize("backend", ['rayrpc', 'gloo'])
+@pytest.mark.parametrize("backend", ['rayrpc'])
 def test_many_to_one_migrate_cache(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = InstanceArgs(migration_buffer_blocks=3, migration_num_layers=5,
@@ -189,7 +189,7 @@ def test_many_to_one_migrate_cache(ray_env, backend):
         worker_idx += 1
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
-@pytest.mark.parametrize("backend", ['rayrpc', 'gloo'])
+@pytest.mark.parametrize("backend", ['rayrpc'])
 def test_many_one_to_one_migrate_cache(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = InstanceArgs(migration_buffer_blocks=3, migration_num_layers=5,

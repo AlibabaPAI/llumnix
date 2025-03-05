@@ -76,15 +76,15 @@ class MockMigrationWorker(MigrationWorker):
             gpu_data.append(self.gpu_cache[0][layer_idx].clone().cpu())
         return gpu_data
 
-@pytest.mark.skipif(torch.cuda.device_count() < 3, reason="Need at least 3 GPUs to run the test.")
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="Need at least 4 GPUs to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo'])
-def test_one_to_many_migrate_cache(ray_env, backend):
+def test_one_to_many_migrate_cache(ray_env, backend, migration_num_buffers):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = InstanceArgs(migration_buffer_blocks=3, migration_num_layers=5,
-                                    migration_num_buffers=2).create_migration_config()
+                                    migration_num_buffers=3).create_migration_config()
     migraiton_config.migration_backend = backend
 
-    num_worker = 3
+    num_worker = 4
     num_gpu_blocks = 6000
     workers, _ = get_ready_workers(num_worker, num_gpu_blocks, engine_config, migraiton_config)
 
@@ -111,9 +111,9 @@ def test_one_to_many_migrate_cache(ray_env, backend):
         for idx in range(0, len(src_blocks), per_step_blocks):
             cur_src_blocks = src_blocks[idx:idx+per_step_blocks]
             cur_dst_blocks = dst_blocks[idx:idx+per_step_blocks]
-            migration_tasks.append(workers[0].execute_method.remote(
+            migration_tasks.append(workers[worker_idx].execute_method.remote(
                 'migrate_cache',
-                src_worker_handle_list=[workers[worker_idx]],
+                src_worker_handle_list=[workers[0]],
                 src_blocks=cur_src_blocks,
                 dst_blocks=cur_dst_blocks)
             )
@@ -130,15 +130,15 @@ def test_one_to_many_migrate_cache(ray_env, backend):
                 assert torch.allclose(worker0_data[layer_idx][1][src_idx], dst_worker_data[layer_idx][1][dst_idx])
         worker_idx += 1
 
-@pytest.mark.skipif(torch.cuda.device_count() < 3, reason="Need at least 3 GPU to run the test.")
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="Need at least 4 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo'])
 def test_many_to_one_migrate_cache(ray_env, backend):
     engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = InstanceArgs(migration_buffer_blocks=3, migration_num_layers=5,
-                                    migration_num_buffers=2).create_migration_config()
+                                    migration_num_buffers=3).create_migration_config()
     migraiton_config.migration_backend = backend
 
-    num_worker = 3
+    num_worker = 4
     num_gpu_blocks = 6000
     workers, _ = get_ready_workers(num_worker, num_gpu_blocks, engine_config, migraiton_config)
 

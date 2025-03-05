@@ -30,7 +30,7 @@ from llumnix.logging.logger import init_logger
 logger = init_logger(__name__)
 
 
-@ray.remote(num_cpus=0, max_concurrency=8)
+@ray.remote(num_cpus=0, max_concurrency=4)
 class ProxyActor:
     def exec_method(self, is_driver_worker, handle, *args, **kwargs):
         try:

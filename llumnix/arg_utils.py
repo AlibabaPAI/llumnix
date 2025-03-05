@@ -384,6 +384,9 @@ class InstanceArgs:
         assert args.migration_backend != 'nccl', 'NCCL has been temporarily deprecated due to its incompatibility with \
             concurrent migrations in Llumnix.'
 
+        assert args.migration_num_buffers <= 4, "Due to the max_concurrency of worker and proxy actor, \
+            the concurrency of migration could not exceed 4."
+
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
                                            self.migration_backend,

@@ -96,11 +96,16 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
-async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migration_request_status, tensor_parallel_size):
+@pytest.mark.parametrize("migration_num_buffers", [4, 1])
+async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migration_request_status, tensor_parallel_size,
+                                   migration_num_buffers):
     if migration_request_status == 'waiting' and migration_backend != 'gloo':
         pytest.skip("When the migrated request status is waiting, only test the gloo migration backend.")
     if tensor_parallel_size == 2 and migration_backend != 'gloo':
         pytest.skip("When the tensor parallel size is 2, only test the gloo migration backend.")
+    if migration_num_buffers == 4 and (migration_backend != 'gloo' or migration_request_status != 'running' or tensor_parallel_size != 1):
+        pytest.skip("When the migration num buffers is 4, only test the gloo migration backend, "
+                    "running migration request status and 1 tensor parallel size.")
 
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()

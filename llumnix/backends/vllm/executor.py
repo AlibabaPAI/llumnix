@@ -86,7 +86,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 num_cpus=0,
                 num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
-                max_concurrency=8,
+                max_concurrency=16,
                 **ray_remote_kwargs,
             )(RayWorkerWrapper).remote(**worker_wrapper_kwargs)
 

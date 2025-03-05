@@ -77,6 +77,8 @@ class Llumlet:
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                                self.backend_engine)
             self.log_requests = True
+            self.num_migrating = 0
+            self.migration_num_buffers = instance_args.migration_num_buffers
 
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
@@ -157,9 +159,13 @@ class Llumlet:
             migrated_request_list.extend(migrated_request)
             if len(migrated_request) == 0 and migrate_out_request.eom:
                 break
+
         return migrated_request_list
 
     async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
+        if self.num_migrating >= self.migration_num_buffers:
+            return []
+        self.num_migrating += 1
         try:
             t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
@@ -174,7 +180,7 @@ class Llumlet:
                 migrate_out_request.migration_start_time = time.time()
                 status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
             else:
-                return migrated_request
+                return []
 
             if status == MigrationStatus.FINISHED:
                 await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", self.instance_id, migrate_out_request)
@@ -200,6 +206,8 @@ class Llumlet:
             logger.error("Unexpected exception: {}".format(e))
             logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
+        self.num_migrating -= 1
+
         return migrated_request
 
     # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager
@@ -249,8 +257,17 @@ class Llumlet:
                     self.backend_engine.add_waiting_request(backend_request)
 
     def execute_migration_method(self, method, *args, **kwargs):
+        migrating = False
+        if method == "migrate_in_pre_alloc":
+            migrating = True
+            if self.num_migrating >= self.migration_num_buffers:
+                return []
+            self.num_migrating += 1
         executor = getattr(self.migration_coordinator, method)
-        return executor(*args, **kwargs)
+        ret = executor(*args, **kwargs)
+        if migrating:
+            self.num_migrating -= 1
+        return ret
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

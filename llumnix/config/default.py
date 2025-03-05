@@ -141,7 +141,7 @@ _C.INSTANCE.MIGRATION_BACKEND = "gloo"
 # Number of cache blocks in migration
 _C.INSTANCE.MIGRATION_BUFFER_BLOCKS = 512
 # Number of buffers in migration backend for migration
-_C.MANAGER.MIGRATION_NUM_BUFFERS = 2
+_C.INSTANCE.MIGRATION_NUM_BUFFERS = 2
 # Number of kv-cache layers to transfer in each round during migration
 _C.INSTANCE.MIGRATION_NUM_LAYERS = 1
 # Timeout(s) for initializing migration backend

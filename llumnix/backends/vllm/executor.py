@@ -70,14 +70,18 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         # Create the workers.
         driver_ip = get_ip()
         worker_wrapper_kwargs = self._get_worker_wrapper_args()
-        for rank in range(self.parallel_config.world_size):
-            bundle = placement_group.bundle_specs[rank + 1]
+        for bundle_id, bundle in enumerate(placement_group.bundle_specs):
             if not bundle.get("GPU", 0):
                 raise Exception("GPU resource cannot be 0.")
+            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            if bundle_id == 0:
+                num_gpus = 0.5
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
                 placement_group_capture_child_tasks=True,
+                placement_group_bundle_index=bundle_id
             )
+
             worker = ray.remote(
                 num_cpus=0,
                 num_gpus=num_gpus,

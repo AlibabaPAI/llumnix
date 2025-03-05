@@ -30,7 +30,7 @@ class ProxyActor:
     def exec_method(self, is_driver_worker, handle, *args, **kwargs):
         try:
             if is_driver_worker:
-                ret = ray.get(handle.execute_engine_method.remote("execute_worker_method", *args, **kwargs))
+                ret = ray.get(handle.execute_engine_method_async.remote("execute_worker_method_async", *args, **kwargs))
             else:
                 ret = ray.get(handle.execute_method.remote(*args, **kwargs))
         # pylint: disable=try-except-raise

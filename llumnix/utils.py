@@ -14,7 +14,9 @@
 import uuid
 import asyncio
 import threading
-from typing import Any, Union
+from typing import Any, Union, Callable, Awaitable, TypeVar
+from functools import partial
+from typing_extensions import ParamSpec
 import ray
 from ray.util.placement_group import PlacementGroup
 from ray.experimental.internal_kv import (
@@ -31,6 +33,9 @@ MANAGER_NAME = "manager"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
+
+P = ParamSpec('P')
+T = TypeVar("T")
 
 
 def initialize_placement_group(
@@ -66,8 +71,11 @@ def initialize_placement_group(
             "The number of required GPUs exceeds the total number of "
             "available GPUs in the cluster.")
     # Create a new placement group
-    # bundle_0: Llumlet + AsyncPutQueueActor, bundle_(1-num_gpus): Workers
-    placement_group_specs = ([{"CPU": num_cpus}] + [{"GPU": 1}] * num_gpus)
+    # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
+    if num_gpus >= 1:
+        placement_group_specs = ([{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1))
+    else:
+        placement_group_specs = ([{"CPU": num_cpus}])
     current_placement_group = ray.util.placement_group(
         placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
     # Wait until PG is ready - this will block until all
@@ -183,3 +191,18 @@ def put_actor_data_to_ray_internal_kv(actor_name: str, data_name: str, value: An
     if _internal_kv_initialized():
         _internal_kv_put(_make_key(actor_name, data_name), f"{value}".encode(), overwrite=True)
         logger.debug("Put {}.{} to ray internal key-value store, value: {}.".format(actor_name, data_name, value))
+
+def make_async(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
+    """Take a blocking function, and run it on in an executor thread.
+
+    This function prevents the blocking function from blocking the
+    asyncio event loop.
+    The code in this function needs to be thread safe.
+    """
+
+    def _async_wrapper(*args: P.args, **kwargs: P.kwargs) -> asyncio.Future:
+        loop = asyncio.get_event_loop()
+        p_func = partial(func, *args, **kwargs)
+        return loop.run_in_executor(executor=None, func=p_func)
+
+    return _async_wrapper

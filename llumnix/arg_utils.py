@@ -387,7 +387,8 @@ class InstanceArgs:
         assert args.migration_num_buffers <= 4, "Due to the max_concurrency of worker and proxy actor, \
             the concurrency of migration could not exceed 4."
 
-        assert args.migration_num_buffers == 1 or args.migration_backend == "rayrpc", "Only the rayrpc migration backend supports concurrent migration."
+        assert args.migration_num_buffers == 1 or args.migration_backend == "rayrpc", \
+            "Only the rayrpc migration backend supports concurrent migration."
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,

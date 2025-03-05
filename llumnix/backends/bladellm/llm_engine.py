@@ -305,6 +305,7 @@ class BackendBladeLLM(BackendInterface):
         pass
 
     def pre_alloc(self,
+                  instance_id: str,
                   request_id: str,
                   request_status: RequestStatus,
                   request_arrival_time: float,
@@ -318,7 +319,7 @@ class BackendBladeLLM(BackendInterface):
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
         pass
 
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
+    def free_dst_pre_alloc_cache(self, instance_id: str, request_id: str = None) -> None:
         pass
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
@@ -327,7 +328,7 @@ class BackendBladeLLM(BackendInterface):
     async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         pass
 
-    def commit_dst_request(self, backend_request: LlumnixRequest) -> None:
+    def commit_dst_request(self, instance_id: str, backend_request: LlumnixRequest) -> None:
         pass
 
     def get_all_request_ids(self) -> List[str]:

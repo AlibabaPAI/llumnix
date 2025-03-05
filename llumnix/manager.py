@@ -299,10 +299,12 @@ class Manager:
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):
                     # Instance without error should clear migration states.
-                    # TODO(s5u13b): Fix the clear_migration_states to adapt to the many-to-many migration.
                     if not has_error:
                         try:
-                            await self.instances[migrate_instance_pair[i]].clear_migration_states.remote(is_migrate_in=bool(i))
+                            if i == 0:
+                                await self.instances[migrate_instance_pair[0]].clear_migration_states.remote(is_migrate_in=False)
+                            else:
+                                await self.instances[migrate_instance_pair[1]].clear_migration_states.remote(is_migrate_in=True, instance_id=migrate_instance_pair[0])
                         except (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError):
                             has_error = True
                 for i, has_error in enumerate(has_error_pair):

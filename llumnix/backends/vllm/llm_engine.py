@@ -357,7 +357,7 @@ class BackendVLLM(BackendInterface):
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
         self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
-    def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
+    def commit_dst_request(self, instance_id: str, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
         logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))

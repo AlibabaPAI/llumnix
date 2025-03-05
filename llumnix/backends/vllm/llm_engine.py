@@ -290,7 +290,9 @@ class BackendVLLM(BackendInterface):
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group)
-        if engine_args.disable_async_output_proc:
+        # In order to call the verify_async_output_proc implicitly.
+        engine_config = engine_args.create_engine_config()
+        if not engine_config.model_config.use_async_output_proc:
             self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
                                      for _ in range(engine_args.pipeline_parallel_size)]
         else:

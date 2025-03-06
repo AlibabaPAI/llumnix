@@ -324,7 +324,7 @@ class BackendBladeLLM(BackendInterface):
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         pass
 
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]):
+    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
         pass
 
     def commit_dst_request(self, backend_request: LlumnixRequest) -> None:

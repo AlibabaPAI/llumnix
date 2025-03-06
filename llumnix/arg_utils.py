@@ -444,7 +444,7 @@ class InstanceArgs:
                             '* "FCWSR" migrate the waiting request first come and running request shortest.\n')
         parser.add_argument('--migration-backend',
                             type=str,
-                            choices=['gloo', 'rayrpc', 'grpc', 'kvtransfer'],
+                            choices=['gloo', 'nccl', 'rayrpc', 'grpc', 'kvtransfer'],
                             help='communication backend of migration, [gloo, rayrpc, nccl] are available for vllm \
                                 and [grpc, kvtransfer] are available for bladellm')
         parser.add_argument('--migration-buffer-blocks',

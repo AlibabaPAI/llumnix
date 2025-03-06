@@ -200,12 +200,9 @@ class SchedulerLlumnix(Scheduler):
     def free_dst_pre_alloc_cache(self, instance_id: str, request_id: str = None) -> None:
         if request_id:
             logger.info("free instance {} request {} pre_alloc_cache".format(instance_id, request_id))
-            block_table = self.pre_alloc_cache_dict.pop(request_id, None)
+            block_table = self.pop_dst_pre_alloc_cache(instance_id, request_id)
             if block_table:
                 block_table.free()
-            src_instance_id = self.pre_alloc_request_instance.pop(request_id)
-            assert src_instance_id == instance_id
-            self.pre_alloc_instance_requests[instance_id].remove(request_id)
         else:
             # Clear all pre-allocated cache of dst instance when src instance encounters exception.
             request_ids = list(self.pre_alloc_instance_requests[instance_id].keys())
@@ -216,6 +213,13 @@ class SchedulerLlumnix(Scheduler):
                     block_table.free()
                 self.pre_alloc_request_instance.pop(req_id)
             self.pre_alloc_instance_requests[instance_id].clear()
+
+    def pop_dst_pre_alloc_cache(self, instance_id: str, request_id: str = None) -> BlockTable:
+        block_table = self.pre_alloc_cache_dict.pop(request_id, None)
+        src_instance_id = self.pre_alloc_request_instance.pop(request_id)
+        assert src_instance_id == instance_id
+        self.pre_alloc_instance_requests[instance_id].remove(request_id)
+        return block_table
 
     def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]

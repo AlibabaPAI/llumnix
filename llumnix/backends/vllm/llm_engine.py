@@ -360,9 +360,9 @@ class BackendVLLM(BackendInterface):
     def commit_dst_request(self, instance_id: str, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
-        logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))
-        pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(backend_request.request_id)
-        self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
+        logger.info("pop instance {} request {} from pre_alloc_cache_dict".format(instance_id, backend_request.request_id))
+        block_table = self.engine.scheduler[0].pop_dst_pre_alloc_cache(instance_id, backend_request.request_id)
+        self.engine.scheduler[0].block_manager.add_block_table(block_table, seq.seq_id)
         backend_request.reset_migration_args_dst()
         assert RequestStatus.is_migrating(backend_request.status), \
             "The status of request migrated to dst instance should be  \

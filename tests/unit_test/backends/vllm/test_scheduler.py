@@ -202,12 +202,12 @@ def test_schedule_running():
     before_arrival = time.time()
     _, seq_group = create_dummy_prompt("1", prompt_length=1, block_size=2, expected_steps=math.inf)
     after_arrival = time.time()
-    blocks = scheduler.pre_alloc("2", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
+    blocks = scheduler.pre_alloc("0", "2", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
     assert len(blocks) == 2
     scheduler.add_waiting_request(seq_group)
-    blocks = scheduler.pre_alloc("3", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
+    blocks = scheduler.pre_alloc("0", "3", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
     assert len(blocks) == 0
-    blocks = scheduler.pre_alloc("4", RequestStatus.WAITING_MIGRATING, before_arrival, 2, range(2*4))
+    blocks = scheduler.pre_alloc("0", "4", RequestStatus.WAITING_MIGRATING, before_arrival, 2, range(2*4))
     assert len(blocks) == 2
 
 def test_try_schedule_times():

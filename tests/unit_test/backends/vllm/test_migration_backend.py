@@ -265,7 +265,7 @@ def test_many_to_many_migrate_cache(ray_env, backend):
     worker_datas = []
     for worker_idx in range(num_workers):
         torch.manual_seed(worker_idx)
-        dummy_data = torch.randn(size=(num_layers, 2, num_gpu_blocks, block_size, num_heads, head_size))        
+        dummy_data = torch.randn(size=(num_layers, 2, num_gpu_blocks, block_size, num_heads, head_size))
         ray.get(workers[worker_idx].execute_method.remote('set_gpu_cache', data=dummy_data))
         worker_datas.append(ray.get(workers[worker_idx].execute_method.remote('get_gpu_cache')))
 
@@ -290,11 +290,11 @@ def test_many_to_many_migrate_cache(ray_env, backend):
     for (src_idx, dst_idx), (start_block, end_block) in zip(migration_pairs, migration_ranges):
         src_blocks = list(range(start_block, end_block))
         dst_blocks = list(range(start_block, end_block))
-        
+
         for idx in range(0, len(src_blocks), per_step_blocks):
             cur_src_blocks = src_blocks[idx:idx+per_step_blocks]
             cur_dst_blocks = dst_blocks[idx:idx+per_step_blocks]
-            
+
             migration_tasks.append(workers[dst_idx].execute_method.remote(
                 'migrate_cache',
                 src_worker_handle_list=[workers[src_idx]],

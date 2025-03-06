@@ -381,9 +381,6 @@ class InstanceArgs:
             assert args.instance_type in ['prefill', 'decode'], \
                 "instance_type should be prefill or decode if enable_pd_disagg is set."
 
-        assert args.migration_backend != 'nccl', 'NCCL has been temporarily deprecated due to its incompatibility with \
-            concurrent migrations in Llumnix.'
-
         assert args.migration_num_buffers <= 4, "Due to the max_concurrency of worker and proxy actor, \
             the concurrency of migration could not exceed 4."
 

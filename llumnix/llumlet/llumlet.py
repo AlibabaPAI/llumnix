@@ -180,6 +180,7 @@ class Llumlet:
                 migrate_out_request.migration_start_time = time.time()
                 status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
             else:
+                self.num_migrating -= 1
                 return []
 
             if status == MigrationStatus.FINISHED:
@@ -261,6 +262,9 @@ class Llumlet:
         if method == "migrate_in_pre_alloc":
             migrating = True
             if self.num_migrating >= self.migration_num_buffers:
+                instance_id = kwargs["instance_id"]
+                request_id = kwargs["request_id"]
+                self.backend_engine.engine.scheduler[0].free_dst_pre_alloc_cache(instance_id, request_id)
                 return []
             self.num_migrating += 1
         executor = getattr(self.migration_coordinator, method)

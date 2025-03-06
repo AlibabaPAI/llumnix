@@ -61,7 +61,7 @@ class SchedulerLlumnix(Scheduler):
             sliding_window=self.cache_config.sliding_window,
             enable_caching=self.cache_config.enable_prefix_caching)
         self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
-        self.migrating_out_request_last_stage: List[SequenceGroupLlumnix] = []
+        self.migrating_out_requests_last_stage: List[SequenceGroupLlumnix] = []
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
@@ -120,14 +120,14 @@ class SchedulerLlumnix(Scheduler):
         return False
 
     def add_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
-        self.migrating_out_request_last_stage.append(backend_request)
+        self.migrating_out_requests_last_stage.append(backend_request)
 
     def remove_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
-        self.migrating_out_request_last_stage.remove(backend_request)
+        self.migrating_out_requests_last_stage.remove(backend_request)
 
     def pop_migrating_out_requests_last_stage(self) -> List[SequenceGroupLlumnix]:
-        migrating_out_request_last_stage = self.migrating_out_request_last_stage.copy()
-        self.migrating_out_request_last_stage.clear()
+        migrating_out_request_last_stage = self.migrating_out_requests_last_stage.copy()
+        self.migrating_out_requests_last_stage.clear()
         return migrating_out_request_last_stage
 
     def pre_alloc(self,

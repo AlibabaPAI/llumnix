@@ -35,7 +35,7 @@ def generate_launch_command(result_filename: str = "",
                             instance_type: str = "no_constraints",
                             tensor_parallel_size: int = 1,
                             enable_simulator: bool = False,
-                            migration_num_buffers: int = 2):
+                            migration_num_buffers: int = 1):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -81,7 +81,7 @@ def generate_serve_command(result_filename: str = "",
                            enable_pd_disagg: bool = False,
                            pd_ratio: str = "1:1",
                            enable_simulator: bool = False,
-                           migration_num_buffers: int = 2):
+                           migration_num_buffers: int = 1):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "

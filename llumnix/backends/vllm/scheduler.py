@@ -205,7 +205,7 @@ class SchedulerLlumnix(Scheduler):
                 block_table.free()
         else:
             # Clear all pre-allocated cache of dst instance when src instance encounters exception.
-            request_ids = list(self.pre_alloc_instance_requests[instance_id].keys())
+            request_ids = self.pre_alloc_instance_requests[instance_id]
             for req_id in request_ids:
                 logger.info("free request {} pre_alloc_cache".format(req_id))
                 block_table = self.pre_alloc_cache_dict.pop(req_id, None)

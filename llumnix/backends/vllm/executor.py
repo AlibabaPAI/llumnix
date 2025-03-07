@@ -19,18 +19,12 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 # pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
 
-from vllm.executor.executor_base import ExecutorBase
-from vllm.executor.ray_gpu_executor import RayGPUExecutor, RayGPUExecutorAsync, RayWorkerWrapper, envs, \
+from vllm.executor.ray_gpu_executor import RayGPUExecutorAsync, RayWorkerWrapper, envs, \
                                            get_ip, get_vllm_instance_id, get_distributed_init_method, get_open_port
 from vllm.worker.worker_base import WorkerBase
 
-from vllm.sequence import Logprob, SequenceOutput, ExecuteModelRequest
-from vllm.utils import GiB_bytes
-
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
-from llumnix.backends.vllm.utils import get_cache_block_size
-from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_prefill, model_decode, _pad_to_alignment
 from llumnix.utils import make_async
 from llumnix import envs as llumnix_envs
 

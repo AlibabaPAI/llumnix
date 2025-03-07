@@ -51,12 +51,9 @@ class MigrationWorker(Worker):
         super().__init__(*args, **kwargs)
 
     def set_cuda_device(self):
-        try:
-            self.semaphore.acquire()
+        with self.semaphore:
             self.barrier.wait()
             torch.cuda.set_device(self.device)
-        finally:
-            self.semaphore.release()
 
     def load_model(self, *args, **kwargs):
         # Due to the max_concurrency of worker.

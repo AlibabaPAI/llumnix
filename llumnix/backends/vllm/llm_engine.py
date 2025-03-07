@@ -353,6 +353,7 @@ class BackendVLLM(BackendInterface):
     async def _set_cuda_device_for_workers_thread_pool(self, worker_max_concurrency):
         tasks = []
         for _ in range(worker_max_concurrency):
+            # pylint: disable=protected-access
             tasks.append(self.engine.model_executor._run_workers_async("set_cuda_device"))
         await asyncio.gather(*tasks)
 

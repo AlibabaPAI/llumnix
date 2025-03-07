@@ -228,8 +228,9 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     que.cleanup()
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 async def test_pd_diaggregation_correctness(ray_env, migration_backend):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True, disable_async_output_proc=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True)
     id_rank_map = {"0":0, "1":1}
 
     instance_args = InstanceArgs()

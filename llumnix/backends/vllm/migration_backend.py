@@ -198,7 +198,12 @@ class RayColMigrationBackend(MigrationBackendWithBuffer):
         self.group_name = None
 
         self.local_rank = local_rank
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
+        worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
+        self.actor = ray.remote(
+            num_cpus=0,
+            max_concurrency=worker_max_concurrency,
+            scheduling_strategy=scheduling_strategy,
+        )(ProxyActor).remote()
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
         self.migration_stream = cupy.cuda.Stream()

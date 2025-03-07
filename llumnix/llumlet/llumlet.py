@@ -262,8 +262,7 @@ class Llumlet:
         if method == "migrate_in_pre_alloc":
             migrating = True
             if self.num_migrating >= self.migration_num_buffers:
-                instance_id = kwargs["instance_id"]
-                request_id = kwargs["request_id"]
+                instance_id, request_id = args[0], args[1]
                 self.backend_engine.engine.scheduler[0].free_dst_pre_alloc_cache(instance_id, request_id)
                 return []
             self.num_migrating += 1

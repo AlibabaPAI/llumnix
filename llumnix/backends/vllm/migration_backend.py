@@ -14,7 +14,6 @@
 from typing import List, Tuple
 import torch
 from func_timeout import func_set_timeout, FunctionTimedOut
-
 import cupy
 from cupy.cuda import nccl
 import ray
@@ -23,14 +22,15 @@ from ray.util.collective.collective_group import nccl_util
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm.worker.cache_engine import CacheEngine
+
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase, MigrationBackendWithBuffer
 from llumnix.logging.logger import init_logger
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
 
-@ray.remote(num_cpus=0, max_concurrency=4)
 class ProxyActor:
     def exec_method(self, is_driver_worker, handle, *args, **kwargs):
         try:
@@ -61,7 +61,12 @@ class RayRpcMigrationBackend(MigrationBackendWithBuffer):
 
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
+        worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
+        self.actor = ray.remote(
+            num_cpus=0,
+            max_concurrency=worker_max_concurrency,
+            scheduling_strategy=scheduling_strategy,
+        )(ProxyActor).remote()
         self.migration_stream = torch.cuda.Stream()
 
         if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES:

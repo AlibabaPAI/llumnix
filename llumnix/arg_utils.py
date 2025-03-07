@@ -23,9 +23,10 @@ from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
-
+from llumnix import envs as llumnix_envs
 
 # All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None for default.
+
 
 class LlumnixArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
@@ -381,8 +382,10 @@ class InstanceArgs:
             assert args.instance_type in ['prefill', 'decode'], \
                 "instance_type should be prefill or decode if enable_pd_disagg is set."
 
-        assert args.migration_num_buffers <= 4, "Due to the max_concurrency of worker and proxy actor, \
-            the concurrency of migration could not exceed 4."
+        worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
+        max_migration_num_buffers = worker_max_concurrency - 1
+        assert args.migration_num_buffers <= max_migration_num_buffers, "Due to the max_concurrency of worker and proxy actor, \
+            the concurrency of migration could not exceed {}.".format(max_migration_num_buffers)
 
         assert args.migration_num_buffers == 1 or args.migration_backend == "rayrpc", \
             "Only the rayrpc migration backend supports concurrent migration."

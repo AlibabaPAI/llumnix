@@ -43,6 +43,7 @@ from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import get_instance_name, make_async
 from llumnix import constants
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -312,6 +313,10 @@ class BackendVLLM(BackendInterface):
                                             src_worker_handle_list=self.worker_handle_list,
                                             placement_group=placement_group)
 
+        worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self._set_cuda_device_for_workers_thread_pool(worker_max_concurrency), loop)
+
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
@@ -344,6 +349,12 @@ class BackendVLLM(BackendInterface):
         if self.state == EngineState.RUNNING:
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+
+    async def _set_cuda_device_for_workers_thread_pool(self, worker_max_concurrency):
+        tasks = []
+        for _ in range(worker_max_concurrency):
+            tasks.append(self.engine.model_executor._run_workers_async("set_cuda_device"))
+        await asyncio.gather(*tasks)
 
     async def execute_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
@@ -386,7 +397,7 @@ class BackendVLLM(BackendInterface):
 
     async def _run_workers_async(self, *args, **kwargs):
         # pylint: disable=protected-access
-        return await make_async(self.engine.model_executor._run_workers)(*args, **kwargs)
+        return await self.engine.model_executor._run_workers_async(*args, **kwargs)
 
     def is_ready(self):
         return True

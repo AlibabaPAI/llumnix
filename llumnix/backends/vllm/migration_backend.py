@@ -61,12 +61,16 @@ class RayRpcMigrationBackend(MigrationBackendWithBuffer):
 
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
+        self.is_driver_worker = is_driver_worker
+        self.gpu_cache = gpu_cache
+
         worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
         self.actor = ray.remote(
             num_cpus=0,
             max_concurrency=worker_max_concurrency,
             scheduling_strategy=scheduling_strategy,
         )(ProxyActor).remote()
+
         self.migration_stream = torch.cuda.Stream()
 
         if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES:
@@ -75,8 +79,6 @@ class RayRpcMigrationBackend(MigrationBackendWithBuffer):
             self.rpc_dtype = torch.float32
             logger.warning("Detect numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine[0].dtype))
 
-        self.is_driver_worker = is_driver_worker
-        self.gpu_cache = gpu_cache
         self.cache_device = "cpu"
         self.num_migration_buffer_blocks = self.migration_config.migration_buffer_blocks
         self.migration_num_layers = self.cache_engine[0].num_attention_layers
@@ -189,27 +191,24 @@ class RayColMigrationBackend(MigrationBackendWithBuffer):
         self.migration_config = migration_config
         self.cache_engine = cache_engine
         self.backend = migration_config.migration_backend
-        self.migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine[0].num_attention_layers)
-        self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
+        self.is_driver_worker = is_driver_worker
+        self.gpu_cache = gpu_cache
 
-        self.backend = migration_config.migration_backend
         self.global_world_size = -1
         self.global_rank = -1
         self.group_name = None
-
         self.local_rank = local_rank
+
         worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
         self.actor = ray.remote(
             num_cpus=0,
             max_concurrency=worker_max_concurrency,
             scheduling_strategy=scheduling_strategy,
         )(ProxyActor).remote()
-        self.is_driver_worker = is_driver_worker
-        self.gpu_cache = gpu_cache
+
         self.migration_stream = cupy.cuda.Stream()
 
         self.migration_cache_size = self.cache_engine[0].block_size * self.cache_engine[0].num_kv_heads * self.cache_engine[0].head_size
-
         if self.backend == 'gloo':
             try_import_gloo()
             self.cache_device = "cpu"
@@ -218,8 +217,10 @@ class RayColMigrationBackend(MigrationBackendWithBuffer):
             nccl_util.TORCH_NCCL_DTYPE_MAP[torch.bfloat16] = nccl.NCCL_FLOAT16
             self.cache_device = torch.device(f"cuda:{self.local_rank}")
             self.pin_memory = False
-
+        self.migration_num_layers = min(migration_config.migration_num_layers, self.cache_engine[0].num_attention_layers)
+        self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
         buffer_shape = (self.num_migration_buffer_blocks, self.migration_num_layers, 2, self.migration_cache_size)
+
         super().__init__(buffer_shape, self.cache_engine[0].dtype, self.cache_device,
                          pin_memory=self.pin_memory, num_buffers=migration_config.migration_num_buffers)
 

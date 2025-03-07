@@ -136,8 +136,9 @@ class MigrationCoordinator:
             else:
                 # last stage migration, stop inference, transfer all blocks
                 migration_status = MigrationStatus.FINISHED
-                found = self.backend_engine.remove_running_request(migrate_out_request.request_id)
-                if not found:
+                found = await self.backend_engine.remove_running_request(migrate_out_request.request_id)
+                # Request coule be finished by previous or current step.
+                if not found or migrate_out_request.finished:
                     return MigrationStatus.ABORTED_SRC
                 self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
                 src_blocks = incremental_blocks[:]

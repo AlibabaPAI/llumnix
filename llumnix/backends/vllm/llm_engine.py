@@ -65,6 +65,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  instance_id: str,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
+                 disable_async_output_proc: bool,
                  *arg, **kwargs) -> None:
         # pylint: disable=import-outside-toplevel
         import vllm.outputs
@@ -88,6 +89,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
+
+        self.disable_async_output_proc = disable_async_output_proc
 
     # pylint: disable=W0221
     @classmethod
@@ -123,6 +126,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             instance_id=instance_id,
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
+            disable_async_output_proc=engine_args.disable_async_output_proc,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -154,11 +158,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             for scheduled_seq_group, seq_group_meta, seq_group_output in \
                     zip(scheduler_outputs.scheduled_seq_groups, seq_group_metadata_list, outputs[0].outputs):
                 seq_group = scheduled_seq_group.seq_group
-                if not RequestStatus.is_migrating(seq_group.status):
-                    new_scheduled_seq_groups.append(scheduled_seq_group)
-                    new_seq_group_metadata_list.append(seq_group_meta)
-                    new_outputs.append(seq_group_output)
-                    server_infos.append(seq_group.server_info)
+                new_scheduled_seq_groups.append(scheduled_seq_group)
+                new_seq_group_metadata_list.append(seq_group_meta)
+                new_outputs.append(seq_group_output)
+                server_infos.append(seq_group.server_info)
             scheduler_outputs.scheduled_seq_groups = new_scheduled_seq_groups
             outputs[0].outputs = new_outputs
             seq_group_metadata_list = new_seq_group_metadata_list
@@ -181,6 +184,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 if hasattr(server_info, 'request_timestamps'):
                     request_output.request_timestamps = server_info.request_timestamps
             set_timestamp(request_outputs, 'engine_process_model_outputs_timestamp_end', time.time())
+
+        if not self.disable_async_output_proc:
+            while self._output_proc_done_event_queue.qsize() > 0:
+                output_proc_done_event = self._output_proc_done_event_queue.get()
+                output_proc_done_event.set()
 
         return
 
@@ -315,6 +323,14 @@ class BackendVLLM(BackendInterface):
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
+        self.disable_async_output_proc = engine_args.disable_async_output_proc
+
+        self._step_done_event_queue = queue.Queue()
+        self._remove_running_request_ret: Dict[str] = {}
+        if not self.disable_async_output_proc:
+            self._output_proc_done_event_queue = queue.Queue()
+            self.engine._output_proc_done_event_queue = self._output_proc_done_event_queue
+
         self._stop_event = asyncio.Event()
         asyncio.create_task(self._start_engine_step_loop())
 
@@ -327,6 +343,11 @@ class BackendVLLM(BackendInterface):
 
         while not self._stop_event.is_set():
             try:
+                while self._step_done_event_queue.qsize() > 0:
+                    request_id, step_done_event = self._step_done_event_queue.get()
+                    self._remove_running_request_ret[request_id] = self._remove_running_request(request_id)
+                    step_done_event.set()
+                await asyncio.sleep(0.0)
                 request_outputs, _ = await self.engine.step_async()
                 if len(request_outputs) == 0:
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
@@ -406,8 +427,20 @@ class BackendVLLM(BackendInterface):
     def get_request_incremental_blocks(self, *args, **kwargs) -> Tuple[List[int], List[int]]:
         return self.engine.scheduler[0].get_request_incremental_blocks(*args, **kwargs)
 
-    def remove_running_request(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler[0].remove_running_request(*args, **kwargs)
+    # pylint: disable=invalid-overridden-method
+    async def remove_running_request(self, request_id: str) -> bool:
+        step_done_event = asyncio.Event()
+        self._step_done_event_queue.put((request_id, step_done_event))
+        await step_done_event.wait()
+        ret = self._remove_running_request_ret.pop(request_id)
+        if not self.disable_async_output_proc:
+            output_proc_done_event = asyncio.Event()
+            self._output_proc_done_event_queue.put(output_proc_done_event)
+            await output_proc_done_event.wait()
+        return ret
+
+    def _remove_running_request(self, request_id: str) -> bool:
+        return self.engine.scheduler[0].remove_running_request(request_id)
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].remove_waiting_request(*args, **kwargs)

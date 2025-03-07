@@ -38,7 +38,7 @@ async def test_migrate_out_onestage(ray_env):
     migrate_out_request = MagicMock()
 
     # Create an instance of MigrationCoordinator
-    coordinator = MigrationCoordinator(backend_engine, migration_last_stage_max_blocks=1, migration_max_stages=3)
+    coordinator = MigrationCoordinator("0", backend_engine, migration_last_stage_max_blocks=1, migration_max_stages=3)
 
     # Mock method return values and test data
     src_blocks = [1, 2, 3]
@@ -98,7 +98,7 @@ async def test_migrate_out_running_request(_, ray_env):
 
     # Create an instance of MigrationCoordinator
     migration_max_stages = 3
-    coordinator = MigrationCoordinator(backend_engine, 1, migration_max_stages)
+    coordinator = MigrationCoordinator("0", backend_engine, 1, migration_max_stages)
     migrate_in_ray_actor = MagicMock()
     migrate_in_ray_actor.execute_engine_method = MagicMock()
     migrate_in_ray_actor.execute_engine_method.remote = MagicMock()
@@ -126,7 +126,7 @@ async def test_migrate_out_waiting_request():
     migrate_out_request = MagicMock()
 
     # Create an instance of MigrationCoordinator
-    coordinator = MigrationCoordinator(backend_engine, migration_last_stage_max_blocks=1, migration_max_stages=3)
+    coordinator = MigrationCoordinator("0", backend_engine, migration_last_stage_max_blocks=1, migration_max_stages=3)
 
     # Test FINISHED
     migrate_out_request.prefill_num_blocks = 3

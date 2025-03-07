@@ -43,6 +43,7 @@ from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import get_instance_name, make_async
 from llumnix import constants
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -312,6 +313,10 @@ class BackendVLLM(BackendInterface):
                                             src_worker_handle_list=self.worker_handle_list,
                                             placement_group=placement_group)
 
+        worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self._set_cuda_device_for_workers_thread_pool(worker_max_concurrency), loop)
+
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
@@ -345,6 +350,13 @@ class BackendVLLM(BackendInterface):
             self.state = EngineState.STOPPED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
+    async def _set_cuda_device_for_workers_thread_pool(self, worker_max_concurrency):
+        tasks = []
+        for _ in range(worker_max_concurrency):
+            # pylint: disable=protected-access
+            tasks.append(self.engine.model_executor._run_workers_async("set_cuda_device"))
+        await asyncio.gather(*tasks)
+
     async def execute_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
@@ -357,12 +369,12 @@ class BackendVLLM(BackendInterface):
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
         self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
-    def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
+    def commit_dst_request(self, instance_id: str, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
-        logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))
-        pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(backend_request.request_id)
-        self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
+        logger.info("pop instance {} request {} from pre_alloc_cache_dict".format(instance_id, backend_request.request_id))
+        block_table = self.engine.scheduler[0].pop_dst_pre_alloc_cache(instance_id, backend_request.request_id)
+        self.engine.scheduler[0].block_manager.add_block_table(block_table, seq.seq_id)
         backend_request.reset_migration_args_dst()
         assert RequestStatus.is_migrating(backend_request.status), \
             "The status of request migrated to dst instance should be  \
@@ -386,7 +398,7 @@ class BackendVLLM(BackendInterface):
 
     async def _run_workers_async(self, *args, **kwargs):
         # pylint: disable=protected-access
-        return await make_async(self.engine.model_executor._run_workers)(*args, **kwargs)
+        return await self.engine.model_executor._run_workers_async(*args, **kwargs)
 
     def is_ready(self):
         return True

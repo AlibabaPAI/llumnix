@@ -70,12 +70,15 @@ class Llumlet:
                                                                         backend_type,
                                                                         engine_args,
                                                                         instance_args.profiling_result_file_path)
-            self.migration_coordinator = MigrationCoordinator(self.backend_engine,
+            self.migration_coordinator = MigrationCoordinator(self.instance_id,
+                                                              self.backend_engine,
                                                               migration_config.migration_last_stage_max_blocks,
                                                               migration_config.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                                self.backend_engine)
             self.log_requests = True
+            self.num_migrating = 0
+            self.migration_num_buffers = instance_args.migration_num_buffers
 
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
@@ -156,9 +159,13 @@ class Llumlet:
             migrated_request_list.extend(migrated_request)
             if len(migrated_request) == 0 and migrate_out_request.eom:
                 break
+
         return migrated_request_list
 
     async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
+        if self.num_migrating >= self.migration_num_buffers:
+            return []
+        self.num_migrating += 1
         try:
             t0 = time.time()
             migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
@@ -173,10 +180,11 @@ class Llumlet:
                 migrate_out_request.migration_start_time = time.time()
                 status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
             else:
-                return migrated_request
+                self.num_migrating -= 1
+                return []
 
             if status == MigrationStatus.FINISHED:
-                await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
+                await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", self.instance_id, migrate_out_request)
                 self.backend_engine.free_src_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
@@ -185,7 +193,8 @@ class Llumlet:
                 migrate_out_request.reset_status()
                 # If dst aborts itself, dst proactively frees the pre allocated cache in migrate_in_pre_alloc.
                 if status == MigrationStatus.ABORTED_SRC:
-                    await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
+                    await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", self.instance_id,
+                                                                                                           migrate_out_request.request_id)
             t1 = time.time()
             logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
                         .format(self.instance_id, dst_instance_id, migrated_request, status, \
@@ -198,6 +207,8 @@ class Llumlet:
             logger.error("Unexpected exception: {}".format(e))
             logger.error("Exception traceback: {}".format(traceback.format_exc()))
             raise
+        self.num_migrating -= 1
+
         return migrated_request
 
     # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager
@@ -226,12 +237,12 @@ class Llumlet:
         request_ids = set(request_id)
         return self.backend_engine.abort_request(request_ids)
 
-    def clear_migration_states(self, is_migrate_in: bool) -> None:
+    def clear_migration_states(self, is_migrate_in: bool, instance_id: str = None) -> None:
         logger.info("Instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
             logger.info("clear_migration_states: free_dst_pre_alloc_cache")
-            self.backend_engine.free_dst_pre_alloc_cache()
+            self.backend_engine.free_dst_pre_alloc_cache(instance_id)
         else:
             # If migrate in instance dies during migration, migrate out instance should add the migrating out request in last stage.
             # back to the running request queue.
@@ -247,8 +258,19 @@ class Llumlet:
                     self.backend_engine.add_waiting_request(backend_request)
 
     def execute_migration_method(self, method, *args, **kwargs):
+        migrating = False
+        if method == "migrate_in_pre_alloc":
+            migrating = True
+            if self.num_migrating >= self.migration_num_buffers:
+                instance_id, request_id = args[0], args[1]
+                self.backend_engine.engine.scheduler[0].free_dst_pre_alloc_cache(instance_id, request_id)
+                return []
+            self.num_migrating += 1
         executor = getattr(self.migration_coordinator, method)
-        return executor(*args, **kwargs)
+        ret = executor(*args, **kwargs)
+        if migrating:
+            self.num_migrating -= 1
+        return ret
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

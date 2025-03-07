@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import time
-
 from collections import defaultdict
 from typing import Callable, Dict, List, Optional, Tuple, Type
 import ray
@@ -20,25 +19,24 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 # pylint: disable=unused-import
 from ray.util.placement_group import PlacementGroup
 
-from vllm.executor.executor_base import ExecutorBase
-from vllm.executor.ray_gpu_executor import RayGPUExecutor, RayGPUExecutorAsync, RayWorkerWrapper, envs, \
+from vllm.executor.ray_gpu_executor import RayGPUExecutorAsync, RayWorkerWrapper, envs, \
                                            get_ip, get_vllm_instance_id, get_distributed_init_method, get_open_port
 from vllm.worker.worker_base import WorkerBase
 
-from vllm.sequence import Logprob, SequenceOutput, ExecuteModelRequest
-from vllm.utils import GiB_bytes
-
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
-from llumnix.backends.vllm.utils import get_cache_block_size
-from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_prefill, model_decode, _pad_to_alignment
+from llumnix.utils import make_async
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
 
 class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     migration_config: MigrationConfig = None
-    last_inference_latency:int = 0
+    last_inference_latency: int = 0
+
+    async def _run_workers_async(self, *args, **kwargs):
+        return await make_async(self._run_workers)(*args, **kwargs)
 
     def _init_workers_ray(self, placement_group: PlacementGroup,
                           **ray_remote_kwargs):
@@ -68,6 +66,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         logger.info("use_ray_spmd_worker: %s", self.use_ray_spmd_worker)
 
         # Create the workers.
+        worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
         driver_ip = get_ip()
         worker_wrapper_kwargs = self._get_worker_wrapper_args()
         for bundle_id, bundle in enumerate(placement_group.bundle_specs):
@@ -86,7 +85,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 num_cpus=0,
                 num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
-                max_concurrency=2,
+                max_concurrency=worker_max_concurrency,
                 **ray_remote_kwargs,
             )(RayWorkerWrapper).remote(**worker_wrapper_kwargs)
 

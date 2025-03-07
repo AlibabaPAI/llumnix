@@ -162,13 +162,13 @@ def test_scheduler_pre_alloc():
     # total 8 blocks
     scheduler = initialize_scheduler()
 
-    blocks = scheduler.pre_alloc("1", RequestStatus.RUNNING, 0.0, 2, range(2*4))
+    blocks = scheduler.pre_alloc("0", "1", RequestStatus.RUNNING, 0.0, 2, range(2*4))
     assert len(blocks) == 2
     assert len(scheduler.pre_alloc_cache_dict["1"].physical_block_ids) == 2
-    blocks = scheduler.pre_alloc("1", RequestStatus.RUNNING, 0.0, 4, range(4*4))
+    blocks = scheduler.pre_alloc("0", "1", RequestStatus.RUNNING, 0.0, 4, range(4*4))
     assert len(blocks) == 4
     assert len(scheduler.pre_alloc_cache_dict["1"].physical_block_ids) == 6
-    blocks = scheduler.pre_alloc("2,", RequestStatus.RUNNING, 0.0, 4, range(4*4))
+    blocks = scheduler.pre_alloc("0", "2,", RequestStatus.RUNNING, 0.0, 4, range(4*4))
     assert len(blocks) == 0
 
 def test_schedule_running():
@@ -202,12 +202,12 @@ def test_schedule_running():
     before_arrival = time.time()
     _, seq_group = create_dummy_prompt("1", prompt_length=1, block_size=2, expected_steps=math.inf)
     after_arrival = time.time()
-    blocks = scheduler.pre_alloc("2", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
+    blocks = scheduler.pre_alloc("0", "2", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
     assert len(blocks) == 2
     scheduler.add_waiting_request(seq_group)
-    blocks = scheduler.pre_alloc("3", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
+    blocks = scheduler.pre_alloc("0", "3", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
     assert len(blocks) == 0
-    blocks = scheduler.pre_alloc("4", RequestStatus.WAITING_MIGRATING, before_arrival, 2, range(2*4))
+    blocks = scheduler.pre_alloc("0", "4", RequestStatus.WAITING_MIGRATING, before_arrival, 2, range(2*4))
     assert len(blocks) == 2
 
 def test_try_schedule_times():

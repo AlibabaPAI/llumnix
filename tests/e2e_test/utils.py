@@ -34,7 +34,8 @@ def generate_launch_command(result_filename: str = "",
                             enable_pd_disagg: bool = False,
                             instance_type: str = "no_constraints",
                             tensor_parallel_size: int = 1,
-                            enable_simulator: bool = False):
+                            enable_simulator: bool = False,
+                            migration_num_buffers: int = 1):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -53,6 +54,7 @@ def generate_launch_command(result_filename: str = "",
         f"--request-migration-policy {request_migration_policy} "
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
+        f"--migration-num-buffers {migration_num_buffers} "
         f"--tensor-parallel-size {tensor_parallel_size} "
         f"--request-output-queue-port {1234+port} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
@@ -78,7 +80,8 @@ def generate_serve_command(result_filename: str = "",
                            max_num_batched_tokens: int = 16000,
                            enable_pd_disagg: bool = False,
                            pd_ratio: str = "1:1",
-                           enable_simulator: bool = False):
+                           enable_simulator: bool = False,
+                           migration_num_buffers: int = 1):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "
@@ -96,6 +99,7 @@ def generate_serve_command(result_filename: str = "",
         f"--request-migration-policy {request_migration_policy} "
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
+        f"--migration-num-buffers {migration_num_buffers} "
         f"--tensor-parallel-size 1 "
         f"--request-output-queue-port {1234+port} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "

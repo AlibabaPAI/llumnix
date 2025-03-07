@@ -14,10 +14,11 @@
 import time
 from typing import Dict, List
 import math
+import threading
 import ray
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 import torch
 
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
 from vllm.config import CacheConfig,  ModelConfig, ParallelConfig
@@ -29,6 +30,8 @@ from llumnix.backends.vllm.utils import _sample_with_torch
 from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migration_backend
 from llumnix.internal_config import MigrationConfig
 from llumnix.utils import convert_bytes
+from llumnix import envs as llumnix_envs
+
 
 logger = init_logger(__name__)
 
@@ -40,21 +43,44 @@ class MigrationWorker(Worker):
         import vllm.model_executor.layers.sampler
         vllm.model_executor.layers.sampler._sample_with_torch = _sample_with_torch
 
+        worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
+        self.semaphore = threading.Semaphore(worker_max_concurrency)
+        self.lock = threading.Lock()
+        self.barrier = threading.Barrier(worker_max_concurrency)
+
         super().__init__(*args, **kwargs)
 
-    def load_model(self):
+    def set_cuda_device(self):
+        with self.semaphore:
+            self.barrier.wait()
+            torch.cuda.set_device(self.device)
+
+    def load_model(self, *args, **kwargs):
+        # Due to the max_concurrency of worker.
         torch.cuda.set_device(self.device)
-        return super().load_model()
+        return super().load_model(*args, **kwargs)
+
+    def determine_num_available_blocks(self, *args, **kwargs):
+        torch.cuda.set_device(self.device)
+        return super().determine_num_available_blocks(*args, **kwargs)
+
+    def initialize_cache(self, *args, **kwargs):
+        torch.cuda.set_device(self.device)
+        return super().initialize_cache(*args, **kwargs)
 
     def get_global_rank(self):
         return self.global_rank
 
     def reserve_memory_for_migration(self, migration_config: MigrationConfig, model_config: ModelConfig,
                                      cache_config: CacheConfig, parallel_config: ParallelConfig) -> int:
+        torch.cuda.set_device(self.device)
+
         migrate_cache_blocks_size = migration_config.migration_buffer_blocks
+        migration_num_buffers = migration_config.migration_num_buffers
         migration_num_layers = migration_config.migration_num_layers
-        dummy_cache_size = migration_num_layers * migrate_cache_blocks_size * CacheEngine.get_cache_block_size(
-            cache_config, model_config, parallel_config) // model_config.get_num_layers(parallel_config)
+        dummy_cache_size = migration_num_buffers * migration_num_layers * migrate_cache_blocks_size \
+                            * CacheEngine.get_cache_block_size(cache_config, model_config, parallel_config) \
+                            // model_config.get_num_layers(parallel_config)
 
         # For nccl migration backend, reserve gpu memory for dummy cache in migration backend. For other backends,
         # CPU memory is used for the dummy cache, which is almost unlimited, so no special action is needed.
@@ -76,6 +102,8 @@ class MigrationWorker(Worker):
 
     def init_migration(self, instance_id: str, migration_config: MigrationConfig, src_worker_handle_list,
                        placement_group) -> None:
+        torch.cuda.set_device(self.device)
+
         # for proxy actor
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,

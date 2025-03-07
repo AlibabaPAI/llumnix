@@ -43,9 +43,11 @@ class MigrationStatus(enum.Enum):
 
 class MigrationCoordinator:
     def __init__(self,
+                 instance_id: str,
                  backend_engine: BackendInterface,
                  migration_last_stage_max_blocks: int,
                  migration_max_stages: int) -> None:
+        self.instance_id = instance_id
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages
         self.backend_engine = backend_engine
@@ -71,7 +73,8 @@ class MigrationCoordinator:
                 return MigrationStatus.ABORTED_SRC
             self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
             dst_blocks = await migrate_in_ray_actor.execute_migration_method \
-                                    .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
+                                    .remote("migrate_in_pre_alloc", self.instance_id,
+                                                                    migrate_out_request.request_id,
                                                                     migrate_out_request.status,
                                                                     migrate_out_request.request_arrival_time,
                                                                     migrate_out_request.prefill_num_blocks,
@@ -128,7 +131,8 @@ class MigrationCoordinator:
                 incremental_token_ids = incremental_token_ids[:len(src_blocks)*migrate_out_request.block_size]
                 stage_block_num = len(incremental_blocks) - 1
                 dst_blocks = await migrate_in_ray_actor.execute_migration_method \
-                                        .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
+                                        .remote("migrate_in_pre_alloc", self.instance_id,
+                                                                        migrate_out_request.request_id,
                                                                         migrate_out_request.status,
                                                                         migrate_out_request.request_arrival_time,
                                                                         stage_block_num,
@@ -143,7 +147,8 @@ class MigrationCoordinator:
                 src_blocks = incremental_blocks[:]
                 stage_block_num = len(incremental_blocks)
                 dst_blocks = await migrate_in_ray_actor.execute_migration_method \
-                                        .remote("migrate_in_pre_alloc", migrate_out_request.request_id,
+                                        .remote("migrate_in_pre_alloc", self.instance_id,
+                                                                        migrate_out_request.request_id,
                                                                         migrate_out_request.status,
                                                                         migrate_out_request.request_arrival_time,
                                                                         stage_block_num,
@@ -176,6 +181,7 @@ class MigrationCoordinator:
             raise
 
     def migrate_in_pre_alloc(self,
+                             instance_id: str,
                              request_id: str,
                              request_status: RequestStatus,
                              request_arrival_time: float,
@@ -183,15 +189,16 @@ class MigrationCoordinator:
                              token_ids: List[int]) -> List[int]:
         """prev alloc blocks to migrate in request
         """
-        pre_alloc_blocks = self.backend_engine.pre_alloc(request_id,
+        pre_alloc_blocks = self.backend_engine.pre_alloc(instance_id,
+                                                         request_id,
                                                          request_status,
                                                          request_arrival_time,
                                                          block_num,
                                                          token_ids)
         if len(pre_alloc_blocks) != block_num:
             # failed to alloc, abort request
-            self.free_dst_pre_alloc_cache(request_id)
+            self.free_dst_pre_alloc_cache(instance_id, request_id)
         return pre_alloc_blocks
 
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
-        self.backend_engine.free_dst_pre_alloc_cache(request_id)
+    def free_dst_pre_alloc_cache(self, instance_id: str, request_id: str = None) -> None:
+        self.backend_engine.free_dst_pre_alloc_cache(instance_id, request_id)

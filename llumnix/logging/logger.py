@@ -25,8 +25,7 @@ from os import path
 from types import MethodType
 from typing import Any, cast
 
-# pylint: disable=consider-using-from-import
-import llumnix.envs as envs
+from llumnix import envs as llumnix_envs
 
 try:
     # import vllm logger first avoid other logger being disabled
@@ -35,12 +34,12 @@ try:
 except ImportError:
     pass
 
-LLUMNIX_CONFIGURE_LOGGING = envs.LLUMNIX_CONFIGURE_LOGGING
-LLUMNIX_LOGGING_CONFIG_PATH = envs.LLUMNIX_LOGGING_CONFIG_PATH
-LLUMNIX_LOGGING_LEVEL = envs.LLUMNIX_LOGGING_LEVEL
-LLUMNIX_LOGGING_PREFIX = envs.LLUMNIX_LOGGING_PREFIX
-LLUMNIX_LOG_STREAM = envs.LLUMNIX_LOG_STREAM
-LLUMNIX_LOG_NODE_PATH = envs.LLUMNIX_LOG_NODE_PATH
+LLUMNIX_CONFIGURE_LOGGING = llumnix_envs.LLUMNIX_CONFIGURE_LOGGING
+LLUMNIX_LOGGING_CONFIG_PATH = llumnix_envs.LLUMNIX_LOGGING_CONFIG_PATH
+LLUMNIX_LOGGING_LEVEL = llumnix_envs.LLUMNIX_LOGGING_LEVEL
+LLUMNIX_LOGGING_PREFIX = llumnix_envs.LLUMNIX_LOGGING_PREFIX
+LLUMNIX_LOG_STREAM = llumnix_envs.LLUMNIX_LOG_STREAM
+LLUMNIX_LOG_NODE_PATH = llumnix_envs.LLUMNIX_LOG_NODE_PATH
 
 _FORMAT = (f"{LLUMNIX_LOGGING_PREFIX}%(levelname)s %(asctime)s "
            "%(filename)s:%(lineno)d] %(message)s")

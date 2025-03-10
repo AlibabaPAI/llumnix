@@ -67,7 +67,7 @@ def run_vllm(model, max_model_len, sampling_params):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [True, False])
-async def test_correctness(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg):
+async def test_correctness(shutdown_llumnix_service, ray_env, model, launch_mode, enable_pd_disagg):
     max_model_len = 370
     sampling_params = {
         "n": 1,

@@ -113,7 +113,8 @@ class SchedulerLlumnix(Scheduler):
 
     def remove_waiting_request(self, request_id: str) -> bool:
         for seq_group in self.waiting:
-            if seq_group.request_id == request_id:
+            if seq_group.request_id == request_id and \
+               seq_group.get_seqs()[0].n_blocks * self.cache_config.block_size <= self._get_prompt_limit_without_seq_group():
                 self.waiting.remove(seq_group)
                 seq_group.set_status(RequestStatus.WAITING_MIGRATING)
                 return True
@@ -139,8 +140,7 @@ class SchedulerLlumnix(Scheduler):
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
-            if (self.waiting and request_arrival_time > self.waiting[0].arrival_time) or \
-                block_num * self.cache_config.block_size > self._get_prompt_limit_without_seq_group():
+            if (self.waiting and request_arrival_time > self.waiting[0].arrival_time):
                 return []
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
         if not block_table:
@@ -171,12 +171,14 @@ class SchedulerLlumnix(Scheduler):
 
     def can_allocate(self, seq_group: SequenceGroup) -> AllocStatus:
         if seq_group.status == RequestStatus.WAITING_MIGRATING:
+            logger.info("Can allocate waiting migrating request {}".format(seq_group.request_id))
             return AllocStatus.OK
         return super().can_allocate(seq_group)
 
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         # Change seq status to running, but request status is still waiting_migrating.
         if seq_group.status == RequestStatus.WAITING_MIGRATING:
+            logger.info("Allocate waiting migrating request {}".format(seq_group.request_id))
             # For the waiting request migrated in, blocks have already been allocated when pre alloc.
             self._set_status(seq_group, status_to=SequenceStatus.RUNNING)
             seq_group.reset_status()

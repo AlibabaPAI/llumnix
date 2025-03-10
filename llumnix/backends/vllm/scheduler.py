@@ -51,6 +51,12 @@ class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
         self._computed_blocks_tracker.add_seq(seq_id)
         self._last_access_blocks_tracker.add_seq(seq_id)
 
+    def can_allocate(self, seq_group: SequenceGroup, *args, **kwargs) -> AllocStatus:
+        if seq_group.status == RequestStatus.WAITING_MIGRATING:
+            return AllocStatus.OK
+        return super().can_allocate(seq_group, *args, **kwargs)
+
+
 class SchedulerLlumnix(Scheduler):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -113,7 +119,8 @@ class SchedulerLlumnix(Scheduler):
 
     def remove_waiting_request(self, request_id: str) -> bool:
         for seq_group in self.waiting:
-            if seq_group.request_id == request_id:
+            if seq_group.request_id == request_id and \
+               seq_group.get_seqs()[0].n_blocks * self.cache_config.block_size <= self._get_prompt_limit(seq_group):
                 self.waiting.remove(seq_group)
                 seq_group.set_status(RequestStatus.WAITING_MIGRATING)
                 return True
@@ -168,14 +175,10 @@ class SchedulerLlumnix(Scheduler):
         else:
             self.waiting.append(backend_request)
 
-    def can_allocate(self, seq_group: SequenceGroup) -> AllocStatus:
-        if seq_group.status == RequestStatus.WAITING_MIGRATING:
-            return AllocStatus.OK
-        return super().can_allocate(seq_group)
-
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         # Change seq status to running, but request status is still waiting_migrating.
         if seq_group.status == RequestStatus.WAITING_MIGRATING:
+            logger.info("Allocate waiting migrating request {}".format(seq_group.request_id))
             # For the waiting request migrated in, blocks have already been allocated when pre alloc.
             self._set_status(seq_group, status_to=SequenceStatus.RUNNING)
             seq_group.reset_status()

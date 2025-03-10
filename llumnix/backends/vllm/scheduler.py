@@ -146,7 +146,7 @@ class SchedulerLlumnix(Scheduler):
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
-            if (self.waiting and request_arrival_time > self.waiting[0].arrival_time):
+            if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
                 return []
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
         if not block_table:

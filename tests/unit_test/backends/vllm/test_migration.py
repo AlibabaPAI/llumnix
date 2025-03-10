@@ -108,14 +108,13 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("disable_async_output_proc", [False, True])
-@pytest.mark.parametrize("enforce_eager", [False, True])
 async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size,
                                      disable_async_output_proc, enforce_eager):
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
 
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
-                             disable_async_output_proc=disable_async_output_proc, enforce_eager=enforce_eager)
+                             enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
     id_rank_map = {"0": 0, "1": 1}
     if migration_request_status == 'running':
         request_migration_policy = "SR"

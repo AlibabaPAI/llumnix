@@ -109,7 +109,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("disable_async_output_proc", [False, True])
 async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size,
-                                     disable_async_output_proc, enforce_eager):
+                                     disable_async_output_proc):
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
 

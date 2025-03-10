@@ -139,7 +139,8 @@ class SchedulerLlumnix(Scheduler):
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
-            if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
+            if (self.waiting and request_arrival_time > self.waiting[0].arrival_time) or \
+                block_num * self.cache_config.block_size > self._get_prompt_limit_without_seq_group():
                 return []
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
         if not block_table:
@@ -188,6 +189,16 @@ class SchedulerLlumnix(Scheduler):
                     status_from: SequenceStatus = None):
         for seq in seq_group.get_seqs(status=status_from):
             seq.status = status_to
+
+    # Do not support lora request.
+    def _get_prompt_limit_without_seq_group(self) -> int:
+        if self.scheduler_config.chunked_prefill_enabled and \
+                not self.scheduler_config.is_multi_step:
+            prompt_limit = self.scheduler_config.max_model_len
+        else:
+            prompt_limit = min(self.scheduler_config.max_model_len,
+                               self.scheduler_config.max_num_batched_tokens)
+        return prompt_limit
 
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
         if request_id:

@@ -91,7 +91,7 @@ def get_instance_num_blocks():
     return instance_num_blocks_list
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 2 gpus required for migration bench")
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])

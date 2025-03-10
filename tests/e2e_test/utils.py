@@ -162,6 +162,38 @@ def generate_bench_command(ip_ports: str,
     )
     return command
 
+def generate_config_command(config_path: str,
+                            ip: str,
+                            port: str,
+                            model: str = 'facebook/opt-125m',
+                            launch_mode: str = 'local',
+                            result_filename: str = ""):
+    if launch_mode == 'local':
+        command = (
+            f"HEAD_NODE_IP='127.0.0.1' "
+            f"HEAD_NODE=1 "
+            f"python -m llumnix.entrypoints.vllm.api_server "
+            f"--config-file {config_path} "
+            f"--host {ip} "
+            f"--port {port} "
+            f"--initial-instances 1 "
+            f"--model {model} "
+            f"--worker-use-ray "
+            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+        )
+    else: # launch_mode == 'global'
+        command = (
+            f"python -m llumnix.entrypoints.vllm.serve "
+            f"--config-file {config_path} "
+            f"--host {ip} "
+            f"--port {port} "
+            f"--max-instances 1 "
+            f"--model {model} "
+            f"--worker-use-ray "
+            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+        )
+    return command
+
 def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)

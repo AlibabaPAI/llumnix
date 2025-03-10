@@ -114,7 +114,6 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
 
-    # TODO(s5u13b): Debug when enforce_eager=True, the migration will be incorrect.
     engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
                              disable_async_output_proc=disable_async_output_proc, enforce_eager=enforce_eager)
     id_rank_map = {"0": 0, "1": 1}

@@ -45,7 +45,6 @@ class MigrationWorker(Worker):
 
         worker_max_concurrency = llumnix_envs.LLUMNIX_WORKER_MAX_CONCURRENCY
         self.semaphore = threading.Semaphore(worker_max_concurrency)
-        self.lock = threading.Lock()
         self.barrier = threading.Barrier(worker_max_concurrency)
 
         super().__init__(*args, **kwargs)

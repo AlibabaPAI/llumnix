@@ -322,6 +322,7 @@ class RayColMigrationBackend(MigrationBackendWithBuffer):
                                             dtype=torch.int64,
                                             device="cpu",
                                             pin_memory=True).view(-1, 2)
+        # TODO(s5u13b): Add timeout mechanism to totally avoid dead lock in worker-level.
         dummy_cache_idx = self.get_available_cache()
         recv_cache = self.dummy_buffer[dummy_cache_idx][:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
 

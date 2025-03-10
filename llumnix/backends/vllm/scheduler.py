@@ -149,6 +149,7 @@ class SchedulerLlumnix(Scheduler):
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
         if not block_table:
             block_table = self.block_manager.get_free_blocks(block_num, token_ids)
+            # TODO(s5u13b): Add unique id generated from instance_id and request_id.
             self.pre_alloc_cache_dict[request_id] = block_table
             self.pre_alloc_instance_requests[instance_id].add(request_id)
             self.pre_alloc_request_instance[request_id] = instance_id

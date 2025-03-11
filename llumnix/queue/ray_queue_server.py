@@ -24,8 +24,6 @@ class RayQueueServer(QueueServerBase):
     def __init__(self) -> None:
         self.queue = RayQueue(
             actor_options={
-                "name": "request_output_queue",
-                "namespace": "llumnix",
                 "scheduling_strategy":
                     NodeAffinitySchedulingStrategy(
                         node_id=ray.get_runtime_context().get_node_id(),

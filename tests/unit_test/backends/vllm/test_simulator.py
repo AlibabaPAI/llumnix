@@ -32,7 +32,8 @@ class MockBackendSim(BackendSimVLLM):
 
 @pytest.mark.asyncio
 async def test_executor():
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True, disable_async_output_proc=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True,
+                             enforce_eager=True, disable_async_output_proc=True)
     engine_config = engine_args.create_engine_config()
     latency_mem = LatencyMemData({},{},{})
     latency_mem.prefill_model_params = (1,1)
@@ -75,7 +76,8 @@ async def test_executor():
 async def test_backend(ray_env):
     # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True, disable_async_output_proc=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True,
+                             enforce_eager=True, disable_async_output_proc=True)
     migration_config = MigrationConfig("SR", "gloo", 16, 1, 4, 5, 20)
 
     request_output_queue_type = QueueType.RAYQUEUE

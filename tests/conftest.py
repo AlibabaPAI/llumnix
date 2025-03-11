@@ -28,7 +28,7 @@ from llumnix.utils import random_uuid
 
 def ray_start():
     for _ in range(5):
-        subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
+        subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL)
         subprocess.run(["ray", "start", "--head", "--port=6379"], check=False, stdout=subprocess.DEVNULL)
         time.sleep(5.0)
         result = subprocess.run(["ray", "status"], check=False, capture_output=True, text=True)
@@ -38,8 +38,8 @@ def ray_start():
         time.sleep(3.0)
     raise Exception("Ray start failed after 5 attempts.")
 
-def pytest_sessionstart(session):
-    ray_start()
+def ray_stop():
+    subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
 
 def cleanup_ray_env_func():
     try:
@@ -82,6 +82,12 @@ def cleanup_ray_env_func():
         # pylint: disable=bare-except
         except:
             pass
+
+def pytest_sessionstart(session):
+    ray_start()
+
+def pytest_sessionfinish(session):
+    ray_stop()
 
 @pytest.fixture
 def ray_env():

@@ -138,7 +138,7 @@ def init_manager_with_launch_mode(launch_mode, request_output_queue_type="rayque
                                pd_ratio=pd_ratio, max_instances=max_instances)
     instance_args = InstanceArgs(migration_backend="rayrpc")
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type=request_output_queue_type)
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     launch_args = LaunchArgs(launch_mode=launch_mode, backend_type=BackendType.VLLM)
 
     # As mock_manager can not be initialized to ray actor, it is initialized as local variable.
@@ -204,7 +204,7 @@ def test_init_llumlet(ray_env, llumlet):
     ray.get(llumlet.is_ready.remote())
 
 def test_init_instances(ray_env, manager):
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, InstanceArgs(), engine_args))
     num_instances = len(instances)
     manager_args = ManagerArgs()
@@ -214,7 +214,7 @@ def test_init_instances_sim(ray_env, manager):
     # pylint: disable=import-outside-toplevel
     # cannot catch by pytest.raises
     try:
-        engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True)
+        engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
         _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM,
                                                             InstanceArgs(profiling_result_file_path="/"), engine_args))
     # pylint: disable=broad-except
@@ -509,7 +509,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env,
 @pytest.mark.asyncio
 async def test_pd_disagg_deployment_states():
     manager_args = ManagerArgs(enable_migration=True, enable_pd_disagg=True, pd_ratio="1:2")
-    engine_args = EngineArgs(model="facebook/opt-125m", worker_use_ray=True, enforce_eager=True)
+    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     manager = Manager(entrypoints_args=EntrypointsArgs(), manager_args=manager_args,
                       instance_args=InstanceArgs(migration_backend="rayrpc"),
                       engine_args=engine_args, launch_args=LaunchArgs(LaunchMode.LOCAL, BackendType.VLLM),

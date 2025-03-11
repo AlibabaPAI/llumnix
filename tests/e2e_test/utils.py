@@ -22,10 +22,10 @@ def generate_launch_command(result_filename: str = "",
                             HEAD_NODE_IP: str = "127.0.0.1",
                             ip: str = "127.0.0.1",
                             port: int = 37000,
-                            instances_num = 1,
+                            instances_num: int = 1,
                             dispatch_policy: str = "load",
-                            migration_backend = "gloo",
-                            model = "facebook/opt-125m",
+                            migration_backend: str = "gloo",
+                            model: str = "facebook/opt-125m",
                             max_model_len: int = 4096,
                             log_instance_info: bool = False,
                             log_request_timestamps: bool = False,
@@ -69,8 +69,8 @@ def generate_serve_command(result_filename: str = "",
                            ip: str = "127.0.0.1",
                            port: int = 37000,
                            dispatch_policy: str = "load",
-                           migration_backend = "gloo",
-                           model = "facebook/opt-125m",
+                           migration_backend: str = "gloo",
+                           model: str = "facebook/opt-125m",
                            max_model_len: int = 4096,
                            log_instance_info: bool = False,
                            log_request_timestamps: bool = True,
@@ -179,6 +179,7 @@ def generate_config_command(config_path: str,
             f"--initial-instances 1 "
             f"--model {model} "
             f"--worker-use-ray "
+            f"--download-dir /mnt/model "
             f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
         )
     else: # launch_mode == 'global'
@@ -190,6 +191,7 @@ def generate_config_command(config_path: str,
             f"--max-instances 1 "
             f"--model {model} "
             f"--worker-use-ray "
+            f"--download-dir /mnt/model "
             f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
         )
     return command
@@ -198,6 +200,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
+    time.sleep(5.0)
 
 @pytest.fixture
 def shutdown_llumnix_service():

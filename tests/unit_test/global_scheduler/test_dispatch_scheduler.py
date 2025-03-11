@@ -57,7 +57,10 @@ def test_dispatch_to_no_constraints_and_prefill():
     dispatched_instance_ids = []
     available_instance_type = ['no_constraints', 'prefill', 'decode']
     for instance_id, _ in dispatch_scheduler.instance_info.items():
-        instance_type = random.choice(available_instance_type)
+        if len(dispatched_instance_ids) == 0:
+            instance_type = random.choice(['no_constraints', 'prefill'])
+        else:
+            instance_type = random.choice(available_instance_type)
         dispatch_scheduler.add_instance(instance_id, InstanceArgs(instance_type=instance_type))
         if instance_type != 'decode':
             dispatched_instance_ids.append(instance_id)

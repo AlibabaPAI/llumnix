@@ -69,7 +69,7 @@ def parse_log_file():
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
-async def test_simple_benchmark(shutdown_llumnix_service, ray_env, model, launch_mode, enable_pd_disagg, enable_simulator):
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg, enable_simulator):
     if enable_simulator and enable_pd_disagg:
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
 

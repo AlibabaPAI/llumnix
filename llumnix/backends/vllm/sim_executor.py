@@ -20,6 +20,7 @@ from vllm.executor.ray_gpu_executor import RayGPUExecutor
 from vllm.sequence import Logprob, SequenceOutput, ExecuteModelRequest
 from vllm.model_executor.layers.sampler import SamplerOutput, CompletionSequenceGroupOutput
 from vllm.utils import GiB_bytes
+from vllm import envs
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import get_cache_block_size
@@ -42,6 +43,8 @@ class SimGPUExecutor(RayGPUExecutor):
         self.sim_cache_config = SimCacheConfig(self.cache_config.gpu_memory_utilization,
                                                self.cache_config.block_size,
                                                self.scheduler_config.max_num_batched_tokens)
+
+        self.use_ray_spmd_worker = envs.VLLM_USE_RAY_SPMD_WORKER
 
     def _init_executor(self) -> None:
         pass

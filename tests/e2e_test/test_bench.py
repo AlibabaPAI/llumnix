@@ -64,7 +64,7 @@ def parse_log_file():
     return to_markdown_table(prefill_data) + "\n\n" + to_markdown_table(decode_data)
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for simple benchmark")
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])

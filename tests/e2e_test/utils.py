@@ -200,7 +200,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
-    time.sleep(3.0)
+    time.sleep(5.0)
 
 @pytest.fixture
 def shutdown_llumnix_service():

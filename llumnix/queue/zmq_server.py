@@ -21,6 +21,7 @@ import zmq.asyncio
 import zmq.error
 import cloudpickle
 
+from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
                                      RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest,
                                      get_open_zmq_ipc_path)
@@ -39,11 +40,11 @@ class Full(Exception):
     pass
 
 
-class ZmqServer:
+class ZmqServer(QueueServerBase):
     def __init__(self, ip: str, port: int, maxsize=0):
         rpc_path = get_open_zmq_ipc_path(ip, port)
 
-        self.context = zmq.asyncio.Context()
+        self.context: zmq.asyncio.Context = zmq.asyncio.Context(8)
 
         # Maximum number of sockets that can be opened (typically 65536).
         # ZMQ_SOCKET_LIMIT (http://api.zeromq.org/4-2:zmq-ctx-get)
@@ -57,8 +58,7 @@ class ZmqServer:
         # safe to set MAX_SOCKETS to the zmq SOCKET_LIMIT (i.e. will
         # not run into ulimit issues)
         self.context.set(zmq.constants.MAX_SOCKETS, socket_limit)
-
-        self.socket = self.context.socket(zmq.constants.ROUTER)
+        self.socket = self.context.socket(zmq.ROUTER)
         self.socket.set_hwm(RPC_ZMQ_HWM)
 
         for attempt in range(MAX_BIND_ADDRESS_RETRY_TIMES):
@@ -98,9 +98,9 @@ class ZmqServer:
         except asyncio.TimeoutError as e:
             raise Full from e
 
-    async def get(self, timeout=None):
+    async def get(self):
         try:
-            return await asyncio.wait_for(self.queue.get(), timeout)
+            return await asyncio.wait_for(self.queue.get(), timeout=None)
         except asyncio.TimeoutError as e:
             raise Empty from e
 

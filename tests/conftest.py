@@ -38,9 +38,6 @@ def ray_start():
         time.sleep(3.0)
     raise Exception("Ray start failed after 5 attempts.")
 
-def pytest_sessionstart(session):
-    ray_start()
-
 def cleanup_ray_env_func():
     try:
         actor_states = list_actors()
@@ -83,11 +80,19 @@ def cleanup_ray_env_func():
         except:
             pass
 
+def pytest_sessionstart(session):
+    ray_start()
+
+def pytest_sessionfinish(session):
+    cleanup_ray_env_func()
+
 @pytest.fixture
 def ray_env():
-    ray.init(namespace="llumnix", ignore_reinit_error=True)
-    yield
-    cleanup_ray_env_func()
+    try:
+        ray.init(namespace="llumnix", ignore_reinit_error=True)
+        yield
+    finally:
+        cleanup_ray_env_func()
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

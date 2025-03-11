@@ -39,7 +39,16 @@ Inference engines like vLLM provide an API server user interface, e.g., `python 
 Llumnix provides a similar user interface to enable seamless integration with such existing multi-instance deployments.
 You only need two simple steps to migrate from a deployed vLLM service to Llumnix:
 
-1. Replace the original vLLM server entrypoint with the Llumnix one.
+1. Setup environment variables to launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster.
+```
+# Configure on all nodes.
+export HEAD_NODE_IP=$HEAD_NODE_IP_ADDRESS
+
+# Configure on head node.
+export HEAD_NODE=1
+```
+
+2. Replace the original vLLM server entrypoint with the Llumnix one.
 ```
 python -m llumnix.entrypoints.vllm.api_server \
     --config-file $CONFIG_PATH \
@@ -50,15 +59,6 @@ python -m llumnix.entrypoints.vllm.api_server \
 
 Upon starting the server, Llumnix's components are automatically configured.
 In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.6.3.post1/models/engine_args.html). Lluminx arguments from cli will override the corresponding configuration in config file.
-
-2. Launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster.
-```
-# Configure on all nodes.
-export HEAD_NODE_IP=$HEAD_NODE_IP_ADDRESS
-
-# Configure on head node.
-export HEAD_NODE=1
-```
 
 During the execution of serving deployment, Llumnix will:
 - Initiate the Ray cluster for distributed execution.
@@ -91,6 +91,8 @@ When you include the --launch-ray-cluster option in Llumnix's serving deployment
 We provide a benchmarking example to help you get through the usage of Llumnix.
 First, you should start the server to launch Llumnix and backend LLM engine instances:
 ```
+export HEAD_NODE_IP='127.0.0.1'
+
 HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
                 --config-file $CONFIG_PATH \
                 --host $HOST \
@@ -99,10 +101,9 @@ HEAD_NODE=1 python -m llumnix.entrypoints.vllm.api_server \
                 --launch-ray-cluster \
                 --model $MODEL_PATH \
                 --worker-use-ray \
-                --max-model-len 4096 \
                 --migration-backend rayrpc \
 ```
-`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/base.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node,
+`CONFIG_PATH` is the path to the configuration file for Llumnix, and we give an example configuration file [here](../configs/vllm.yml). `MODEL_PATH` defines the location of your model. `INITIAL_INSTANCES` determines the number of instances to be launched on the current node,
 
 Second, you can run the benchmark to evaluate the serving performance:
 

@@ -36,6 +36,7 @@ from llumnix.utils import initialize_placement_group, get_placement_group_name
 from tests.conftest import ray_env
 from .utils import initialize_scheduler
 
+
 class MockEngine(LLMEngineLlumnix):
     def __init__(self, *args, executor_class=None, **kwargs):
         self.scheduler = [initialize_scheduler()]
@@ -52,6 +53,7 @@ class MockEngine(LLMEngineLlumnix):
 
     def update_instance_info(self, instance_info):
         pass
+
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_llm_engine_from_engine_args(ray_env):

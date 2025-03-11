@@ -15,7 +15,6 @@ import asyncio
 import traceback
 from typing import List, Union, Iterable
 import time
-
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
@@ -96,13 +95,13 @@ class Llumlet:
                   backend_type: BackendType,
                   engine_args):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
-                f'unimplemented backend {backend_type}'
+            assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
+                f'unimplemented backend {BackendType}'
+            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
             if backend_type == BackendType.VLLM:
                 num_gpus = 0.5
-            elif backend_type == backend_type.BLADELLM:
-                world_size = get_engine_world_size(engine_args, backend_type)
-                num_gpus = world_size
+            elif backend_type == BackendType.BLADELLM:
+                num_gpus = get_engine_world_size(engine_args, backend_type)
             else: # backend_type == BackendType.SIM_VLLM
                 num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,

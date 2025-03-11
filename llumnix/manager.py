@@ -226,6 +226,10 @@ class Manager:
                        instance_args: InstanceArgs,
                        engine_args
                       ) -> Tuple[List[str], List[Llumlet]]:
+        async def instance_ready_scale_up(instance_id: str, instance: "ray.actor.ActorHandle"):
+            await instance.is_ready.remote()
+            self.scale_up(instance_id, instance, instance_args)
+
         instance_ids: List[str] = []
         instances: List[Llumlet] = []
         for _ in range(self.manager_args.initial_instances):
@@ -235,9 +239,7 @@ class Manager:
                                            backend_type, engine_args)
             instance_ids.append(instance_id)
             instances.append(instance)
-
-        # Because init_instances is called by multiple nodes simultaneously, we dot not wait instances ready here.
-        self.scale_up(instance_ids, instances, [instance_args]*len(instance_ids))
+            asyncio.create_task(instance_ready_scale_up(instance_id, instance))
 
         return instance_ids, instances
 

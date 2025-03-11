@@ -79,7 +79,7 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
 
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
 def test_reserve_memory_for_migration(ray_env, backend):
-    engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
+    engine_config = EngineArgs(model='facebook/opt-125m', download_dir="/mnt/model", max_model_len=8, enforce_eager=True).create_engine_config()
     migration_config = InstanceArgs(migration_buffer_blocks=1).create_migration_config()
     migration_config.migration_backend = backend
     worker = create_worker(rank=0, local_rank=0, engine_config=engine_config)
@@ -100,7 +100,7 @@ def test_reserve_memory_for_migration(ray_env, backend):
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
 def test_rebuild_migration_backend(ray_env, backend):
-    engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
+    engine_config = EngineArgs(model='facebook/opt-125m', download_dir="/mnt/model", max_model_len=8, enforce_eager=True).create_engine_config()
     migration_config = InstanceArgs(migration_buffer_blocks=1).create_migration_config()
     migration_config.migration_backend = backend
 
@@ -149,7 +149,7 @@ def test_rebuild_migration_backend(ray_env, backend):
     assert ray.get(worker0.execute_method.remote('warmup'))
 
 def test_max_concurrency(ray_env):
-    engine_config = EngineArgs(model='facebook/opt-125m', max_model_len=8, enforce_eager=True).create_engine_config()
+    engine_config = EngineArgs(model='facebook/opt-125m', download_dir="/mnt/model", max_model_len=8, enforce_eager=True).create_engine_config()
     worker_no_concurrency = create_worker(rank=0, local_rank=0, engine_config=engine_config,
                                           worker_module_name="tests.unit_test.backends.vllm.test_worker",
                                           worker_class_name="MockMigrationWorker",

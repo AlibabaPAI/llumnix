@@ -83,7 +83,8 @@ if __name__ == "__main__":
     # magic actor, without this actor, APIServer cannot initialize correctly.
     # If this actor is placed globally,
     # pylint will hangs if testing api_server_manager and api_server_service concurrently (--jobs > 1).
-    request_output_queue = RayQueue()
+    request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
+                                                   "name": "magic_ray_queue"})
 
     manager = MockManagerServer.from_args(entrypoints_args)
 

@@ -88,11 +88,9 @@ def pytest_sessionfinish(session):
 
 @pytest.fixture
 def ray_env():
-    try:
-        ray.init(namespace="llumnix", ignore_reinit_error=True)
-        yield
-    finally:
-        cleanup_ray_env_func()
+    ray.init(namespace="llumnix", ignore_reinit_error=True)
+    yield
+    cleanup_ray_env_func()
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

@@ -24,7 +24,7 @@ import ray
 from llumnix.entrypoints.utils import get_ip_address
 
 # pylint: disable=unused-import
-from tests.conftest import cleanup_ray_env_func
+from tests.conftest import ray_env
 from .utils import (generate_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service)
 
@@ -99,7 +99,7 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
-async def test_migration_benchmark(shutdown_llumnix_service, model, migration_backend, migration_request_status,
+async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, migration_backend, migration_request_status,
                                    tensor_parallel_size, use_ray_spmd_worker):
     if migration_request_status == 'waiting' and migration_backend != 'gloo':
         pytest.skip("When the migrated request status is waiting, only test the gloo migration backend.")
@@ -193,5 +193,3 @@ async def test_migration_benchmark(shutdown_llumnix_service, model, migration_ba
             f.write(to_markdown_table(data))
 
     await asyncio.sleep(3)
-    
-    cleanup_ray_env_func()

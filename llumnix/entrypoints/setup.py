@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import subprocess
-import traceback
 import sys
 import os
 import time

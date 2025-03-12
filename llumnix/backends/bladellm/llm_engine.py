@@ -38,6 +38,7 @@ from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
+from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -56,7 +57,8 @@ class AsyncBackQueueWrapper(APIWrapper):
         )
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
-            scheduling_strategy=scheduling_strategy
+            scheduling_strategy=scheduling_strategy,
+            name="AsyncPutQueueActor_"+random_uuid()
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
 

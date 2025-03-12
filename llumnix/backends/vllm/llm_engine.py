@@ -86,7 +86,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         )
         self.async_put_queue_actor: AsyncPutQueueActor = ray.remote(
             num_cpus=1,
-            scheduling_strategy=scheduling_strategy
+            scheduling_strategy=scheduling_strategy,
+            name="AsyncPutQueueActor_"+instance_id
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
 
@@ -119,6 +120,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             from llumnix.backends.vllm.executor import LlumnixRayGPUExecutor
             executor_class = LlumnixRayGPUExecutor
             executor_class.migration_config = migration_config
+            executor_class.instance_id = instance_id
         else:
             raise ValueError('Unsupported executor backend')
         # Create the LLM engine.

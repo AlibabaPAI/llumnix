@@ -35,7 +35,8 @@ def generate_launch_command(result_filename: str = "",
                             instance_type: str = "no_constraints",
                             tensor_parallel_size: int = 1,
                             enable_simulator: bool = False,
-                            output_queue_type: str = "rayqueue"):
+                            output_queue_type: str = "rayqueue",
+                            config_path: str = "configs/vllm.yml"):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -59,6 +60,7 @@ def generate_launch_command(result_filename: str = "",
         f"--request-output-queue-port {1234+port} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
+        f"--config-file {config_path} "
         f"--instance-type {instance_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'--simulator-mode ' if enable_simulator else ''}"
@@ -81,7 +83,8 @@ def generate_serve_command(result_filename: str = "",
                            enable_pd_disagg: bool = False,
                            pd_ratio: str = "1:1",
                            enable_simulator: bool = False,
-                           output_queue_type: str = "rayqueue"):
+                           output_queue_type: str = "rayqueue",
+                           config_path: str = "configs/vllm.yml"):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "
@@ -107,6 +110,7 @@ def generate_serve_command(result_filename: str = "",
         f"--enable-port-increment "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
+        f"--config-file {config_path} "
         f"--max-instances 4 "
         f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
@@ -164,40 +168,6 @@ def generate_bench_command(ip_ports: str,
         f"--fail_on_response_failure "
         f"{'> bench_'+results_filename if len(results_filename)> 0 else ''}"
     )
-    return command
-
-def generate_config_command(config_path: str,
-                            ip: str,
-                            port: str,
-                            model: str = 'facebook/opt-125m',
-                            launch_mode: str = 'local',
-                            result_filename: str = ""):
-    if launch_mode == 'local':
-        command = (
-            f"HEAD_NODE_IP='127.0.0.1' "
-            f"HEAD_NODE=1 "
-            f"python -m llumnix.entrypoints.vllm.api_server "
-            f"--config-file {config_path} "
-            f"--host {ip} "
-            f"--port {port} "
-            f"--initial-instances 1 "
-            f"--model {model} "
-            f"--worker-use-ray "
-            f"--download-dir /mnt/model "
-            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
-        )
-    else: # launch_mode == 'global'
-        command = (
-            f"python -m llumnix.entrypoints.vllm.serve "
-            f"--config-file {config_path} "
-            f"--host {ip} "
-            f"--port {port} "
-            f"--max-instances 1 "
-            f"--model {model} "
-            f"--worker-use-ray "
-            f"--download-dir /mnt/model "
-            f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
-        )
     return command
 
 def shutdown_llumnix_service_func():

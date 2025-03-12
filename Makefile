@@ -128,8 +128,4 @@ check_pytest_installed:
 		echo "pytest-asyncio is not installed. Installing pytest-asyncio ..."; \
 		python3 -m pip install pytest-asyncio; }
 
-	@python3 -m pip show pylint-pytest > /dev/null 2>&1 || { \
-		echo "pylint-pytest is not installed. Installing pylint-pytest ..."; \
-		python3 -m pip install pylint-pytest; }
-
 ###################################### pytest end #######################################

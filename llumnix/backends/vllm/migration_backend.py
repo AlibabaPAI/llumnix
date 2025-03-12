@@ -21,6 +21,7 @@ from vllm.worker.cache_engine import CacheEngine
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logging.logger import init_logger
+from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -43,16 +44,18 @@ NUMPY_SUPPORTED_DTYPES = [torch.float32, torch.float16]
 
 
 class RayRpcMigrationBackend(MigrationBackendBase):
-    def __init__(self, migration_config: MigrationConfig, cache_engine: List[CacheEngine],  worker_rank, worker_handle_list, \
-                  scheduling_strategy, is_driver_worker, gpu_cache) -> None:
+    def __init__(self, instance_id: str, migration_config: MigrationConfig, cache_engine: List[CacheEngine],
+                 worker_rank, worker_handle_list, scheduling_strategy, is_driver_worker, gpu_cache) -> None:
         super().__init__()
 
+        self.instance_id = instance_id
         self.migration_config = migration_config
         self.cache_engine = cache_engine
 
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
+        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
+                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote()
 
         if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES:
             self.rpc_dtype = self.cache_engine[0].dtype
@@ -156,13 +159,14 @@ def try_import_gloo():
 
 
 class RayColMigrationBackend(MigrationBackendBase):
-    def __init__(self, migration_config: MigrationConfig, cache_engine: List[CacheEngine], local_rank,
+    def __init__(self, instance_id: str, migration_config: MigrationConfig, cache_engine: List[CacheEngine], local_rank,
                  scheduling_strategy, is_driver_worker, gpu_cache) -> None:
         super().__init__()
 
         # pylint: disable=C0415
         import cupy
 
+        self.instance_id = instance_id
         self.migration_config = migration_config
         self.cache_engine = cache_engine
         self.backend = migration_config.migration_backend
@@ -175,7 +179,8 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.group_name = None
 
         self.local_rank = local_rank
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
+        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
+                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote()
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
 
@@ -302,8 +307,9 @@ class RayColMigrationBackend(MigrationBackendBase):
                     .swap_blocks(recv_cache[cache_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         self.migration_stream.synchronize()
 
-def get_migration_backend(migration_config: MigrationConfig, cache_engine: List[CacheEngine], worker_handle_list, scheduling_strategy,
-                        is_driver_worker, gpu_cache, worker_rank, local_rank) -> MigrationBackendBase:
+def get_migration_backend(instance_id: str, migration_config: MigrationConfig, cache_engine: List[CacheEngine],
+                          worker_handle_list, scheduling_strategy, is_driver_worker, gpu_cache, worker_rank,
+                          local_rank) -> MigrationBackendBase:
     if cache_engine[0].num_gpu_blocks < migration_config.migration_buffer_blocks:
         logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
                        .format(migration_config.migration_buffer_blocks, cache_engine[0].num_gpu_blocks))
@@ -315,10 +321,10 @@ def get_migration_backend(migration_config: MigrationConfig, cache_engine: List[
     assert backend in ['nccl', 'rayrpc', 'gloo'], "Unsupported migration backend: {} for llumnix".format(backend)
 
     if backend in ['nccl', 'gloo']:
-        target_migration_backend = RayColMigrationBackend(migration_config, cache_engine, local_rank, scheduling_strategy,
+        target_migration_backend = RayColMigrationBackend(instance_id, migration_config, cache_engine, local_rank, scheduling_strategy,
                                             is_driver_worker, gpu_cache)
     else:
-        target_migration_backend = RayRpcMigrationBackend(migration_config, cache_engine, worker_rank, worker_handle_list,
+        target_migration_backend = RayRpcMigrationBackend(instance_id, migration_config, cache_engine, worker_rank, worker_handle_list,
                                             scheduling_strategy, is_driver_worker, gpu_cache)
 
     return target_migration_backend

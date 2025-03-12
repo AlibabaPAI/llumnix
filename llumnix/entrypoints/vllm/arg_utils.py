@@ -11,16 +11,14 @@ from llumnix.entrypoints.utils import LaunchMode
 logger = init_logger(__name__)
 
 
-def add_cli_args(parser: LlumnixArgumentParser) -> "Namespace":
+def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
     parser.set_namespace("llumnix")
     parser = EntrypointsArgs.add_cli_args(parser)
     parser = ManagerArgs.add_cli_args(parser)
     parser = InstanceArgs.add_cli_args(parser)
     parser.set_namespace("vllm")
     parser = AsyncEngineArgs.add_cli_args(parser)
-    cli_args = parser.parse_args()
-
-    return cli_args
+    return parser
 
 def get_args(cfg, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
         -> Tuple[EntrypointsArgs, ManagerArgs, InstanceArgs, AsyncEngineArgs]:

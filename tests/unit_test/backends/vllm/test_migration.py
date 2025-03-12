@@ -103,6 +103,7 @@ class MockLlumletDoNotSchedule(Llumlet):
 
         self.backend_engine.engine.step_async = step_async_try_schedule
 
+# TODO(s5u13b): Test correctness of inner migration states.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])

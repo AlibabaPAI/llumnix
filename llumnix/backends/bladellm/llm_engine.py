@@ -295,13 +295,13 @@ class BackendBladeLLM(BackendInterface):
     def remove_waiting_request(self, request_id: str) -> bool:
         pass
 
-    def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def add_migrating_out_request_last_stage(self, dst_instance_id: str, backend_request: LlumnixRequest) -> None:
         pass
 
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def remove_migrating_out_request_last_stage(self, dst_instance_id: str, backend_request: LlumnixRequest) -> None:
         pass
 
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
+    def pop_migrating_out_requests_last_stage(self, dst_instance_id: str) -> List[LlumnixRequest]:
         pass
 
     def pre_alloc(self,

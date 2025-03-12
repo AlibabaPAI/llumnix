@@ -139,7 +139,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def add_migrating_out_request_last_stage(self, dst_instance_id: str, backend_request: LlumnixRequest) -> None:
         """
         Add a backend request to the list of migrating out requests in last stage.
 
@@ -148,12 +148,13 @@ class BackendInterface(ABC):
         running queue.
 
         Args:
+            dst_instance_id: The ID of destination instance.
             backend_request: An object representing the backend request.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def remove_migrating_out_request_last_stage(self, dst_instance_id: str, backend_request: LlumnixRequest) -> None:
         """
         Remove a backend request from the list of migrating out requests in last stage.
 
@@ -161,12 +162,13 @@ class BackendInterface(ABC):
         This action is performed after the migration is finished successfully.
 
         Args:
+            dst_instance_id: The ID of destination instance.
             backend_request: An object representing the backend request.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
+    def pop_migrating_out_requests_last_stage(self, dst_instance_id: str) -> List[LlumnixRequest]:
         """
         Pop the list of migrating out requests in last stage.
 
@@ -174,6 +176,7 @@ class BackendInterface(ABC):
         to free migrating out requests in last stage when the migration encounters exception.
 
         Returns:
+            dst_instance_id: The ID of destination instance.
             The list of migrating out requests in last stage.
         """
         raise NotImplementedError

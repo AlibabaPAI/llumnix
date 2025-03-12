@@ -62,7 +62,7 @@ class SchedulerLlumnix(Scheduler):
             sliding_window=self.cache_config.sliding_window,
             enable_caching=self.cache_config.enable_prefix_caching)
         self.pre_alloc_cache_dict: Dict[str, BlockTable] = {}
-        self.migrating_out_requests_last_stage: List[SequenceGroupLlumnix] = []
+        self.instance_migrating_out_requests_last_stage: Dict[str, List[SequenceGroupLlumnix]] = defaultdict(list)
         self.pre_alloc_request_instance: Dict[str, str] = {}
         self.pre_alloc_instance_requests: Dict[str, Set[str]] = defaultdict(set)
         self.migrating_out_request_last_stage: List[SequenceGroupLlumnix] = []
@@ -123,16 +123,16 @@ class SchedulerLlumnix(Scheduler):
                 return True
         return False
 
-    def add_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
-        self.migrating_out_requests_last_stage.append(backend_request)
+    def add_migrating_out_request_last_stage(self, dst_instance_id: str, backend_request: SequenceGroupLlumnix) -> None:
+        self.instance_migrating_out_requests_last_stage[dst_instance_id].append(backend_request)
 
-    def remove_migrating_out_request_last_stage(self, backend_request: SequenceGroupLlumnix) -> None:
-        self.migrating_out_requests_last_stage.remove(backend_request)
+    def remove_migrating_out_request_last_stage(self, dst_instance_id: str, backend_request: SequenceGroupLlumnix) -> None:
+        self.instance_migrating_out_requests_last_stage[dst_instance_id].remove(backend_request)
 
-    def pop_migrating_out_requests_last_stage(self) -> List[SequenceGroupLlumnix]:
-        migrating_out_request_last_stage = self.migrating_out_requests_last_stage.copy()
-        self.migrating_out_requests_last_stage.clear()
-        return migrating_out_request_last_stage
+    def pop_migrating_out_requests_last_stage(self, dst_instance_id: str) -> List[SequenceGroupLlumnix]:
+        migrating_out_requests_last_stage = self.instance_migrating_out_requests_last_stage[dst_instance_id].copy()
+        self.instance_migrating_out_requests_last_stage[dst_instance_id].clear()
+        return migrating_out_requests_last_stage
 
     def pre_alloc(self,
                   instance_id: str,

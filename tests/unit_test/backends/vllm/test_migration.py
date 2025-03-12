@@ -303,11 +303,11 @@ def test_clear_migration_states():
     assert len(llumlet.backend_engine.pre_alloc("0", "0", RequestStatus.RUNNING, 0.0, num_gpu_blocks, range(4*num_gpu_blocks))) == num_gpu_blocks
     _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.RUNNING)
     seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
-    llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
+    llumlet.backend_engine.add_migrating_out_request_last_stage("0", seq_group)
     llumlet.clear_migration_states(is_migrate_in=False, instance_id="0")
     assert len(llumlet.backend_engine.get_running_queue()) == 1
     _, seq_group = create_dummy_prompt("0", 7, block_size, SequenceStatus.WAITING)
     seq_group.set_status(RequestStatus.WAITING_MIGRATING)
-    llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
+    llumlet.backend_engine.add_migrating_out_request_last_stage("0", seq_group)
     llumlet.clear_migration_states(is_migrate_in=False, instance_id="0")
     assert len(llumlet.backend_engine.get_waiting_queue()) == 1

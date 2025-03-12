@@ -175,10 +175,10 @@ class Llumlet:
 
             if migrate_out_request.status == RequestStatus.RUNNING:
                 migrate_out_request.migration_start_time = time.time()
-                status = await self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
+                status = await self.migration_coordinator.migrate_out_running_request(dst_instance_id, migrate_in_ray_actor, migrate_out_request)
             elif migrate_out_request.status == RequestStatus.WAITING:
                 migrate_out_request.migration_start_time = time.time()
-                status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
+                status = await self.migration_coordinator.migrate_out_waiting_request(dst_instance_id, migrate_in_ray_actor, migrate_out_request)
             else:
                 self.num_migrating -= 1
                 return []
@@ -186,7 +186,7 @@ class Llumlet:
             if status == MigrationStatus.FINISHED:
                 await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", self.instance_id, migrate_out_request)
                 self.backend_engine.free_src_request(migrate_out_request)
-                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                self.backend_engine.remove_migrating_out_request_last_stage(dst_instance_id, migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
             else: # ABORTED_SRC or ABORTED_DST
                 migrate_out_request.reset_migration_args_src()
@@ -237,16 +237,16 @@ class Llumlet:
         request_ids = set(request_id)
         return self.backend_engine.abort_request(request_ids)
 
-    def clear_migration_states(self, is_migrate_in: bool, instance_id: str = None) -> None:
+    def clear_migration_states(self, is_migrate_in: bool, instance_id: str) -> None:
         logger.info("Instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
-            logger.info("clear_migration_states: free_dst_pre_alloc_cache")
+            logger.info("clear_migration_states, free dst instance {} pre-allocated cache".format(instance_id))
             self.backend_engine.free_dst_pre_alloc_cache(instance_id)
         else:
             # If migrate in instance dies during migration, migrate out instance should add the migrating out request in last stage.
             # back to the running request queue.
-            migrating_out_requests_last_stage = self.backend_engine.pop_migrating_out_requests_last_stage()
+            migrating_out_requests_last_stage = self.backend_engine.pop_migrating_out_requests_last_stage(instance_id)
             for backend_request in migrating_out_requests_last_stage:
                 logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
                 assert RequestStatus.is_migrating(backend_request.status), \

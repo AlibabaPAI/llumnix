@@ -60,7 +60,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
                  is_driver_worker: bool,
                  gpu_cache: Optional[List[List[torch.Tensor]]],
                  use_ray_spmd_worker: bool,
-                 worker_put_metadata_callback: Callable) -> None:
+                 worker_put_seq_group_metadata_callback: Callable) -> None:
         super().__init__()
 
         self.migration_config = migration_config
@@ -78,7 +78,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
         self.gpu_cache = gpu_cache
         self.use_ray_spmd_worker = use_ray_spmd_worker
-        self.worker_put_metadata_callback = worker_put_metadata_callback
+        self.worker_put_seq_group_metadata_callback = worker_put_seq_group_metadata_callback
 
         self.cache_device = "cpu"
         self.num_migration_buffer_blocks = self.migration_config.migration_buffer_blocks
@@ -118,7 +118,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
                       is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
-        src_metadata = None
+        src_seq_group_metadata = None
         for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
             offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
             is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
@@ -131,13 +131,13 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
 
             if send_worker_metadata:
-                rpc_numpy_cache, src_metadata = ray.get(ray_obj)
+                rpc_numpy_cache, src_seq_group_metadata = ray.get(ray_obj)
             else:
                 rpc_numpy_cache = ray.get(ray_obj)
 
         self.do_recv(rpc_numpy_cache, recv_blocks)
-        if src_metadata:
-            self.worker_put_metadata_callback(src_metadata)
+        if src_seq_group_metadata:
+            self.worker_put_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 
     def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
@@ -199,7 +199,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                  is_driver_worker: bool,
                  gpu_cache: Optional[List[List[torch.Tensor]]],
                  use_ray_spmd_worker: bool,
-                 worker_put_metadata_callback: Callable) -> None:
+                 worker_put_seq_group_metadata_callback: Callable) -> None:
         super().__init__()
 
         # pylint: disable=C0415
@@ -220,7 +220,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote(is_driver_worker, use_ray_spmd_worker)
         self.gpu_cache = gpu_cache
         self.use_ray_spmd_worker = use_ray_spmd_worker
-        self.worker_put_metadata_callback = worker_put_metadata_callback
+        self.worker_put_seq_group_metadata_callback = worker_put_seq_group_metadata_callback
 
         self.migration_cache_size = self.cache_engine[0].block_size * self.cache_engine[0].num_kv_heads * self.cache_engine[0].head_size
 
@@ -305,7 +305,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         tot_blocks = len(src_blocks)
         src_rank = ray.get(self.actor.exec_method.remote(src_handle, "get_global_rank"))
 
-        src_metadata = None
+        src_seq_group_metadata = None
         for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
             offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
             is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
@@ -316,9 +316,9 @@ class RayColMigrationBackend(MigrationBackendBase):
                                                     self.global_rank, send_blocks, request_id=request_id, send_worker_metadata=send_worker_metadata)
             self.do_recv(src_rank, recv_blocks)
             if send_worker_metadata:
-                _, src_metadata = ray.get(ray_obj)
-        if src_metadata:
-            self.worker_put_metadata_callback(src_metadata)
+                _, src_seq_group_metadata = ray.get(ray_obj)
+        if src_seq_group_metadata:
+            self.worker_put_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 
     def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
@@ -369,7 +369,7 @@ def get_migration_backend(migration_config: MigrationConfig,
                           worker_rank: int,
                           local_rank: int,
                           use_ray_spmd_worker: bool,
-                          worker_put_metadata_callback: Callable) -> MigrationBackendBase:
+                          worker_put_seq_group_metadata_callback: Callable) -> MigrationBackendBase:
     if cache_engine[0].num_gpu_blocks < migration_config.migration_buffer_blocks:
         logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
                        .format(migration_config.migration_buffer_blocks, cache_engine[0].num_gpu_blocks))
@@ -388,7 +388,7 @@ def get_migration_backend(migration_config: MigrationConfig,
                                                           is_driver_worker,
                                                           gpu_cache,
                                                           use_ray_spmd_worker,
-                                                          worker_put_metadata_callback)
+                                                          worker_put_seq_group_metadata_callback)
     else:
         target_migration_backend = RayRpcMigrationBackend(migration_config,
                                                           cache_engine,
@@ -398,6 +398,6 @@ def get_migration_backend(migration_config: MigrationConfig,
                                                           is_driver_worker,
                                                           gpu_cache,
                                                           use_ray_spmd_worker,
-                                                          worker_put_metadata_callback)
+                                                          worker_put_seq_group_metadata_callback)
 
     return target_migration_backend

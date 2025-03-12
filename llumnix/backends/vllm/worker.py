@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import time
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Union
 import math
 import traceback
 import ray
@@ -44,6 +44,7 @@ class MigrationWorker(Worker):
         # pylint: disable=import-outside-toplevel
         import vllm.model_executor.layers.sampler
         vllm.model_executor.layers.sampler._sample_with_torch = _sample_with_torch
+        self.migrating_out_seq_group_metadata: Dict[str, Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]] = {}
 
         super().__init__(*args, **kwargs)
 
@@ -115,7 +116,7 @@ class MigrationWorker(Worker):
                                                                              worker_rank=self.rank,
                                                                              local_rank=self.local_rank,
                                                                              use_ray_spmd_worker=self.use_ray_spmd_worker,
-                                                                             worker_put_metadata_callback=self._put_seq_group_metadata)
+                                                                             worker_put_seq_group_metadata_callback=self._put_seq_group_metadata)
 
     def migrate_cache(self,
                       src_worker_handle_list: List["ray.actor.ActorHandle"],
@@ -151,20 +152,31 @@ class MigrationWorker(Worker):
             return self.migration_backend.do_send(*args, **kwargs)
         return self.migration_backend.do_send(*args, **kwargs), self._get_seq_group_metadata(request_id)
 
-    def _get_seq_group_metadata(self, request_id: str) -> Dict[str, Any]:
-        src_metadata = {
-            "_seq_group_metadata_cache": {}
-        }
-        # the request_id is in self._seq_group_metadata_cache when the request is in running states.
-        if request_id in self._seq_group_metadata_cache:
-            src_metadata["_seq_group_metadata_cache"][request_id] = self._seq_group_metadata_cache[request_id]
-            self._seq_group_metadata_cache.pop(request_id)
+    def _get_seq_group_metadata(self, request_id: str) -> Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]:
+        assert request_id in self._seq_group_metadata_cache, \
+            "the request id of running request that migrating out should exist in sequence group metadata cache"
+        src_seq_group_metadata = self._seq_group_metadata_cache.pop(request_id)
+        self._add_migrating_out_seq_group_metadata(request_id, src_seq_group_metadata)
+        return src_seq_group_metadata
 
-        return src_metadata
+    def _put_seq_group_metadata(self, request_id: str,
+            src_seq_group_metadata: Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]) -> None:
+        self._seq_group_metadata_cache[request_id] = src_seq_group_metadata
 
-    def _put_seq_group_metadata(self, src_metadata: Dict[str, Any]) -> None:
-        if "_seq_group_metadata_cache" in src_metadata:
-            self._seq_group_metadata_cache.update(src_metadata["_seq_group_metadata_cache"])
+    def _add_migrating_out_seq_group_metadata(self, request_id: str,
+            seq_group_metadata: Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]) -> None:
+        self.migrating_out_seq_group_metadata[request_id] = seq_group_metadata
+
+    def pop_migrating_out_seq_group_metadata(self, request_id: str) -> None:
+        self.migrating_out_seq_group_metadata.pop(request_id)
+
+    def free_migrating_out_seq_group_metadata(self) -> None:
+        self.migrating_out_seq_group_metadata.clear()
+
+    def restore_migrating_out_seq_group_metadata(self) -> None:
+        for request_id, seq_group_metadata in self.migrating_out_seq_group_metadata.items():
+            self._seq_group_metadata_cache[request_id] = seq_group_metadata
+        self.migrating_out_seq_group_metadata.clear()
 
     def _execute_model_spmd(self, execute_model_req: ExecuteModelRequest, *args, **kwargs):
         if execute_model_req is not None:

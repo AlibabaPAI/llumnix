@@ -19,8 +19,11 @@ import subprocess
 import ray
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
-from ray.util.placement_group import PlacementGroup
-from ray.util.state import list_actors, list_placement_groups
+from ray.util.placement_group import (
+    PlacementGroup,
+    placement_group_table,
+    remove_placement_group,
+)
 import pytest
 
 from llumnix.utils import random_uuid
@@ -43,12 +46,12 @@ def ray_stop():
 
 def cleanup_ray_env_func():
     try:
-        actor_states = list_actors()
-        for actor_state in actor_states:
+        # list_actors cannot always take effects.
+        named_actors = ray.util.list_named_actors(True)
+        for actor in named_actors:
             try:
-                if actor_state['name'] and actor_state['ray_namespace']:
-                    actor_handle = ray.get_actor(actor_state['name'], namespace=actor_state['ray_namespace'])
-                    ray.kill(actor_handle)
+                actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+                ray.kill(actor_handle)
             # pylint: disable=bare-except
             except:
                 continue
@@ -57,14 +60,13 @@ def cleanup_ray_env_func():
         pass
 
     try:
-        # list_placement_groups cannot take effects.
-        pg_states = list_placement_groups()
-        for pg_state in pg_states:
+        # list_placement_groups always cannot take effects.
+        for placement_group_info in placement_group_table().values():
             try:
                 pg = PlacementGroup(
-                    PlacementGroupID(hex_to_binary(pg_state["placement_group_id"]))
+                    PlacementGroupID(hex_to_binary(placement_group_info["placement_group_id"]))
                 )
-                ray.util.remove_placement_group(pg)
+                remove_placement_group(pg)
             # pylint: disable=bare-except
             except:
                 pass
@@ -74,14 +76,7 @@ def cleanup_ray_env_func():
 
     time.sleep(1.0)
 
-    alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")])
-    if alive_actor_states:
-        print("There are still alive actors, alive_actor_states: {}".format(alive_actor_states))
-        try:
-            ray.shutdown()
-        # pylint: disable=bare-except
-        except:
-            pass
+    ray.shutdown()
 
 def pytest_sessionstart(session):
     ray_start()

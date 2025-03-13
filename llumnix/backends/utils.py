@@ -113,5 +113,5 @@ def get_engine_world_size(engine_args, backend_type: BackendType):
         engine_config = engine_args.create_engine_config()
         world_size = engine_config.parallel_config.world_size
     else: # BLADE_LLM
-        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
+        world_size = engine_args.world_size
     return world_size

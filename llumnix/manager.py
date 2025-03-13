@@ -135,7 +135,6 @@ class Manager:
         self.scaling_down = False
         self.last_check_scale_time = time.time()
 
-        # tasks
         # When manager starts, it automatically connects to all existing instances.
         run_async_func_sync(self._connect_to_instances())
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
@@ -220,7 +219,7 @@ class Manager:
             os.getcwd())
         return manager
 
-    def init_instances(self,
+    async def init_instances(self,
                        request_output_queue_type: QueueType,
                        backend_type: BackendType,
                        instance_args: InstanceArgs,
@@ -259,7 +258,6 @@ class Manager:
             else:
                 logger.info("Instance {} is dead.".format(instance_id))
                 self.scale_down(instance_id)
-
         while True:
             try:
                 await asyncio.sleep(interval)
@@ -666,6 +664,7 @@ class Manager:
                                 if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []
+        scale_up_instance_args = []
         scale_up_instance_actor_handles = []
         scale_up_instance_args = []
         tasks = []

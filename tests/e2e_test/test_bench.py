@@ -63,7 +63,7 @@ def parse_log_file(mark_parametrizes: dict):
         + "\n"
         + to_markdown_table(data)
         + "\n"
-        + "-------------------------------------"
+        + "-------------------------------------\n"
     )
 
 

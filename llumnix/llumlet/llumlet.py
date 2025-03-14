@@ -98,6 +98,7 @@ class Llumlet:
             assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
                 f'unimplemented backend {BackendType}'
             # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
             if backend_type == BackendType.VLLM:
                 num_gpus = 0.5
             elif backend_type == BackendType.BLADELLM:

@@ -15,7 +15,6 @@ import time
 import traceback
 from typing import Any, List, Optional, Union, Iterable, Deque, Tuple
 from collections import defaultdict
-import threading
 import asyncio
 import queue
 import ray
@@ -80,15 +79,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             placement_group_bundle_index=0,
             placement_group_capture_child_tasks=True,
         )
-        self.put_queue_args_queue = queue.Queue()
-        self.put_queue_loop_thread = threading.Thread(
-            target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
-        )
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
-        self.put_queue_loop_thread.start()
 
         self.disable_async_output_proc = disable_async_output_proc
 
@@ -233,7 +227,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         set_timestamp(request_outputs, 'engine_put_queue_timestamp', time.time())
 
         if request_outputs:
-            self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
+            asyncio.create_task(self._put_request_outputs_to_server(request_outputs, server_infos))
 
         set_timestamp(request_outputs, 'engine_step_postprocess_timestamp_end', time.time())
 
@@ -264,14 +258,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                                                              seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
                                                              seq_group.priority)
 
-    def _start_put_queue_loop(self):
-        while True:
-            args = self.put_queue_args_queue.get()
-            request_outputs, server_infos = args
-            set_timestamp(request_outputs, 'engine_thread_put_queue_timestamp', time.time())
-            self._put_request_outputs_to_server(request_outputs, server_infos)
-
-    def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
+    async def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in orther to put request output to queue in batch at one time.
@@ -281,7 +268,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
-        self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+        await self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
 
 class BackendVLLM(BackendInterface):

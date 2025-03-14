@@ -327,8 +327,9 @@ class Manager:
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
                     self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
-                logger.info("Instance {}->{} migrate done, migrate request {}".format(
-                    migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
+                if not self.manager_args.enable_pd_disagg:
+                    logger.info("Instance {}->{} migrate done, migrate request {}".format(
+                        migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
 
         def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
             ret = fut.result()[0]
@@ -349,11 +350,11 @@ class Manager:
                                         dst_instance_id, dst_instance_actor_handle), return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
-            if len(migration_tasks) > 0:
-                logger.info("{} migration tasks starts.".format(len(migration_tasks)))
+            if not self.manager_args.enable_pd_disagg:
+                logger.debug("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
-            if len(migration_tasks) > 0:
-                logger.info("{} migration tasks ends.".format(len(migration_tasks)))
+            if not self.manager_args.enable_pd_disagg:
+                logger.debug("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Unexpected exception: {}".format(e))

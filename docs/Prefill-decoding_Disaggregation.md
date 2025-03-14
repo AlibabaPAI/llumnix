@@ -42,8 +42,27 @@ Currently P-D disaggregation is an experimental feature, mainly to demonstrate t
 We are actively working on these items. Stay tuned :)
 
 ## How to use
-Llumnix uses two simple arguments to enable prefill-decoding disaggregation in the current version. 
-- `--enable-pd-disagg True` is used to enable prefill-decoding disaggregation.
-- `--num-available-dispatch-instances` is used to configure the initial number of prefill instances. 
 
-Note that one should make sure that `num-available-dispatch-instances` is smaller than `initial_instances` (especially when `--enable-scaling` is not set), otherwise there would be no instances for decoding.
+### Migrating from Existing Deployments
+
+People can launch the PD-separated service following the vLLM launch style. The only difference is that it is necessary to explicitly specify whether the instance to be launched is for prefill or decode. You first need follow the [Quickstart](./Quickstart.md) to configure environment variables HEAD_NODE_IP and HEAD_NODE for Llumnix. Then, follow the commands below to launch the instances:
+
+```bash
+# launch prefill instance
+python -m llumnix.entrypoints.vllm.api_server --host `hostname -i` --port $PORT --model $MODEL_PATH --worker-use-ray --trust-remote-code --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --instance-type prefill --initial-instances 1
+
+# launch decode instance
+python -m llumnix.entrypoints.vllm.api_server --host `hostname -i` --port $PORT --model $MODEL_PATH --worker-use-ray --trust-remote-code --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --instance-type decode --initial-instances 1
+```
+
+In this deployment model, `--instance-type` must be explicitly specified for every launch command, and `--initial-instances` will control how many instances of the corresponding type are launched. If only prefill instances exist and no decode instances are available, requests will hang in the prefill instances.
+
+### Centralized Launch
+
+Centralized launch assumes that users have already launched a Ray cluster. Llumnix will automatically connect to the Ray cluster and then deploy the prefill instance and decode instance according to the preset ratio. Users can submit the Llumnix launch job directly via the Ray job submission API in Centralized Launch deployment model. Below is an example of the centralized launch command:
+
+```bash
+python -m llumnix.entrypoints.vllm.serve --host `hostname -i` --port $PORT --model $MODEL_PATH --trust-remote-code --worker-use-ray --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --pd-ratio 1:1 --max-instances 2
+```
+
+The `--pd-ratio` specifies the ratio of prefill instances to decode in cluster, defaulting to 1:1. `--max-instances` controls the total number of instances (including both prefill and decode). Llumnix will attempt to launch instances as closely as possible to the specified PD_RATIO of prefill and decode. And, llumnix currently provides a simple mechanism that ensures there is at least one prefill and one decode instance in the cluster.

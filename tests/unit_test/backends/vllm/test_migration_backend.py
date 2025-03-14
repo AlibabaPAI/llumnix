@@ -50,10 +50,13 @@ class MockMigrationWorker(MigrationWorker):
     def get_worker_metadata(self, request_id):
         return self._seq_group_metadata_cache[request_id]
 
+    def get_worker_stage_metadata(self, request_id):
+        return self.migrating_in_seq_group_metadata[request_id]
+
 
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPU to run the test.")
 @pytest.mark.parametrize("backend", ['rayrpc', 'gloo', 'nccl'])
-@pytest.mark.parametrize("send_worker_metadata", [False, True])
+@pytest.mark.parametrize("send_worker_metadata", [True, False])
 def test_migrate_cache(ray_env, backend, send_worker_metadata):
     engine_config = EngineArgs(model='facebook/opt-125m', download_dir="/mnt/model", max_model_len=8, enforce_eager=True).create_engine_config()
     migraiton_config = InstanceArgs(migration_buffer_blocks=3, migration_num_layers=5).create_migration_config()
@@ -133,5 +136,5 @@ def test_migrate_cache(ray_env, backend, send_worker_metadata):
             assert torch.allclose(worker0_cache[layer_idx][1][src_idx], worker1_cache[layer_idx][1][dst_idx])
 
     if send_worker_metadata:
-        worker1_data = ray.get(worker1.execute_method.remote('get_worker_metadata', request_id=request_id))
+        worker1_data = ray.get(worker1.execute_method.remote('get_worker_stage_metadata', request_id=request_id))
         assert worker0_data == worker1_data

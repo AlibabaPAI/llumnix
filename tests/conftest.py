@@ -16,14 +16,14 @@ import time
 import shutil
 import os
 import subprocess
+
 import ray
+from ray.util.placement_group import PlacementGroup
+from ray.util.state import list_placement_groups
+from ray.util import list_named_actors
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
-from ray.util.placement_group import (
-    PlacementGroup,
-    placement_group_table,
-    remove_placement_group,
-)
+
 import pytest
 
 from llumnix.utils import random_uuid
@@ -46,37 +46,41 @@ def ray_stop():
 
 def cleanup_ray_env_func():
     try:
-        # list_actors cannot always take effects.
-        named_actors = ray.util.list_named_actors(True)
-        for actor in named_actors:
+        actor_names = list_named_actors()
+        for actor_name in actor_names:
             try:
-                actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+                actor_handle = ray.get_actor(actor_name, namespace="llumnix")
                 ray.kill(actor_handle)
             # pylint: disable=bare-except
             except:
-                continue
-    # pylint: disable=bare-except
-    except:
-        pass
-
-    try:
-        # list_placement_groups always cannot take effects.
-        for placement_group_info in placement_group_table().values():
-            try:
-                pg = PlacementGroup(
-                    PlacementGroupID(hex_to_binary(placement_group_info["placement_group_id"]))
-                )
-                remove_placement_group(pg)
-            # pylint: disable=bare-except
-            except:
                 pass
-    # pylint: disable=bare-except
-    except:
-        pass
+    # pylint: disable=broad-except
+    except Exception as e:
+        print("clear ray actor error: ", e)
 
     time.sleep(1.0)
 
-    ray.shutdown()
+    try:
+        # list_placement_groups cannot take effects.
+        pg_states = list_placement_groups()
+        for pg_state in pg_states:
+            pg = PlacementGroup(
+                PlacementGroupID(hex_to_binary(pg_state["placement_group_id"]))
+            )
+            ray.util.remove_placement_group(pg)
+    # pylint: disable=broad-except
+    except Exception as e:
+        print("clear placement group error: ", e)
+
+    time.sleep(1.0)
+
+    try:
+        ray.shutdown()
+    # pylint: disable=broad-except
+    except Exception as e:
+        print("ray shutdown error: ", e)
+
+    time.sleep(3.0)
 
 def pytest_sessionstart(session):
     ray_start()

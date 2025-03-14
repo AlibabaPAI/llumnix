@@ -40,7 +40,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
-from llumnix.utils import get_instance_name, make_async
+from llumnix.utils import get_instance_name, make_async, random_uuid
 from llumnix import constants
 from llumnix.metrics.timestamps import set_timestamp
 
@@ -86,7 +86,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         )
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
-            scheduling_strategy=scheduling_strategy
+            scheduling_strategy=scheduling_strategy,
+            name="AsyncPutQueueActor_"+random_uuid()
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
 

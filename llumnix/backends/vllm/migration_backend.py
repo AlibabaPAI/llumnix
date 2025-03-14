@@ -21,6 +21,7 @@ from vllm.worker.cache_engine import CacheEngine
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logging.logger import init_logger
+from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -52,7 +53,8 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
+        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
+                                        name="ProxyActor_"+random_uuid()).remote()
 
         if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES:
             self.rpc_dtype = self.cache_engine[0].dtype
@@ -175,7 +177,8 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.group_name = None
 
         self.local_rank = local_rank
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy).remote()
+        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
+                                        name="ProxyActor_"+random_uuid()).remote()
         self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
 

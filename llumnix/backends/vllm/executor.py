@@ -32,6 +32,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import get_cache_block_size
 from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_prefill, model_decode, _pad_to_alignment
+from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -87,6 +88,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
                 max_concurrency=2,
+                name="RayWorkerWrapper_"+random_uuid(),
                 **ray_remote_kwargs,
             )(RayWorkerWrapper).remote(**worker_wrapper_kwargs)
 

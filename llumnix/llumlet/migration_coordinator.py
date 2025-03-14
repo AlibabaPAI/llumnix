@@ -78,7 +78,7 @@ class MigrationCoordinator:
                                                                     migrate_out_request.token_ids)
             if len(dst_blocks) != migrate_out_request.prefill_num_blocks:
                 self.backend_engine.add_waiting_request(migrate_out_request)
-                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 return MigrationStatus.ABORTED_DST
 
             return MigrationStatus.FINISHED
@@ -136,6 +136,7 @@ class MigrationCoordinator:
             else:
                 # last stage migration, stop inference, transfer all blocks
                 migration_status = MigrationStatus.FINISHED
+                # TODO(s5u13b): Consider BladeLLM.
                 found = await self.backend_engine.remove_running_request(migrate_out_request.request_id)
                 # Request coule be finished by previous or current step.
                 if not found or migrate_out_request.finished:
@@ -154,7 +155,7 @@ class MigrationCoordinator:
                 # migrate-in instance failed to pre alloc
                 if is_last_stage:
                     self.backend_engine.add_running_request(migrate_out_request)
-                    self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                    self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 return MigrationStatus.ABORTED_DST
 
             if migrate_out_request.should_abort_migration():

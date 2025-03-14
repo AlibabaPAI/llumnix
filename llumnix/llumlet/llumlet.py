@@ -19,8 +19,6 @@ import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
-from vllm import envs as vllm_envs
-
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
@@ -77,8 +75,6 @@ class Llumlet:
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                                self.backend_engine)
             self.log_requests = True
-
-            self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
 
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
@@ -179,13 +175,10 @@ class Llumlet:
                 return migrated_request
 
             if status == MigrationStatus.FINISHED:
-                await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
+                # TODO(s5u13b): Consider BladeLLM.
+                await migrate_in_ray_actor.execute_engine_method_async.remote("commit_dst_request", migrate_out_request)
                 self.backend_engine.free_src_request(migrate_out_request)
-                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
-                # Only running requests have sequence group metadata in workers.
-                if self.use_ray_spmd_worker and migrate_out_request.status == RequestStatus.RUNNING_MIGRATING:
-                    # pylint: disable=protected-access
-                    await self.backend_engine._run_workers_async("pop_migrating_out_seq_group_metadata", migrate_out_request.request_id)
+                self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
             else: # ABORTED_SRC or ABORTED_DST
                 migrate_out_request.reset_migration_args_src()
@@ -239,19 +232,10 @@ class Llumlet:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
             logger.info("clear_migration_states: free_dst_pre_alloc_cache")
             self.backend_engine.free_dst_pre_alloc_cache()
-            # TODO(s5u13b): Only needed when migrating waiting request.
-            if self.use_ray_spmd_worker:
-                # pylint: disable=protected-access
-                await self.backend_engine._run_workers_async("free_migrating_out_seq_group_metadata")
         else:
             # If migrate in instance dies during migration, migrate out instance should add the migrating out request in last stage.
             # back to the running request queue.
-            migrating_out_requests_last_stage = self.backend_engine.pop_migrating_out_requests_last_stage()
-            # TODO(s5u13b): Only needed when migrating waiting request.
-            if self.use_ray_spmd_worker and migrating_out_requests_last_stage and \
-                migrating_out_requests_last_stage[0].status == RequestStatus.RUNNING_MIGRATING:
-                # pylint: disable=protected-access
-                await self.backend_engine._run_workers_async("restore_migrating_out_seq_group_metadata")
+            migrating_out_requests_last_stage = self.backend_engine.free_migrating_out_requests_last_stage()
             for backend_request in migrating_out_requests_last_stage:
                 logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
                 assert RequestStatus.is_migrating(backend_request.status), \

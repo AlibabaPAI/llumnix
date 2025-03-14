@@ -45,6 +45,7 @@ class MigrationWorker(Worker):
         import vllm.model_executor.layers.sampler
         vllm.model_executor.layers.sampler._sample_with_torch = _sample_with_torch
         self.migrating_out_seq_group_metadata: Dict[str, Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]] = {}
+        self.migrating_in_seq_group_metadata: Dict[str, Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]] = {}
 
         super().__init__(*args, **kwargs)
 
@@ -116,7 +117,7 @@ class MigrationWorker(Worker):
                                                                              worker_rank=self.rank,
                                                                              local_rank=self.local_rank,
                                                                              use_ray_spmd_worker=self.use_ray_spmd_worker,
-                                                                             worker_put_seq_group_metadata_callback=self._put_seq_group_metadata)
+                                                                             worker_stage_seq_group_metadata_callback=self._stage_seq_group_metadata)
 
     def migrate_cache(self,
                       src_worker_handle_list: List["ray.actor.ActorHandle"],
@@ -159,19 +160,26 @@ class MigrationWorker(Worker):
         self._add_migrating_out_seq_group_metadata(request_id, src_seq_group_metadata)
         return src_seq_group_metadata
 
-    def _put_seq_group_metadata(self, request_id: str,
+    def _stage_seq_group_metadata(self, request_id: str,
             src_seq_group_metadata: Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]) -> None:
-        self._seq_group_metadata_cache[request_id] = src_seq_group_metadata
+        self.migrating_in_seq_group_metadata[request_id] = src_seq_group_metadata
+
+    def _commit_seq_group_metadata(self, request_id: str) -> None:
+        assert request_id in self.migrating_in_seq_group_metadata, \
+            "the request id of running request that migrating in should exist in migrating in sequence group metadata"
+        self._seq_group_metadata_cache[request_id] = self.migrating_in_seq_group_metadata.pop(request_id)
 
     def _add_migrating_out_seq_group_metadata(self, request_id: str,
             seq_group_metadata: Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]) -> None:
         self.migrating_out_seq_group_metadata[request_id] = seq_group_metadata
 
     def pop_migrating_out_seq_group_metadata(self, request_id: str) -> None:
+        assert request_id in self.migrating_out_seq_group_metadata, \
+            "the request id of request that migrating out should exist in migrating out sequence group metadata"
         self.migrating_out_seq_group_metadata.pop(request_id)
 
-    def free_migrating_out_seq_group_metadata(self) -> None:
-        self.migrating_out_seq_group_metadata.clear()
+    def free_migrating_in_seq_group_metadata(self) -> None:
+        self.migrating_in_seq_group_metadata.clear()
 
     def restore_migrating_out_seq_group_metadata(self) -> None:
         for request_id, seq_group_metadata in self.migrating_out_seq_group_metadata.items():
@@ -192,7 +200,6 @@ class MigrationWorker(Worker):
             if request_id in self._seq_group_metadata_cache:
                 seq_group_metadata = self._seq_group_metadata_cache[request_id]
                 if isinstance(metadata_or_delta, SequenceGroupMetadataDelta):
-                    # TODO(s5u13b): Only support one sequence.
                     for new_seq_id, old_seq_id in zip(metadata_or_delta.seq_data_delta.keys(), \
                                                       seq_group_metadata.seq_data.keys()):
                         if new_seq_id != old_seq_id:

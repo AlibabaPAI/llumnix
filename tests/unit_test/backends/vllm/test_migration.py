@@ -62,13 +62,13 @@ def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_a
 class MockBackendVLLM(BackendVLLM):
     def __init__(self):
         self.engine = MockEngine()
+        self.use_ray_spmd_worker = True
 
 
 class MockLlumlet(Llumlet):
     def __init__(self):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
-        self.use_ray_spmd_worker = False
 
 
 @ray.remote

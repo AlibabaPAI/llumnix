@@ -150,12 +150,12 @@ class Launcher:
         return instance
 
     def clear_instance_ray_resources(self, instance_id: str):
-        if not remove_placement_group(instance_id):
-            logger.debug("Failed to remove placement group {}.".format(instance_id))
         if not kill_server(instance_id):
             logger.debug("Failed to kill server {}.".format(instance_id))
         if not kill_instance(instance_id):
             logger.debug("Failed to kill instance {}.".format(instance_id))
+        if not remove_placement_group(instance_id):
+            logger.debug("Failed to remove placement group {}.".format(instance_id))
 
     def _get_next_instance_args(self, instance_args: InstanceArgs) -> InstanceArgs:
         assert not self.enablde_engine_pd_disagg, \

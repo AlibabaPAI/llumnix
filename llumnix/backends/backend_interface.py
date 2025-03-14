@@ -141,9 +141,9 @@ class BackendInterface(ABC):
     @abstractmethod
     def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         """
-        Add a backend request to the list of migrating out requests in last stage.
+        Add a backend request to the dict of migrating out requests in last stage.
 
-        This method adds a backend request to the list of migrating out requests in last stage.
+        This method adds a backend request to the dict of migrating out requests in last stage.
         This action is performed after the migrating out request has been removed from the
         running queue.
 
@@ -153,11 +153,11 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def pop_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         """
-        Remove a backend request from the list of migrating out requests in last stage.
+        Pop a backend request from the dict of migrating out requests in last stage.
 
-        This method adds a backend request to the list of migrating out requests in last stage.
+        This method pops a backend request to the dict of migrating out requests in last stage.
         This action is performed after the migration is finished successfully.
 
         Args:
@@ -166,7 +166,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
+    def free_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
         """
         Pop the list of migrating out requests in last stage.
 
@@ -257,7 +257,12 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    async def send_blocks(self,
+                          dst_ray_actor: "ray.actor.ActorHandle",
+                          src_blocks: List[int],
+                          dst_blocks: List[int],
+                          request_id: str,
+                          is_last_stage: bool) -> None:
         """
         Send cache blocks from the source instance to the destination instance.
 
@@ -273,6 +278,8 @@ class BackendInterface(ABC):
                         sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's cache where the
                         incoming blocks should be stored.
+            request_id: Request ID.
+            is_last_stage: A boolean indicating whether this is the last stage of the migration.
         """
         raise NotImplementedError
 

@@ -15,7 +15,6 @@ import asyncio
 import traceback
 from typing import List, Union, Iterable
 import time
-
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
@@ -96,13 +95,14 @@ class Llumlet:
                   backend_type: BackendType,
                   engine_args):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
-                f'unimplemented backend {backend_type}'
+            assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
+                f'unimplemented backend {BackendType}'
+            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
             if backend_type == BackendType.VLLM:
                 num_gpus = 0.5
-            elif backend_type == backend_type.BLADELLM:
-                world_size = get_engine_world_size(engine_args, backend_type)
-                num_gpus = world_size
+            elif backend_type == BackendType.BLADELLM:
+                num_gpus = get_engine_world_size(engine_args, backend_type)
             else: # backend_type == BackendType.SIM_VLLM
                 num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,
@@ -176,9 +176,10 @@ class Llumlet:
                 return migrated_request
 
             if status == MigrationStatus.FINISHED:
-                await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
+                # TODO(s5u13b): Consider BladeLLM.
+                await migrate_in_ray_actor.execute_engine_method_async.remote("commit_dst_request", migrate_out_request)
                 self.backend_engine.free_src_request(migrate_out_request)
-                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
             else: # ABORTED_SRC or ABORTED_DST
                 migrate_out_request.reset_migration_args_src()
@@ -226,7 +227,7 @@ class Llumlet:
         request_ids = set(request_id)
         return self.backend_engine.abort_request(request_ids)
 
-    def clear_migration_states(self, is_migrate_in: bool) -> None:
+    async def clear_migration_states(self, is_migrate_in: bool) -> None:
         logger.info("Instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
@@ -235,7 +236,7 @@ class Llumlet:
         else:
             # If migrate in instance dies during migration, migrate out instance should add the migrating out request in last stage.
             # back to the running request queue.
-            migrating_out_requests_last_stage = self.backend_engine.pop_migrating_out_requests_last_stage()
+            migrating_out_requests_last_stage = self.backend_engine.free_migrating_out_requests_last_stage()
             for backend_request in migrating_out_requests_last_stage:
                 logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
                 assert RequestStatus.is_migrating(backend_request.status), \

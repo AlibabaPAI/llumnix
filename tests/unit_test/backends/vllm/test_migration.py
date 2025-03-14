@@ -13,9 +13,11 @@
 
 import asyncio
 import math
+import os
 from unittest.mock import MagicMock
 import pytest
 import ray
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
@@ -27,12 +29,12 @@ from llumnix.backends.utils import BackendType
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import (initialize_placement_group, get_placement_group_name,
+from llumnix.utils import (initialize_placement_group, get_placement_group_name, get_llumnix_env_vars,
                            remove_placement_group, kill_instance)
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
-from tests.conftest import ray_env
+from tests.conftest import ray_env, cleanup_ray_env_func
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt
@@ -60,6 +62,7 @@ def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_a
 class MockBackendVLLM(BackendVLLM):
     def __init__(self):
         self.engine = MockEngine()
+        self.use_ray_spmd_worker = True
 
 
 class MockLlumlet(Llumlet):
@@ -68,11 +71,9 @@ class MockLlumlet(Llumlet):
         self.backend_engine = MockBackendVLLM()
 
 
-@ray.remote(num_cpus=1)
+@ray.remote
 class MockLlumletDoNotSchedule(Llumlet):
-    def __init__(self, *args, num_gpus=1, **kwargs):
-        instance_id = kwargs["instance_id"]
-        placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=num_gpus, detached=True)
+    def __init__(self, placement_group, *args, **kwargs):
         kwargs["placement_group"] = placement_group
         super().__init__(*args, **kwargs)
         # stop the schedule in engine step loop
@@ -102,16 +103,34 @@ class MockLlumletDoNotSchedule(Llumlet):
 
         self.backend_engine.engine.step_async = step_async_try_schedule
 
-
+# TODO(s5u13b): Test correctness of inner migration states.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("disable_async_output_proc", [False, True])
-async def test_migration_correctness(ray_env, migration_backend, migration_request_status, tensor_parallel_size,
-                                     disable_async_output_proc):
+@pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
+async def test_migration_correctness(migration_backend, migration_request_status, tensor_parallel_size,
+                                     disable_async_output_proc, use_ray_spmd_worker):
     if migration_backend == 'nccl' and tensor_parallel_size == 2:
         pytest.skip("When the migration backend is nccl, Llumnix does not support tensor parallelism.")
+    if disable_async_output_proc and migration_backend != "gloo":
+        pytest.skip("Only test the gloo migration backend when disable async output processing.")
+    if use_ray_spmd_worker and tensor_parallel_size == 2:
+        pytest.skip("When using ray spmd worker, ray will raise RayCgraphCapacityExceeded exeception when tensor parallelism is enabled.")
+    if use_ray_spmd_worker and not disable_async_output_proc:
+        pytest.skip("When using ray spmd worker, async output processing is not supported.")
+    if use_ray_spmd_worker and migration_backend != "gloo":
+        pytest.skip("Only test the gloo migration backend when using ray spmd worker.")
+
+    if use_ray_spmd_worker:
+        os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
+        os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "1"
+    else:
+        os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "0"
+        os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "0"
+
+    ray.init(namespace="llumnix", ignore_reinit_error=True, runtime_env={"env_vars": get_llumnix_env_vars()})
 
     engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
                              enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
@@ -137,6 +156,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         if all(res):
             break
 
+    id_rank_map = {"0": 0, "1": 1}
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
              llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
@@ -202,15 +222,27 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
     if migration_request_status == 'waiting':
         kill_instance("0")
         remove_placement_group("0")
+        if use_ray_spmd_worker:
+            num_gpus = 0.5
+        else:
+            num_gpus = 0
+        placement_group = initialize_placement_group(get_placement_group_name("2"), num_cpus=3, num_gpus=tensor_parallel_size, detached=True)
         llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
+            num_cpus=1,
+            num_gpus=num_gpus,
             name='instance_2',
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_bundle_index=0,
+                placement_group_capture_child_tasks=True
+            ),
             namespace='llumnix').remote(
                 instance_id="2",
                 instance_args=instance_args,
                 request_output_queue_type=request_output_queue_type,
                 backend_type=BackendType.VLLM,
                 engine_args=engine_args,
-                num_gpus=tensor_parallel_size
+                placement_group=placement_group
             )
         while True:
             res = ray.get(llumlet_2.is_ready.remote())
@@ -226,6 +258,8 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         origin_output = origin_outputs[i]
         await test_correctness(prompt, origin_output)
     que.cleanup()
+
+    cleanup_ray_env_func()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
@@ -296,21 +330,22 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
 
     que.cleanup()
 
-def test_clear_migration_states():
+@pytest.mark.asyncio
+async def test_clear_migration_states():
     num_gpu_blocks = 8
     block_size = 4
     llumlet = MockLlumlet()
     llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, 1, range(4))
 
-    llumlet.clear_migration_states(is_migrate_in=True)
+    await llumlet.clear_migration_states(is_migrate_in=True)
     assert len(llumlet.backend_engine.pre_alloc("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks, range(4*num_gpu_blocks))) == num_gpu_blocks
     _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.RUNNING)
     seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
-    llumlet.clear_migration_states(is_migrate_in=False)
+    await llumlet.clear_migration_states(is_migrate_in=False)
     assert len(llumlet.backend_engine.get_running_queue()) == 1
     _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.WAITING)
     seq_group.set_status(RequestStatus.WAITING_MIGRATING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
-    llumlet.clear_migration_states(is_migrate_in=False)
+    await llumlet.clear_migration_states(is_migrate_in=False)
     assert len(llumlet.backend_engine.get_waiting_queue()) == 1

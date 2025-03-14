@@ -298,10 +298,10 @@ class BackendBladeLLM(BackendInterface):
     def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         pass
 
-    def remove_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
+    def pop_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         pass
 
-    def pop_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
+    def free_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
         pass
 
     def pre_alloc(self,
@@ -324,7 +324,12 @@ class BackendBladeLLM(BackendInterface):
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         pass
 
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    async def send_blocks(self,
+                          dst_ray_actor: "ray.actor.ActorHandle",
+                          src_blocks: List[int],
+                          dst_blocks: List[int],
+                          request_id: str,
+                          is_last_stage: bool) -> None:
         pass
 
     def commit_dst_request(self, backend_request: LlumnixRequest) -> None:

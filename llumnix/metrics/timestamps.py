@@ -37,7 +37,6 @@ class RequestTimestamps:
     engine_step_timestamp_end: float = 0.0
     engine_step_postprocess_timestamp_end: float = 0.0
     engine_put_queue_timestamp: float = 0.0
-    engine_thread_put_queue_timestamp: float = 0.0
     engine_actor_put_queue_timestamp: float = 0.0
     queue_client_send_timestamp: float = 0.0
     queue_server_receive_timestamp: float = 0.0
@@ -55,10 +54,8 @@ class RequestTimestamps:
                 (self.engine_step_timestamp_end - self.engine_step_timestamp_begin) * 1000,
             "step_postprocess_latency":
                 (self.engine_step_postprocess_timestamp_end - self.engine_step_timestamp_end) * 1000,
-            "across_async_put_queue_thread_latency":
-                (self.engine_thread_put_queue_timestamp - self.engine_put_queue_timestamp) * 1000,
             "across_async_put_queue_actor_latency":
-                (self.engine_actor_put_queue_timestamp - self.engine_thread_put_queue_timestamp) * 1000,
+                (self.engine_actor_put_queue_timestamp - self.engine_put_queue_timestamp) * 1000,
             "across_queue_client_latency":
                 (self.queue_client_send_timestamp - self.engine_actor_put_queue_timestamp) * 1000,
             "queue_rpc_latency":

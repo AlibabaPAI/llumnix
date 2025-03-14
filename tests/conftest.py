@@ -23,7 +23,6 @@ from ray.util.state import list_placement_groups
 from ray.util import list_named_actors
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
-
 import pytest
 
 from llumnix.utils import random_uuid

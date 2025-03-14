@@ -39,7 +39,7 @@ Inference engines like vLLM provide an API server user interface, e.g., `python 
 Llumnix provides a similar user interface to enable seamless integration with such existing multi-instance deployments.
 You only need two simple steps to migrate from a deployed vLLM service to Llumnix:
 
-1. Setup environment variables to launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You need to configure the following environment variables for Llumnix to correctly set up the cluster.
+1. Setup environment variables to launch multiple servers and connect to the Llumnix cluster. Llumnix uses Ray to manage multiple vLLM servers and instances. You first need to start Ray in cluster, then configure the following environment variables for Llumnix.
 ```
 # Configure on all nodes.
 export HEAD_NODE_IP=$HEAD_NODE_IP_ADDRESS

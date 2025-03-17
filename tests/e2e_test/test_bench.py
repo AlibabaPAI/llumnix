@@ -194,15 +194,16 @@ async def test_simple_benchmark(
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    with open("performance.txt", "a", encoding="utf-8") as f:
-        mark_parametrizes = {
-            "model": model.split("/")[-1],
-            "num_prompts": num_prompts,
-            "launch_mode": launch_mode,
-            "enable_pd_disagg" :enable_pd_disagg,
-            "enable_simulator": enable_simulator,
-            "output_queue_type": output_queue_type
-        }
-        f.write(parse_log_file(mark_parametrizes))
+    if num_prompts >= 500:
+        with open("performance.txt", "a", encoding="utf-8") as f:
+            mark_parametrizes = {
+                "model": model.split("/")[-1],
+                "num_prompts": num_prompts,
+                "launch_mode": launch_mode,
+                "enable_pd_disagg" :enable_pd_disagg,
+                "enable_simulator": enable_simulator,
+                "output_queue_type": output_queue_type
+            }
+            f.write(parse_log_file(mark_parametrizes))
 
     await asyncio.sleep(3)

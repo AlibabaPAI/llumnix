@@ -351,10 +351,10 @@ class Manager:
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
             if not self.manager_args.enable_pd_disagg:
-                logger.debug("{} migration tasks starts.".format(len(migration_tasks)))
+                logger.info("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
             if not self.manager_args.enable_pd_disagg:
-                logger.debug("{} migration tasks ends.".format(len(migration_tasks)))
+                logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Unexpected exception: {}".format(e))

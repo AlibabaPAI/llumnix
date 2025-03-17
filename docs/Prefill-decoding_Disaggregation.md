@@ -45,7 +45,7 @@ We are actively working on these items. Stay tuned :)
 
 ### Migrating from Existing Deployments
 
-People can launch the PD-separated service following the vLLM launch style. The only difference is that it is necessary to explicitly specify whether the instance to be launched is for prefill or decode. You first need follow the [Quickstart](./Quickstart.md) to configure environment variables HEAD_NODE_IP and HEAD_NODE for Llumnix. Then, follow the commands below to launch the instances:
+People can launch the prefill-decode disaggregated inference service in a manner similar to the vLLM launch style. The only difference is that it is necessary to explicitly specify whether the instance to be launched is for prefill or decode. You first need follow the [Quickstart](./Quickstart.md) to configure environment variables HEAD_NODE_IP and HEAD_NODE for Llumnix. Then, follow the commands below to launch the instances:
 
 ```bash
 # launch prefill instance
@@ -59,7 +59,7 @@ In this deployment model, `--instance-type` must be explicitly specified for eve
 
 ### Centralized Launch
 
-Centralized launch assumes that users have already launched a Ray cluster. Llumnix will automatically connect to the Ray cluster and then deploy the prefill instances and decode instances according to the preset ratio. Users can submit the Llumnix launch job directly via the Ray job submission API in Centralized Launch deployment model. Below is an example of the centralized launch command:
+Centralized launch assumes that users have already launched a Ray cluster. Llumnix will automatically connect to the Ray cluster and then deploy the prefill instances and decode instances according to the preset ratio. Users can submit the Llumnix launch job directly via the Ray job submission API in centralized launch model. Below is an example of the centralized launch command:
 
 ```bash
 python -m llumnix.entrypoints.vllm.serve --host `hostname -i` --port $PORT --model $MODEL_PATH --trust-remote-code --worker-use-ray --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --pd-ratio 1:1 --max-instances 2

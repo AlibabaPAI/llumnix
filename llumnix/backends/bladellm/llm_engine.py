@@ -38,7 +38,6 @@ from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
-from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
 

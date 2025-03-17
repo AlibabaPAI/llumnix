@@ -87,7 +87,7 @@ async def test_simple_benchmark(
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
 
     if output_queue_type == "zmq" and not (
-        launch_mode == "global" and not enable_simulator and not enable_pd_disagg
+        launch_mode == "local" and not enable_simulator and not enable_pd_disagg
     ):
         pytest.skip(
             "Only test zmq queue type when simulator is enabled and prefill-decode disaggregation is disabled."

@@ -58,7 +58,7 @@ class AsyncBackQueueWrapper(APIWrapper):
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy,
-            name="AsyncPutQueueActor_"+random_uuid()
+            name="AsyncPutQueueActor_"+instance_id
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
         self.put_queue_loop_thread.start()
 

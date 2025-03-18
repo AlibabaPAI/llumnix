@@ -33,7 +33,7 @@ from llumnix.queue.zmq_utils import (
     get_open_zmq_ipc_path,
     get_zmq_socket_name,
 )
-from llumnix.constants import (RPC_GET_DATA_TIMEOUT_MS)
+from llumnix.constants import RPC_GET_DATA_TIMEOUT_MS, ZMQ_IO_THREADS
 from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
@@ -61,7 +61,7 @@ class ZmqSocketFactory:
         self.context: zmq.asyncio.Context = context
         self.socket_connections: Dict[str, SocketConnection] = {}
 
-    async def get_socket(self, ip, port) -> zmq.asyncio.Socket:
+    def get_socket(self, ip, port) -> SocketConnection:
         dst_name = get_zmq_socket_name(ip, port)
         if dst_name not in self.socket_connections:
             socket = self.context.socket(zmq.DEALER)
@@ -85,7 +85,7 @@ class ZmqSocketFactory:
 
 class ZmqClient(QueueClientBase):
     def __init__(self):
-        self.context = zmq.asyncio.Context(8)
+        self.context = zmq.asyncio.Context(ZMQ_IO_THREADS)
         self.socket_factory: ZmqSocketFactory = ZmqSocketFactory(context=self.context)
 
     # This function is not called explicitly.
@@ -108,7 +108,7 @@ class ZmqClient(QueueClientBase):
             return cloudpickle.loads(await socket.recv())
 
         try:
-            socket_connection = await self.socket_factory.get_socket(ip, port)
+            socket_connection = self.socket_factory.get_socket(ip, port)
             async with socket_connection as socket:
                 response = await do_rpc_call(socket, request)
         except (TimeoutError, zmq.ZMQError) as e:

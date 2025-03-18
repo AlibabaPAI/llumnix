@@ -55,7 +55,7 @@ def cleanup_ray_env_func():
     time.sleep(1.0)
 
     pg_table = placement_group_table()
-    for placement_group_id in pg_table.keys():
+    for placement_group_id in pg_table:
         try:
             pg = PlacementGroup(PlacementGroupID(hex_to_binary(placement_group_id)) )
             remove_placement_group(pg)

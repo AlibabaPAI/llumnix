@@ -31,7 +31,7 @@ from .utils import (generate_launch_command, generate_bench_command, to_markdown
 BENCH_TEST_TIMEOUT_MINS = 30
 
 
-def parse_log_file(mark_parametrizes: dict):
+def parse_log_file(title: str):
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]
 
     def get_markdown_data(key: str, head_name: str):
@@ -59,7 +59,7 @@ def parse_log_file(mark_parametrizes: dict):
     data.append(get_markdown_data('prefill_token_latencies', 'prefill'))
 
     return (
-        json.dumps(mark_parametrizes)
+        title
         + "\n"
         + to_markdown_table(data)
         + "\n"
@@ -196,14 +196,6 @@ async def test_simple_benchmark(
 
     if num_prompts >= 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
-            mark_parametrizes = {
-                "model": model.split("/")[-1],
-                "num_prompts": num_prompts,
-                "launch_mode": launch_mode,
-                "enable_pd_disagg" :enable_pd_disagg,
-                "enable_simulator": enable_simulator,
-                "output_queue_type": output_queue_type
-            }
-            f.write(parse_log_file(mark_parametrizes))
+            f.write(parse_log_file(title=output_queue_type)))
 
     await asyncio.sleep(3)

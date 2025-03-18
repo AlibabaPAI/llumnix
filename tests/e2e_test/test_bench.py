@@ -196,6 +196,6 @@ async def test_simple_benchmark(
 
     if num_prompts >= 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
-            f.write(parse_log_file(title=output_queue_type)))
+            f.write(parse_log_file(title=output_queue_type))
 
     await asyncio.sleep(3)

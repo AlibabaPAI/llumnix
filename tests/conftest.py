@@ -19,8 +19,7 @@ import subprocess
 
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.state import list_placement_groups
-from ray.util import list_named_actors
+from ray.util import list_named_actors, placement_group_table, remove_placement_group
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
 import pytest
@@ -55,17 +54,14 @@ def cleanup_ray_env_func():
 
     time.sleep(1.0)
 
-    try:
-        # list_placement_groups cannot take effects.
-        pg_states = list_placement_groups()
-        for pg_state in pg_states:
-            pg = PlacementGroup(
-                PlacementGroupID(hex_to_binary(pg_state["placement_group_id"]))
-            )
-            ray.util.remove_placement_group(pg)
-    # pylint: disable=broad-except
-    except Exception as e:
-        print("clear placement group error: ", e)
+    pg_table = placement_group_table()
+    for placement_group_id in pg_table.keys():
+        try:
+            pg = PlacementGroup(PlacementGroupID(hex_to_binary(placement_group_id)) )
+            remove_placement_group(pg)
+        # pylint: disable=broad-except
+        except Exception as e:
+            print("clear placement group error: ", e)
 
     time.sleep(1.0)
 

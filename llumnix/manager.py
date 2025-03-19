@@ -156,32 +156,14 @@ class Manager:
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
         instance_id, request_expected_steps = self.global_scheduler.dispatch()
-        try:
-            set_timestamp(server_info, 'manager_generate_timestamp', time.time())
-            await self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
-            if self.log_requests:
-                logger.info("manager receive request {}".format(request_id))
-                logger.info("dispath request {} to instance {}".format(request_id, instance_id))
-                self.request_instance[request_id] = instance_id
-        except (ray.exceptions.RayActorError, KeyError):
-            logger.info("Instance {} is dead, regenerate request {}.".format(instance_id, request_id))
-            self.scale_down(instance_id)
+        set_timestamp(server_info, 'manager_generate_timestamp', time.time())
+        self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
+        if self.log_requests:
+            logger.info("manager receive request {}".format(request_id))
+            logger.info("dispath request {} to instance {}".format(request_id, instance_id))
+            self.request_instance[request_id] = instance_id
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
-        def abort_done_callback(instance_id: str, request_ids: List[str], fut):
-            ret = fut.result()[0]
-            if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
-                if self.log_requests:
-                    logger.info("Abort requests: {}.".format(request_ids))
-                for req_id in request_ids:
-                    if req_id in self.request_instance:
-                        del self.request_instance[req_id]
-                    else:
-                        logger.warning("request {} is not in request_instance".format(req_id))
-            else:
-                logger.info("Instance {} is dead.".format(instance_id))
-                self.scale_down(instance_id)
-
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids = set(request_id)
@@ -193,9 +175,14 @@ class Manager:
                 instance_requests[instance_id].append(req_id)
         tasks = []
         for instance_id, request_ids in instance_requests.items():
-            task = asyncio.gather(self.instances[instance_id].abort.remote(request_ids), return_exceptions=True)
-            task.add_done_callback(partial(abort_done_callback, instance_id, request_ids))
-            tasks.append(task)
+            self.instances[instance_id].abort.remote(request_ids)
+            if self.log_requests:
+                logger.info("Abort requests: {}.".format(request_ids))
+            for req_id in request_ids:
+                if req_id in self.request_instance:
+                    del self.request_instance[req_id]
+                else:
+                    logger.warning("request {} is not in request_instance".format(req_id))
         await asyncio.gather(*tasks, return_exceptions=True)
 
     @classmethod

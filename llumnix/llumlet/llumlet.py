@@ -19,6 +19,7 @@ import time
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
+import ray.actor
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
@@ -141,7 +142,7 @@ class Llumlet:
                 self_actor = ray.get_actor(name=self.actor_name, namespace="llumnix")
                 ray.kill(self_actor)
 
-    async def migrate_out(self, dst_instance_name: str) -> List[str]:
+    async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[str]:
         migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
 
         if len(migrate_out_requests) == 0:
@@ -152,31 +153,32 @@ class Llumlet:
 
         migrated_request_list = []
         for migrate_out_request in migrate_out_requests:
-            migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_name)
+            migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_id, dst_instance_actor_handle)
             migrated_request_list.extend(migrated_request)
             if len(migrated_request) == 0 and migrate_out_request.eom:
                 break
         return migrated_request_list
 
-    async def _migrate_out_one_request(self, migrate_out_request: LlumnixRequest, dst_instance_name: str) -> List[LlumnixRequest]:
+    async def _migrate_out_one_request(self,
+                                       migrate_out_request: LlumnixRequest,
+                                       dst_instance_id: str,
+                                       dst_instance_actor_handle: ray.actor.ActorHandle) -> List[LlumnixRequest]:
         try:
             t0 = time.time()
-            migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
-            dst_instance_id = dst_instance_name[len("instance_"):]
             logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
             migrated_request = []
 
             if migrate_out_request.status == RequestStatus.RUNNING:
                 migrate_out_request.migration_start_time = time.time()
-                status = await self.migration_coordinator.migrate_out_running_request(migrate_in_ray_actor, migrate_out_request)
+                status = await self.migration_coordinator.migrate_out_running_request(dst_instance_actor_handle, migrate_out_request)
             elif migrate_out_request.status == RequestStatus.WAITING:
                 migrate_out_request.migration_start_time = time.time()
-                status = await self.migration_coordinator.migrate_out_waiting_request(migrate_in_ray_actor, migrate_out_request)
+                status = await self.migration_coordinator.migrate_out_waiting_request(dst_instance_actor_handle, migrate_out_request)
             else:
                 return migrated_request
 
             if status == MigrationStatus.FINISHED:
-                await migrate_in_ray_actor.execute_engine_method.remote("commit_dst_request", migrate_out_request)
+                await dst_instance_actor_handle.execute_engine_method.remote("commit_dst_request", migrate_out_request)
                 self.backend_engine.free_src_request(migrate_out_request)
                 self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
@@ -185,13 +187,13 @@ class Llumlet:
                 migrate_out_request.reset_status()
                 # If dst aborts itself, dst proactively frees the pre allocated cache in migrate_in_pre_alloc.
                 if status == MigrationStatus.ABORTED_SRC:
-                    await migrate_in_ray_actor.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
+                    await dst_instance_actor_handle.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
             t1 = time.time()
             logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
                         .format(self.instance_id, dst_instance_id, migrated_request, status, \
                                 sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
         except ray.exceptions.RayActorError:
-            logger.info("Instance {} is dead.".format(dst_instance_name[len("instance_"):]))
+            logger.info("Instance {} is dead.".format(dst_instance_id))
             raise
         # pylint: disable=W0703
         except Exception as e:

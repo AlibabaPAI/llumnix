@@ -87,10 +87,9 @@ class MockLlumlet:
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 
-    def migrate_out(self, dst_instance_name):
+    def migrate_out(self, dst_instance_id, dst_instance_actor_handle):
         self.num_migrate_out += 1
-        migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
-        ray.get(migrate_in_ray_actor.migrate_in.remote(self.actor_name))
+        ray.get(dst_instance_actor_handle.migrate_in.remote(self.actor_name))
         time.sleep(0.1)
         return []
 
@@ -127,9 +126,6 @@ class MockManager(Manager):
 
     def init_server_and_instance(self, *args, **kwargs):
         return self.launcher.init_server_and_instance(*args, **kwargs)
-
-    def clear_instance_ray_resources(self, instance_id: str):
-        return self.launcher.clear_instance_ray_resources(instance_id)
 
 
 def init_manager_with_launch_mode(launch_mode, request_output_queue_type="rayqueue",

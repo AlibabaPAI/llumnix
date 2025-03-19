@@ -42,7 +42,7 @@ class APIServerActor:
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.setup import setup_entrypoints_context
         self.entrypoints_context = setup_entrypoints_context(
-                                        self.entrypoints_args,manager, [instance_id], [instance], self.request_output_queue)
+                                        self.entrypoints_args, manager, [instance_id], [instance], self.request_output_queue)
 
     def _run_uvicorn_server(self,
                             entrypoints_args: EntrypointsArgs,

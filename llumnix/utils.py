@@ -14,10 +14,11 @@
 import uuid
 import asyncio
 import threading
-from typing import Any, Union, Callable, Awaitable, TypeVar
+from typing import Any, Union, Callable, Awaitable, TypeVar, Coroutine
 from functools import partial
 from typing_extensions import ParamSpec
 import ray
+import ray.actor
 from ray.util.placement_group import PlacementGroup
 from ray.experimental.internal_kv import (
     _internal_kv_get,
@@ -103,7 +104,7 @@ def convert_bytes(bytes_size):
 
     return f"{bytes_size:.2f} {size_suffixes[index]}"
 
-def clear_gloo_backend_state():
+def clear_gloo_backend_ray_resources():
     try:
         # clear gloo migrate backend intermediate state
         ray.kill(ray.get_actor("gloo_queue", "llumnix"))
@@ -124,9 +125,10 @@ def get_server_name(instance_id: str) -> str:
 def get_instance_name(instance_id: str) -> str:
     return f"{INSTANCE_NAME_PREFIX}{instance_id}"
 
-def remove_placement_group(instance_id: str) -> bool:
+def remove_placement_group(instance_id: str, placement_group: PlacementGroup = None) -> bool:
     try:
-        placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
+        if not placement_group:
+            placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
         logger.info("Remove placement group {}.".format(instance_id))
@@ -135,9 +137,10 @@ def remove_placement_group(instance_id: str) -> bool:
         return False
     return True
 
-def kill_server(instance_id: str) -> bool:
+def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) -> bool:
     try:
-        server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+        if not server:
+            server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
         ray.kill(server)
         logger.info("Kill server {}.".format(instance_id))
     # pylint: disable=broad-except
@@ -145,9 +148,10 @@ def kill_server(instance_id: str) -> bool:
         return False
     return True
 
-def kill_instance(instance_id: str) -> bool:
+def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None) -> bool:
     try:
-        instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+        if not instance:
+            instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
         ray.kill(instance)
         logger.info("Kill instance {}.".format(instance_id))
     # pylint: disable=broad-except
@@ -155,16 +159,17 @@ def kill_instance(instance_id: str) -> bool:
         return False
     return True
 
-def run_async_func_sync(func):
-    def run_task():
+def run_coroutine_in_new_thread(coro: Coroutine, blocking: bool):
+    def run_coroutine():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        future = loop.create_task(func)
+        future = loop.create_task(coro)
         loop.run_until_complete(future)
         loop.close()
-    thread = threading.Thread(target=run_task)
+    thread = threading.Thread(target=run_coroutine)
     thread.start()
-    thread.join()
+    if blocking:
+        thread.join()
 
 def _make_key(actor_name: str, data_name: str):
     """Generate a binary key for the given actor name and data.

@@ -39,7 +39,7 @@ def ray_start():
     raise Exception("Ray start failed after 5 attempts.")
 
 def ray_stop():
-    subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
+    subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL)
 
 def cleanup_ray_env_func():
     try:

@@ -55,7 +55,7 @@ python -m llumnix.entrypoints.vllm.api_server --host `hostname -i` --port $PORT 
 python -m llumnix.entrypoints.vllm.api_server --host `hostname -i` --port $PORT --model $MODEL_PATH --worker-use-ray --trust-remote-code --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --instance-type decode --initial-instances 1
 ```
 
-In this deployment model, `--instance-type` must be explicitly specified for every launch command, and `--initial-instances` will control how many instances of the corresponding type are launched. If only prefill instances exist and no decode instances are available, requests will hang in the prefill instances.
+In this deployment mode, `--instance-type` must be explicitly specified for every launch command, and `--initial-instances` will control how many instances of the corresponding type are launched. Notice that if only prefill instances exist and no decode instances are available, requests will hang in the prefill instances.
 
 ### Centralized Launch
 

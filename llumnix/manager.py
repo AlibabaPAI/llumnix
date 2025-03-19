@@ -431,7 +431,7 @@ class Manager:
                     self.pgs[ins_id] = pg
                 except ValueError:
                     logger.warning("Placement group of instance {} is not found".format(ins_id))
-                if self.servers:
+                if self.servers is not None:
                     try:
                         self.servers[ins_id] = ray.get_actor(get_server_name(ins_id), namespace="llumnix")
                     except ValueError:

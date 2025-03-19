@@ -59,7 +59,7 @@ In this deployment mode, `--instance-type` must be explicitly specified for ever
 
 ### Centralized Launch
 
-Centralized launch assumes that users have already launched a Ray cluster. Llumnix will automatically connect to the Ray cluster and then deploy the prefill instances and decode instances according to the preset ratio. Users can submit the Llumnix launch job directly via the Ray job submission API in centralized launch model. Below is an example of the centralized launch command:
+Centralized launch assumes that users have already launched a Ray cluster. Llumnix will automatically connect to the Ray cluster and then deploy the prefill instances and decode instances according to the preset ratio. Users can submit the Llumnix launch job directly via the Ray job submission API in centralized launch mode. Below is an example of the centralized launch command:
 
 ```bash
 python -m llumnix.entrypoints.vllm.serve --host `hostname -i` --port $PORT --model $MODEL_PATH --trust-remote-code --worker-use-ray --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --pd-ratio 1:1 --max-instances 2

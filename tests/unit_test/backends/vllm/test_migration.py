@@ -141,7 +141,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
              llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
+    res = ray.get(llumlet_0.migrate_out.remote("1", llumlet_1))
     assert not res
 
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
@@ -170,7 +170,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
                 if len(running_queue) > 0 and running_queue[0].inference_type == RequestInferenceType.DECODE:
                     break
             # migrate request
-            res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
+            res = ray.get(llumlet_0.migrate_out.remote("1", llumlet_1))
             assert len(res) == 1
         else: # migration_request_status == 'waiting'
             request_id1 = random_uuid()
@@ -181,7 +181,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
                 if len(waiting_queue) > 0 and waiting_queue[0].try_schedule_times >= 1:
                     break
             # migrate request
-            res = ray.get(llumlet_2.migrate_out.remote("instance_1"))
+            res = ray.get(llumlet_2.migrate_out.remote("1", llumlet_1))
             assert len(res) == 1
 
         request_output_queue = que
@@ -219,7 +219,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         id_rank_map = {"2": 0, "1": 1}
         ray.get([llumlet_2.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
                     llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
-        res = ray.get(llumlet_2.migrate_out.remote("instance_1"))
+        res = ray.get(llumlet_2.migrate_out.remote("1", llumlet_1))
         assert not res
 
     for i, prompt in enumerate(TEST_PROMPTS):
@@ -253,7 +253,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
              llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
+    res = ray.get(llumlet_0.migrate_out.remote("1", llumlet_1))
     assert not res
 
     # running without migration
@@ -276,7 +276,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         ray.get(llumlet_0.generate.remote(request_id1, server_info, request_expected_steps_id1, prompt, sampling_params))
         # migrate request for decoding
         while True:
-            res = ray.get(llumlet_0.migrate_out.remote("instance_1"))
+            res = ray.get(llumlet_0.migrate_out.remote("1", llumlet_1))
             if len(res) == 1:
                 break
         request_output_queue = que

@@ -28,9 +28,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
 from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
 from llumnix.backends.utils import get_engine_world_size
-from llumnix.utils import (initialize_placement_group, remove_placement_group,
-                           get_manager_name, get_server_name,
-                           kill_server, kill_instance,
+from llumnix.utils import (initialize_placement_group, get_manager_name, get_server_name,
                            get_actor_data_from_ray_internal_kv, put_actor_data_to_ray_internal_kv)
 
 logger = init_logger(__name__)
@@ -50,6 +48,8 @@ class Launcher:
         self.enable_pd_disagg = enable_pd_disagg
         self.enablde_engine_pd_disagg = enablde_engine_pd_disagg
         self.pd_ratio = pd_ratio
+
+        self.manager_actor_handle = None
 
         if enable_port_increment:
             self.port_offset = 0
@@ -86,20 +86,19 @@ class Launcher:
                                  engine_args,
                                  backend_type: BackendType,
                                  placement_group: PlacementGroup,
-                                 instance_ready_cb: Callable = None,
-                                 server_ready_cb: Callable = None):
+                                 scale_up_callback: Callable = None,
+                                 scale_down_callback: Callable = None):
         async def done_scale_up(instance_args: InstanceArgs, entrypoint_args: EntrypointsArgs):
             try:
-                manager = ray.get_actor(get_manager_name(), namespace="llumnix")
+                if not self.manager_actor_handle:
+                    self.manager_actor_handle = ray.get_actor(get_manager_name(), namespace="llumnix")
                 await instance.is_ready.remote()
-                await server.run.remote(manager, instance_id, instance)
+                await server.run.remote(self.manager_actor_handle, instance_id, instance)
                 self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
                 self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
-                if instance_ready_cb:
+                if scale_up_callback:
                     # manager.scale_up will be called here after the instance is ready
-                    instance_ready_cb(instance_id, instance, instance_args)
-                if server_ready_cb:
-                    server_ready_cb(instance_id, server)
+                    scale_up_callback(instance_id, instance, instance_args)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}, "
                             "api_server_port: {}, request_output_queue_port: {}".format(
                                 instance_id, instance_args.instance_type,
@@ -110,7 +109,7 @@ class Launcher:
                 self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
                 logger.error("Unexpected exception occurs: {}".format(e))
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
-                self.clear_instance_ray_resources(instance_id)
+                scale_down_callback(instance_id)
 
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
         next_instance_args = self._get_next_instance_args(instance_args)
@@ -148,14 +147,6 @@ class Launcher:
                         engine_args)
 
         return instance
-
-    def clear_instance_ray_resources(self, instance_id: str):
-        if not kill_server(instance_id):
-            logger.debug("Failed to kill server {}.".format(instance_id))
-        if not kill_instance(instance_id):
-            logger.debug("Failed to kill instance {}.".format(instance_id))
-        if not remove_placement_group(instance_id):
-            logger.debug("Failed to remove placement group {}.".format(instance_id))
 
     def _get_next_instance_args(self, instance_args: InstanceArgs) -> InstanceArgs:
         assert not self.enablde_engine_pd_disagg, \

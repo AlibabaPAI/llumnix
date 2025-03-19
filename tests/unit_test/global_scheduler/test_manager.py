@@ -87,10 +87,9 @@ class MockLlumlet:
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 
-    def migrate_out(self, dst_instance_name):
+    def migrate_out(self, dst_instance_id, dst_instance_actor_handle):
         self.num_migrate_out += 1
-        migrate_in_ray_actor = ray.get_actor(dst_instance_name, namespace='llumnix')
-        ray.get(migrate_in_ray_actor.migrate_in.remote(self.actor_name))
+        ray.get(dst_instance_actor_handle.migrate_in.remote(self.actor_name))
         time.sleep(0.1)
         return []
 
@@ -128,16 +127,12 @@ class MockManager(Manager):
     def init_server_and_instance(self, *args, **kwargs):
         return self.launcher.init_server_and_instance(*args, **kwargs)
 
-    def clear_instance_ray_resources(self, instance_id: str):
-        return self.launcher.clear_instance_ray_resources(instance_id)
 
-
-def init_manager_with_launch_mode(launch_mode, request_output_queue_type="rayqueue",
-                                  enable_pd_disagg=False, pd_ratio="1:3", max_instances=-1):
+def init_manager_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio="1:3", max_instances=-1):
     manager_args = ManagerArgs(enable_port_increment=True, enable_pd_disagg=enable_pd_disagg,
                                pd_ratio=pd_ratio, max_instances=max_instances)
     instance_args = InstanceArgs(migration_backend="rayrpc")
-    entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000, request_output_queue_type=request_output_queue_type)
+    entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000)
     engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     launch_args = LaunchArgs(launch_mode=launch_mode, backend_type=BackendType.VLLM)
 
@@ -381,9 +376,8 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     assert not pg_created and not server_alive and not instance_alive
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
-async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env, request_output_queue_type):
-    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
+async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
+    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL)
     await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
@@ -405,9 +399,8 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env, req
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
-async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env, request_output_queue_type):
-    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type)
+async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
+    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL)
     await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])
@@ -449,10 +442,8 @@ def test_pd_disagg_gloal_launch_instance_type():
     assert launcher._get_next_instance_type(3, 7, [1, 2]) == InstanceType.PREFILL
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("request_output_queue_type", ['rayqueue', 'zmq'])
-async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env, request_output_queue_type):
-    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, request_output_queue_type,
-                                                        enable_pd_disagg=True, pd_ratio="1:1")
+async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env):
+    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, enable_pd_disagg=True, pd_ratio="1:1")
     await asyncio.sleep(60.0)
 
     num_instances = manager.scale_up([], [], [])

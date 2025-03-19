@@ -45,7 +45,7 @@ We are actively working on these items. Stay tuned :)
 
 ### Migrating from Existing Deployments
 
-People can launch the prefill-decode disaggregated inference service in a manner similar to the vLLM launch style. The only difference is that it is necessary to explicitly specify whether the instance to be launched is for prefill or decode. You first need follow the [Quickstart](./Quickstart.md) to configure environment variables HEAD_NODE_IP and HEAD_NODE for Llumnix. Then, follow the commands below to launch the instances:
+People can launch the prefill-decode disaggregated inference service in a manner similar to the vLLM launch style. The only difference is that it is necessary to explicitly specify whether the instance to be launched is for prefill or decode. You first need follow the [Quickstart](./Quickstart.md) to configure environment variables HEAD_NODE_IP and HEAD_NODE for Llumnix. And at the same time, ensure to include `--launch-ray-cluster` in the llumnix arguments or set `SERVER.LAUNCH_RAY_CLUSTER` to True in config file. Then, follow the commands below to launch the instances:
 
 ```bash
 # launch prefill instance

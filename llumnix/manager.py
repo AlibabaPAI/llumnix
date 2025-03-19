@@ -620,7 +620,7 @@ class Manager:
             if alive_actor_state["name"].startswith(SERVER_NAME_PREFIX):
                 instance_id = alive_actor_state["name"].split("_")[-1]
                 if instance_id in self.servers:
-                    curr_servers = self.servers[instance_id]
+                    curr_servers[instance_id] = self.servers[instance_id]
                 else:
                     curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
             elif alive_actor_state["name"].startswith(INSTANCE_NAME_PREFIX):

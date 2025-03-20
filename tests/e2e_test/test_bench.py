@@ -31,7 +31,7 @@ from .utils import (generate_launch_command, generate_bench_command, to_markdown
 BENCH_TEST_TIMEOUT_MINS = 30
 
 
-def parse_log_file():
+def parse_log_file(title: str):
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]
 
     def get_markdown_data(key: str, head_name: str):
@@ -39,7 +39,7 @@ def parse_log_file():
 
         for json_file in json_files:
             with open(json_file, 'r', encoding="utf-8") as file:
-                data = json.load(file)[0]
+                data = json.load(file)[-1]
                 latencies.append(data.get(key, []))
 
         latencies_array = np.array(latencies)
@@ -51,17 +51,21 @@ def parse_log_file():
         p99 = np.percentile(latencies_array, 99)
         mean = np.mean(latencies_array)
 
-        data = [
-            [head_name, "p25", "p50", "p75", "p95", "p99", "mean"],
-            ["latency(ms)", f"{p25:.2f}", f"{p50:.2f}", f"{p75:.2f}", f"{p95:.2f}", f"{p99:.2f}", f"{mean:.2f}"]
-        ]
+        data = [head_name, f"{p25:.2f}", f"{p50:.2f}", f"{p75:.2f}", f"{p95:.2f}", f"{p99:.2f}", f"{mean:.2f}"]
 
         return data
+    data = [["latency(ms)", "p25", "p50", "p75", "p95", "p99", "mean"]]
+    data.append(get_markdown_data("decode_token_latencies", "decode"))
+    data.append(get_markdown_data('prefill_token_latencies', 'prefill'))
 
-    decode_data = get_markdown_data('decode_token_latencies', 'decode')
-    prefill_data = get_markdown_data('prefill_token_latencies', 'prefill')
+    return (
+        title
+        + "\n"
+        + to_markdown_table(data)
+        + "\n"
+        + "-------------------------------------\n"
+    )
 
-    return to_markdown_table(prefill_data) + "\n\n" + to_markdown_table(decode_data)
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
@@ -69,9 +73,25 @@ def parse_log_file():
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
-async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode, enable_pd_disagg, enable_simulator):
+@pytest.mark.parametrize("output_queue_type", ["rayqueue","zmq"])
+async def test_simple_benchmark(
+    ray_env,
+    shutdown_llumnix_service,
+    model,
+    launch_mode,
+    enable_pd_disagg,
+    enable_simulator,
+    output_queue_type,
+):
     if enable_simulator and enable_pd_disagg:
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
+
+    if output_queue_type == "zmq" and not (
+        launch_mode == "local" and not enable_simulator and not enable_pd_disagg
+    ):
+        pytest.skip(
+            "Only test zmq queue type when simulator is disabled and prefill-decode disaggregation is disabled."
+        )
 
     if launch_mode == 'local':
         num_prompts = 500 if not enable_pd_disagg else 50
@@ -97,7 +117,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                                                          port=port,
                                                          model=model,
                                                          enable_pd_disagg=enable_pd_disagg,
-                                                         instance_type="prefill")
+                                                         instance_type="prefill",
+                                                         output_queue_type=output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
             for i in range(device_count//2):
                 port = base_port+i+device_count//2
@@ -109,7 +130,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                                                          port=port,
                                                          model=model,
                                                          enable_pd_disagg=enable_pd_disagg,
-                                                         instance_type="decode")
+                                                         instance_type="decode",
+                                                         output_queue_type=output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
         else:
             for i in range(device_count):
@@ -121,7 +143,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                                                          ip=ip,
                                                          port=port,
                                                          model=model,
-                                                         enable_simulator=enable_simulator)
+                                                         enable_simulator=enable_simulator,
+                                                         output_queue_type=output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
     else: # global
         device_count = torch.cuda.device_count()
@@ -134,7 +157,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                                                port=base_port,
                                                model=model,
                                                enable_pd_disagg=enable_pd_disagg,
-                                               enable_simulator=enable_simulator)
+                                               enable_simulator=enable_simulator,
+                                               output_queue_type=output_queue_type)
         subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 
@@ -170,8 +194,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    if launch_mode == 'local' and not enable_pd_disagg:
-        with open("performance.txt", "w", encoding="utf-8") as f:
-            f.write(parse_log_file())
+    if num_prompts >= 500:
+        with open("performance.txt", "a", encoding="utf-8") as f:
+            f.write(parse_log_file(title=output_queue_type))
 
     await asyncio.sleep(3)

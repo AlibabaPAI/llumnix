@@ -25,7 +25,7 @@ from vllm import EngineArgs
 from llumnix.launcher import Launcher
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, InstanceArgs
 from llumnix.manager import Manager
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.instance_info import InstanceInfo
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.global_scheduler.scaling_scheduler import InstanceType
@@ -309,19 +309,14 @@ def test_poll_instance_info_loop_and_migrate(ray_env, manager):
     instance_ids, instances = init_instances(num_instances)
 
     for i in range(num_instances):
-        for _ in range(2*(i+1)):
-            ray.get(instances[i].generate.remote(random_uuid(), None, math.inf, None, None))
-
-    instance_load_calculator = InstanceLoadCalculator("remaining_steps", "remaining_steps", True)
-    for i in range(num_instances):
         instance_info = InstanceInfo(
             instance_id=instance_ids[i],
             instance_type=InstanceType.NO_CONSTRAINTS,
             num_free_gpu_blocks=40-i*10,
-            num_running_requests=i+1,
-            num_blocks_first_waiting_request=i,
+            num_running_requests=2*(i+1),
+            num_blocks_first_waiting_request=20,
+            migration_load_metric=-5+i
         )
-        instance_load_calculator.compute_instance_load(instance_info)
         ray.get(instances[i].set_instance_info.remote(instance_info))
 
     for i in range(num_instances):

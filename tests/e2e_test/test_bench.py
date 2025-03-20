@@ -35,14 +35,17 @@ def parse_log_file(title: str):
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]
 
     def get_markdown_data(key: str, head_name: str):
-        latencies = []
-
-        for json_file in json_files:
-            with open(json_file, 'r', encoding="utf-8") as file:
-                data = json.load(file)[-1]
-                latencies.append(data.get(key, []))
-
-        latencies_array = np.array(latencies)
+        try:
+            latencies = []
+            for json_file in json_files:
+                with open(json_file, 'r', encoding="utf-8") as file:
+                    data = json.load(file)[-1]
+                    latencies.append(data.get(key, []))
+            latencies_array = np.array(latencies)
+        # pylint: disable=broad-except
+        except Exception as e:
+            print(f"Error parsing {json_file}: {e}")
+            return [head_name, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]
 
         p25 = np.percentile(latencies_array, 25)
         p50 = np.percentile(latencies_array, 50)
@@ -52,8 +55,8 @@ def parse_log_file(title: str):
         mean = np.mean(latencies_array)
 
         data = [head_name, f"{p25:.2f}", f"{p50:.2f}", f"{p75:.2f}", f"{p95:.2f}", f"{p99:.2f}", f"{mean:.2f}"]
-
         return data
+
     data = [["latency(ms)", "p25", "p50", "p75", "p95", "p99", "mean"]]
     data.append(get_markdown_data("decode_token_latencies", "decode"))
     data.append(get_markdown_data('prefill_token_latencies', 'prefill'))
@@ -74,7 +77,7 @@ def parse_log_file(title: str):
 @pytest.mark.parametrize("enable_pd_disagg", [True, False])
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
-@pytest.mark.parametrize("output_queue_type", ["rayqueue","zmq"])
+@pytest.mark.parametrize("output_queue_type", ["rayqueue", "zmq"])
 async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
                                 model, launch_mode, enable_pd_disagg, engine, output_queue_type):
     engine = engine.split("_")[1]
@@ -207,7 +210,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
     if launch_mode == 'local' and not enable_pd_disagg and engine == 'vLLM':
-        with open("performance.txt", "w", encoding="utf-8") as f:
+        with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(parse_log_file(title=output_queue_type))
 
     await asyncio.sleep(3)

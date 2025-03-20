@@ -38,7 +38,7 @@ class BackendType(str, Enum):
 
 class BackendInterface(ABC):
     @abstractmethod
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
+    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, decode_instance_id: str = None,
                     *args, **kwargs) -> None:
         """Add a new inference request to the backend.
 
@@ -53,6 +53,9 @@ class BackendInterface(ABC):
                             instance for the request. Currently, `expected_steps` is used to
                             implement prefill-decoding disaggregation. For requests dispatched to
                             prefill instances, `expected_steps` is set to 1.
+            decode_instance_id: The instance ID of the decode instance.
+                                If provided, engine will skip dispatch decode instance after prefilling.
+                                Only used in Bladellm now.
             *args: Positional arguments that represent request-specific data.
             **kwargs: Keyword arguments that contain metadata of the backend request
                       (request_id, arrival_time, etc.).

@@ -144,6 +144,7 @@ class ManagerArgs:
 
     enable_pd_disagg: bool = None
     pd_ratio: Union[str, List[int]] = None
+    enable_preassign_decode_instance: bool = None
 
     # init from instance args
     is_group_kind_migration_backend: bool = None
@@ -199,7 +200,7 @@ class ManagerArgs:
         return manager_args
 
     @classmethod
-    def check_args(cls, args: 'ManagerArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'ManagerArgs', parser: argparse.ArgumentParser, backend_type: BackendType):
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -208,6 +209,11 @@ class ManagerArgs:
 
         assert not args.enable_port_offset_store or args.enable_port_increment, \
             "Set enable_port_increment when enable_port_offset_store"
+
+        if args.enable_preassign_decode_instance:
+            assert (
+                args.enable_pd_disagg or not backend_type == BackendType.BLADELLM
+            ), "Preassign decode instance is only supported when pd-disaggregation is enabled and backend is BladeLLM."
 
         assert not args.enable_scaling, "Proactive auto-scaling is deprecated now, all auto-scaling related args will not take effects."
 
@@ -295,6 +301,10 @@ class ManagerArgs:
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',
                             help='enable prefill decoding disaggregation')
+        parser.add_argument('--enable-preassign-decode-instance',
+                            action='store_true',
+                            help='assign both prefill and decode instance when manager dispatch request.\n'
+                            'only work when enable-pd-disagg is True and BladeLlama engine.')
         parser.add_argument('--pd-ratio',
                             type=str,
                             help='the prefill decode ratio used in gloabl launch model e.g. "1:1"')

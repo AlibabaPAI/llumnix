@@ -218,9 +218,9 @@ class Llumlet:
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()
 
-    def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, decode_instance_id: str = None, *args, **kwargs) -> None:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
-        self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+        self.backend_engine.add_request(request_id, server_info, expected_steps, decode_instance_id, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):

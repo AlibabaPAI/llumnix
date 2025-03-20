@@ -14,7 +14,7 @@
 from collections import defaultdict
 import random
 
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.arg_utils import InstanceArgs
 
@@ -25,38 +25,62 @@ def init_dispatch_scheduler(policy='load'):
 
 def test_add_instance_and_remove_instance():
     dispatch_scheduler = init_dispatch_scheduler('balanced')
+    # test prefill instance
     dispatch_scheduler.add_instance('instance_1', InstanceArgs(instance_type="no_constraints"))
-    assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    assert len(dispatch_scheduler.available_prefill_instance_set) == 1
+    assert len(dispatch_scheduler.available_decode_instance_set) == 0
     dispatch_scheduler.remove_instance('instance_1')
-    assert len(dispatch_scheduler.available_dispatch_instance_set) == 0
+    assert len(dispatch_scheduler.available_prefill_instance_set) == 0
 
-    dispatch_scheduler.add_instance('instance_2', InstanceArgs(instance_type="no_constraints"))
-    assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    dispatch_scheduler.add_instance('instance_2', InstanceArgs(instance_type="prefill"))
+    assert len(dispatch_scheduler.available_prefill_instance_set) == 1
     dispatch_scheduler.add_instance('instance_3', InstanceArgs(instance_type="no_constraints"))
-    assert len(dispatch_scheduler.available_dispatch_instance_set) == 2
+    assert len(dispatch_scheduler.available_prefill_instance_set) == 2
 
     dispatch_scheduler.remove_instance('instance_2')
-    assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
+    assert len(dispatch_scheduler.available_prefill_instance_set) == 1
     dispatch_scheduler.remove_instance('instance_3')
-    assert len(dispatch_scheduler.available_dispatch_instance_set) == 0
+    assert len(dispatch_scheduler.available_prefill_instance_set) == 0
+
+    # test decode instance
+    dispatch_scheduler.add_instance('instance_1', InstanceArgs(instance_type="decode"))
+    assert len(dispatch_scheduler.available_decode_instance_set) == 1
+    assert len(dispatch_scheduler.available_prefill_instance_set) == 0
+    dispatch_scheduler.remove_instance('instance_1')
+    assert len(dispatch_scheduler.available_decode_instance_set) == 0
+
+    dispatch_scheduler.add_instance('instance_2', InstanceArgs(instance_type="decode"))
+    assert len(dispatch_scheduler.available_decode_instance_set) == 1
+    dispatch_scheduler.add_instance('instance_3', InstanceArgs(instance_type="decode"))
+    assert len(dispatch_scheduler.available_decode_instance_set) == 2
+
+    dispatch_scheduler.remove_instance('instance_2')
+    assert len(dispatch_scheduler.available_decode_instance_set) == 1
+    dispatch_scheduler.remove_instance('instance_3')
+    assert len(dispatch_scheduler.available_decode_instance_set) == 0
 
 def test_dispatch_to_no_constraints_and_prefill():
     dispatch_scheduler = init_dispatch_scheduler('rr')
     instance_num = 4
-    instance_num_requests = {}
-    instance_info_dict = {}
-    for instance_id in [f'instance_{i}' for i in range(instance_num)]:
+    dispatch_scheduler.prefill_instance_num_requests = {}
+    dispatch_scheduler.prefill_instance_info = {}
+    dispatch_scheduler.decode_instance_info = {}
+    for i in range(instance_num):
         instance_info = InstanceInfo(
-            instance_id=instance_id,
+            instance_id=f'instance_prefill_{i}',
             dispatch_load_metric=random.randint(1, 10),
         )
-        instance_info_dict[instance_id] = instance_info
-    dispatch_scheduler.instance_num_requests = instance_num_requests
-    dispatch_scheduler.instance_info = instance_info_dict
+        dispatch_scheduler.prefill_instance_info[instance_info.instance_id] = instance_info
+
+        instance_info = InstanceInfo(
+            instance_id=f'instance_decode_{i}',
+            dispatch_load_metric=random.randint(1, 10),
+        )
+        dispatch_scheduler.decode_instance_info[instance_info.instance_id] = instance_info
 
     dispatched_instance_ids = []
     available_instance_type = ['no_constraints', 'prefill', 'decode']
-    for instance_id, _ in dispatch_scheduler.instance_info.items():
+    for instance_id, _ in dispatch_scheduler.prefill_instance_info.items():
         if len(dispatched_instance_ids) == 0:
             instance_type = random.choice(['no_constraints', 'prefill'])
         else:
@@ -65,7 +89,7 @@ def test_dispatch_to_no_constraints_and_prefill():
         if instance_type != 'decode':
             dispatched_instance_ids.append(instance_id)
         else:
-            assert instance_id not in dispatch_scheduler.available_dispatch_instance_set
+            assert instance_id not in dispatch_scheduler.available_prefill_instance_set
 
     instance_dispatch_info = defaultdict(int)
     for _ in range(instance_num * 2):
@@ -83,11 +107,25 @@ def test_dispatch_balanced():
         dispatch_scheduler = init_dispatch_scheduler('balanced')
         instance_num_requests = {}
         for instance_id in [f'instance_{i}' for i in range(1, instance_num + 1)]:
-            dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
+            dispatch_scheduler.available_prefill_instance_set.add(instance_id)
             instance_num_requests[instance_id] = random.randint(1, 10)
-        dispatch_scheduler.instance_num_requests = instance_num_requests
+        dispatch_scheduler.prefill_instance_num_requests = instance_num_requests
         min_instance_id = next(key for key, value in sorted(instance_num_requests.items(), key=lambda item: item[1]))
         instance_id = dispatch_scheduler.dispatch()
+        assert min_instance_id == instance_id
+
+def test_dispatch_balanced_decode_instance():
+    num_tests = 100
+    instance_num = 4
+    for _ in range(num_tests):
+        dispatch_scheduler = init_dispatch_scheduler('balanced')
+        instance_num_requests = {}
+        for instance_id in [f'instance_{i}' for i in range(1, instance_num + 1)]:
+            dispatch_scheduler.available_decode_instance_set.add(instance_id)
+            instance_num_requests[instance_id] = random.randint(1, 10)
+        dispatch_scheduler.decode_instance_num_requests = instance_num_requests
+        min_instance_id = next(key for key, value in sorted(instance_num_requests.items(), key=lambda item: item[1]))
+        instance_id = dispatch_scheduler.dispatch(instance_type=InstanceType.Decode)
         assert min_instance_id == instance_id
 
 def test_dispatch_load():
@@ -102,12 +140,12 @@ def test_dispatch_load():
             instance_info.instance_id = instance_id
             instance_info.dispatch_load_metric = random.random()
             instance_info_dict[instance_id] = instance_info
-            dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
+            dispatch_scheduler.available_prefill_instance_set.add(instance_id)
             instance_num_requests[instance_id] = 0
-        dispatch_scheduler.instance_num_requests = instance_num_requests
-        dispatch_scheduler.instance_info = instance_info_dict
+        dispatch_scheduler.prefill_instance_num_requests = instance_num_requests
+        dispatch_scheduler.prefill_instance_info = instance_info_dict
         available_instance_dict = {key: value for key, value in instance_info_dict.items()
-                                   if key in dispatch_scheduler.available_dispatch_instance_set}
+                                   if key in dispatch_scheduler.available_prefill_instance_set}
         min_instance_id = next(key for key, value in sorted(available_instance_dict.items(),
                                                             key=lambda item: item[1].dispatch_load_metric))
         instance_id = dispatch_scheduler.dispatch()
@@ -125,12 +163,12 @@ def test_dispatch_queue():
             instance_info.instance_id = instance_id
             instance_info.num_waiting_requests = random.randint(1, 10)
             instance_info_dict[instance_id] = instance_info
-            dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
+            dispatch_scheduler.available_prefill_instance_set.add(instance_id)
             instance_num_requests[instance_id] = 0
-        dispatch_scheduler.instance_num_requests = instance_num_requests
-        dispatch_scheduler.instance_info = instance_info_dict
+        dispatch_scheduler.prefill_instance_num_requests = instance_num_requests
+        dispatch_scheduler.prefill_instance_info = instance_info_dict
         available_instance_dict = {key: value for key, value in instance_info_dict.items()
-                                   if key in dispatch_scheduler.available_dispatch_instance_set}
+                                   if key in dispatch_scheduler.available_prefill_instance_set}
         min_instance_id = next(key for key, value in sorted(available_instance_dict.items(),
                                                             key=lambda item: item[1].num_waiting_requests))
         instance_id = dispatch_scheduler.dispatch()
@@ -147,10 +185,10 @@ def test_dispatch_rr():
         instance_info.instance_id = instance_id
         instance_info.num_waiting_requests = random.randint(1, 10)
         instance_info_dict[instance_id] = instance_info
-        dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
+        dispatch_scheduler.available_prefill_instance_set.add(instance_id)
         instance_num_requests[instance_id] = 0
-    dispatch_scheduler.instance_num_requests = instance_num_requests
-    dispatch_scheduler.instance_info = instance_info_dict
+    dispatch_scheduler.prefill_instance_num_requests = instance_num_requests
+    dispatch_scheduler.prefill_instance_info = instance_info_dict
 
     num_request = 2 * instance_num + 1
     for idx in range(0, num_request):
@@ -170,10 +208,10 @@ def test_dispatch_topk_random_dispatch():
             instance_info.instance_id = instance_id
             instance_info.num_waiting_requests = random.randint(1, 10)
             instance_info_dict[instance_id] = instance_info
-            dispatch_scheduler.available_dispatch_instance_set.add(instance_id)
+            dispatch_scheduler.available_prefill_instance_set.add(instance_id)
             instance_num_requests[instance_id] = 0
-        dispatch_scheduler.instance_num_requests = instance_num_requests
-        dispatch_scheduler.instance_info = instance_info_dict
+        dispatch_scheduler.prefill_instance_num_requests = instance_num_requests
+        dispatch_scheduler.prefill_instance_info = instance_info_dict
         instance_id_set = set()
         for _ in range(num_tests):
             instance_id_set.add(dispatch_scheduler.dispatch())

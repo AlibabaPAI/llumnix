@@ -91,7 +91,7 @@ class LoadFilter(MigrationFilterPolicy):
             and instance_info.migration_load_metric < filter_config.migrate_out_load_threshold
 
 
-class PddFilter(MigrationFilterPolicy):
+class PDDFilter(MigrationFilterPolicy):
     INSTANCE_FILTER_RULES = {
         PairMigrationConstraints.DECODING_2_DECODING: (InstanceType.DECODE, InstanceType.DECODE),
         PairMigrationConstraints.PREFILL_2_DECODING: (InstanceType.PREFILL, InstanceType.DECODE),
@@ -149,7 +149,7 @@ class CustomFilter(MigrationFilterPolicy):
 class MigrationFilterPolicyFactory:
     _POLICY_REGISTRY = {
         'load': LoadFilter,
-        'pdd': PddFilter,
+        'pdd': PDDFilter,
         'custom': CustomFilter,
     }
 

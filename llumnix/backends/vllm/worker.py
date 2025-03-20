@@ -93,7 +93,8 @@ class MigrationWorker(Worker):
         self.instance_id = instance_id
         self.global_world_size = 0
         self.global_rank = -1
-        self.migration_backend: MigrationBackendBase = get_migration_backend(migration_config=migration_config,
+        self.migration_backend: MigrationBackendBase = get_migration_backend(instance_id=instance_id,
+                                                                             migration_config=migration_config,
                                                                              cache_engine=self.cache_engine,
                                                                              worker_handle_list=src_worker_handle_list,
                                                                              scheduling_strategy=scheduling_strategy,

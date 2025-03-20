@@ -32,13 +32,15 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import get_cache_block_size
 from llumnix.backends.profiling import LatencyMemData, SimCacheConfig, model_prefill, model_decode, _pad_to_alignment
+from llumnix.utils import random_uuid
 
 logger = init_logger(__name__)
 
 
 class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
+    instance_id: str = None
     migration_config: MigrationConfig = None
-    last_inference_latency:int = 0
+    last_inference_latency: int = 0
 
     def _init_workers_ray(self, placement_group: PlacementGroup,
                           **ray_remote_kwargs):
@@ -87,6 +89,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
                 max_concurrency=2,
+                name=f"RayWorkerWrapper_{self.instance_id}_"+random_uuid(),
                 **ray_remote_kwargs,
             )(RayWorkerWrapper).remote(**worker_wrapper_kwargs)
 

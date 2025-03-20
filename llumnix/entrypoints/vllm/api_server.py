@@ -177,8 +177,8 @@ if __name__ == "__main__":
     parser.add_argument("--ssl-keyfile", type=str)
     parser.add_argument("--ssl-certfile", type=str)
     parser.add_argument("--log-level", type=str, choices=["debug", "info", "warning", "error"])
-
-    cli_args = add_cli_args(parser)
+    parser = add_cli_args(parser)
+    cli_args = parser.parse_args()
     cfg = get_llumnix_config(cli_args.config_file, cli_args)
 
     entrypoints_args, manager_args, instance_args, engine_args = get_args(cfg, LaunchMode.LOCAL, parser, cli_args)

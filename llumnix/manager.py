@@ -23,6 +23,7 @@ from functools import partial
 
 import ray
 import ray.actor
+# TODO(s5u13b): Try to not use ray state apis because they are not reliable.
 from ray.util.state import list_placement_groups, list_actors
 from ray.util.placement_group import PlacementGroup
 

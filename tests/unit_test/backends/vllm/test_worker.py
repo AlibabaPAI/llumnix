@@ -54,7 +54,8 @@ def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
     worker = ray.remote(
         num_cpus=0,
         num_gpus=1,
-        max_concurrency=max_concurrency
+        max_concurrency=max_concurrency,
+        name=f"unit_test_worker_{random_uuid()}"
     )(RayWorkerWrapper).remote(
         worker_module_name=worker_module_name,
         worker_class_name=worker_class_name,

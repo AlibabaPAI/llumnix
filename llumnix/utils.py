@@ -220,7 +220,7 @@ def put_data_to_ray_internal_kv(data_name: str, value: Any) -> None:
 def get_engine_args_data_name(instance_type: str):
     return f"engine_args.{instance_type}"
 
-@ray.remote(lifetime="detached")
+@ray.remote(lifetime="detached", max_restarts=-1)
 class EngineArgsKeeper:
     def put_engine_args_to_ray_internal_kv(self, instance_type: str, engine_args: Any) -> None:
         put_data_to_ray_internal_kv(get_engine_args_data_name(instance_type), engine_args)

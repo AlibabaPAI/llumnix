@@ -37,7 +37,7 @@ class MockManagerServer(MockManager):
 
     def init_server(self, entrypoints_args):
         server = APIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME,
-                                       namespace='llumnix').remote(entrypoints_args)
+                                        namespace='llumnix').remote(entrypoints_args)
         return server
 
     # pylint: disable=arguments-renamed

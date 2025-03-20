@@ -24,13 +24,14 @@ if __name__ == "__main__":
     parser = add_cli_args(parser)
     cli_args = parser.parse_args()
     cfg = get_llumnix_config(cli_args.config_file, cli_args)
+
+    # Assume that there is an existing ray cluster when using centralized deployment.
+    connect_to_ray_cluster()
+
     entrypoints_args, manager_args, instance_args, engine_args = get_args(cfg, LaunchMode.GLOBAL, parser, cli_args)
 
     backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=backend_type)
-
-    # Assume that there is an existing ray cluster when using centralized deployment.
-    connect_to_ray_cluster()
 
     # magic actor to avoid fast api server actor initialization error
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",

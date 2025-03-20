@@ -13,6 +13,7 @@
 
 import asyncio
 import os
+import copy
 import time
 import math
 import ray
@@ -20,6 +21,7 @@ import pytest
 import numpy as np
 
 import torch
+
 from vllm import EngineArgs
 
 from llumnix.launcher import Launcher
@@ -34,6 +36,8 @@ from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
                            remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
                            kill_instance, random_uuid, get_manager_name)
+from llumnix.internal_config import PDDConfig
+from llumnix.entrypoints.vllm.register_args import put_engine_args_to_ray_internal_kv
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -425,7 +429,8 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 def test_pd_disagg_gloal_launch_instance_type():
-    launcher = Launcher(None, True, False, True, False, [1, 2])
+    pdd_config = PDDConfig(True, False, [1, 2], False)
+    launcher = Launcher(None, True, False, pdd_config)
 
     assert launcher._get_next_instance_type(0, 0, [1, 2]) == InstanceType.PREFILL
     launcher.inflight_num_prefill_instance += 1
@@ -441,6 +446,23 @@ def test_pd_disagg_gloal_launch_instance_type():
     assert launcher._get_next_instance_type(3, 5, [1, 2]) == InstanceType.DECODE
     assert launcher._get_next_instance_type(3, 6, [1, 2]) == InstanceType.PREFILL
     assert launcher._get_next_instance_type(3, 7, [1, 2]) == InstanceType.PREFILL
+
+@pytest.mark.parametrize("load_engine_args_from_ray", [False, True])
+def test_load_engine_args_from_ray(ray_env, load_engine_args_from_ray):
+    engine_args = EngineArgs()
+    engine_args.model = 'no_constraints'
+    for instance_type in ['prefill', 'decode']:
+        put_engine_args = copy.deepcopy(engine_args)
+        put_engine_args.model = instance_type
+        put_engine_args_to_ray_internal_kv(instance_type, put_engine_args)
+    pdd_config = PDDConfig(True, False, [1, 2], load_engine_args_from_ray)
+    launcher = Launcher(None, True, False, pdd_config)
+    for instance_type in ['prefill', 'decode']:
+        get_engine_args = launcher._get_next_engine_args(engine_args, instance_type)
+        if load_engine_args_from_ray:
+            assert get_engine_args.model == instance_type
+        else:
+            assert get_engine_args.model == 'no_constraints'
 
 @pytest.mark.asyncio
 async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env):

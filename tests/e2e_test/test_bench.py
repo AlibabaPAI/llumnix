@@ -71,32 +71,16 @@ def parse_log_file(title: str):
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("output_queue_type", ["rayqueue","zmq"])
-async def test_simple_benchmark(
-    ray_env,
-    shutdown_llumnix_service,
-    model,
-    launch_mode,
-    enable_pd_disagg,
-    enable_simulator,
-    output_queue_type,
-):
-    if enable_simulator and enable_pd_disagg:
-        pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
-
-    if output_queue_type == "zmq" and not (
-        launch_mode == "local" and not enable_simulator and not enable_pd_disagg
-    ):
-        pytest.skip(
-            "Only test zmq queue type when simulator is disabled and prefill-decode disaggregation is disabled."
-        )
+async def test_simple_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode, enable_simulator, output_queue_type):
+    if output_queue_type == "zmq" and not (launch_mode == "local" and not enable_simulator):
+        pytest.skip("Only test zmq queue type when simulator is disabled.")
 
     if launch_mode == 'local':
-        num_prompts = 500 if not enable_pd_disagg else 50
+        num_prompts = 500
     else:
-        num_prompts = 50 if not enable_pd_disagg else 50
+        num_prompts = 50
 
     if enable_simulator:
         num_prompts = 50
@@ -106,46 +90,19 @@ async def test_simple_benchmark(
     ip_ports = []
     if launch_mode == 'local':
         device_count = torch.cuda.device_count()
-        if enable_pd_disagg:
-            for i in range(device_count//2):
-                port = base_port+i
-                ip_port = f"{ip}:{port}"
-                ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_pd_disagg=enable_pd_disagg,
-                                                         instance_type="prefill",
-                                                         output_queue_type=output_queue_type)
-                subprocess.run(launch_command, shell=True, check=True)
-            for i in range(device_count//2):
-                port = base_port+i+device_count//2
-                ip_port = f"{ip}:{port}"
-                ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_pd_disagg=enable_pd_disagg,
-                                                         instance_type="decode",
-                                                         output_queue_type=output_queue_type)
-                subprocess.run(launch_command, shell=True, check=True)
-        else:
-            for i in range(device_count):
-                port = base_port+i
-                ip_port = f"{ip}:{port}"
-                ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_simulator=enable_simulator,
-                                                         output_queue_type=output_queue_type)
-                subprocess.run(launch_command, shell=True, check=True)
+        for i in range(device_count):
+            port = base_port+i
+            ip_port = f"{ip}:{port}"
+            ip_ports.append(ip_port)
+            launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                                                        launch_ray_cluster=False,
+                                                        ip=ip,
+                                                        port=port,
+                                                        model=model,
+                                                        enable_pd_disagg=False,
+                                                        enable_simulator=enable_simulator,
+                                                        output_queue_type=output_queue_type)
+            subprocess.run(launch_command, shell=True, check=True)
     else: # global
         device_count = torch.cuda.device_count()
         for i in range(device_count):
@@ -156,7 +113,7 @@ async def test_simple_benchmark(
                                                ip=ip,
                                                port=base_port,
                                                model=model,
-                                               enable_pd_disagg=enable_pd_disagg,
+                                               enable_pd_disagg=False,
                                                enable_simulator=enable_simulator,
                                                output_queue_type=output_queue_type)
         subprocess.run(serve_command, shell=True, check=True)
@@ -197,5 +154,89 @@ async def test_simple_benchmark(
     if num_prompts >= 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(parse_log_file(title=output_queue_type))
+
+    await asyncio.sleep(3)
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for pdd benchmark")
+@pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
+@pytest.mark.parametrize("launch_mode", ['global', 'local'])
+async def test_pdd_benchmark(ray_env, shutdown_llumnix_service, model, launch_mode):
+    num_prompts = 50
+
+    ip = get_ip_address()
+    base_port = 37037
+    ip_ports = []
+    if launch_mode == 'local':
+        device_count = torch.cuda.device_count()
+        for i in range(device_count//2):
+            port = base_port+i
+            ip_port = f"{ip}:{port}"
+            ip_ports.append(ip_port)
+            launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                                                     launch_ray_cluster=False,
+                                                     ip=ip,
+                                                     port=port,
+                                                     model=model,
+                                                     enable_pd_disagg=True,
+                                                     instance_type="prefill")
+            subprocess.run(launch_command, shell=True, check=True)
+        for i in range(device_count//2):
+            port = base_port+i+device_count//2
+            ip_port = f"{ip}:{port}"
+            ip_ports.append(ip_port)
+            launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
+                                                     launch_ray_cluster=False,
+                                                     ip=ip,
+                                                     port=port,
+                                                     model=model,
+                                                     enable_pd_disagg=True,
+                                                     instance_type="decode")
+            subprocess.run(launch_command, shell=True, check=True)
+    else: # global
+        device_count = torch.cuda.device_count()
+        for i in range(device_count):
+            port = base_port+i
+            ip_port = f"{ip}:{port}"
+            ip_ports.append(ip_port)
+        serve_command = generate_serve_command(result_filename=str(base_port)+".out",
+                                               ip=ip,
+                                               port=base_port,
+                                               model=model,
+                                               enable_pd_disagg=True)
+        subprocess.run(serve_command, shell=True, check=True)
+    wait_for_llumnix_service_ready(ip_ports)
+
+    def run_bench_command(command):
+        # pylint: disable=consider-using-with
+        process = subprocess.Popen(command, shell=True)
+        return process
+
+    tasks = []
+    for i in range(device_count):
+        bench_command = generate_bench_command(
+            ip_ports=f"{ip}:{base_port + i}",
+            model=model,
+            num_prompts=num_prompts,
+            dataset_type="sharegpt",
+            dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
+            qps=5,
+            results_filename=f"{base_port + i}.out"
+        )
+        tasks.append(bench_command)
+
+    with ThreadPoolExecutor() as executor:
+        future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
+
+        for future in as_completed(future_to_command):
+            try:
+                process = future.result()
+                process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
+
+                assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
+            # pylint: disable=broad-except
+            except subprocess.TimeoutExpired:
+                process.kill()
+                assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
     await asyncio.sleep(3)

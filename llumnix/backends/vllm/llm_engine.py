@@ -84,7 +84,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.put_queue_loop_thread = threading.Thread(
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
         )
-        self.async_put_queue_actor = ray.remote(
+        self.async_put_queue_actor: AsyncPutQueueActor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
@@ -281,7 +281,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
-        self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+        if server_info_dict:
+            self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
 
 class BackendVLLM(BackendInterface):

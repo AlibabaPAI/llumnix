@@ -58,7 +58,7 @@ python -m llumnix.entrypoints.vllm.api_server \
 ```
 
 Upon starting the server, Llumnix's components are automatically configured.
-In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.6.3.post1/models/engine_args.html). Lluminx arguments from cli will override the corresponding configuration in config file.
+In addition to the server arguments provided above, it's necessary to specify both the Llumnix arguments and the vLLM arguments. For detailed configuration options, please consult the documentation for [Llumnix arguments](./Arguments.md) and [vLLM arguments](https://docs.vllm.ai/en/v0.6.3.post1/models/engine_args.html). Lluminx arguments from cli will override the corresponding configuration in config file. Notice that Llumnix uses Ray to deploy its components, so ensure to include `--launch-ray-cluster` in llumnix arguments or set `SERVER.LAUNCH_RAY_CLUSTER` to True in config file.
 
 During the execution of serving deployment, Llumnix will:
 - Initiate the Ray cluster for distributed execution.

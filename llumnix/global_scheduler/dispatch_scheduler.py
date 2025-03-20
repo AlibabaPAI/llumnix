@@ -28,36 +28,63 @@ class DispatchScheduler:
                  topk_random_dispatch: int) -> None:
         self.dispatch_policy = DispatchPolicyFactory.get_policy(dispatch_policy)
         self.topk_random_dispatch = topk_random_dispatch
-        self.available_dispatch_instance_set: Set[str] = set()
-        self.instance_info: Dict[str, InstanceInfo] = {}
+        
+        # include instance_type prefill and no_constraints
+        self.available_prefill_instance_set: Set[str] = set()
+        self.prefill_instance_info: Dict[str, InstanceInfo] = {}
+        self.prefill_instance_num_requests: Dict[str, int] = {}
+        
+        # only used in P-D disaggregation
+        self.available_decode_instance_set: Set[str] = set()
+        self.decode_instance_info: Dict[str, InstanceInfo] = {}
+        self.decode_instance_num_requests: Dict[str, int] = {}
+
+
         # statistics
         self.total_num_requests = 0
-        self.instance_num_requests: Dict[str, int] = {}
 
-    def dispatch(self) -> str:
+    def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
         self.total_num_requests += 1
-        dispatch_instance_id = self.dispatch_policy.dispatch(self.instance_num_requests,
-                                                             self.instance_info.values(),
+
+        if instance_type in [InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS]:
+            dispatch_instance_id = self.dispatch_policy.dispatch(self.prefill_instance_num_requests,
+                                                             self.prefill_instance_info.values(),
                                                              self.topk_random_dispatch)
-        self.instance_num_requests[dispatch_instance_id] += 1
+            self.prefill_instance_num_requests[dispatch_instance_id] += 1
+
+        if instance_type == InstanceType.DECODE:
+            # TODO(tongchenghao): support separate decode instance dispatch policy
+            dispatch_instance_id = self.dispatch_policy.dispatch(self.decode_instance_num_requests,
+                                                             self.decode_instance_info.values(),
+                                                             self.topk_random_dispatch)
+            self.decode_instance_num_requests[dispatch_instance_id] += 1
+
         if self.total_num_requests % DISPATCH_LOG_FREQUENCY == 0:
             logger.info("dispatch scheduler total_dispatched_requests: {}".format(self.total_num_requests))
-            for instance_id, num_requests in self.instance_num_requests.items():
-                logger.info("instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
+            for instance_id, num_requests in self.prefill_instance_num_requests.items():
+                logger.info("prefill instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
+            for instance_id, num_requests in self.decode_instance_num_requests.items():
+                logger.info("decode instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
         return dispatch_instance_id
 
     def update_instance_infos(self, instance_infos: Dict[str, InstanceInfo]) -> None:
         for instance_id, instance_info in instance_infos.items():
-            if instance_id not in self.available_dispatch_instance_set:
-                continue
-            self.instance_info[instance_id] = instance_info
-
+            if instance_id in self.available_prefill_instance_set:
+                self.prefill_instance_info[instance_id] = instance_info
+            if instance_id in self.available_decode_instance_set:
+                self.decode_instance_info[instance_id] = instance_info
     def add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
         if instance_args.instance_type in [InstanceType.NO_CONSTRAINTS, InstanceType.PREFILL]:
-            self.available_dispatch_instance_set.add(instance_id)
-            self.instance_num_requests[instance_id] = 0
+            self.available_prefill_instance_set.add(instance_id)
+            self.prefill_instance_num_requests[instance_id] = 0
+        if instance_args.instance_type == InstanceType.DECODE:
+            self.available_decode_instance_set.add(instance_id)
+            self.decode_instance_num_requests[instance_id] = 0
 
     def remove_instance(self, instance_id: str) -> None:
-        if instance_id in self.available_dispatch_instance_set:
-            self.available_dispatch_instance_set.remove(instance_id)
-            self.instance_num_requests.pop(instance_id, None)
+        if instance_id in self.available_prefill_instance_set:
+            self.available_prefill_instance_set.remove(instance_id)
+            self.prefill_instance_num_requests.pop(instance_id, None)
+        if instance_id in self.available_decode_instance_set:
+            self.available_decode_instance_set.remove(instance_id)
+            self.decode_instance_num_requests.pop(instance_id, None)

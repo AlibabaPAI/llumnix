@@ -16,7 +16,7 @@ import math
 
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
@@ -52,10 +52,13 @@ class GlobalScheduler:
             if instance_info.instance_id in self.instance_id_set:
                 self.instance_info[instance_info.instance_id] = instance_info
 
-    def dispatch(self) -> str:
+    def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
         self.dispatch_scheduler.update_instance_infos(self.instance_info)
-        instance_id = self.dispatch_scheduler.dispatch()
-        request_expected_steps = 1 if self.global_scheduler_config.enable_pd_disagg else math.inf
+        instance_id = self.dispatch_scheduler.dispatch(instance_type)
+        if self.global_scheduler_config.enable_pd_disagg and instance_type == InstanceType.PREFILL:
+            request_expected_steps = 1 
+        else:
+            request_expected_steps = math.inf
         return instance_id, request_expected_steps
 
     def pair_migration(self, pair_migration_type: PairMigrationConstraints) -> List[Tuple[str, str]]:

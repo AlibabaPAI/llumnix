@@ -374,6 +374,7 @@ class BackendVLLM(BackendInterface):
                     request_id: str,
                     server_info: ServerInfo,
                     expected_steps: int,
+                    decode_instance_id: str = None,
                     *args,
                     **kwargs) -> None:
         # Store the server information of each request to put the request outputs back to the corresponding api server correctly.

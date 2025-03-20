@@ -268,9 +268,10 @@ class BackendBladeLLM(BackendInterface):
         self._engine_ready.set()
         loop.run_forever()
 
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, decode_instance_id: str = None, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
         server_request = ServerRequest(**json.loads(kwargs["server_request"]))
+        # TODO(tongchenghao): add decode_instance_id into ServerRequest here
         asyncio.run_coroutine_threadsafe(self.engine.add_request(server_info, server_request), self._loop)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:

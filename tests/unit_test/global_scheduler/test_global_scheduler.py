@@ -16,7 +16,7 @@ import pytest
 
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
 from llumnix.utils import random_uuid
 from llumnix.arg_utils import InstanceArgs
 
@@ -74,6 +74,27 @@ def test_dispatch(global_scheduler):
     global_scheduler.update_instance_infos(instance_infos)
     instance_id, request_expected_steps = global_scheduler.dispatch()
     assert instance_id in instance_ids
+    assert request_expected_steps == math.inf
+
+def test_dispatch_decode(global_scheduler):
+    initial_instances = 4
+    prefill_instance_infos = init_instance_infos(initial_instances)
+    prefill_instance_ids = [instance_info.instance_id for instance_info in prefill_instance_infos]
+    global_scheduler.scale_up(prefill_instance_ids, [InstanceArgs(instance_type="prefill")]*len(prefill_instance_ids))
+    global_scheduler.update_instance_infos(prefill_instance_infos)
+
+    decode_instance_infos = init_instance_infos(initial_instances)
+    decode_instance_ids = [instance_info.instance_id for instance_info in decode_instance_infos]
+    global_scheduler.scale_up(decode_instance_ids, [InstanceArgs(instance_type="decode")]*len(decode_instance_ids))
+    global_scheduler.update_instance_infos(decode_instance_infos)
+
+
+    prefill_instance_id, request_expected_steps = global_scheduler.dispatch(InstanceType.PREFILL)
+    assert prefill_instance_id in prefill_instance_ids
+    assert request_expected_steps == 1
+
+    decode_instance_id, request_expected_steps = global_scheduler.dispatch(InstanceType.DECODE)
+    assert decode_instance_id in decode_instance_ids
     assert request_expected_steps == math.inf
 
 def test_pair_migration(global_scheduler):

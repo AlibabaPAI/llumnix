@@ -32,7 +32,7 @@ def get_args(cfg, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_ar
     entrypoints_args = EntrypointsArgs.from_llumnix_config(cfg)
 
     EntrypointsArgs.check_args(entrypoints_args, parser)
-    ManagerArgs.check_args(manager_args, parser)
+    ManagerArgs.check_args(manager_args, parser, BackendType.VLLM)
     InstanceArgs.check_args(instance_args, manager_args, launch_mode, parser)
     check_engine_args(engine_args, instance_args)
 

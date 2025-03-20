@@ -250,6 +250,7 @@ def test_generate_and_abort(ray_env, manager, llumlet):
     assert num_requests == 0
     server_info = ServerInfo(None, None, None, None, None)
     ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None))
+    time.sleep(1.0)
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 1
     ray.get(manager.abort.remote(request_id))

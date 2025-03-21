@@ -43,11 +43,12 @@ engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", w
 manager: Manager = init_manager(manager_args)
 ray.get(manager.is_ready.remote())
 
-# Create instances.
+# Create instances and register to manager.
 instance_ids: List[str] = None
 instances: List[Llumlet] = None
 instance_ids, instances = ray.get(manager.init_instances.remote(
     QueueType("rayqueue"), BackendType.VLLM, instance_args, engine_args))
+ray.get(manager.scale_up.remote(instance_ids, instances, [instance_args]*len(instance_ids)))
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()

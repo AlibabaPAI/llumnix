@@ -41,6 +41,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import get_instance_name, make_async
+from llumnix.llumlet.request import LlumnixRequest
 from llumnix import constants
 from llumnix.metrics.timestamps import set_timestamp
 
@@ -257,7 +258,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 
-    def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
+    # pylint: disable=invalid-overridden-method
+    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler[0].waiting[-1]
         set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
@@ -314,6 +316,7 @@ class BackendVLLM(BackendInterface):
         for vid in range(engine_args.pipeline_parallel_size):
             self.engine.scheduler[vid].add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
+        self.migration_config = migration_config
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
@@ -372,14 +375,9 @@ class BackendVLLM(BackendInterface):
     async def execute_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
-    def add_request(self,
-                    request_id: str,
-                    server_info: ServerInfo,
-                    expected_steps: int,
-                    *args,
-                    **kwargs) -> None:
-        # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
-        self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+    # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
+    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+        await self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
@@ -397,8 +395,9 @@ class BackendVLLM(BackendInterface):
             backend_request.reset_status()
             self.add_running_request(backend_request)
 
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
-        await dst_ray_actor.execute_engine_method_async.remote("_run_workers_async",
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
+                          src_blocks: List[int], dst_blocks: List[int], is_last_stage: bool) -> None:
+        await dst_ray_actor.execute_async_engine_method.remote("_run_workers_async",
                                                                "migrate_cache",
                                                                dst_blocks=dst_blocks,
                                                                src_blocks=src_blocks,
@@ -412,7 +411,7 @@ class BackendVLLM(BackendInterface):
         # pylint: disable=protected-access
         return await make_async(self.engine.model_executor._run_workers)(*args, **kwargs)
 
-    def is_ready(self):
+    async def is_ready(self):
         return True
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
@@ -427,8 +426,11 @@ class BackendVLLM(BackendInterface):
     def get_waiting_queue(self) -> Deque[SequenceGroupLlumnix]:
         return self.engine.scheduler[0].get_waiting_queue()
 
-    def get_request_incremental_blocks(self, *args, **kwargs) -> Tuple[List[int], List[int]]:
-        return self.engine.scheduler[0].get_request_incremental_blocks(*args, **kwargs)
+    async def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
+        incremental_blocks, incremental_token_ids = \
+            self.engine.scheduler[0].get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
+        is_last_stage = (len(incremental_blocks) <= self.migration_config.migration_last_stage_max_blocks) or backend_request.blocking_migration
+        return incremental_blocks, incremental_token_ids, is_last_stage
 
     # pylint: disable=invalid-overridden-method
     async def remove_running_request(self, request_id: str) -> bool:

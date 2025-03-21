@@ -11,11 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import os
 import asyncio
 import queue
 from typing import List, Dict
 
+import ray
 from ray.util.placement_group import PlacementGroup
 from vllm.engine.arg_utils import EngineArgs
 
@@ -41,6 +43,7 @@ class BackendSimVLLM(BackendVLLM):
         profiling_result_file_path: str
     ) -> None:
         # multi-instance args
+        self.migration_config = migration_config
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
@@ -87,5 +90,6 @@ class BackendSimVLLM(BackendVLLM):
         return latency_mem
 
     # pylint: disable=unused-argument
-    async def send_blocks(self, dst_ray_actor: "ray.actor.ActorHandle", src_blocks: List[int], dst_blocks: List[int]) -> None:
+    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
+                          src_blocks: List[int], dst_blocks: List[int], is_last_stage: bool):
         await self.engine.model_executor.send_blocks(len(src_blocks))

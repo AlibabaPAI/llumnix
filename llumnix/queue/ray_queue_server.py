@@ -18,12 +18,13 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.metrics.timestamps import set_timestamp
-
+from llumnix.utils import random_uuid
 
 class RayQueueServer(QueueServerBase):
     def __init__(self) -> None:
         self.queue = RayQueue(
             actor_options={
+                "name": random_uuid(),
                 "scheduling_strategy":
                     NodeAffinitySchedulingStrategy(
                         node_id=ray.get_runtime_context().get_node_id(),

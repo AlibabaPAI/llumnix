@@ -11,13 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Union
+from typing import Dict, Union, List
 import argparse
 
 from .config import LlumnixConfig
 from .default import _C
 
-def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Namespace] = None) -> LlumnixConfig:
+def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Namespace] = None, cli_args: List = None) -> LlumnixConfig:
     if isinstance(others, argparse.Namespace):
         others = vars(others)
 
@@ -35,6 +35,9 @@ def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Name
 
     if others is not None:
         update_config(cfg, others)
+
+    if cli_args is not None:
+        cfg.merge_from_list(cli_args)
 
     cfg.freeze()
     return cfg

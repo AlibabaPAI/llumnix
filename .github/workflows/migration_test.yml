@@ -28,7 +28,7 @@ jobs:
       run: |
         [[ -n $(docker ps -q) ]] && docker kill $(docker ps -q) || echo "No running containers to kill."
     - name: Build And Test
-      run: ./tools/run_test.sh migration_test
+      run: ./tools/run_test.sh vllm_migration_test
     - name: Create comment from file
       if: ${{ github.event_name != 'push' }}
       uses: actions/github-script@v7

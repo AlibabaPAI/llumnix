@@ -11,16 +11,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import time
 import subprocess
+import uuid
 import pytest
 import requests
 
+from llumnix.entrypoints.utils import get_ip_address
 
-def generate_launch_command(result_filename: str = "",
-                            launch_ray_cluster: bool = True,
+
+def generate_vllm_launch_command(result_filename: str = "",
+                            launch_ray_cluster: bool = False,
                             HEAD_NODE_IP: str = "127.0.0.1",
-                            ip: str = "127.0.0.1",
+                            ip: str = get_ip_address(),
                             port: int = 37000,
                             instances_num: int = 1,
                             dispatch_policy: str = "load",
@@ -36,7 +40,9 @@ def generate_launch_command(result_filename: str = "",
                             tensor_parallel_size: int = 1,
                             enable_simulator: bool = False,
                             output_queue_type: str = "rayqueue",
-                            config_path: str = "configs/vllm.yml"):
+                            config_path: str = "configs/vllm.yml",
+                            enable_migration: bool = True,
+                            **kwargs):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -46,7 +52,7 @@ def generate_launch_command(result_filename: str = "",
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
         f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
-        f"--enable-migration "
+        f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
         f"--max-model-len {max_model_len} "
@@ -69,8 +75,8 @@ def generate_launch_command(result_filename: str = "",
     )
     return command
 
-def generate_serve_command(result_filename: str = "",
-                           ip: str = "127.0.0.1",
+def generate_vllm_serve_command(result_filename: str = "",
+                           ip: str = get_ip_address(),
                            port: int = 37000,
                            dispatch_policy: str = "load",
                            migration_backend: str = "gloo",
@@ -117,6 +123,98 @@ def generate_serve_command(result_filename: str = "",
     )
     return command
 
+NAMING_URL = "file:/tmp/llumnix/naming"
+
+def generate_bladellm_launch_command(
+    config_file: str = "configs/bladellm.yml",
+    result_filename: str = "",
+    model = "facebook/opt-125m",
+    HEAD_NODE_IP: str = "127.0.0.1",
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    max_num_batched_tokens: int = 16000,
+    enable_llumnix: bool = True,
+    enable_pd_disagg: bool = False,
+    enable_migration: bool = True,
+    dispatch_policy: str = "load",
+    instance_type: str = "prefill",
+    engine_disagg_transfer_type: str = "ipc",
+    max_gpu_memory_utilization: float = 0.85,
+    migration_backend: str = "grpc",
+    tensor_parallel_size: int = 1,
+    **kwargs
+):
+    command = (
+        f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+        f"nohup blade_llm_server "
+        f"--host {ip} "
+        f"--port {port} "
+        f"--model {model} "
+        f"{'--enable_llumnix' if enable_llumnix else ''} "
+        f"--llumnix_config {config_file} "
+        f"--disable_prompt_cache "
+        f"--log_level INFO "
+        f"-tp {tensor_parallel_size} "
+        f"--attn_cls ragged_flash "
+        f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
+        f"--disable_frontend_multiprocessing "
+        f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "
+        f"{'--enable_disagg' if enable_pd_disagg else ''} "
+        f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
+        f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
+        f"--disagg_pd.inst_role={instance_type} "
+        f"--disagg_pd.token_port={port + 5000} "
+        f"--naming_url={NAMING_URL} "
+        f"INSTANCE.GRPC_MIGRATION_BACKEND_SERVER_PORT {port + 10000} "
+        f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
+        f"MANAGER.ENABLE_MIGRATION {enable_migration} "
+        f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
+        f"{'> instance_' + result_filename if len(result_filename) > 0 else ''} 2>&1 &"
+    )
+    return command
+
+
+def generate_vllm_request(prompt):
+    request = {
+        "prompt": prompt,
+        "stream": False,
+        "n": 1,
+        "best_of": 1,
+        "temperature": 0.0,
+        "top_k": 1,
+        "ignore_eos": False,
+    }
+    return request
+
+def process_vllm_api_server_output(output):
+    return output['text'][0]
+
+def generate_bladellm_request(prompt):
+    request = {
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "n": 1,
+        "best_of": 1,
+        "temperature": 0.0,
+        "stream": "false",
+        "ignore_eos": "false",
+        "presence_penalty": 1.1,
+        "repetition_penalty": 1.1,
+    }
+    return request
+
+def process_bladellm_api_server_output(output):
+    return output['choices'][0]['message']['content']
+
+
 def wait_for_llumnix_service_ready(ip_ports, timeout=120):
     start_time = time.time()
     while True:
@@ -140,7 +238,8 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
 
         time.sleep(1)
 
-def generate_bench_command(ip_ports: str,
+def generate_bench_command(backend: str,
+                           ip_ports: str,
                            model: str,
                            num_prompts: int,
                            dataset_type: str,
@@ -153,7 +252,7 @@ def generate_bench_command(ip_ports: str,
     command = (
         f"python -u ./benchmark/benchmark_serving.py "
         f"--ip_ports {ip_ports} "
-        f"--backend vLLM "
+        f"--backend {backend} "
         f"--tokenizer {model} "
         f"--trust_remote_code "
         f"--log_filename bench_{ip_ports.split(':')[1]} "
@@ -174,12 +273,39 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
+    subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
+    subprocess.run('pkill -f multiprocess', shell=True, check=False)
+    subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
+    subprocess.run(f'rm -rf {NAMING_URL}', shell=True, check=False)
     time.sleep(5.0)
 
 @pytest.fixture
 def shutdown_llumnix_service():
+    subprocess.run('rm -rf instance_*.out', shell=True, check=False)
     yield
     shutdown_llumnix_service_func()
+
+def count_tracebacks_in_instances(directory):
+    def count_traceback_in_file(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+                return content.count("Traceback (most recent call last)")
+        # pylint: disable=bare-except
+        except:
+            return 0
+
+    total_count = 0
+    for filename in os.listdir(directory):
+        if filename.startswith('instance_'):
+            file_path = os.path.join(directory, filename)
+            count = count_traceback_in_file(file_path)
+            total_count += count
+    return total_count
+
+def check_log_exception():
+    total_traceback = count_tracebacks_in_instances('.')
+    assert total_traceback == 0, f'There are {total_traceback} tracebacks in log files, check the log files.'
 
 def to_markdown_table(data):
     headers = data[0]

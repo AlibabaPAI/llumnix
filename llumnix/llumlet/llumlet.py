@@ -12,9 +12,12 @@
 # limitations under the License.
 
 import asyncio
+import glob
+import os
 import traceback
 from typing import List, Union, Iterable
 import time
+import pickle
 
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -48,6 +51,10 @@ class Llumlet:
                  backend_type: BackendType,
                  engine_args) -> None:
         try:
+            # bladellm engine_args is dumped by pickle
+            if hasattr(engine_args, 'engine_args'):
+                engine_args = pickle.loads(engine_args.engine_args)
+
             self.job_id = ray.get_runtime_context().get_job_id()
             self.worker_id = ray.get_runtime_context().get_worker_id()
             self.actor_id = ray.get_runtime_context().get_actor_id()
@@ -55,6 +62,9 @@ class Llumlet:
             self.instance_id = instance_id
             logger.info("Llumlet(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
                             self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
+            session_log_dir = os.readlink('/tmp/ray/session_latest')
+            pattern = os.path.join(session_log_dir, "logs", f"worker-{self.worker_id}*")
+            logger.info("Llumlet log dir: {}".format(glob.glob(pattern)))
             logger.info("Llumlet backend type: {}".format(backend_type))
             self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)
@@ -75,9 +85,7 @@ class Llumlet:
                                                               migration_config.migration_last_stage_max_blocks,
                                                               migration_config.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
-                                                               self.backend_engine)
-            self.log_requests = True
-
+                                                            self.backend_engine)
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
@@ -157,6 +165,7 @@ class Llumlet:
             migrated_request_list.extend(migrated_request)
             if len(migrated_request) == 0 and migrate_out_request.eom:
                 break
+
         return migrated_request_list
 
     async def _migrate_out_one_request(self,
@@ -209,7 +218,8 @@ class Llumlet:
         self.instance_load_calculator.compute_instance_load(instance_info)
         return instance_info
 
-    def is_ready(self) -> bool:
+    async def is_ready(self) -> InstanceArgs:
+        await self.backend_engine.is_ready()
         return True
 
     def get_instance_args(self) -> InstanceArgs:
@@ -218,9 +228,9 @@ class Llumlet:
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()
 
-    def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
-        self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+        await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -256,6 +266,6 @@ class Llumlet:
         executor = getattr(self.backend_engine, method)
         return executor(*args, **kwargs)
 
-    async def execute_engine_method_async(self, method, *args, **kwargs):
+    async def execute_async_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
         return await executor(*args, **kwargs)

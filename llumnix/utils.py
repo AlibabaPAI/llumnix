@@ -43,6 +43,7 @@ def initialize_placement_group(
     placement_group_name: str,
     num_cpus: int,
     num_gpus: int,
+    seperate_gpu_groups: bool = True,
     detached: bool = False,
     block: bool = True
 ) -> PlacementGroup:
@@ -51,7 +52,8 @@ def initialize_placement_group(
     Args:
         placement_group_name: The name of placement group.
         num_cpus: The number of cpus in placement group.
-        num_cpus: The number of cpus in placement group.
+        num_gpus: The number of gpus in placement group.
+        seperate_gpu_groups: Whether to seperate gpu in bundles.
         detached: Whether the lifetime of the placement group being detached.
         block: If True, the function will block until the placement group is ready.
 
@@ -71,12 +73,15 @@ def initialize_placement_group(
         raise ValueError(
             "The number of required GPUs exceeds the total number of "
             "available GPUs in the cluster.")
+
     # Create a new placement group
     # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
-    if num_gpus >= 1:
+    if seperate_gpu_groups:
         placement_group_specs = ([{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1))
     else:
-        placement_group_specs = ([{"CPU": num_cpus}])
+        spec = {"CPU": num_cpus} if num_gpus == 0 else {"CPU": num_cpus, "GPU": num_gpus}
+        placement_group_specs = ([spec])
+
     current_placement_group = ray.util.placement_group(
         placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
     # Wait until PG is ready - this will block until all

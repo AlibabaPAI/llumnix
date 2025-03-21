@@ -116,7 +116,7 @@ class MigrationWorker(Worker):
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
             self.cache_config, self.model_config, self.parallel_config)
         speed = total_kv_cache_size/GiB_bytes/(end_time - start_time)
-        logger.info("Migrate kv cache done, blocks_num: {}, total_kv_cache_size: {}, time: {}s, speed: {}GB/s."
+        logger.info("Migrate kv cache done, blocks_num: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
                     .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
 
     def do_recv(self, *args, **kwargs):

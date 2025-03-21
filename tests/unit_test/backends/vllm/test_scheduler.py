@@ -153,10 +153,10 @@ def test_scheduler_migrating_out_request_last_stage():
     block_size = 4
     _, seq_group = create_dummy_prompt("1", prompt_length=1, block_size=block_size)
     scheduler.add_migrating_out_request_last_stage(seq_group)
-    assert len(scheduler.pop_migrating_out_requests_last_stage()) == 1
+    assert len(scheduler.free_migrating_out_requests_last_stage()) == 1
     scheduler.add_migrating_out_request_last_stage(seq_group)
-    scheduler.remove_migrating_out_request_last_stage(seq_group)
-    assert len(scheduler.pop_migrating_out_requests_last_stage()) == 0
+    scheduler.pop_migrating_out_request_last_stage(seq_group.request_id)
+    assert len(scheduler.free_migrating_out_requests_last_stage()) == 0
 
 def test_scheduler_pre_alloc():
     # total 8 blocks

@@ -71,7 +71,7 @@ bladellm_unit_test: check_pytest_installed
 
 .PHONY: vllm_offline_test
 vllm_offline_test:
-	@python examlpes/offline_inference.py
+	@python examples/offline_inference.py
 
 # TODO(KuilongCui): add bladellm offine inference example
 
@@ -98,10 +98,6 @@ vllm_migration_test:
 .PHONY: bladellm_migration_test
 bladellm_migration_test:
 	@pytest -v -k 'engine_bladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_migration.py
-
-.PHONY: config_test
-config_test:
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_config.py
 
 ####################################### test end ########################################
 

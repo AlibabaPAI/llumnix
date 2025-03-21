@@ -155,10 +155,10 @@ class Launcher:
             "Currently not support engine based pd-disaggregation in global launch mode."
 
         next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
-        cur_num_prefill = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        cur_num_decode = len(self.global_scheduler.instance_id_set -
+        cur_num_prefill_instance = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
+        cur_num_decode_instance = len(self.global_scheduler.instance_id_set -
                                 self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pd_ratio)
+        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill_instance, cur_num_decode_instance, self.pd_ratio)
 
         return next_instance_args
 
@@ -174,34 +174,34 @@ class Launcher:
         return next_entrypoints_args
 
     def _get_next_instance_type(self,
-                                cur_num_prefill: int,
-                                cur_num_decode: int,
+                                cur_num_prefill_instance: int,
+                                cur_num_decode_instance: int,
                                 pd_ratio: List[int]) -> str:
         instance_type = InstanceType.NO_CONSTRAINTS
 
         if self.enable_pd_disagg:
             # Note: There are no instances simultaneously in inflight_num_prefill and cur_num_prefill as
             # inflight_num will decrease before scaling up the instances. The same applies to num_decode.
-            total_num_prefill = self.inflight_num_prefill_instance + cur_num_prefill
-            total_num_decode = self.inflight_num_decode_instance + cur_num_decode
+            total_num_prefill_instance = self.inflight_num_prefill_instance + cur_num_prefill_instance
+            total_num_decode_instance = self.inflight_num_decode_instance + cur_num_decode_instance
 
-            if total_num_prefill == 0:
+            if total_num_prefill_instance == 0:
                 instance_type = InstanceType.PREFILL
-            elif total_num_decode == 0:
+            elif total_num_decode_instance == 0:
                 instance_type = InstanceType.DECODE
             else:
                 # compute distance if launch prefill or decode
                 normal_distance = pd_ratio[0] - pd_ratio[1]
 
-                base_num_ratio = min(total_num_prefill//pd_ratio[0], total_num_decode//pd_ratio[1])
-                total_num_prefill = total_num_prefill - base_num_ratio * pd_ratio[0]
-                total_num_decode = total_num_decode - base_num_ratio * pd_ratio[1]
+                base_num_ratio = min(total_num_prefill_instance//pd_ratio[0], total_num_decode_instance//pd_ratio[1])
+                total_num_prefill_instance = total_num_prefill_instance - base_num_ratio * pd_ratio[0]
+                total_num_decode_instance = total_num_decode_instance - base_num_ratio * pd_ratio[1]
 
-                if total_num_prefill + total_num_decode == 0:
+                if total_num_prefill_instance + total_num_decode_instance == 0:
                     instance_type = InstanceType.PREFILL
                 else:
-                    distance_if_prefill = total_num_prefill + 1 - total_num_decode
-                    distance_if_decode = total_num_prefill - (total_num_decode + 1)
+                    distance_if_prefill = total_num_prefill_instance + 1 - total_num_decode_instance
+                    distance_if_decode = total_num_prefill_instance - (total_num_decode_instance + 1)
                     gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
                     gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
                     instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode \

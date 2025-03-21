@@ -145,7 +145,7 @@ def remove_placement_group(instance_id: str, placement_group: PlacementGroup = N
 def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) -> bool:
     try:
         if not server:
-            server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+            server = ray.get_actor(get_server_name(instance_id))
         ray.kill(server)
         logger.info("Kill server {}.".format(instance_id))
     # pylint: disable=broad-except
@@ -156,7 +156,7 @@ def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) -> bool:
 def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None) -> bool:
     try:
         if not instance:
-            instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+            instance = ray.get_actor(get_instance_name(instance_id))
         ray.kill(instance)
         logger.info("Kill instance {}.".format(instance_id))
     # pylint: disable=broad-except

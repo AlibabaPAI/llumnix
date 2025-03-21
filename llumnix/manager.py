@@ -202,7 +202,6 @@ class Manager:
         manager_class = ray.remote(num_cpus=1,
                                    max_restarts=-1,
                                    name=get_manager_name(),
-                                   namespace="llumnix",
                                    lifetime="detached")(cls)
         manager = manager_class.remote(
             entrypoints_args,
@@ -420,7 +419,7 @@ class Manager:
                     logger.warning("Placement group of instance {} is not found".format(ins_id))
                 if self.servers is not None:
                     try:
-                        self.servers[ins_id] = ray.get_actor(get_server_name(ins_id), namespace="llumnix")
+                        self.servers[ins_id] = ray.get_actor(get_server_name(ins_id))
                     except ValueError:
                         logger.warning("APIServerActor of instance {} is not found".format(ins_id))
                 self.instance_migrating[ins_id] = False
@@ -609,13 +608,13 @@ class Manager:
                 if instance_id in self.servers:
                     curr_servers[instance_id] = self.servers[instance_id]
                 else:
-                    curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
+                    curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"])
             elif alive_actor_state["name"].startswith(INSTANCE_NAME_PREFIX):
                 instance_id = alive_actor_state["name"].split("_")[-1]
                 if instance_id in self.instances:
                     curr_instances[instance_id] = self.instances[instance_id]
                 else:
-                    curr_instances[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
+                    curr_instances[instance_id] = ray.get_actor(alive_actor_state["name"])
 
         return curr_pgs, curr_servers, curr_instances
 
@@ -703,7 +702,7 @@ class Manager:
         actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
         instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict
                                 if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
-        instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
+        instance_actor_handles = [ray.get_actor(actor_name) for actor_name in instance_actor_names]
         scale_up_instance_ids = []
         scale_up_instance_args = []
         scale_up_instance_actor_handles = []

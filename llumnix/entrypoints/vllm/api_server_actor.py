@@ -81,7 +81,6 @@ class APIServerActor:
         try:
             api_server_class = ray.remote(num_cpus=1,
                                           name=server_name,
-                                          namespace="llumnix",
                                           lifetime="detached")(cls).options(
                                                 scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                     placement_group=placement_group,

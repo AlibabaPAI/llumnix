@@ -203,8 +203,7 @@ async def test_migration_correctness(ray_env, migration_backend, migration_reque
         kill_instance("0")
         remove_placement_group("0")
         llumlet_2: Llumlet = MockLlumletDoNotSchedule.options(
-            name='instance_2',
-            namespace='llumnix').remote(
+            name='instance_2').remote(
                 instance_id="2",
                 instance_args=instance_args,
                 request_output_queue_type=request_output_queue_type,

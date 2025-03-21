@@ -88,7 +88,7 @@ asyncio.run(main())
 named_actors = ray.util.list_named_actors(True)
 for actor in named_actors:
     try:
-        actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+        actor_handle = ray.get_actor(actor['name'])
         ray.kill(actor_handle)
     except:
         continue

@@ -46,7 +46,7 @@ def cleanup_ray_env_func():
     actor_infos = list_named_actors(True)
     for actor_info in actor_infos:
         try:
-            actor_handle = ray.get_actor(actor_info['name'], namespace=actor_info['namespace'])
+            actor_handle = ray.get_actor(actor_info['name'])
             ray.kill(actor_handle)
         # pylint: disable=broad-except
         except Exception as e:
@@ -81,7 +81,7 @@ def pytest_sessionfinish(session):
 
 @pytest.fixture
 def ray_env():
-    ray.init(ignore_reinit_error=True, namespace="llumnix")
+    ray.init(ignore_reinit_error=True, namespace=random_uuid())
     yield
     cleanup_ray_env_func()
 

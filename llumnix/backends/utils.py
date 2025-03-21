@@ -52,7 +52,7 @@ class AsyncPutQueueActor:
                                     server_request_outputs: Dict[str, List],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
-            self.engine_actor_handle = ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix")
+            self.engine_actor_handle = ray.get_actor(get_instance_name(self.instance_id))
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]

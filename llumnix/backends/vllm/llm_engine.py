@@ -320,7 +320,7 @@ class BackendVLLM(BackendInterface):
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
-            self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix"))
+            self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id)))
         self._run_workers("init_migration", instance_id=instance_id,
                                             migration_config=migration_config,
                                             src_worker_handle_list=self.worker_handle_list,

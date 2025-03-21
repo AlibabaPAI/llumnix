@@ -35,7 +35,7 @@ def test_launch_ray_cluster():
 def test_init_manager(ray_env):
     manager = init_manager(ManagerArgs())
     assert manager is not None
-    manager_actor_handle = ray.get_actor(get_manager_name(), namespace='llumnix')
+    manager_actor_handle = ray.get_actor(get_manager_name())
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 

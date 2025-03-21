@@ -22,6 +22,7 @@ from ray.util.placement_group import PlacementGroup
 from ray.util import list_named_actors, placement_group_table, remove_placement_group
 from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
+from ray.runtime_context import get_runtime_context
 import pytest
 
 from llumnix.utils import random_uuid
@@ -43,10 +44,11 @@ def ray_stop():
     subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL)
 
 def cleanup_ray_env_func():
+    print(f'in ns: {get_runtime_context().namespace}')
     actor_infos = list_named_actors(True)
     for actor_info in actor_infos:
         try:
-            actor_handle = ray.get_actor(actor_info['name'], namespace=actor_info['namespace'])
+            actor_handle = ray.get_actor(actor_info['name'])
             ray.kill(actor_handle)
         # pylint: disable=broad-except
         except Exception as e:
@@ -81,7 +83,9 @@ def pytest_sessionfinish(session):
 
 @pytest.fixture
 def ray_env():
-    ray.init(ignore_reinit_error=True, namespace="llumnix")
+    ns = random_uuid()
+    print(f'using ns: {ns}')
+    ray.init(ignore_reinit_error=True, namespace=ns)
     yield
     cleanup_ray_env_func()
 

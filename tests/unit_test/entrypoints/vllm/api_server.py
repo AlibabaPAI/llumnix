@@ -52,13 +52,12 @@ class MockManager:
     def from_args(cls, request_output_queue_type: QueueType):
         manager_class = ray.remote(num_cpus=1,
                                    name=get_manager_name(),
-                                   namespace='llumnix',
                                    lifetime='detached')(cls)
         manager = manager_class.remote(request_output_queue_type)
         return manager
 
 def setup_entrypoints_context(request_output_queue_type: QueueType):
-    manager = ray.get_actor(get_manager_name(), namespace="llumnix")
+    manager = ray.get_actor(get_manager_name())
     tests.unit_test.entrypoints.vllm.api.manager = manager
     ip = '127.0.0.1'
     port = 1234

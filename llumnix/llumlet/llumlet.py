@@ -117,7 +117,6 @@ class Llumlet:
             llumlet_class = ray.remote(num_cpus=1,
                                        num_gpus=num_gpus,
                                        name=get_instance_name(instance_id),
-                                       namespace='llumnix',
                                        lifetime="detached")(cls).options(
                                             scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                 placement_group=placement_group,
@@ -147,7 +146,7 @@ class Llumlet:
                 # pylint: disable=protected-access
                 self.backend_engine._stop_event.set()
                 await asyncio.sleep(0)
-                self_actor = ray.get_actor(name=self.actor_name, namespace="llumnix")
+                self_actor = ray.get_actor(name=self.actor_name)
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[str]:

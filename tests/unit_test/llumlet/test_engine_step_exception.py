@@ -65,7 +65,7 @@ def test_engine_step_exception(ray_env):
         origin_free_memory_list.append(origin_free_memory)
 
     actor_name = "instance_0"
-    llumlet = MockLlumlet.options(name=actor_name, namespace='llumnix').remote(
+    llumlet = MockLlumlet.options(name=actor_name).remote(
         instance_id="0",
         instance_args=InstanceArgs(),
         request_output_queue_type=QueueType.RAYQUEUE,

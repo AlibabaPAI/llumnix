@@ -33,8 +33,7 @@ if __name__ == "__main__":
     connect_to_ray_cluster()
 
     # magic actor to avoid fast api server actor initialization error
-    request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
-                                                   "name": "magic_ray_queue"})
+    request_output_queue = RayQueue(actor_options={"name": "magic_ray_queue"})
 
     setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 

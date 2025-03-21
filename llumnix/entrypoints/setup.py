@@ -89,7 +89,7 @@ def setup_ray_cluster(entrypoints_args) -> None:
         launch_ray_cluster(entrypoints_args.ray_cluster_port)
     connect_to_ray_cluster(head_node_ip=os.getenv('HEAD_NODE_IP'),
                            port=entrypoints_args.ray_cluster_port,
-                           namespace="llumnix",
+                           namespace=os.getenv('LLUMNIX_RAY_NAMESPACE', 'llumnix'),
                            log_to_driver=not entrypoints_args.disable_log_to_driver)
 
 def init_manager(manager_args: ManagerArgs,
@@ -108,7 +108,7 @@ def init_manager(manager_args: ManagerArgs,
             launch_args=launch_args)
         logger.info("Init Manager on current node.")
     except ValueError:
-        manager = ray.get_actor(get_manager_name(), namespace='llumnix')
+        manager = ray.get_actor(get_manager_name())
         logger.info("Get existing Manager.")
     return manager
 

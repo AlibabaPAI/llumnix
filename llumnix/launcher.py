@@ -93,7 +93,7 @@ class Launcher:
         async def done_scale_up(instance_args: InstanceArgs, entrypoint_args: EntrypointsArgs):
             try:
                 if not self.manager_actor_handle:
-                    self.manager_actor_handle = ray.get_actor(get_manager_name(), namespace="llumnix")
+                    self.manager_actor_handle = ray.get_actor(get_manager_name())
                 await instance.is_ready.remote()
                 await server.run.remote(self.manager_actor_handle, instance_id, instance)
                 self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0

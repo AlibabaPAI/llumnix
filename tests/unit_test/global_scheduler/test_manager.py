@@ -115,7 +115,7 @@ def init_manager():
             launch_args=None,
         )
     except ValueError:
-        manager = ray.get_actor(get_manager_name(), namespace='llumnix')
+        manager = ray.get_actor(get_manager_name())
     ray.get(manager.is_ready.remote())
     return manager
 
@@ -152,8 +152,7 @@ def init_instances(initial_instances):
     for _ in range(initial_instances):
         instance_id = random_uuid()
         instance_name = get_instance_name(instance_id)
-        llumlet = MockLlumlet.options(name=instance_name,
-                                      namespace='llumnix').remote(instance_id)
+        llumlet = MockLlumlet.options(name=instance_name).remote(instance_id)
         instance_ids.append(instance_id)
         instances.append(llumlet)
     ray.get([instance.is_ready.remote() for instance in instances])
@@ -169,14 +168,13 @@ def manager():
 def llumlet():
     instance_id = random_uuid()
     instance_name = get_instance_name(instance_id)
-    llumlet = MockLlumlet.options(name=instance_name,
-                                  namespace='llumnix').remote(instance_id)
+    llumlet = MockLlumlet.options(name=instance_name).remote(instance_id)
     ray.get(llumlet.is_ready.remote())
     return llumlet
 
 def is_actor_exists(actor_name):
     try:
-        ray.get_actor(actor_name, namespace='llumnix')
+        ray.get_actor(actor_name)
         return True
     except ValueError:
         return False
@@ -190,7 +188,7 @@ def is_placement_group_exists(pg_name):
 
 def test_init_manager(ray_env, manager):
     assert manager is not None
-    manager_actor_handle = ray.get_actor(get_manager_name(), namespace='llumnix')
+    manager_actor_handle = ray.get_actor(get_manager_name())
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 
@@ -346,9 +344,9 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
 
     # wait for scale up
     await asyncio.sleep(5.0)
-    server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+    server = ray.get_actor(get_server_name(instance_id))
     ray.get(server.is_ready.remote())
-    instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+    instance = ray.get_actor(get_instance_name(instance_id))
     ray.get(instance.is_ready.remote())
     num_instances = manager.scale_up(instance_id, instance, InstanceArgs())
     assert num_instances == 1

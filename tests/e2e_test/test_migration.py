@@ -19,7 +19,7 @@ import re
 import pytest
 import torch
 import ray
-
+from ray.runtime_context import get_runtime_context
 from llumnix.entrypoints.utils import get_ip_address
 
 # pylint: disable=unused-import
@@ -68,7 +68,7 @@ def wait_for_all_instances_finished():
     instance_actor_handles = []
     for actor in named_actors:
         if actor['name'].startswith("instance"):
-            instance_actor_handles.append(ray.get_actor(actor['name'], namespace=actor['namespace']))
+            instance_actor_handles.append(ray.get_actor(actor['name']))
     while True:
         all_finished = True
         for instance in instance_actor_handles:
@@ -79,11 +79,12 @@ def wait_for_all_instances_finished():
             break
 
 def get_instance_num_blocks():
+    print(f'in ns: {get_runtime_context().namespace}')
     named_actors = ray.util.list_named_actors(True)
     instance_actor_handles = []
     for actor in named_actors:
         if actor['name'].startswith("instance"):
-            instance_actor_handles.append(ray.get_actor(actor['name'], namespace=actor['namespace']))
+            instance_actor_handles.append(ray.get_actor(actor['name']))
     instance_num_blocks_list = []
     for instance in instance_actor_handles:
         instance_info = ray.get(instance.get_instance_info.remote())

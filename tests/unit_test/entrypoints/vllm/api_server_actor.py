@@ -36,8 +36,7 @@ class MockManagerServer(MockManager):
         ray.get(self.server.run.remote())
 
     def init_server(self, entrypoints_args):
-        server = APIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME,
-                                       namespace='llumnix').remote(entrypoints_args)
+        server = APIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME).remote(entrypoints_args)
         return server
 
     # pylint: disable=arguments-renamed
@@ -45,7 +44,6 @@ class MockManagerServer(MockManager):
     def from_args(cls, entrypoints_args):
         manager_class = ray.remote(num_cpus=1,
                                    name=get_manager_name(),
-                                   namespace='llumnix',
                                    lifetime='detached')(cls)
         manager = manager_class.remote(entrypoints_args)
         return manager
@@ -83,8 +81,7 @@ if __name__ == "__main__":
     # magic actor, without this actor, APIServer cannot initialize correctly.
     # If this actor is placed globally,
     # pylint will hangs if testing api_server_manager and api_server_service concurrently (--jobs > 1).
-    request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
-                                                   "name": "magic_ray_queue"})
+    request_output_queue = RayQueue(actor_options={"name": "magic_ray_queue"})
 
     manager = MockManagerServer.from_args(entrypoints_args)
 

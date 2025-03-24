@@ -82,6 +82,12 @@ def connect_to_ray_cluster(head_node_ip: str = None,
         ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
     else:
         ray.init(ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
+    job_id = ray.get_runtime_context().get_job_id()
+    worker_id = ray.get_runtime_context().get_worker_id()
+    actor_id = ray.get_runtime_context().get_actor_id()
+    node_id = ray.get_runtime_context().get_node_id()
+    logger.info("entrypoints(job_id={}, worker_id={}, actor_id={}, node_id={})".format(
+                    job_id, worker_id, actor_id, node_id))
 
 def setup_ray_cluster(entrypoints_args) -> None:
     if entrypoints_args.launch_ray_cluster:

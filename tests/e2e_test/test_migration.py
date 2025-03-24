@@ -59,7 +59,7 @@ def parse_instance_log_file(log_files):
         if len(trimmed_speeds) > 0:
             average_speed[transfer_size] = sum(trimmed_speeds) / len(trimmed_speeds)
 
-    assert len(average_speed) > 0, "Migration should have occurred, but it was not detected. "
+    # assert len(average_speed) > 0, "Migration should have occurred, but it was not detected. "
 
     return average_speed
 

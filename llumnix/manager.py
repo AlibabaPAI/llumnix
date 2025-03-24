@@ -29,7 +29,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
@@ -133,6 +133,7 @@ class Manager:
         self.pending_rebuild_migration_instances = 0
 
         # request states
+        # TODO(tongchenghao): need to save decode instance when p-d disaggregation
         self.request_instance: Dict[str, str] = {}
 
         # migration states
@@ -156,14 +157,16 @@ class Manager:
             logger.warning("No instance available now, sleep {}s, "
                            "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
-
-        instance_id, request_expected_steps = self.global_scheduler.dispatch()
+        prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
+        if self.manager_args.enable_engine_pd_disagg:
+            # Only used in bladellm now
+            kwargs['decode_instance_id'],_ = self.global_scheduler.dispatch(InstanceType.DECODE)
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
-        self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
+        self.instances[prefill_instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
         if self.log_requests:
             logger.info("manager receive request {}".format(request_id))
-            logger.info("dispath request {} to instance {}".format(request_id, instance_id))
-            self.request_instance[request_id] = instance_id
+            logger.info("dispath request {} to instance {}".format(request_id, prefill_instance_id))
+            self.request_instance[request_id] = prefill_instance_id
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
@@ -429,17 +432,14 @@ class Manager:
         return self.num_instances
 
     def get_num_prefill_decode_instances(self):
-        instance_id_set = self.global_scheduler.instance_id_set
-        available_dispatch_instance_set = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set
-        num_prefill_instances = len(available_dispatch_instance_set)
-        num_decode_instances = len(instance_id_set - available_dispatch_instance_set)
+        num_prefill_instances = len(self.global_scheduler.available_prefill_instance_info)
+        num_decode_instances = len(self.global_scheduler.available_decode_instance_info)
 
         return num_prefill_instances, num_decode_instances
 
     def get_prefill_decode_instance_id_set(self):
-        prefill_instance_id_set = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set
-        decode_instance_id_set = self.global_scheduler.instance_id_set - prefill_instance_id_set
-
+        prefill_instance_id_set = set(self.global_scheduler.available_prefill_instance_info.values())
+        decode_instance_id_set = set(self.global_scheduler.available_decode_instance_info.values())
         return prefill_instance_id_set, decode_instance_id_set
 
     # TODO(KuilongCui): Add comments for this function.

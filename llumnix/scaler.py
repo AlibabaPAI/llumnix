@@ -446,7 +446,15 @@ class Scaler:
         instance_ids: List[str] = []
         instances: List[Llumlet] = []
         for _ in range(self.manager_args.initial_instances):
-            instance_id = random_uuid()
+            if (
+                backend_type == BackendType.BLADELLM
+                and self.manager_args.enable_engine_pd_disagg
+                and engine_args.instance_id
+            ):
+                # use blade instance id as llumlet instance id
+                instance_id = engine_args.instance_id
+            else:
+                instance_id = random_uuid()
             placement_group = self._init_placement_group(get_placement_group_name(instance_id), engine_args, backend_type,
                                                          init_server=False, block=True)
             instance = self._init_instance(instance_id, instance_args, placement_group, request_output_queue_type,

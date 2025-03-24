@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import subprocess
-import traceback
 import sys
 import os
 import time
@@ -126,31 +125,11 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
         manager.init_instances.remote, 'init_instances', request_output_queue_type,
         backend_type, instance_args, engine_args)
 
-    available_instance_ids = []
-    available_instances = []
-    for instance_id, instance in zip(instance_ids, instances):
-        try:
-            ray.get(instance.is_ready.remote())
-            available_instance_ids.append(instance_id)
-            available_instances.append(instance)
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.error("Instance {} is dead.".format(instance_id))
-            logger.error("Unexpected exception occurs: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
-            retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
-
-    if len(available_instance_ids) > 0:
-        retry_manager_method_sync(manager.scale_up.remote, 'scale_up',
-                                  available_instance_ids, available_instances, [instance_args]*len(available_instance_ids))
-        logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
-                    .format(len(available_instance_ids), available_instance_ids))
-
     ip = get_ip_address()
     request_output_queue_port: str = entrypoints_args.request_output_queue_port
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
-    return manager, available_instance_ids, available_instances, request_output_queue
+    return manager, instance_ids, instances, request_output_queue
 
 def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue) -> EntrypointsContext:
     instances_dict: Dict[str, Llumlet] = {}

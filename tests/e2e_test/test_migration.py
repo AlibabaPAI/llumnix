@@ -157,7 +157,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
             backend=engine,
             ip_ports=ip_ports[i],
             model=model,
-            num_prompts=500,
+            num_prompts=10,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=10,

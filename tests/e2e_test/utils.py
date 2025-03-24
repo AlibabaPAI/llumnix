@@ -39,7 +39,7 @@ def generate_vllm_launch_command(result_filename: str = "",
                             instance_type: str = "no_constraints",
                             tensor_parallel_size: int = 1,
                             enable_simulator: bool = False,
-                            output_queue_type: str = "rayqueue",
+                            output_queue_type: str = "zmq",
                             config_path: str = "configs/vllm.yml",
                             enable_migration: bool = True,
                             **kwargs):
@@ -89,7 +89,7 @@ def generate_vllm_serve_command(result_filename: str = "",
                            enable_pd_disagg: bool = False,
                            pd_ratio: str = "1:1",
                            enable_simulator: bool = False,
-                           output_queue_type: str = "rayqueue",
+                           output_queue_type: str = "zmq",
                            config_path: str = "configs/vllm.yml"):
     command = (
         f"RAY_DEDUP_LOGS=0 "

@@ -85,6 +85,7 @@ def pytest_sessionfinish(session):
 def ray_env():
     ns = random_uuid()
     print(f'using ns: {ns}')
+    os.environ['LLUMNIX_RAY_NAMESPACE'] = ns
     ray.init(ignore_reinit_error=True, namespace=ns)
     yield
     cleanup_ray_env_func()

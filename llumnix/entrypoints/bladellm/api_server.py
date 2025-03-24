@@ -163,7 +163,8 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
         llumnix_engine_args = BladellmEngineArgs()
         llumnix_engine_args.engine_args = pickle.dumps(engine_args)
         llumnix_engine_args.world_size = bladellm_args.tensor_parallel_size*bladellm_args.pipeline_parallel_size
-
+        if bladellm_args.disable_optinons is not None:
+            llumnix_engine_args.instance_id = bladellm_args.disagg_options.inst_id
         global llumnix_context
         llumnix_context = \
             setup_llumnix(entrypoints_args, manager_args, instance_args, llumnix_engine_args, launch_args)

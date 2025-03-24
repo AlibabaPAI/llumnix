@@ -29,6 +29,7 @@ logger = init_logger(__name__)
 class BladellmEngineArgs:
     engine_args: bytes = None
     world_size: int = None
+    instance_id: str = None
 
 
 def add_llumnix_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:

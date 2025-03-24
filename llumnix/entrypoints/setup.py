@@ -77,7 +77,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
 
 def connect_to_ray_cluster(head_node_ip: str = None,
                            port: int = None,
-                           namespace: str ="llumnix",
+                           namespace: str = "llumnix",
                            log_to_driver: bool=True) -> None:
     if head_node_ip is not None and port is not None:
         ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)

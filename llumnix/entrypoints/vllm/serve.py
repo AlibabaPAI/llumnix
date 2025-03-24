@@ -1,4 +1,5 @@
 
+import os
 import time
 from ray.util.queue import Queue as RayQueue
 
@@ -30,7 +31,7 @@ if __name__ == "__main__":
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=backend_type)
 
     # Assume that there is an existing ray cluster when using centralized deployment.
-    connect_to_ray_cluster()
+    connect_to_ray_cluster(namespace=os.getenv('LLUMNIX_RAY_NAMESPACE', 'llumnix'))
 
     # magic actor to avoid fast api server actor initialization error
     request_output_queue = RayQueue(actor_options={"name": "magic_ray_queue"})

@@ -26,6 +26,7 @@ import ray.actor
 # TODO(s5u13b): Try to not use ray state apis because they are not reliable.
 from ray.util.state import list_placement_groups, list_actors
 from ray.util.placement_group import PlacementGroup
+from ray.runtime_context import get_runtime_context
 
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
@@ -701,7 +702,7 @@ class Manager:
         # Must set True despite set namespance to llumnix.
         actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
         instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict
-                                if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
+                                if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX) and actor_name_dict['namespace'] == get_runtime_context().namespace]
         instance_actor_handles = [ray.get_actor(actor_name) for actor_name in instance_actor_names]
         scale_up_instance_ids = []
         scale_up_instance_args = []

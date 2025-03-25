@@ -48,9 +48,9 @@ def cleanup_ray_env_func():
         try:
             actor_handle = ray.get_actor(actor_info['name'], namespace=actor_info['namespace'])
             ray.kill(actor_handle)
-        # pylint: disable=broad-except
+        # pylint: disable=broad-except, unused-variable
         except Exception as e:
-            print("clear ray actor error: ", e)
+            pass
 
     time.sleep(1.0)
 
@@ -71,7 +71,7 @@ def cleanup_ray_env_func():
     except Exception as e:
         print("ray shutdown error: ", e)
 
-    time.sleep(3.0)
+    time.sleep(5.0)
 
 def pytest_sessionstart(session):
     ray_start()

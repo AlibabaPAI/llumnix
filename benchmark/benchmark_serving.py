@@ -69,7 +69,7 @@ async def async_request_gen(generator, qps: float, distribution="uniform", coeff
 
 class GenerationBackend(str, Enum):
     vLLM = "vLLM"
-    bladeLLM = "bladeLLM"
+    BladeLLM = "BladeLLM"
     NaiveHfPipeline = "NaiveHfPipeline"
     RayGen = "RayGen"
     FasterTransformer = "FasterTransformer"
@@ -459,7 +459,7 @@ async def benchmark(
 
     if backend == GenerationBackend.vLLM:
         query_model = partial(inner_query_model, server_req_func=vllm_server_req_func)
-    elif backend == GenerationBackend.bladeLLM:
+    elif backend == GenerationBackend.BladeLLM:
         query_model = partial(inner_query_model, server_req_func=bladellm_server_req_func)
     else:
         raise ValueError(f'unknown backend {backend}')

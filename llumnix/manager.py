@@ -336,10 +336,10 @@ class Manager:
                                         dst_instance_id, dst_instance_actor_handle), return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
-            if not self.manager_args.enable_pd_disagg:
+            if len(migration_tasks) > 0 and not self.manager_args.enable_pd_disagg:
                 logger.info("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
-            if not self.manager_args.enable_pd_disagg:
+            if len(migration_tasks) > 0 and not self.manager_args.enable_pd_disagg:
                 logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:

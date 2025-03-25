@@ -105,7 +105,7 @@ def detect_unsupported_engine_feature(engine_args: ServingArgs) -> None:
         unsupported_feature = "hybrid data parallel"
 
     if unsupported_feature:
-        raise ValueError(f'Llumnix does not support "{unsupported_feature}" for bladeLLM currently.')
+        raise ValueError(f'Llumnix does not support "{unsupported_feature}" for BladeLLM currently.')
 
 def get_args(llumnix_cfg, llumnix_parser, engine_args: ServingArgs):
     instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)
@@ -130,7 +130,7 @@ def get_args(llumnix_cfg, llumnix_parser, engine_args: ServingArgs):
         "Migration feature is temporarily unavailable for the engine based pd-disaggregation."
 
     assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
-         "Migration feature is temporarily unavailable for pipeline parallel in bladeLLM."
+         "Migration feature is temporarily unavailable for pipeline parallel in BladeLLM."
 
     detect_unsupported_engine_feature(engine_args)
 

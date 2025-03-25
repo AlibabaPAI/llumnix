@@ -48,18 +48,18 @@ def detect_unsupported_feature(engine_args: EngineArgs) -> None:
     if unsupported_feature:
         raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
 
-def check_engine_args(engine_args: AsyncEngineArgs, intance_args: InstanceArgs) -> None:
+def check_engine_args(engine_args: AsyncEngineArgs) -> None:
+    detect_unsupported_feature(engine_args)
     assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
+
+def check_instance_args(intance_args: InstanceArgs, engine_args: AsyncEngineArgs) -> None:
     migration_config: MigrationConfig = intance_args.create_migration_config()
     engine_config: EngineConfig = engine_args.create_engine_config()
     parallel_config: ParallelConfig = engine_config.parallel_config
-    if parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl':
-        logger.warning("Llumnix does not support TP or PP when the migration backend is nccl, change migration backend to gloo.")
-        intance_args.migration_backend = 'gloo'
-    detect_unsupported_feature(engine_args)
-    if not engine_args.disable_async_output_proc and intance_args.simulator_mode:
-        logger.warning("Llumnix does not support async output processing when enabling simualtor mode, disable async output processing.")
-        engine_args.disable_async_output_proc = True
+    assert not (parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl'), \
+        "Llumnix does not support TP or PP when the migration backend is nccl, please change migration backend."
+    assert not (not engine_args.disable_async_output_proc and intance_args.simulator_mode), \
+        "Llumnix does not support async output processing when enabling simualtor mode, please disable async output processing."
 
 def _get_dtype_size(dtype: torch.dtype) -> int:
     return torch.tensor([], dtype=dtype).element_size()

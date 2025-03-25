@@ -28,8 +28,12 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
 from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
 from llumnix.backends.utils import get_engine_world_size
-from llumnix.utils import (initialize_placement_group, get_manager_name, get_server_name,
-                           get_actor_data_from_ray_internal_kv, put_actor_data_to_ray_internal_kv)
+from llumnix.utils import (initialize_placement_group,
+                           get_manager_name, get_server_name,
+                           get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
+                           load_engine_args)
+from llumnix.internal_config import PDDConfig
+
 
 logger = init_logger(__name__)
 
@@ -39,24 +43,33 @@ class Launcher:
                  global_scheduler: GlobalScheduler,
                  enable_port_increment: bool,
                  enable_port_offset_store: bool,
-                 enable_pd_disagg: bool,
-                 enablde_engine_pd_disagg: bool,
-                 pd_ratio: List[int]):
+                 load_registered_service: bool,
+                 load_registered_service_path: str,
+                 pdd_config: PDDConfig):
         self.global_scheduler = global_scheduler
         self.enable_port_increment = enable_port_increment
         self.enable_port_offset_store = enable_port_offset_store
-        self.enable_pd_disagg = enable_pd_disagg
-        self.enablde_engine_pd_disagg = enablde_engine_pd_disagg
-        self.pd_ratio = pd_ratio
+        self.pdd_config = pdd_config
+        self.load_registered_service = load_registered_service
+        self.load_registered_service_path = load_registered_service_path
 
         self.manager_actor_handle = None
 
         if enable_port_increment:
             self.port_offset = 0
             if enable_port_offset_store:
-                value = get_actor_data_from_ray_internal_kv("manager", "port_offset")
-                if value is not None:
-                    self.port_offset = int(value)
+                # TODO(s5u13b): Do not use ray interval kv.
+                value = get_data_from_ray_internal_kv("manager.port_offset")
+                self.port_offset = int(value)
+
+        if self.load_registered_service:
+            self.engine_args_dict = {}
+            if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
+                instance_type_list = ['no_constraints']
+            else:
+                instance_type_list = ['prefill', 'decode']
+            for instance_type in instance_type_list:
+                self.engine_args_dict[instance_type] = load_engine_args(instance_type, self.load_registered_service_path)
 
         self.inflight_num_prefill_instance = 0
         self.inflight_num_decode_instance = 0
@@ -115,9 +128,10 @@ class Launcher:
 
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
         next_instance_args = self._get_next_instance_args(instance_args)
-        instance = self.init_instance(instance_id, next_instance_args, placement_group,
-                                       request_output_queue_type, backend_type, engine_args)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
+        next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
+        instance = self.init_instance(instance_id, next_instance_args, placement_group,
+                                      request_output_queue_type, backend_type, next_engine_args)
         server = self.init_server(get_server_name(instance_id), placement_group, next_entrypoints_args)
 
         self.inflight_num_prefill_instance += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
@@ -151,60 +165,71 @@ class Launcher:
         return instance
 
     def _get_next_instance_args(self, instance_args: InstanceArgs) -> InstanceArgs:
-        assert not self.enablde_engine_pd_disagg, \
-            "Currently not support engine based pd-disaggregation in global launch mode."
+        if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
+            return instance_args
 
         next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
         cur_num_prefill = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
         cur_num_decode = len(self.global_scheduler.instance_id_set -
                                 self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pd_ratio)
+        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pdd_config.pd_ratio)
 
         return next_instance_args
 
     def _get_next_entrypoints_args(self, entrypoints_args: EntrypointsArgs) -> EntrypointsArgs:
+        if not self.enable_port_increment:
+            return entrypoints_args
+
         next_entrypoints_args = copy.deepcopy(entrypoints_args)
         if self.enable_port_increment:
             next_entrypoints_args.port += self.port_offset
             next_entrypoints_args.request_output_queue_port += self.port_offset
             self.port_offset += 1
             if self.enable_port_offset_store:
-                put_actor_data_to_ray_internal_kv("manager", "port_offset", self.port_offset)
+                put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)
 
         return next_entrypoints_args
+
+    def _get_next_engine_args(self, engine_args, instance_type: str):
+        if not self.load_registered_service:
+            return engine_args
+
+        new_engine_args = self.engine_args_dict[instance_type]
+
+        return new_engine_args
 
     def _get_next_instance_type(self,
                                 cur_num_prefill: int,
                                 cur_num_decode: int,
                                 pd_ratio: List[int]) -> str:
-        instance_type = InstanceType.NO_CONSTRAINTS
+        if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
+            return InstanceType.NO_CONSTRAINTS
 
-        if self.enable_pd_disagg:
-            # Note: There are no instances simultaneously in inflight_num_prefill and cur_num_prefill as
-            # inflight_num will decrease before scaling up the instances. The same applies to num_decode.
-            total_num_prefill = self.inflight_num_prefill_instance + cur_num_prefill
-            total_num_decode = self.inflight_num_decode_instance + cur_num_decode
+        # Note: There are no instances simultaneously in inflight_num_prefill and cur_num_prefill as
+        # inflight_num will decrease before scaling up the instances. The same applies to num_decode.
+        total_num_prefill = self.inflight_num_prefill_instance + cur_num_prefill
+        total_num_decode = self.inflight_num_decode_instance + cur_num_decode
 
-            if total_num_prefill == 0:
+        if total_num_prefill == 0:
+            instance_type = InstanceType.PREFILL
+        elif total_num_decode == 0:
+            instance_type = InstanceType.DECODE
+        else:
+            # compute distance if launch prefill or decode
+            normal_distance = pd_ratio[0] - pd_ratio[1]
+
+            base_num_ratio = min(total_num_prefill//pd_ratio[0], total_num_decode//pd_ratio[1])
+            total_num_prefill = total_num_prefill - base_num_ratio * pd_ratio[0]
+            total_num_decode = total_num_decode - base_num_ratio * pd_ratio[1]
+
+            if total_num_prefill + total_num_decode == 0:
                 instance_type = InstanceType.PREFILL
-            elif total_num_decode == 0:
-                instance_type = InstanceType.DECODE
             else:
-                # compute distance if launch prefill or decode
-                normal_distance = pd_ratio[0] - pd_ratio[1]
-
-                base_num_ratio = min(total_num_prefill//pd_ratio[0], total_num_decode//pd_ratio[1])
-                total_num_prefill = total_num_prefill - base_num_ratio * pd_ratio[0]
-                total_num_decode = total_num_decode - base_num_ratio * pd_ratio[1]
-
-                if total_num_prefill + total_num_decode == 0:
-                    instance_type = InstanceType.PREFILL
-                else:
-                    distance_if_prefill = total_num_prefill + 1 - total_num_decode
-                    distance_if_decode = total_num_prefill - (total_num_decode + 1)
-                    gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
-                    gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
-                    instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode \
-                        else InstanceType.DECODE
+                distance_if_prefill = total_num_prefill + 1 - total_num_decode
+                distance_if_decode = total_num_prefill - (total_num_decode + 1)
+                gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
+                gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
+                instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode \
+                    else InstanceType.DECODE
 
         return instance_type

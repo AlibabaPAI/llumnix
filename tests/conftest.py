@@ -48,8 +48,8 @@ def cleanup_ray_env_func():
         try:
             actor_handle = ray.get_actor(actor_info['name'], namespace=actor_info['namespace'])
             ray.kill(actor_handle)
-        # pylint: disable=broad-except, unused-variable
-        except Exception as e:
+        # pylint: disable=bare-except
+        except:
             pass
 
     time.sleep(1.0)
@@ -59,9 +59,9 @@ def cleanup_ray_env_func():
         try:
             pg = PlacementGroup(PlacementGroupID(hex_to_binary(placement_group_id)) )
             remove_placement_group(pg)
-        # pylint: disable=broad-except
-        except Exception as e:
-            print("clear placement group error: ", e)
+        # pylint: disable=bare-except
+        except:
+            pass
 
     time.sleep(1.0)
 

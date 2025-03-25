@@ -56,6 +56,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
             [--enable-pd-disagg]
             [--pd-ratio PD_RATIO]
+            [--load-registered-service]
+            [--load-registered-service-path]
             [--enable-port-increment]
             [--enable-port-offset-store]
             [--instance-type INSTANCE_TYPE]
@@ -255,8 +257,16 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Enable prefill decoding disaggregation.
 
 `--pd-ratio`
-- The p:d ratio used in gloabl launch model.
+- The p:d ratio used in gloabl launch mode.
 - Default: "1:1"
+
+`--load-registered-service`
+- Load registered service.
+- Default: False
+
+`--load-registered-service-path`
+- Path of loading registered service.
+- Default: None
 
 `--enable-port-increment`
 - Enable port increment when desploying multiple servers.

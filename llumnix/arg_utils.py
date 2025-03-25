@@ -18,7 +18,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import List, Tuple, Union
 
-from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig
+from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.backends.backend_interface import BackendType
@@ -83,7 +83,7 @@ class EntrypointsArgs:
         return entrypoints_args
 
     @classmethod
-    def check_args(cls, args: 'EntrypointsArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'EntrypointsArgs', parser: argparse.ArgumentParser) -> None:
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -151,6 +151,8 @@ class ManagerArgs:
 
     enable_pd_disagg: bool = None
     pd_ratio: Union[str, List[int]] = None
+    load_registered_service: bool = None
+    load_registered_service_path: str = None
 
     # init from instance args
     is_group_kind_migration_backend: bool = None
@@ -180,7 +182,8 @@ class ManagerArgs:
         self.enable_engine_pd_disagg = instance_args.enable_engine_pd_disagg
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
 
-    def create_global_scheduler_config(self, is_group_kind_migration_backend) -> Tuple[GlobalSchedulerConfig]:
+    def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
+        # Create the GlobalScheduler Configuration.
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.dispatch_policy,
                                                         self.topk_random_dispatch,
@@ -191,8 +194,14 @@ class ManagerArgs:
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
-                                                        is_group_kind_migration_backend)
+                                                        self.is_group_kind_migration_backend)
         return global_scheduler_config
+
+    def create_pdd_config(self) -> PDDConfig:
+        pdd_config = PDDConfig(self.enable_pd_disagg,
+                               self.enable_engine_pd_disagg,
+                               self.pd_ratio)
+        return pdd_config
 
     @classmethod
     def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'ManagerArgs':
@@ -205,7 +214,7 @@ class ManagerArgs:
         return manager_args
 
     @classmethod
-    def check_args(cls, args: 'ManagerArgs', parser: argparse.ArgumentParser):
+    def check_args(cls, args: 'ManagerArgs', parser: argparse.ArgumentParser, launch_mode: LaunchMode) -> None:
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -215,7 +224,13 @@ class ManagerArgs:
         assert not args.enable_port_offset_store or args.enable_port_increment, \
             "Set enable_port_increment when enable_port_offset_store"
 
-        assert not args.enable_scaling, "Proactive auto-scaling is deprecated now, all auto-scaling related args will not take effects."
+        assert not args.enable_scaling, "Proactive auto-scaling is deprecated now, " \
+            "all auto-scaling related args will not take effects."
+
+        if args.load_registered_service:
+            assert args.load_registered_service_path and launch_mode == LaunchMode.GLOBAL, \
+            "Only load registered service when enabling pd-disaggregation in global launch mode, " \
+            "and the path of loading registered service is required to be specified when loading registered service from path."
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -303,7 +318,22 @@ class ManagerArgs:
                             help='enable prefill decoding disaggregation')
         parser.add_argument('--pd-ratio',
                             type=str,
-                            help='the prefill decode ratio used in gloabl launch model e.g. "1:1"')
+                            help='the prefill decode ratio used in gloabl launch mode e.g. "1:1"')
+        parser.add_argument('--load-registered-service',
+                            action='store_true',
+                            help="load registered service.\n When this argument is passed, "
+                                 "--load-registered-service-path is required at the same time.")
+        parser.add_argument('--load-registered-service-path',
+                            type=str,
+                            help="path of loading registered service.\n"
+                                 "Registered service is generated by running register_service.py, "
+                                 "Currently the register_service.py is mainly used to saving the engine arguments of engine, "
+                                 "the save path of engine arguments file is decided by the save-path "
+                                 "and save-key aruguments of register_service.py. "
+                                 "You can specify the load path through this argument, and registered service (all the engine arguments "
+                                 "files) under this path will be loaded. The Llumnix will initialize instance based on "
+                                 "the engine type (no_constraints, prefill, decode) and the corresponding engine arguments "
+                                 "loaded from the path.")
         return parser
 
 
@@ -374,7 +404,7 @@ class InstanceArgs:
 
     @classmethod
     def check_args(cls, args: 'InstanceArgs', manager_args: ManagerArgs,
-                   launch_mode: LaunchMode, parser: argparse.ArgumentParser):
+                   launch_mode: LaunchMode, parser: argparse.ArgumentParser) -> None:
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -406,15 +436,17 @@ class InstanceArgs:
         parser.add_argument('--instance-type',
                             type=str,
                             choices=['prefill', 'decode', 'no_constraints'],
-                            help="instance type for the engine. When non-pd-disaggregation option, set instance_type \
-                                to no_constraints. For pd-disaggregation implemented via LLuminx, specify instance_type \
-                                as either prefill or decode for local launch model and it is not necessary to set for \
-                                global launch model as the manager will automatically determine the instance type and \
-                                quantity based on the --pd-ratio. When pd-disaggregation is handled internally within \
-                                the LLM engine, don't set --enable-pd-disagg. --instance-type parameters should not \
-                                alse be set. Instead, the instance_type will be automatically assigned to either prefill \
-                                or decode based on engine_args for local launch mode, and donot set it for global launch \
-                                model.")
+                            help="instance type of the engine.\n When not setting --enable-pd-disagg, set --instance-type \
+                                to no_constraints.\n When setting --enable-pd-disagg, pd-disaggregation is fully \
+                                (launch instance + migrate kv cache) implemented via LLuminx (vLLM). In local launch mode, \
+                                set --instance-type as either prefill or decode. In global launch mode, do not set \
+                                --instance-type as manager will automatically determine the type and number of instance.\n \
+                                For engine specifying pd-disaggregation by its own and migrating kv cache internally (BladeLLM), \
+                                don't set --enable-pd-disagg. Llumnix will decide if enabling engine based pd-disaggregation by \
+                                checking engine arguments, Engine based pd-disaggregation means that pd-disaggregation is \
+                                partially implemented via Llumnix (launch instance), and partially implemented by engine \
+                                (migrate kv cache). In local launch mode, the instance type will be assigned according to \
+                                engine arguments. In global launch mode, do not set --instance-type as explained above.")
         parser.add_argument('--profiling-result-file-path',
                             type=str,
                             help='profiling result file path when using simulator')

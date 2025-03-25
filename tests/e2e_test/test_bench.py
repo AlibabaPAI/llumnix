@@ -30,6 +30,8 @@ from .utils import (generate_vllm_launch_command, generate_bench_command, to_mar
 
 BENCH_TEST_TIMEOUT_MINS = 60
 
+# TODO(s5u13b): Reorganize the bench test to make codes cleaner.
+
 
 def parse_log_file(title: str):
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]
@@ -76,10 +78,10 @@ def parse_log_file(title: str):
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [True, False])
 @pytest.mark.parametrize("enable_simulator", [False, True])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
-                                model, launch_mode, enable_pd_disagg, engine, request_output_queue_type):
+                                model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
     if "BladeLLM" in engine and launch_mode == "global":

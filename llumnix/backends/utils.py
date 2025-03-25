@@ -65,8 +65,8 @@ class AsyncPutQueueActor:
                 server_info = server_info_dict[server_id]
                 logger.error("Server {} is dead, exception: {}".format(server_id, ret))
                 if self.request_output_queue_type == QueueType.ZMQ:
-                    logger.warning("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
-                                                                                  server_info.request_output_queue_port))
+                    logger.debug("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
+                                                                                server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
                 request_ids = [req_output.request_id for req_output in req_outputs]
                 self.engine_actor_handle.abort.remote(request_ids)

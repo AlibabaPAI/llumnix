@@ -13,13 +13,16 @@
 
 import asyncio
 import os
+import copy
 import time
 import math
+import shutil
 import ray
 import pytest
 import numpy as np
 
 import torch
+
 from vllm import EngineArgs
 
 from llumnix.launcher import Launcher
@@ -34,6 +37,8 @@ from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
                            remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
                            kill_instance, random_uuid, get_manager_name)
+from llumnix.internal_config import PDDConfig
+from llumnix.entrypoints.vllm.register_service import save_engine_args
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -420,7 +425,8 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 def test_pd_disagg_gloal_launch_instance_type():
-    launcher = Launcher(None, True, False, True, False, [1, 2])
+    pdd_config = PDDConfig(True, False, [1, 2])
+    launcher = Launcher(None, True, False, False, None, pdd_config)
 
     assert launcher._get_next_instance_type(0, 0, [1, 2]) == InstanceType.PREFILL
     launcher.inflight_num_prefill_instance += 1
@@ -436,6 +442,33 @@ def test_pd_disagg_gloal_launch_instance_type():
     assert launcher._get_next_instance_type(3, 5, [1, 2]) == InstanceType.DECODE
     assert launcher._get_next_instance_type(3, 6, [1, 2]) == InstanceType.PREFILL
     assert launcher._get_next_instance_type(3, 7, [1, 2]) == InstanceType.PREFILL
+
+@pytest.mark.parametrize("load_registered_service", [False, True])
+@pytest.mark.parametrize("enable_pd_disagg", [False, True])
+def test_load_registered_service(ray_env, load_registered_service, enable_pd_disagg):
+    engine_args = EngineArgs()
+    engine_args.model = 'no_constraints'
+    save_path = 'test'
+    save_key = "test"
+    load_registered_service_path = os.path.join(save_path, save_key)
+    instance_type_list = ['no_constraints']
+    if load_registered_service:
+        if enable_pd_disagg:
+            instance_type_list = ['prefill', 'decode']
+        for instance_type in instance_type_list:
+            put_engine_args = copy.deepcopy(engine_args)
+            put_engine_args.model = instance_type
+            save_engine_args(instance_type, save_path, put_engine_args, save_key)
+    pdd_config = PDDConfig(enable_pd_disagg, False, [1, 2])
+    launcher = Launcher(None, True, False, load_registered_service, load_registered_service_path, pdd_config)
+    for instance_type in instance_type_list:
+        get_engine_args = launcher._get_next_engine_args(engine_args, instance_type)
+        if load_registered_service:
+            assert get_engine_args.model == instance_type
+        else:
+            assert get_engine_args.model == 'no_constraints'
+    if load_registered_service:
+        shutil.rmtree(load_registered_service_path)
 
 @pytest.mark.asyncio
 async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env):

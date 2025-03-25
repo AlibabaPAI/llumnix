@@ -73,8 +73,13 @@ _C.MANAGER.ENABLE_PORT_INCREMENT = False
 _C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
 # Enable prefill decoding disaggregation
 _C.MANAGER.ENABLE_PD_DISAGG = False
-# The p:d ratio used in gloabl launch model
+# The p:d ratio used in gloabl launch mode
 _C.MANAGER.PD_RATIO = "1:1"
+# Load engine arguments from storage
+_C.MANAGER.LOAD_REGISTERED_SERVICE = False
+# Path of loading engine arguments
+_C.MANAGER.LOAD_REGISTERED_SERVICE_PATH = None
+
 
 # -------------------------- DISPATCH CONFIGURATION ---------------------------
 # Request dispatch policy

@@ -114,6 +114,9 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
     if migration_request_status == 'waiting' and migration_backend != 'rayrpc':
         pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
 
+    if tensor_parallel_size == 2 and migration_backend == 'nccl':
+        pytest.skip("When the migration backend is nccl, tensor parallelism is not supported.")
+
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
     base_port = 37037

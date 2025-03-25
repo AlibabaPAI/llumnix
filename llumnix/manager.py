@@ -104,12 +104,13 @@ class Manager:
         self.polling_interval = manager_args.polling_interval
 
         self.is_group_kind_migration_backend = manager_args.is_group_kind_migration_backend
-        global_scheduler_config = manager_args.create_global_scheduler_config(self.is_group_kind_migration_backend)
+        global_scheduler_config = manager_args.create_global_scheduler_config()
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
 
+        pdd_config = manager_args.create_pdd_config()
         self.launcher: Launcher = Launcher(self.global_scheduler, manager_args.enable_port_increment,
-                                           manager_args.enable_port_offset_store, manager_args.enable_pd_disagg,
-                                           manager_args.enable_engine_pd_disagg, manager_args.pd_ratio)
+                                           manager_args.enable_port_offset_store, manager_args.load_registered_service,
+                                           manager_args.load_registered_service_path, pdd_config)
 
         # log args
         self.log_requests = not manager_args.disable_log_requests_manager

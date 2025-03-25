@@ -101,8 +101,6 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     else:
         num_prompts = 50
 
-    num_prompts = 10
-
     ip = get_ip_address()
     base_port = 37037
     ip_ports = []

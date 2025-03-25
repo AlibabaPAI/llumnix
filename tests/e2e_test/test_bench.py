@@ -77,9 +77,9 @@ def parse_log_file(title: str):
 @pytest.mark.parametrize("enable_pd_disagg", [True, False])
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
-@pytest.mark.parametrize("output_queue_type", ["rayqueue", "zmq"])
+@pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
-                                model, launch_mode, enable_pd_disagg, engine, output_queue_type):
+                                model, launch_mode, enable_pd_disagg, engine, request_output_queue_type):
     engine = engine.split("_")[1]
 
     if "bladeLLM" in engine and launch_mode == "global":
@@ -88,7 +88,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     if "bladeLLM" in engine and enable_simulator:
         pytest.skip("Simulator for bladeLLM is not supported yet.")
 
-    if output_queue_type == "zmq" and not (
+    if request_output_queue_type == "zmq" and not (
         launch_mode == "local" and not enable_simulator and not enable_pd_disagg):
         pytest.skip("Only test zmq queue type when simulator is disabled and prefill-decode "
                     "disaggregation is disabled.")
@@ -130,7 +130,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                         enable_pd_disagg=enable_pd_disagg,
                                                         enable_migration=enable_migration,
                                                         instance_type="prefill",
-                                                        output_queue_type=output_queue_type)
+                                                        request_output_queue_type=request_output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
             for i in range(device_count//2):
                 port = base_port+i*100+(device_count//2)*100
@@ -145,7 +145,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                         enable_pd_disagg=enable_pd_disagg,
                                                         enable_migration=enable_migration,
                                                         instance_type="decode",
-                                                        output_queue_type=output_queue_type)
+                                                        request_output_queue_type=request_output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
         else:
             for i in range(device_count):
@@ -158,7 +158,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                          port=port,
                                                          model=model,
                                                          enable_simulator=enable_simulator,
-                                                         output_queue_type=output_queue_type)
+                                                         request_output_queue_type=request_output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
     else: # global
         device_count = torch.cuda.device_count()
@@ -172,7 +172,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                model=model,
                                                enable_pd_disagg=enable_pd_disagg,
                                                enable_simulator=enable_simulator,
-                                               output_queue_type=output_queue_type)
+                                               request_output_queue_type=request_output_queue_type)
         subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 
@@ -209,9 +209,9 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    if launch_mode == 'local' and not enable_pd_disagg and engine == 'vLLM':
+    if launch_mode == 'local' and not enable_pd_disagg and engine == 'vLLM' and num_prompts == 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
-            f.write(parse_log_file(title=output_queue_type))
+            f.write(parse_log_file(title=request_output_queue_type))
 
     await asyncio.sleep(3)
 

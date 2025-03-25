@@ -39,7 +39,7 @@ def generate_vllm_launch_command(result_filename: str = "",
                             instance_type: str = "no_constraints",
                             tensor_parallel_size: int = 1,
                             enable_simulator: bool = False,
-                            output_queue_type: str = "rayqueue",
+                            request_output_queue_type: str = "rayqueue",
                             config_path: str = "configs/vllm.yml",
                             enable_migration: bool = True,
                             **kwargs):
@@ -62,7 +62,7 @@ def generate_vllm_launch_command(result_filename: str = "",
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
         f"--tensor-parallel-size {tensor_parallel_size} "
-        f"--request-output-queue-type {output_queue_type} "
+        f"--request-output-queue-type {request_output_queue_type} "
         f"--request-output-queue-port {1234+port} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
@@ -89,7 +89,7 @@ def generate_vllm_serve_command(result_filename: str = "",
                            enable_pd_disagg: bool = False,
                            pd_ratio: str = "1:1",
                            enable_simulator: bool = False,
-                           output_queue_type: str = "rayqueue",
+                           request_output_queue_type: str = "rayqueue",
                            config_path: str = "configs/vllm.yml"):
     command = (
         f"RAY_DEDUP_LOGS=0 "
@@ -109,7 +109,7 @@ def generate_vllm_serve_command(result_filename: str = "",
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
         f"--tensor-parallel-size 1 "
-        f"--request-output-queue-type {output_queue_type} "
+        f"--request-output-queue-type {request_output_queue_type} "
         f"--request-output-queue-port {1234+port} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"--pd-ratio {pd_ratio} "

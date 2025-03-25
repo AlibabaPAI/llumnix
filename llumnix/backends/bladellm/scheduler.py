@@ -31,12 +31,14 @@ from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.llumlet.request import RequestStatus
 from llumnix.server_info import ServerInfo
 
+
 class PagedSchedulerLlumnix(PagedScheduler):
     def __init__(self, serving_args: ServingArgs, *args, **kwargs) -> None:
         PagedScheduler.__init__(self, serving_args, *args, **kwargs)
         self.llumnix_metrics = BladeLLMMetrics()
         self.id2group: Dict[int, GenerationGroupStateLlumnix] = {}
         self.pre_alloc_cache_dict: Dict[int, BlockTable] = {}
+        # TODO(s5u13b): Change it to dict.
         self.migrating_out_request_last_stage: Set[int] = set()
         self.llumnix_metrics.block_manager_init_metrics(self.block_manager)
         self.llumnix_metrics.scheduler_init_metrics(self)
@@ -152,7 +154,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
     def add_waiting_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         heapq.push(self.waiting, backend_request)
 
-    def remove_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
+    def pop_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.migrating_out_request_last_stage.remove(backend_request.request_id)
 
     # pylint: disable=unused-argument
@@ -193,7 +195,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
                 # pylint: disable=protected-access
                 self.block_manager._free_block_table(blocks)
 
-    def pop_migrating_out_requests_last_stage(self) -> List[GenerationGroupStateLlumnix]:
+    def free_migrating_out_requests_last_stage(self) -> List[GenerationGroupStateLlumnix]:
         migrating_out_request_last_stage = self.migrating_out_request_last_stage.copy()
         self.migrating_out_request_last_stage.clear()
         return migrating_out_request_last_stage

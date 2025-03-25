@@ -28,13 +28,18 @@ class MigrationBackendBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+    def migrate_cache(self,
+                      src_handle: "ray.actor.ActorHandle",
+                      src_blocks: List[int],
+                      dst_blocks: List[int],
+                      request_id: str,
+                      is_last_stage: bool) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def do_send(self, *args, **kwargs):
+    def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int):
         raise NotImplementedError
 
     @abstractmethod
-    def do_recv(self, *args, **kwargs):
+    def do_recv(self, src_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int):
         raise NotImplementedError

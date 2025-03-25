@@ -99,10 +99,6 @@ vllm_migration_test:
 bladellm_migration_test:
 	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_migration.py
 
-.PHONY: config_test
-config_test:
-	@pytest -v -x -s --tb=long ./tests/e2e_test/test_config.py
-
 ####################################### test end ########################################
 
 #################### pygloo install for gloo migration backend begin ####################

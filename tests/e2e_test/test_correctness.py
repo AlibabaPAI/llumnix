@@ -123,12 +123,12 @@ async def run_bladellm(model, enable_pd_disagg):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_correctness(ray_env, shutdown_llumnix_service,
                            model, launch_mode, enable_pd_disagg, engine):
     engine = engine.split("_")[1]
-    if engine == "bladeLLM" and launch_mode == "global":
-        pytest.skip("Global launch model for bladeLLM is not supported yet.")
+    if engine == "BladeLLM" and launch_mode == "global":
+        pytest.skip("Global launch model for BladeLLM is not supported yet.")
 
     ip = get_ip_address()
     base_port = 37037

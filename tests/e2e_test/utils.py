@@ -40,7 +40,7 @@ def generate_vllm_launch_command(
     instance_type: str = "no_constraints",
     tensor_parallel_size: int = 1,
     enable_simulator: bool = False,
-    request_output_queue_type: str = "rayqueue",
+    request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
     enable_migration: bool = True,
     **kwargs):
@@ -91,8 +91,10 @@ def generate_vllm_serve_command(
     enable_pd_disagg: bool = False,
     pd_ratio: str = "1:1",
     enable_simulator: bool = False,
-    request_output_queue_type: str = "rayqueue",
-    config_path: str = "configs/vllm.yml"):
+    request_output_queue_type: str = "zmq",
+    config_path: str = "configs/vllm.yml",
+    tensor_parallel_size: int = 1,
+    ):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "
@@ -110,7 +112,7 @@ def generate_vllm_serve_command(
         f"--request-migration-policy {request_migration_policy} "
         f"--migration-backend {migration_backend} "
         f"--migration-buffer-blocks 32 "
-        f"--tensor-parallel-size 1 "
+        f"--tensor-parallel-size {tensor_parallel_size} "
         f"--request-output-queue-type {request_output_queue_type} "
         f"--request-output-queue-port {1234+port} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "

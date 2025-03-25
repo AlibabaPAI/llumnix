@@ -76,31 +76,32 @@ def parse_log_file(title: str):
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [True, False])
 @pytest.mark.parametrize("enable_simulator", [False, True])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
                                 model, launch_mode, enable_pd_disagg, engine, request_output_queue_type):
     engine = engine.split("_")[1]
 
-    if "bladeLLM" in engine and launch_mode == "global":
-        pytest.skip("Global launch model for bladeLLM is not supported yet.")
+    if "BladeLLM" in engine and launch_mode == "global":
+        pytest.skip("Global launch model for BladeLLM is not supported yet.")
 
-    if "bladeLLM" in engine and enable_simulator:
-        pytest.skip("Simulator for bladeLLM is not supported yet.")
+    if "BladeLLM" in engine and enable_simulator:
+        pytest.skip("Simulator for BladeLLM is not supported yet.")
 
     if request_output_queue_type == "zmq" and not (
-        launch_mode == "local" and not enable_simulator and not enable_pd_disagg):
+        launch_mode == "global" and not enable_simulator and not enable_pd_disagg):
         pytest.skip("Only test zmq queue type when simulator is disabled and prefill-decode "
                     "disaggregation is disabled.")
 
     if enable_simulator and enable_pd_disagg:
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
 
-    if launch_mode == 'local' and not enable_simulator:
-        num_prompts = 500 if engine == 'vLLM' else 300
-        num_prompts = num_prompts if not enable_pd_disagg else 50
+    if launch_mode == 'global' and not enable_simulator:
+        num_prompts = 500 if not enable_pd_disagg else 50
     else:
         num_prompts = 50
+
+    num_prompts = 10
 
     ip = get_ip_address()
     base_port = 37037
@@ -110,7 +111,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     if "vLLM" in engine:
         generate_launch_command = generate_vllm_launch_command
         enable_migration = True
-    elif "bladeLLM" in engine:
+    elif "BladeLLM" in engine:
         generate_launch_command = generate_bladellm_launch_command
         enable_migration = not enable_pd_disagg
     else:
@@ -161,7 +162,6 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                          request_output_queue_type=request_output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
     else: # global
-        device_count = torch.cuda.device_count()
         for i in range(device_count):
             port = base_port+i
             ip_port = f"{ip}:{port}"

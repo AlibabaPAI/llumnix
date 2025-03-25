@@ -67,7 +67,7 @@ vllm_unit_test: check_pytest_installed
 
 .PHONY: bladellm_unit_test
 bladellm_unit_test: check_pytest_installed
-	@pytest -v -k 'engine_bladeLLM or not engine_' --ignore=third_party --ignore=tests/e2e_test --disable-warnings
+	@pytest -v -k 'engine_BladeLLM or not engine_' --ignore=third_party --ignore=tests/e2e_test --disable-warnings
 
 .PHONY: vllm_offline_test
 vllm_offline_test:
@@ -81,7 +81,7 @@ vllm_correctness_test:
 
 .PHONY: bladellm_correctness_test
 bladellm_correctness_test:
-	@pytest -v -k 'engine_bladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_correctness.py
+	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_correctness.py
 
 .PHONY: vllm_bench_test
 vllm_bench_test:
@@ -89,7 +89,7 @@ vllm_bench_test:
 
 .PHONY: bladellm_bench_test
 bladellm_bench_test:
-	@pytest -v -k 'engine_bladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_bench.py
+	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_bench.py
 
 .PHONY: vllm_migration_test
 vllm_migration_test:
@@ -97,7 +97,7 @@ vllm_migration_test:
 
 .PHONY: bladellm_migration_test
 bladellm_migration_test:
-	@pytest -v -k 'engine_bladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_migration.py
+	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_migration.py
 
 .PHONY: config_test
 config_test:

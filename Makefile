@@ -71,7 +71,7 @@ bladellm_unit_test: check_pytest_installed
 
 .PHONY: vllm_offline_test
 vllm_offline_test:
-	@python examlpes/offline_inference.py
+	@python examples/offline_inference.py
 
 # TODO(KuilongCui): add bladellm offine inference example
 

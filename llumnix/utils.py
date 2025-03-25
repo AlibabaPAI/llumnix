@@ -11,11 +11,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import uuid
 import asyncio
+import traceback
 import threading
 from typing import Any, Union, Callable, Awaitable, TypeVar, Coroutine
 from functools import partial
+import pickle
 from typing_extensions import ParamSpec
 import ray
 import ray.actor
@@ -24,6 +27,7 @@ from ray.experimental.internal_kv import (
     _internal_kv_get,
     _internal_kv_initialized,
     _internal_kv_put,
+    _internal_kv_exists
 )
 
 from llumnix.logging.logger import init_logger
@@ -176,31 +180,72 @@ def run_coroutine_in_new_thread(coro: Coroutine, blocking: bool):
     if blocking:
         thread.join()
 
-def _make_key(actor_name: str, data_name: str):
-    """Generate a binary key for the given actor name and data.
+def _make_key(actor_name: str):
+    return actor_name.encode("ascii")
 
-    Args:
-        actor_name: The name of the actor
-        data_name: The data member of the actor
-
-    Returns:
-        The key to use for storing a the value.
-    """
-    return (actor_name.encode("ascii") + b"." + data_name.encode("ascii"))
-
-def get_actor_data_from_ray_internal_kv(actor_name: str, data_name: str) -> Union[str, None]:
-    value = None
-    if _internal_kv_initialized():
-        value = _internal_kv_get(_make_key(actor_name, data_name))
-    if value is not None:
+def _load_value(value: Any):
+    if isinstance(value, str):
         value = value.decode()
-    logger.info("Get {}.{} from ray internal key-value store, value: {}.".format(actor_name, data_name, value))
+    else:
+        value = pickle.loads(value)
     return value
 
-def put_actor_data_to_ray_internal_kv(actor_name: str, data_name: str, value: Any):
+def _dump_value(value: Any):
+    if isinstance(value, str):
+        value = f"{value}".encode()
+    else:
+        value = pickle.dumps(value)
+    return value
+
+def get_data_from_ray_internal_kv(data_name: str) -> Union[str, None]:
+    assert _internal_kv_initialized(), f"Ray internal key-value storage should be initialized to get data {data_name}."
+    key = _make_key(data_name)
+    assert _internal_kv_exists(key), f"The given data {data_name} is not exist in the ray internal key-value storage."
+    value = _internal_kv_get(key)
+    value = _load_value(value)
+    logger.info("Get data {} from ray internal key-value storage, value: {}.".format(data_name, value))
+
+    return value
+
+def put_data_to_ray_internal_kv(data_name: str, value: Any) -> None:
     if _internal_kv_initialized():
-        _internal_kv_put(_make_key(actor_name, data_name), f"{value}".encode(), overwrite=True)
-        logger.debug("Put {}.{} to ray internal key-value store, value: {}.".format(actor_name, data_name, value))
+        logger.info("Put data {} to ray internal key-value storage, value: {}.".format(data_name, value))
+        try:
+            value = _dump_value(value)
+            _internal_kv_put(_make_key(data_name), value, overwrite=True)
+        # pylint: disable=W0703
+        except Exception as e:
+            logger.error("Unexpected exception: {}".format(e))
+            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+    else:
+        logger.error("Ray internal key-value storage is not initilized, failed to put the given data {}.".format(data_name))
+
+def _get_engine_args_filename(engine_type: str) -> str:
+    return f"engine_args_{engine_type}.pkl"
+
+def _get_engine_args_filepath(save_path: str, save_key: str = None) -> str:
+    if save_key is not None:
+        save_filepath = os.path.join(save_path, save_key)
+    else:
+        save_filepath = save_path
+    return save_filepath
+
+def save_engine_args(engine_type: str, save_path: str, engine_args: Any, save_key: str = None) -> None:
+    engine_args_filename = _get_engine_args_filename(engine_type)
+    save_filepath = _get_engine_args_filepath(save_path, save_key)
+    save_filename = os.path.join(save_filepath, engine_args_filename)
+    os.makedirs(save_filepath, exist_ok=True)
+    with open(save_filename, 'wb') as file:
+        pickle.dump(engine_args, file)
+    logger.info("Save engine arguments of {} engine type as file: {}".format(engine_type, save_filename))
+
+def load_engine_args(engine_type: str, load_path: str) -> Any:
+    engine_args_filename = _get_engine_args_filename(engine_type)
+    load_filename = os.path.join(load_path, engine_args_filename)
+    with open(load_filename, 'rb') as file:
+        engine_args =  pickle.load(file)
+    logger.info("Load engine arguments of {} engine type from path: {}".format(engine_type, load_path))
+    return engine_args
 
 def make_async(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
     """Take a blocking function, and run it on in an executor thread.

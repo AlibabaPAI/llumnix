@@ -116,7 +116,7 @@ def get_args(llumnix_cfg, llumnix_parser, engine_args: ServingArgs):
 
     EntrypointsArgs.check_args(entrypoints_args, llumnix_parser)
     instance_args.check_args(instance_args, manager_args, LaunchMode.LOCAL, llumnix_parser)
-    ManagerArgs.check_args(manager_args, llumnix_parser)
+    ManagerArgs.check_args(manager_args, llumnix_parser, LaunchMode.LOCAL)
 
     assert not instance_args.simulator_mode, "Only support the simulator mode for vLLM."
 

@@ -11,6 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Union, List
+
+
 class GlobalSchedulerConfig:
     def __init__(
             self,
@@ -65,3 +68,14 @@ class MigrationConfig:
         self.migration_backend_init_timeout = migration_backend_init_timeout
         self.grpc_migration_backend_server_port = grpc_migration_backend_server_port
         self.kvtransfer_migration_backend_naming_url = kvtransfer_migration_backend_naming_url
+
+
+class PDDConfig:
+    def __init__(
+        self,
+        enable_pd_disagg: bool,
+        enable_engine_pd_disagg: bool,
+        pd_ratio: Union[str, List[int]]) -> None:
+        self.enable_pd_disagg = enable_pd_disagg
+        self.enable_engine_pd_disagg = enable_engine_pd_disagg
+        self.pd_ratio = pd_ratio

@@ -71,7 +71,8 @@ def generate_vllm_launch_command(
         f"--instance-type {instance_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'--simulator-mode ' if enable_simulator else ''}"
-        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl' if enable_simulator else ''}"
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl ' if enable_simulator else ''}"
+        f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command
@@ -122,7 +123,8 @@ def generate_vllm_serve_command(
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--config-file {config_path} "
         f"--max-instances 4 "
-        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl' if enable_simulator else ''}"
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl ' if enable_simulator else ''}"
+        f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     return command

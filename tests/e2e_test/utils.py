@@ -21,28 +21,29 @@ import requests
 from llumnix.entrypoints.utils import get_ip_address
 
 
-def generate_vllm_launch_command(result_filename: str = "",
-                            launch_ray_cluster: bool = False,
-                            HEAD_NODE_IP: str = "127.0.0.1",
-                            ip: str = get_ip_address(),
-                            port: int = 37000,
-                            instances_num: int = 1,
-                            dispatch_policy: str = "load",
-                            migration_backend: str = "gloo",
-                            model: str = "facebook/opt-125m",
-                            max_model_len: int = 4096,
-                            log_instance_info: bool = False,
-                            log_request_timestamps: bool = False,
-                            request_migration_policy: str = 'SR',
-                            max_num_batched_tokens: int = 16000,
-                            enable_pd_disagg: bool = False,
-                            instance_type: str = "no_constraints",
-                            tensor_parallel_size: int = 1,
-                            enable_simulator: bool = False,
-                            request_output_queue_type: str = "rayqueue",
-                            config_path: str = "configs/vllm.yml",
-                            enable_migration: bool = True,
-                            **kwargs):
+def generate_vllm_launch_command(
+    result_filename: str = "",
+    launch_ray_cluster: bool = False,
+    HEAD_NODE_IP: str = "127.0.0.1",
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    instances_num: int = 1,
+    dispatch_policy: str = "load",
+    migration_backend: str = "gloo",
+    model: str = "facebook/opt-125m",
+    max_model_len: int = 4096,
+    log_instance_info: bool = False,
+    log_request_timestamps: bool = False,
+    request_migration_policy: str = 'SR',
+    max_num_batched_tokens: int = 16000,
+    enable_pd_disagg: bool = False,
+    instance_type: str = "no_constraints",
+    tensor_parallel_size: int = 1,
+    enable_simulator: bool = False,
+    request_output_queue_type: str = "rayqueue",
+    config_path: str = "configs/vllm.yml",
+    enable_migration: bool = True,
+    **kwargs):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -75,22 +76,23 @@ def generate_vllm_launch_command(result_filename: str = "",
     )
     return command
 
-def generate_vllm_serve_command(result_filename: str = "",
-                           ip: str = get_ip_address(),
-                           port: int = 37000,
-                           dispatch_policy: str = "load",
-                           migration_backend: str = "gloo",
-                           model: str = "facebook/opt-125m",
-                           max_model_len: int = 4096,
-                           log_instance_info: bool = False,
-                           log_request_timestamps: bool = True,
-                           request_migration_policy: str = 'SR',
-                           max_num_batched_tokens: int = 16000,
-                           enable_pd_disagg: bool = False,
-                           pd_ratio: str = "1:1",
-                           enable_simulator: bool = False,
-                           request_output_queue_type: str = "rayqueue",
-                           config_path: str = "configs/vllm.yml"):
+def generate_vllm_serve_command(
+    result_filename: str = "",
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    dispatch_policy: str = "load",
+    migration_backend: str = "gloo",
+    model: str = "facebook/opt-125m",
+    max_model_len: int = 4096,
+    log_instance_info: bool = False,
+    log_request_timestamps: bool = True,
+    request_migration_policy: str = 'SR',
+    max_num_batched_tokens: int = 16000,
+    enable_pd_disagg: bool = False,
+    pd_ratio: str = "1:1",
+    enable_simulator: bool = False,
+    request_output_queue_type: str = "rayqueue",
+    config_path: str = "configs/vllm.yml"):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "

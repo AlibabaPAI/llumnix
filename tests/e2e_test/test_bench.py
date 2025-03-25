@@ -123,14 +123,14 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 ip_port = f"{ip}:{port}"
                 ip_ports.append(ip_port)
                 launch_command = generate_launch_command(result_filename=str(port)+".out",
-                                                        launch_ray_cluster=False,
-                                                        ip=ip,
-                                                        port=port,
-                                                        model=model,
-                                                        enable_pd_disagg=enable_pd_disagg,
-                                                        enable_migration=enable_migration,
-                                                        instance_type="prefill",
-                                                        request_output_queue_type=request_output_queue_type)
+                                                         launch_ray_cluster=False,
+                                                         ip=ip,
+                                                         port=port,
+                                                         model=model,
+                                                         enable_pd_disagg=enable_pd_disagg,
+                                                         enable_migration=enable_migration,
+                                                         instance_type="prefill",
+                                                         request_output_queue_type=request_output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
             for i in range(device_count//2):
                 port = base_port+i*100+(device_count//2)*100
@@ -138,14 +138,14 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 if engine == "vLLM":
                     ip_ports.append(ip_port)
                 launch_command = generate_launch_command(result_filename=str(port)+".out",
-                                                        launch_ray_cluster=False,
-                                                        ip=ip,
-                                                        port=port,
-                                                        model=model,
-                                                        enable_pd_disagg=enable_pd_disagg,
-                                                        enable_migration=enable_migration,
-                                                        instance_type="decode",
-                                                        request_output_queue_type=request_output_queue_type)
+                                                         launch_ray_cluster=False,
+                                                         ip=ip,
+                                                         port=port,
+                                                         model=model,
+                                                         enable_pd_disagg=enable_pd_disagg,
+                                                         enable_migration=enable_migration,
+                                                         instance_type="decode",
+                                                         request_output_queue_type=request_output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
         else:
             for i in range(device_count):
@@ -167,12 +167,12 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
             ip_port = f"{ip}:{port}"
             ip_ports.append(ip_port)
         serve_command = generate_vllm_serve_command(result_filename=str(base_port)+".out",
-                                               ip=ip,
-                                               port=base_port,
-                                               model=model,
-                                               enable_pd_disagg=enable_pd_disagg,
-                                               enable_simulator=enable_simulator,
-                                               request_output_queue_type=request_output_queue_type)
+                                                    ip=ip,
+                                                    port=base_port,
+                                                    model=model,
+                                                    enable_pd_disagg=enable_pd_disagg,
+                                                    enable_simulator=enable_simulator,
+                                                    request_output_queue_type=request_output_queue_type)
         subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 

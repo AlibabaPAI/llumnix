@@ -24,7 +24,7 @@ from functools import partial
 import ray
 import ray.actor
 # TODO(s5u13b): Try to not use ray state apis because they are not reliable.
-from ray.util.state import list_placement_groups, list_actors
+from ray.util.state import list_actors
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.llumlet.llumlet import Llumlet
@@ -39,7 +39,8 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_server_name,
                            get_instance_name, get_manager_name, get_placement_group_name,
                            INSTANCE_NAME_PREFIX, SERVER_NAME_PREFIX, run_coroutine_in_new_thread,
-                           kill_server, kill_instance, remove_placement_group)
+                           kill_server, kill_instance, remove_placement_group,
+                           get_placement_group_infos_by_state, get_placement_group_infos_by_name)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_GENERATE_INTERVAL,
@@ -353,22 +354,24 @@ class Manager:
                 new_pg = None
                 if self.last_timeout_instance_id is not None:
                     last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
-                    last_timeout_pg_states = list_placement_groups(filters=[("name", "=", last_timeout_pg_name)], limit=MAX_NUM_LIST_ENTRIES)
-                    if len(last_timeout_pg_states) > 0:
+                    last_timeout_pg_infos = get_placement_group_infos_by_name(name=last_timeout_pg_name)
+                    if len(last_timeout_pg_infos) > 0:
                         new_instance_id = self.last_timeout_instance_id
                         # pending, created(without server and instance) or rescheduling
                         new_pg = ray.util.get_placement_group(last_timeout_pg_name)
                     # reset
                     self.last_timeout_instance_id = None
-                pending_pg_states = list_placement_groups(filters=[("state", "=", "PENDING")], limit=MAX_NUM_LIST_ENTRIES)
-                pending_pg_states.extend(list_placement_groups(filters=[("state", "=", "RESCHEDULING")], limit=MAX_NUM_LIST_ENTRIES))
-                for pending_pg_state in pending_pg_states:
-                    instance_id = pending_pg_state["name"].split("_")[-1]
+                pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
+                pending_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
+                for pending_pg_info in pending_pg_infos:
+                    instance_id = pending_pg_info["name"].split("_")[-1]
                     if new_pg is not None and instance_id == new_instance_id:
                         continue
-                    self.scale_down(instance_id)
-                alive_pg_states = list_placement_groups(filters=[("state", "!=", "REMOVED")], limit=MAX_NUM_LIST_ENTRIES)
-                if self.max_instances != -1 and len(alive_pg_states) >= self.max_instances:
+                    self.clear_instance_ray_resources(instance_id)
+                alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
+                alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
+                alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
+                if self.max_instances != -1 and len(alive_pg_infos) >= self.max_instances:
                     logger.debug("The number of alive placement groups has reached the max_instances.")
                     await asyncio.sleep(interval)
                     continue
@@ -550,13 +553,12 @@ class Manager:
 
         while True:
             try:
-                pending_pg_states = list_placement_groups(filters=[("state", "=", "PENDING")], limit=MAX_NUM_LIST_ENTRIES)
-                rescheduling_pg_states = list_placement_groups(filters=[("state", "=", "RESCHEDULING")], limit=MAX_NUM_LIST_ENTRIES)
-                all_penging_pg_names = [pg.name for pg in pending_pg_states]
-
-                if previous_penging_pg_names and len(rescheduling_pg_states) == 0 :
-                    new_pending_pg_states = list_placement_groups(filters=[("state", "=", "PENDING")], limit=MAX_NUM_LIST_ENTRIES)
-                    all_new_penging_pg_names = [pg.name for pg in new_pending_pg_states]
+                pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
+                rescheduling_pg_infos = get_placement_group_infos_by_state(state="RESCHEDULING")
+                all_penging_pg_names = [pg["name"] for pg in pending_pg_infos]
+                if previous_penging_pg_names and len(rescheduling_pg_infos) == 0 :
+                    new_pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
+                    all_new_penging_pg_names = [pg["name"] for pg in new_pending_pg_infos]
                     if len(set(previous_penging_pg_names).difference(set(all_new_penging_pg_names))) == 0:
                         self._check_pd_deployment_states()
                     previous_penging_pg_names = all_new_penging_pg_names
@@ -598,10 +600,10 @@ class Manager:
         curr_servers: Dict[str, PlacementGroup] = {}
         curr_instances: Dict[str, Llumlet] = {}
 
-        created_pg_states = list_placement_groups(filters=[("state", "=", "CREATED")], limit=MAX_NUM_LIST_ENTRIES)
-        for created_pg_state in created_pg_states:
-            instance_id = created_pg_state["name"].split("_")[-1]
-            curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_state["name"])
+        created_pg_infos = get_placement_group_infos_by_state(state="CREATED")
+        for created_pg_info in created_pg_infos:
+            instance_id = created_pg_info["name"].split("_")[-1]
+            curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_info["name"])
 
         alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")], limit=MAX_NUM_LIST_ENTRIES)
         for alive_actor_state in alive_actor_states:
@@ -621,8 +623,8 @@ class Manager:
         return curr_pgs, curr_servers, curr_instances
 
     def _get_instance_deployment_states(self, instance_id: str):
-        pg_state = list_placement_groups(filters=[("name", "=", get_placement_group_name(instance_id))], limit=MAX_NUM_LIST_ENTRIES)
-        pg_created = len(pg_state) == 1 and pg_state[0]["state"] == "CREATED"
+        pg_infos = get_placement_group_infos_by_name(name=get_placement_group_name(instance_id))
+        pg_created = len(pg_infos) == 1 and pg_infos[0]["state"] == "CREATED"
         server_state = list_actors(filters=[("name", "=", get_server_name(instance_id))], limit=MAX_NUM_LIST_ENTRIES)
         server_alive = len(server_state) == 1 and server_state[0]["state"] == "ALIVE"
         instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))], limit=MAX_NUM_LIST_ENTRIES)

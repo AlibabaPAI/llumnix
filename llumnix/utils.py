@@ -29,6 +29,7 @@ from ray.experimental.internal_kv import (
     _internal_kv_put,
     _internal_kv_exists
 )
+from ray.util import placement_group_table
 
 from llumnix.logging.logger import init_logger
 
@@ -95,6 +96,22 @@ def initialize_placement_group(
         ray.get(current_placement_group.ready(), timeout=1800)
 
     return current_placement_group
+
+def get_placement_group_infos_by_state(state: str = None):
+    if state is None:
+        return placement_group_table().values()
+    target_placement_group_infos = []
+    for placement_group_info in placement_group_table().values():
+        if placement_group_info["state"] == state:
+            target_placement_group_infos.append(placement_group_info)
+    return target_placement_group_infos
+
+def get_placement_group_infos_by_name(name: str):
+    target_placement_group_infos = []
+    for placement_group_info in placement_group_table().values():
+        if placement_group_info["name"] == name:
+            target_placement_group_infos.append(placement_group_info)
+    return target_placement_group_infos
 
 def random_uuid() -> str:
     return str(uuid.uuid4().hex)

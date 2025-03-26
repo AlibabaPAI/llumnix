@@ -64,11 +64,11 @@ def parse_instance_log_file(log_files):
     return average_speed
 
 def wait_for_all_instances_finished():
-    named_actors = ray.util.list_named_actors(True)
+    actor_infos = ray.util.list_named_actors(True)
     instance_actor_handles = []
-    for actor in named_actors:
-        if actor['name'].startswith("instance"):
-            instance_actor_handles.append(ray.get_actor(actor['name'], namespace=actor['namespace']))
+    for actor_info in actor_infos:
+        if actor_info['name'].startswith("instance"):
+            instance_actor_handles.append(ray.get_actor(actor_info['name'], namespace=actor_info['namespace']))
     while True:
         all_finished = True
         for instance in instance_actor_handles:
@@ -79,11 +79,11 @@ def wait_for_all_instances_finished():
             break
 
 def get_instance_num_blocks():
-    named_actors = ray.util.list_named_actors(True)
+    actor_infos = ray.util.list_named_actors(True)
     instance_actor_handles = []
-    for actor in named_actors:
-        if actor['name'].startswith("instance"):
-            instance_actor_handles.append(ray.get_actor(actor['name'], namespace=actor['namespace']))
+    for actor_info in actor_infos:
+        if actor_info['name'].startswith("instance"):
+            instance_actor_handles.append(ray.get_actor(actor_info['name'], namespace=actor_info['namespace']))
     instance_num_blocks_list = []
     for instance in instance_actor_handles:
         instance_info = ray.get(instance.get_instance_info.remote())

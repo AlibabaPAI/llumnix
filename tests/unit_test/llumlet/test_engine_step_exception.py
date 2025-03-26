@@ -74,8 +74,8 @@ def test_engine_step_exception(ray_env):
     )
     ray.get(llumlet.is_ready.remote())
 
-    all_actors = ray.util.list_named_actors(True)
-    all_actor_names = [actor["name"] for actor in all_actors]
+    actor_infos = ray.util.list_named_actors(True)
+    all_actor_names = [actor_info["name"] for actor_info in actor_infos]
     assert actor_name in all_actor_names
 
     cur_free_memory_list = []
@@ -87,8 +87,8 @@ def test_engine_step_exception(ray_env):
     ray.get(llumlet.set_error_step.remote(True))
     time.sleep(3)
 
-    all_actors = ray.util.list_named_actors(True)
-    all_actor_names = [actor["name"] for actor in all_actors]
+    actor_infos = ray.util.list_named_actors(True)
+    all_actor_names = [actor["name"] for actor in actor_infos]
     assert actor_name not in all_actor_names
 
     cur_free_memory_list = []

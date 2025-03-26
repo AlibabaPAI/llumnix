@@ -23,8 +23,6 @@ from functools import partial
 
 import ray
 import ray.actor
-# TODO(s5u13b): Try to not use ray state apis because they are not reliable.
-from ray.util.state import list_actors
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.llumlet.llumlet import Llumlet
@@ -40,14 +38,14 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_se
                            get_instance_name, get_manager_name, get_placement_group_name,
                            INSTANCE_NAME_PREFIX, SERVER_NAME_PREFIX, run_coroutine_in_new_thread,
                            kill_server, kill_instance, remove_placement_group,
-                           get_placement_group_infos_by_state, get_placement_group_infos_by_name)
+                           get_placement_group_infos_by_state, get_placement_group_infos_by_name,
+                           actor_exists, get_actor_names_by_name_prefix)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_GENERATE_INTERVAL,
                                WAIT_ALL_MIGRATIONS_DONE_INTERVAL, AUTO_SCALE_UP_INTERVAL,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
-                               WATCH_DEPLOYMENT_INTERVAL, WAIT_PENDING_INSTANCE_TIMEOUT,
-                               MAX_NUM_LIST_ENTRIES)
+                               WATCH_DEPLOYMENT_INTERVAL)
 from llumnix.launcher import Launcher
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
@@ -512,23 +510,10 @@ class Manager:
         async def watch_instance_deployment_states(instance_id: str):
             # There might be some delays of calling _init_server_and_instance, so sleep first.
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
-            wait_pending_instance_time = 0.0
-            while True:
-                instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))], limit=MAX_NUM_LIST_ENTRIES)
-                instance_pending_creation = len(instance_state) == 1 and instance_state[0]["state"] == "PENDING_CREATION"
-                if not instance_pending_creation:
-                    break
-                logger.debug("Instance {} is in pending creation state, sleep {} s then watch its deployment again,"
-                             "total wait pending instance time: {} s".format(
-                                 instance_id, WATCH_DEPLOYMENT_INTERVAL, WAIT_PENDING_INSTANCE_TIMEOUT))
-                await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
-                wait_pending_instance_time += WATCH_DEPLOYMENT_INTERVAL
-                if wait_pending_instance_time >= WAIT_PENDING_INSTANCE_TIMEOUT:
-                    break
-            pg_created, server_alive, instance_alive = self._get_instance_deployment_states(instance_id)
-            if pg_created and (not server_alive or not instance_alive):
+            pg_created, server_exists, instance_exists = self._get_instance_deployment_states(instance_id)
+            if pg_created and (not server_exists or not instance_exists):
                 logger.warning("Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
-                               .format(instance_id, pg_created, server_alive, instance_alive))
+                               .format(instance_id, pg_created, server_exists, instance_exists))
                 self.scale_down(instance_id)
 
         while True:
@@ -603,34 +588,42 @@ class Manager:
         created_pg_infos = get_placement_group_infos_by_state(state="CREATED")
         for created_pg_info in created_pg_infos:
             instance_id = created_pg_info["name"].split("_")[-1]
-            curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_info["name"])
+            try:
+                curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_info["name"])
+            except ValueError:
+                continue
 
-        alive_actor_states = list_actors(filters=[("state", "=", "ALIVE")], limit=MAX_NUM_LIST_ENTRIES)
-        for alive_actor_state in alive_actor_states:
-            if alive_actor_state["name"].startswith(SERVER_NAME_PREFIX):
-                instance_id = alive_actor_state["name"].split("_")[-1]
-                if instance_id in self.servers:
-                    curr_servers[instance_id] = self.servers[instance_id]
-                else:
-                    curr_servers[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
-            elif alive_actor_state["name"].startswith(INSTANCE_NAME_PREFIX):
-                instance_id = alive_actor_state["name"].split("_")[-1]
-                if instance_id in self.instances:
-                    curr_instances[instance_id] = self.instances[instance_id]
-                else:
-                    curr_instances[instance_id] = ray.get_actor(alive_actor_state["name"], namespace="llumnix")
+        curr_server_names = get_actor_names_by_name_prefix(name_prefix=SERVER_NAME_PREFIX)
+        for curr_server_name in curr_server_names:
+            instance_id = curr_server_name.split("_")[-1]
+            if instance_id in self.servers:
+                curr_servers[instance_id] = self.servers[instance_id]
+            else:
+                try:
+                    curr_servers[instance_id] = ray.get_actor(curr_server_name, namespace="llumnix")
+                except ValueError:
+                    continue
+
+        curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
+        for curr_instance_name in curr_instance_names:
+            instance_id = curr_instance_name.split("_")[-1]
+            if instance_id in self.instances:
+                curr_instances[instance_id] = self.instances[instance_id]
+            else:
+                try:
+                    curr_instances[instance_id] = ray.get_actor(curr_instance_name, namespace="llumnix")
+                except ValueError:
+                    continue
 
         return curr_pgs, curr_servers, curr_instances
 
     def _get_instance_deployment_states(self, instance_id: str):
         pg_infos = get_placement_group_infos_by_name(name=get_placement_group_name(instance_id))
         pg_created = len(pg_infos) == 1 and pg_infos[0]["state"] == "CREATED"
-        server_state = list_actors(filters=[("name", "=", get_server_name(instance_id))], limit=MAX_NUM_LIST_ENTRIES)
-        server_alive = len(server_state) == 1 and server_state[0]["state"] == "ALIVE"
-        instance_state = list_actors(filters=[("name", "=", get_instance_name(instance_id))], limit=MAX_NUM_LIST_ENTRIES)
-        instance_alive = len(instance_state) == 1 and instance_state[0]["state"] == "ALIVE"
+        server_exists = actor_exists(get_server_name(instance_id))
+        instance_exists = actor_exists(get_instance_name(instance_id))
 
-        return pg_created, server_alive, instance_alive
+        return pg_created, server_exists, instance_exists
 
     # TODO(KuilongCui): Add comments for this function.
     async def _rebuild_migration_backend(self) -> None:
@@ -703,9 +696,9 @@ class Manager:
                 logger.warning("Connect to instance {} failed, exception: {}".format(instance_id, ret))
 
         # Must set True despite set namespance to llumnix.
-        actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
-        instance_actor_names = [actor_name_dict['name'] for actor_name_dict in actor_names_dict
-                                if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
+        actor_infos = ray.util.list_named_actors(all_namespaces=True)
+        instance_actor_names = [actor_info['name'] for actor_info in actor_infos
+                                if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
         scale_up_instance_ids = []
         scale_up_instance_args = []

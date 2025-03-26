@@ -100,7 +100,6 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'grpc', 'kvtransfer'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])

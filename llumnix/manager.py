@@ -45,7 +45,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_GENERATE_INTERVAL,
                                WAIT_ALL_MIGRATIONS_DONE_INTERVAL, AUTO_SCALE_UP_INTERVAL,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
-                               WATCH_DEPLOYMENT_INTERVAL)
+                               WATCH_DEPLOYMENT_INTERVAL, INSTANCE_READY_TIMEOUT)
 from llumnix.launcher import Launcher
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
@@ -228,8 +228,16 @@ class Manager:
                        engine_args
                       ) -> Tuple[List[str], List[Llumlet]]:
         async def instance_ready_scale_up(instance_id: str, instance: "ray.actor.ActorHandle"):
-            await instance.is_ready.remote()
-            self.scale_up(instance_id, instance, instance_args)
+            try:
+                await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
+                self.scale_up(instance_id, instance, instance_args)
+            except asyncio.TimeoutError:
+                logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                self.clear_instance_ray_resources(instance_id)
+            except Exception as e: # pylint: disable=broad-except
+                logger.error("Unexpected exception occurs: {}".format(e))
+                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                self.clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []
         instances: List[Llumlet] = []

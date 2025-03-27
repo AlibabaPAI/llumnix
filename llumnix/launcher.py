@@ -32,6 +32,7 @@ from llumnix.utils import (initialize_placement_group, get_manager_name, get_ser
                            get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
                            load_engine_args, GPUBundlingStrategy, get_service_resouces)
 from llumnix.internal_config import PDDConfig
+from llumnix.constants import INSTANCE_READY_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -109,24 +110,29 @@ class Launcher:
             try:
                 if not self.manager_actor_handle:
                     self.manager_actor_handle = ray.get_actor(get_manager_name(), namespace="llumnix")
-                await instance.is_ready.remote()
-                await server.run.remote(self.manager_actor_handle, instance_id, instance)
-                self.inflight_num_prefill_instances -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode_instances -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
+                tasks = [
+                    instance.is_ready.remote(),
+                    server.run.remote(self.manager_actor_handle, instance_id, instance)
+                ]
+                await asyncio.wait(tasks, timeout=INSTANCE_READY_TIMEOUT)
                 if scale_up_callback:
-                    # manager.scale_up will be called here after the instance is ready
                     scale_up_callback(instance_id, instance, instance_args)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}, "
                             "api_server_port: {}, request_output_queue_port: {}".format(
                                 instance_id, instance_args.instance_type,
                                 entrypoint_args.port, entrypoint_args.request_output_queue_port))
-            # pylint: disable=broad-except
-            except Exception as e:
-                self.inflight_num_prefill_instances -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode_instances -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
+            except asyncio.TimeoutError:
+                logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                if scale_down_callback:
+                    scale_down_callback(instance_id)
+            except Exception as e: # pylint: disable=broad-except
                 logger.error("Unexpected exception occurs: {}".format(e))
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
-                scale_down_callback(instance_id)
+                if scale_down_callback:
+                    scale_down_callback(instance_id)
+            finally:
+                self.inflight_num_prefill_instances -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
+                self.inflight_num_decode_instances -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
 
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
         next_instance_args = self._get_next_instance_args(instance_args, instance_type)

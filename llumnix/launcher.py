@@ -32,7 +32,7 @@ from llumnix.utils import (initialize_placement_group, get_manager_name, get_ser
                            get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
                            load_engine_args, GPUBundlingStrategy, get_service_resouces)
 from llumnix.internal_config import PDDConfig
-from llumnix.constants import INSTANCE_READY_TIMEOUT
+from llumnix.constants import INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -110,11 +110,11 @@ class Launcher:
             try:
                 if not self.manager_actor_handle:
                     self.manager_actor_handle = ray.get_actor(get_manager_name(), namespace="llumnix")
-                tasks = [
-                    instance.is_ready.remote(),
-                    server.run.remote(self.manager_actor_handle, instance_id, instance)
-                ]
-                await asyncio.wait(tasks, timeout=INSTANCE_READY_TIMEOUT)
+                instance_ready = False
+                await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
+                instance_ready = True
+                # Run server until instance is ready.
+                await asyncio.wait_for(server.run.remote(self.manager_actor_handle, instance_id, instance), timeout=SERVER_READY_TIMEOUT)
                 if scale_up_callback:
                     scale_up_callback(instance_id, instance, instance_args)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}, "
@@ -122,7 +122,10 @@ class Launcher:
                                 instance_id, instance_args.instance_type,
                                 entrypoint_args.port, entrypoint_args.request_output_queue_port))
             except asyncio.TimeoutError:
-                logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                if not instance_ready:
+                    logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                else:
+                    logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
                 if scale_down_callback:
                     scale_down_callback(instance_id)
             except Exception as e: # pylint: disable=broad-except

@@ -362,7 +362,7 @@ class Manager:
                 if self.last_timeout_instance_id is not None:
                     last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
                     last_timeout_pg_infos = get_placement_group_infos_by_name(name=last_timeout_pg_name)
-                    if len(last_timeout_pg_infos) > 0:
+                    if len(last_timeout_pg_infos) > 0 and last_timeout_pg_infos[0]["state"] != "REMOVED":
                         new_instance_id = self.last_timeout_instance_id
                         # pending, created(without server and instance) or rescheduling
                         new_pg = ray.util.get_placement_group(last_timeout_pg_name)

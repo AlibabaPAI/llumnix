@@ -17,6 +17,7 @@ import asyncio
 import traceback
 import threading
 from typing import Any, Union, Callable, Awaitable, TypeVar, Coroutine, Dict, List
+from enum import Enum
 from functools import partial
 import pickle
 from typing_extensions import ParamSpec

@@ -173,8 +173,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                     model=model,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     enable_simulator=enable_simulator,
-                                                    request_output_queue_type=request_output_queue_type,
-                                                    enable_migration=enable_migration)
+                                                    request_output_queue_type=request_output_queue_type)
         subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 

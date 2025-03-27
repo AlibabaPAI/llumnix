@@ -33,7 +33,8 @@ from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 
 logger = init_logger(__name__)
 
-llumnix_context: EntrypointsContext = None
+entrypoints_context: EntrypointsContext = None
+
 
 class LlumnixEntrypoint(Entrypoint):
     async def generate_benchmark(self, request: web.Request):
@@ -83,12 +84,20 @@ class LlumnixEntrypoint(Entrypoint):
 
 # pylint: disable=unused-argument
 async def clean_up_llumnix_components(app):
-    for instance in llumnix_context.instances.values():
+    for instance in entrypoints_context.instances.values():
         try:
             ray.kill(instance)
         # pylint: disable=bare-except
         except:
             pass
+
+
+def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
+    parser.set_namespace("llumnix")
+    parser = EntrypointsArgs.add_cli_args(parser)
+    parser = ManagerArgs.add_cli_args(parser)
+    parser = InstanceArgs.add_cli_args(parser)
+    return parser
 
 # Functions detect_unsupported_engine_feature, get_args and setup_llumnix_api_server cannot be put into arg_utils.py,
 # Because they need to import ServingArgs, when importing ServingArgs, it will raise no available gpu error.
@@ -121,18 +130,14 @@ def get_args(llumnix_cfg, llumnix_parser, engine_args: ServingArgs):
     ManagerArgs.check_args(manager_args, llumnix_parser, LaunchMode.LOCAL)
 
     assert not instance_args.simulator_mode, "Only support the simulator mode for vLLM."
-
     assert not (engine_args.enable_disagg and manager_args.enable_pd_disagg), \
-        "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Lluminx."
-
+        "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Llumnix."
     assert 'W' not in instance_args.request_migration_policy, \
-        "Migrating waiting request is not supported for bladellm temporarily."
-
+        "Migrating waiting request is not supported for BladeLLM temporarily."
     assert not engine_args.enable_disagg or not manager_args.enable_migration, \
         "Migration feature is temporarily unavailable for the engine based pd-disaggregation."
-
     assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
-         "Migration feature is temporarily unavailable for pipeline parallel in BladeLLM."
+        "Migration feature is temporarily unavailable for pipeline parallelism in BladeLLM."
 
     detect_unsupported_engine_feature(engine_args)
 
@@ -145,30 +150,24 @@ def get_args(llumnix_cfg, llumnix_parser, engine_args: ServingArgs):
 
 def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     # generate llumnix_parser for checking parameters with choices
-    llumnix_parser = LlumnixArgumentParser()
-    llumnix_parser = EntrypointsArgs.add_cli_args(llumnix_parser)
-    llumnix_parser = ManagerArgs.add_cli_args(llumnix_parser)
-    llumnix_parser = InstanceArgs.add_cli_args(llumnix_parser)
+    parser = LlumnixArgumentParser()
+    parser = add_cli_args(parser)
     llumnix_config = get_llumnix_config(bladellm_args.llumnix_config, cli_args=bladellm_args.llumnix_opts)
 
-    entrypoints_args, manager_args, instance_args, engine_args = \
-        get_args(llumnix_config, llumnix_parser, bladellm_args)
-
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, parser, bladellm_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
+
     setup_ray_cluster(entrypoints_args)
 
     llumnix_client = None
-    # If gpu is not available, it means that this node is head pod x any llumnix components
+    # If gpu is not available, it means that this node is head pod without any llumnix components.
     if is_gpu_available():
-        # Since importing the bladellm engine arguments require a GPU, serialize the engine parameters
-        # before passing them to the manager.
-        llumnix_engine_args = BladellmEngineArgs()
-        llumnix_engine_args.engine_args = pickle.dumps(engine_args)
-        llumnix_engine_args.world_size = bladellm_args.tensor_parallel_size*bladellm_args.pipeline_parallel_size
-
-        global llumnix_context
-        llumnix_context = \
-            setup_llumnix(entrypoints_args, manager_args, instance_args, llumnix_engine_args, launch_args)
-        llumnix_client = LlumnixClientBladeLLM(bladellm_args, llumnix_context, loop)
+        # Since importing the bladellm engine arguments requires available GPU,
+        # serialize the engine parameters before passing them to the manager.
+        engine_args_llumnix = BladellmEngineArgs()
+        engine_args_llumnix.engine_args = pickle.dumps(engine_args)
+        engine_args_llumnix.world_size = bladellm_args.tensor_parallel_size * bladellm_args.pipeline_parallel_size
+        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
+        llumnix_client = LlumnixClientBladeLLM(bladellm_args, entrypoints_context, loop)
 
     return llumnix_client

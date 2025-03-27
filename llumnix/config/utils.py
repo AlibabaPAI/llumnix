@@ -14,8 +14,8 @@
 from typing import Dict, Union, List
 import argparse
 
-from .config import LlumnixConfig
-from .default import _C
+from llumnix.config import LlumnixConfig
+from llumnix.config.default import _C
 
 def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Namespace] = None, cli_args: List = None) -> LlumnixConfig:
     if isinstance(others, argparse.Namespace):

@@ -9,6 +9,7 @@ from llumnix.arg_utils import EntrypointsArgs, ManagerArgs, InstanceArgs, Llumni
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import load_engine_args
 from llumnix.internal_config import MigrationConfig
+from llumnix.config import LlumnixConfig
 
 logger = init_logger(__name__)
 
@@ -58,14 +59,14 @@ def check_instance_args(intance_args: InstanceArgs, engine_args: AsyncEngineArgs
     assert not (not engine_args.disable_async_output_proc and intance_args.simulator_mode), \
         "Llumnix does not support async output processing when enabling simualtor mode, please disable async output processing."
 
-def get_args(cfg, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
+def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
         -> Tuple[EntrypointsArgs, ManagerArgs, InstanceArgs, AsyncEngineArgs]:
     engine_args = AsyncEngineArgs.from_cli_args(cli_args)
-    instance_args: InstanceArgs = InstanceArgs.from_llumnix_config(cfg)
+    instance_args: InstanceArgs = InstanceArgs.from_llumnix_config(llumnix_config)
     instance_args.init_from_engine_args(engine_args, BackendType.VLLM)
-    manager_args = ManagerArgs.from_llumnix_config(cfg)
+    manager_args = ManagerArgs.from_llumnix_config(llumnix_config)
     manager_args.init_from_instance_args(instance_args)
-    entrypoints_args = EntrypointsArgs.from_llumnix_config(cfg)
+    entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_config)
 
     EntrypointsArgs.check_args(entrypoints_args, parser)
     ManagerArgs.check_args(manager_args, parser, launch_mode)

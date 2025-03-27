@@ -186,16 +186,16 @@ if __name__ == "__main__":
     parser.add_argument("--log-level", type=str, choices=["debug", "info", "warning", "error"])
     parser = add_cli_args(parser)
     cli_args = parser.parse_args()
-    cfg = get_llumnix_config(cli_args.config_file, cli_args)
+    llumnix_config = get_llumnix_config(cli_args.config_file, cli_args)
 
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(cfg, LaunchMode.LOCAL, parser, cli_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, cli_args)
     backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=backend_type)
 
     # Launch or connect to the ray cluster for multi-node serving.
     setup_ray_cluster(entrypoints_args)
 
-    # if gpu is not available, it means that this node is head pod without any llumnix components
+    # if gpu is not available, it means that this node is head pod without any llumnix components.
     if is_gpu_available():
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
         llumnix_client = LlumnixClientVLLM(entrypoints_context)

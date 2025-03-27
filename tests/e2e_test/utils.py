@@ -175,7 +175,7 @@ def generate_bladellm_launch_command(
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
-        f"{'> instance_' + result_filename if len(result_filename) > 0 else ''} 2>&1 &"
+        f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     return command
 

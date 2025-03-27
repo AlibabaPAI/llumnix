@@ -254,7 +254,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: 16
 
 `--enable-pd-disagg`
-- Enable prefill decoding disaggregation.
+- Enable prefill decode disaggregation.
 
 `--pd-ratio`
 - The p:d ratio used in gloabl launch mode.

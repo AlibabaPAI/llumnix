@@ -153,6 +153,7 @@ class ManagerArgs:
     pd_ratio: Union[str, List[int]] = None
     load_registered_service: bool = None
     load_registered_service_path: str = None
+    enable_pdd_node_affinity_scheduling: bool = None
 
     # init from instance args
     is_group_kind_migration_backend: bool = None
@@ -173,9 +174,9 @@ class ManagerArgs:
             parts = ratio_str.split(':')
             if len(parts) != 2:
                 raise ValueError(f"Invalid format for --pd-ratio : '{ratio_str}'. Expected format 'a:b'.")
-            num_prefill, num_decode = int(parts[0].strip()), int(parts[1].strip())
-            assert num_prefill > 0 and num_decode > 0, "Both parts of --pd-ratio must be non-negative."
-            return [num_prefill, num_decode]
+            num_prefill_instances, num_decode_instances = int(parts[0].strip()), int(parts[1].strip())
+            assert num_prefill_instances > 0 and num_decode_instances > 0, "Both parts of --pd-ratio must be non-negative."
+            return [num_prefill_instances, num_decode_instances]
         self.pd_ratio = parse_ratio(self.pd_ratio)
 
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
@@ -200,7 +201,8 @@ class ManagerArgs:
     def create_pdd_config(self) -> PDDConfig:
         pdd_config = PDDConfig(self.enable_pd_disagg,
                                self.enable_engine_pd_disagg,
-                               self.pd_ratio)
+                               self.pd_ratio,
+                               self.enable_pdd_node_affinity_scheduling)
         return pdd_config
 
     @classmethod
@@ -214,7 +216,7 @@ class ManagerArgs:
         return manager_args
 
     @classmethod
-    def check_args(cls, args: 'ManagerArgs', parser: argparse.ArgumentParser, launch_mode: LaunchMode) -> None:
+    def check_args(cls, args: 'ManagerArgs', launch_mode: LaunchMode, parser: argparse.ArgumentParser) -> None:
         # pylint: disable=protected-access
         for action in parser._optionals._actions:
             if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
@@ -231,6 +233,11 @@ class ManagerArgs:
             assert args.load_registered_service_path and launch_mode == LaunchMode.GLOBAL, \
             "Only load registered service when enabling pd-disaggregation in global launch mode, " \
             "and the path of loading registered service is required to be specified when loading registered service from path."
+
+        if args.enable_pdd_node_affinity_scheduling:
+            assert (args.enable_pd_disagg or args.enable_engine_pd_disagg) and launch_mode == LaunchMode.GLOBAL, \
+                "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
+                "in global launch mode."
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -315,7 +322,7 @@ class ManagerArgs:
                             help='enable store port offset when desploying multiple servers')
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',
-                            help='enable prefill decoding disaggregation')
+                            help='enable prefill-decode disaggregation')
         parser.add_argument('--pd-ratio',
                             type=str,
                             help='the prefill decode ratio used in gloabl launch mode e.g. "1:1"')
@@ -334,6 +341,12 @@ class ManagerArgs:
                                  "files) under this path will be loaded. The Llumnix will initialize instance based on "
                                  "the engine type (no_constraints, prefill, decode) and the corresponding engine arguments "
                                  "loaded from the path.")
+        parser.add_argument('--enable-pdd-node-affinity-scheduling',
+                            action='store_true',
+                            help="Enable prefill-decode disaggregation (abbreviated as PDD) node affinity scheduling.\n "
+                                 "For PDD ray cluster, each node can be annotated with prefill/decode gpu resources. "
+                                 "When enabling PDD node affinity scheduling, Llumnix will schedule prefill/decode instance to "
+                                 "the node with correspoinding prefill/decode gpu resources.")
         return parser
 
 

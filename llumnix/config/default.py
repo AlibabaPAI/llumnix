@@ -71,7 +71,7 @@ _C.MANAGER.LOG_FILENAME = "server.log"
 _C.MANAGER.ENABLE_PORT_INCREMENT = False
 # Enable store port offset when deploying multiple servers
 _C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
-# Enable prefill decoding disaggregation
+# Enable prefill-decode disaggregation
 _C.MANAGER.ENABLE_PD_DISAGG = False
 # The p:d ratio used in gloabl launch mode
 _C.MANAGER.PD_RATIO = "1:1"
@@ -79,7 +79,8 @@ _C.MANAGER.PD_RATIO = "1:1"
 _C.MANAGER.LOAD_REGISTERED_SERVICE = False
 # Path of loading engine arguments
 _C.MANAGER.LOAD_REGISTERED_SERVICE_PATH = None
-
+# Enable prefill-decode disaggregation node affinity scheduling.
+_C.MANAGER.ENABLE_PDD_NODE_AFFINITY_SCHEDULING = False
 
 # -------------------------- DISPATCH CONFIGURATION ---------------------------
 # Request dispatch policy

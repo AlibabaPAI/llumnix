@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import subprocess
+import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 from collections import defaultdict
@@ -119,7 +120,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
 
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
-    base_port = 37037
+    base_port = random.randint(30000, 40000)
     ip_ports = []
     instance_output_logs = []
     device_count = torch.cuda.device_count()
@@ -211,6 +212,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(to_markdown_table(data))
+        await asyncio.sleep(3)
 
     await asyncio.sleep(3)
 

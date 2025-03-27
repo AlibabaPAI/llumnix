@@ -35,7 +35,7 @@ environment_variables: Dict[str, Callable[[], Any]] = {
 
     # this is used for configuring the default logging level
     "LLUMNIX_LOGGING_LEVEL":
-    lambda: os.getenv("LLUMNIX_LOGGING_LEVEL", "INFO"),
+    lambda: os.getenv("LLUMNIX_LOGGING_LEVEL", "DEBUG"),
 
     # if set, LLUMNIX_LOGGING_PREFIX will be prepended to all log messages
     "LLUMNIX_LOGGING_PREFIX":

@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import subprocess
+import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 import json
@@ -95,6 +96,9 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         pytest.skip("Only test zmq queue type when simulator is disabled and prefill-decode "
                     "disaggregation is disabled.")
 
+    if request_output_queue_type == 'rayqueue' and launch_mode == 'local':
+        pytest.skip("Do not test rayqueue in local launch mode because it will cause unexpected ray job id error.")
+
     if enable_simulator and enable_pd_disagg:
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
 
@@ -104,7 +108,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         num_prompts = 50
 
     ip = get_ip_address()
-    base_port = 37037
+    base_port = random.randint(30000, 40000)
+
     ip_ports = []
     device_count = torch.cuda.device_count()
 
@@ -209,9 +214,10 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    if launch_mode == 'local' and not enable_pd_disagg and engine == 'vLLM' and num_prompts == 500:
+    if num_prompts == 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(parse_log_file(title=request_output_queue_type))
+        await asyncio.sleep(3)
 
     await asyncio.sleep(3)
 

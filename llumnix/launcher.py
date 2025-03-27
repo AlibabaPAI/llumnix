@@ -28,12 +28,11 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
 from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
 from llumnix.backends.utils import get_engine_world_size
-from llumnix.utils import (initialize_placement_group,
-                           get_manager_name, get_server_name,
+from llumnix.utils import (initialize_placement_group, get_manager_name, get_server_name,
                            get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
-                           load_engine_args)
+                           load_engine_args, GPUBundlingStrategy, get_service_resouces)
 from llumnix.internal_config import PDDConfig
-
+from llumnix.constants import INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -71,23 +70,26 @@ class Launcher:
             for instance_type in instance_type_list:
                 self.engine_args_dict[instance_type] = load_engine_args(instance_type, self.load_registered_service_path)
 
-        self.inflight_num_prefill_instance = 0
-        self.inflight_num_decode_instance = 0
+        self.inflight_num_prefill_instances = 0
+        self.inflight_num_decode_instances = 0
 
     def init_placement_group(self,
                              placement_group_name: str,
                              engine_args,
                              backend_type: BackendType,
                              init_server: bool = False,
-                             block: bool = True) -> PlacementGroup:
+                             block: bool = True,
+                             service_name: str = None
+                             ) -> PlacementGroup:
         # num_cpus=2+(0/1), for Llumlet + AsyncPutQueueActor + (ApiServerActor)
         if not BackendType.is_sim_backend(backend_type):
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
-            seperate_gpu_groups = backend_type != BackendType.BLADELLM
+            gpu_bundling_strategy = GPUBundlingStrategy.SPREAD if backend_type == BackendType.VLLM else GPUBundlingStrategy.PACK
+            resources = get_service_resouces(service_name, world_size)
             placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
                                                          num_gpus=world_size, detached=True, block=block,
-                                                         seperate_gpu_groups=seperate_gpu_groups)
+                                                         gpu_bundling_strategy=gpu_bundling_strategy, resources=resources)
         else:
             placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
                                                          num_gpus=0, detached=True, block=block)
@@ -101,41 +103,50 @@ class Launcher:
                                  engine_args,
                                  backend_type: BackendType,
                                  placement_group: PlacementGroup,
+                                 instance_type: InstanceType = None,
                                  scale_up_callback: Callable = None,
                                  scale_down_callback: Callable = None):
         async def done_scale_up(instance_args: InstanceArgs, entrypoint_args: EntrypointsArgs):
             try:
                 if not self.manager_actor_handle:
                     self.manager_actor_handle = ray.get_actor(get_manager_name(), namespace="llumnix")
-                await instance.is_ready.remote()
-                await server.run.remote(self.manager_actor_handle, instance_id, instance)
-                self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
+                instance_ready = False
+                await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
+                instance_ready = True
+                # Run server until instance is ready.
+                await asyncio.wait_for(server.run.remote(self.manager_actor_handle, instance_id, instance), timeout=SERVER_READY_TIMEOUT)
                 if scale_up_callback:
-                    # manager.scale_up will be called here after the instance is ready
                     scale_up_callback(instance_id, instance, instance_args)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}, "
                             "api_server_port: {}, request_output_queue_port: {}".format(
                                 instance_id, instance_args.instance_type,
                                 entrypoint_args.port, entrypoint_args.request_output_queue_port))
-            # pylint: disable=broad-except
-            except Exception as e:
-                self.inflight_num_prefill_instance -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
-                self.inflight_num_decode_instance -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
+            except asyncio.TimeoutError:
+                if not instance_ready:
+                    logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                else:
+                    logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
+                if scale_down_callback:
+                    scale_down_callback(instance_id)
+            except Exception as e: # pylint: disable=broad-except
                 logger.error("Unexpected exception occurs: {}".format(e))
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
-                scale_down_callback(instance_id)
+                if scale_down_callback:
+                    scale_down_callback(instance_id)
+            finally:
+                self.inflight_num_prefill_instances -= 1 if instance_args.instance_type == InstanceType.PREFILL else 0
+                self.inflight_num_decode_instances -= 1 if instance_args.instance_type == InstanceType.DECODE else 0
 
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
-        next_instance_args = self._get_next_instance_args(instance_args)
+        next_instance_args = self._get_next_instance_args(instance_args, instance_type)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
         instance = self.init_instance(instance_id, next_instance_args, placement_group,
                                       request_output_queue_type, backend_type, next_engine_args)
         server = self.init_server(get_server_name(instance_id), placement_group, next_entrypoints_args)
 
-        self.inflight_num_prefill_instance += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
-        self.inflight_num_decode_instance += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
+        self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
+        self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
         asyncio.create_task(done_scale_up(next_instance_args, next_entrypoints_args))
 
     def init_server(self,
@@ -164,15 +175,16 @@ class Launcher:
 
         return instance
 
-    def _get_next_instance_args(self, instance_args: InstanceArgs) -> InstanceArgs:
+    def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
         if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
             return instance_args
 
         next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
-        cur_num_prefill = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        cur_num_decode = len(self.global_scheduler.instance_id_set -
+        cur_num_prefill_instances = len(self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
+        cur_num_decode_instances = len(self.global_scheduler.instance_id_set -
                                 self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set)
-        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill, cur_num_decode, self.pdd_config.pd_ratio)
+        next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill_instances, cur_num_decode_instances,
+                                                                        self.pdd_config.pd_ratio, instance_type)
 
         return next_instance_args
 
@@ -199,34 +211,38 @@ class Launcher:
         return new_engine_args
 
     def _get_next_instance_type(self,
-                                cur_num_prefill: int,
-                                cur_num_decode: int,
-                                pd_ratio: List[int]) -> str:
+                                cur_num_prefill_instances: int,
+                                cur_num_decode_instances: int,
+                                pd_ratio: List[int],
+                                instance_type: InstanceType = None) -> str:
+        if instance_type:
+            return instance_type
+
         if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
             return InstanceType.NO_CONSTRAINTS
 
-        # Note: There are no instances simultaneously in inflight_num_prefill and cur_num_prefill as
-        # inflight_num will decrease before scaling up the instances. The same applies to num_decode.
-        total_num_prefill = self.inflight_num_prefill_instance + cur_num_prefill
-        total_num_decode = self.inflight_num_decode_instance + cur_num_decode
+        # There are no instances simultaneously in inflight_num_prefill_instances and cur_num_prefill_instances
+        # as inflight_num will decrease before scaling up the instances. The same applies to num_decode.
+        total_num_prefill_instances = self.inflight_num_prefill_instances + cur_num_prefill_instances
+        total_num_decode_instances = self.inflight_num_decode_instances + cur_num_decode_instances
 
-        if total_num_prefill == 0:
+        if total_num_prefill_instances == 0:
             instance_type = InstanceType.PREFILL
-        elif total_num_decode == 0:
+        elif total_num_decode_instances == 0:
             instance_type = InstanceType.DECODE
         else:
             # compute distance if launch prefill or decode
             normal_distance = pd_ratio[0] - pd_ratio[1]
 
-            base_num_ratio = min(total_num_prefill//pd_ratio[0], total_num_decode//pd_ratio[1])
-            total_num_prefill = total_num_prefill - base_num_ratio * pd_ratio[0]
-            total_num_decode = total_num_decode - base_num_ratio * pd_ratio[1]
+            base_num_ratio = min(total_num_prefill_instances//pd_ratio[0], total_num_decode_instances//pd_ratio[1])
+            total_num_prefill_instances = total_num_prefill_instances - base_num_ratio * pd_ratio[0]
+            total_num_decode_instances = total_num_decode_instances - base_num_ratio * pd_ratio[1]
 
-            if total_num_prefill + total_num_decode == 0:
+            if total_num_prefill_instances + total_num_decode_instances == 0:
                 instance_type = InstanceType.PREFILL
             else:
-                distance_if_prefill = total_num_prefill + 1 - total_num_decode
-                distance_if_decode = total_num_prefill - (total_num_decode + 1)
+                distance_if_prefill = total_num_prefill_instances + 1 - total_num_decode_instances
+                distance_if_decode = total_num_prefill_instances - (total_num_decode_instances + 1)
                 gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
                 gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
                 instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode \

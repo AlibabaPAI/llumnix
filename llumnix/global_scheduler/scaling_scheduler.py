@@ -41,7 +41,7 @@ class ScalingScheduler:
         self.instance_info: Dict[str, InstanceInfo] = None
         self.sorted_instance_infos: List[InstanceInfo] = None
 
-        # TODO(Xinyi): Tag instance type for scheduler, should be extended to auto-scaling for prefill/decoding instances.
+        # TODO(Xinyi): Tag instance type for scheduler, should be extended to auto-scaling for prefill/decode instances.
         self.instance_type_id_set: Dict[InstanceType, Set[str]] = {instance_type: set() for instance_type in InstanceType}
 
     def check_scale(self) -> Tuple[str, str]:

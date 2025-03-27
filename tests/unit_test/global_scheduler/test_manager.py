@@ -14,6 +14,7 @@
 import asyncio
 import os
 import copy
+import subprocess
 import time
 import math
 import shutil
@@ -41,7 +42,7 @@ from llumnix.internal_config import PDDConfig
 from llumnix.entrypoints.vllm.register_service import save_engine_args
 
 # pylint: disable=unused-import
-from tests.conftest import ray_env
+from tests.conftest import ray_env, cleanup_ray_env_func, ray_stop, ray_start
 
 
 @ray.remote(num_cpus=1)
@@ -133,9 +134,11 @@ class MockManager(Manager):
         return self.launcher.init_server_and_instance(*args, **kwargs)
 
 
-def init_manager_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio="1:3", max_instances=-1):
+def init_manager_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio="1:3", max_instances=-1,
+                                  enable_pdd_node_affinity_scheduling=False):
     manager_args = ManagerArgs(enable_port_increment=True, enable_pd_disagg=enable_pd_disagg,
-                               pd_ratio=pd_ratio, max_instances=max_instances)
+                               pd_ratio=pd_ratio, max_instances=max_instances,
+                               enable_pdd_node_affinity_scheduling=enable_pdd_node_affinity_scheduling)
     instance_args = InstanceArgs(migration_backend="rayrpc")
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000)
     engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
@@ -146,8 +149,8 @@ def init_manager_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio=
     dummy_manager_actor = init_manager()
     ray.get(dummy_manager_actor.is_ready.remote())
     manager = MockManager(entrypoints_args=entrypoints_args, manager_args=manager_args,
-                      instance_args=instance_args, engine_args=engine_args,
-                      launch_args=launch_args, work_dir=os.getcwd())
+                          instance_args=instance_args, engine_args=engine_args,
+                          launch_args=launch_args, work_dir=os.getcwd())
 
     return manager, manager_args, entrypoints_args, engine_args, launch_args
 
@@ -340,6 +343,7 @@ def test_poll_instance_info_loop_and_migrate(ray_env, manager):
             assert num_migrate_in == 0 and num_migrate_out > 1
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required")
 async def test_init_server_and_get_instance_deployment_states_and_instance_and_clear_instance_ray_resources(ray_env):
     manager, _, _, engine_args, _ = init_manager_with_launch_mode(LaunchMode.LOCAL)
     instance_id = random_uuid()
@@ -377,6 +381,7 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     assert not pg_created and not server_alive and not instance_alive
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL)
     await asyncio.sleep(60.0)
@@ -400,6 +405,7 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL)
     await asyncio.sleep(60.0)
@@ -425,17 +431,17 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
 def test_pd_disagg_gloal_launch_instance_type():
-    pdd_config = PDDConfig(True, False, [1, 2])
+    pdd_config = PDDConfig(True, False, [1, 2], False)
     launcher = Launcher(None, True, False, False, None, pdd_config)
 
     assert launcher._get_next_instance_type(0, 0, [1, 2]) == InstanceType.PREFILL
-    launcher.inflight_num_prefill_instance += 1
+    launcher.inflight_num_prefill_instances += 1
 
     assert launcher._get_next_instance_type(0, 0, [1, 2]) == InstanceType.DECODE
-    launcher.inflight_num_decode_instance += 1
+    launcher.inflight_num_decode_instances += 1
 
-    launcher.inflight_num_prefill_instance = 0
-    launcher.inflight_num_decode_instance = 0
+    launcher.inflight_num_prefill_instances = 0
+    launcher.inflight_num_decode_instances = 0
     assert launcher._get_next_instance_type(1, 1, [1, 2]) == InstanceType.DECODE
     assert launcher._get_next_instance_type(1, 2, [1, 2]) == InstanceType.PREFILL
 
@@ -459,7 +465,7 @@ def test_load_registered_service(ray_env, load_registered_service, enable_pd_dis
             put_engine_args = copy.deepcopy(engine_args)
             put_engine_args.model = instance_type
             save_engine_args(instance_type, save_path, put_engine_args, save_key)
-    pdd_config = PDDConfig(enable_pd_disagg, False, [1, 2])
+    pdd_config = PDDConfig(enable_pd_disagg, False, [1, 2], False)
     launcher = Launcher(None, True, False, load_registered_service, load_registered_service_path, pdd_config)
     for instance_type in instance_type_list:
         get_engine_args = launcher._get_next_engine_args(engine_args, instance_type)
@@ -471,6 +477,7 @@ def test_load_registered_service(ray_env, load_registered_service, enable_pd_dis
         shutil.rmtree(load_registered_service_path)
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, enable_pd_disagg=True, pd_ratio="1:1")
     await asyncio.sleep(60.0)
@@ -527,7 +534,8 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
     assert alive_decode_instance_id in decode_instance_ids
 
 @pytest.mark.asyncio
-async def test_pd_disagg_deployment_states():
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
+async def test_pd_disagg_deployment_states(ray_env):
     manager_args = ManagerArgs(enable_migration=True, enable_pd_disagg=True, pd_ratio="1:2")
     engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     manager = Manager(entrypoints_args=EntrypointsArgs(), manager_args=manager_args,
@@ -553,8 +561,46 @@ async def test_pd_disagg_deployment_states():
     assert not manager._check_pd_deployment_states()
 
 @pytest.mark.asyncio
-async def test_auto_scale_up_loop_max_instances():
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
+async def test_auto_scale_up_loop_max_instances(ray_env):
     manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, "rayqueue", max_instances=2)
     await asyncio.sleep(60.0)
     num_instances = manager.scale_up([], [], [])
     assert num_instances == 2
+
+# 1. Resources cannot be specified in ray.init() when there is a existing ray cluster.
+# 2. If specify resources in ray_start() of pytest_sessionstart, when running serveral tests, it's fine.
+# However, when running the whole unit test, placement group with resources cannot be scheduled for unknown reason.
+# 3. If restart ray cluster, it will raise restart gcs error between tests sometimes.
+@pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
+async def test_auto_scale_up_loop_enable_pdd_node_affinity_scheduling():
+    ray_stop()
+    subprocess.run(["ray", "start", "--head", "--port=6379", "--resources={\"PREFILL_GPU\": 2, \"DECODE_GPU\": 2}"],
+            check=False, stdout=subprocess.DEVNULL)
+    ray.init(ignore_reinit_error=True, namespace="llumnix")
+
+    manager, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL,
+                                                        enable_pd_disagg=True,
+                                                        enable_pdd_node_affinity_scheduling=True)
+    await asyncio.sleep(60.0)
+
+    curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
+    assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
+
+    num_prefill_instances = 0
+    num_decode_instances = 0
+    num_no_constraints_instances = 0
+    for instance_handle in curr_instances.values():
+        instance_type = ray.get(instance_handle.get_instance_args.remote()).instance_type
+        if instance_type == InstanceType.PREFILL:
+            num_prefill_instances += 1
+        elif instance_type == InstanceType.DECODE:
+            num_decode_instances += 1
+        else:
+            num_no_constraints_instances += 1
+
+    assert num_prefill_instances == 2 and num_decode_instances == 2 and num_no_constraints_instances == 0
+
+    cleanup_ray_env_func()
+    ray_start()

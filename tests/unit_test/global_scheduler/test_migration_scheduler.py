@@ -40,7 +40,7 @@ def test_add_instance_and_remove_instance():
     migration_scheduler.remove_instance('instance_2')
     assert migration_scheduler.num_instances == 0
 
-@pytest.mark.parametrize("pair_migration_type", ['NO_CONSTRAINTS', 'DECODING_2_DECODING', 'PREFILL_2_DECODING'])
+@pytest.mark.parametrize("pair_migration_type", ['NO_CONSTRAINTS', 'DECODE_2_DECODE', 'PREFILL_2_DECODE'])
 def test_migration_filter(pair_migration_type):
     num_tests = 1000
     migration_filter = MigrationInstanceFilter(MigrationFilterConfig(MIGRATE_OUT_LOAD_THRESHOLD))
@@ -75,22 +75,22 @@ def test_migration_filter(pair_migration_type):
         src_instance_infos, dst_instance_infos = migration_filter.filter_instances(instance_infos, pair_migration_type)
 
         for instance in src_instance_infos:
-            if pair_migration_type != PairMigrationConstraints.PREFILL_2_DECODING:
+            if pair_migration_type != PairMigrationConstraints.PREFILL_2_DECODE:
                 assert instance.num_killed_requests > 0 \
                     or instance.migration_load_metric > MIGRATE_OUT_LOAD_THRESHOLD
                 if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
                     assert instance.instance_type == InstanceType.NO_CONSTRAINTS
-                elif pair_migration_type == PairMigrationConstraints.DECODING_2_DECODING:
+                elif pair_migration_type == PairMigrationConstraints.DECODE_2_DECODE:
                     assert instance.instance_type == InstanceType.DECODE
             else:
                 assert instance.instance_type == InstanceType.PREFILL
 
         for instance in dst_instance_infos:
-            if pair_migration_type != PairMigrationConstraints.PREFILL_2_DECODING:
+            if pair_migration_type != PairMigrationConstraints.PREFILL_2_DECODE:
                 assert instance.num_killed_requests == 0 and instance.migration_load_metric < MIGRATE_OUT_LOAD_THRESHOLD
                 if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
                     assert instance.instance_type == InstanceType.NO_CONSTRAINTS
-                elif pair_migration_type == PairMigrationConstraints.DECODING_2_DECODING:
+                elif pair_migration_type == PairMigrationConstraints.DECODE_2_DECODE:
                     assert instance.instance_type == InstanceType.DECODE
             else:
                 assert instance.instance_type == InstanceType.DECODE

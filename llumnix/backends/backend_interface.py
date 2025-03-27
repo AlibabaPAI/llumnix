@@ -29,9 +29,9 @@ class EngineState(str, Enum):
 
 
 class BackendType(str, Enum):
-    VLLM = "VLLM"
-    BLADELLM = "BLADELLM"
-    SIM_VLLM = "SIM_VLLM"
+    VLLM = "vLLM"
+    BLADELLM = "BladeLLM"
+    SIM_VLLM = "vLLM simulator"
 
     @staticmethod
     def is_sim_backend(status: "BackendType") -> bool:
@@ -58,7 +58,7 @@ class BackendInterface(ABC):
             expected_steps: The expected number of steps for the request to run. The number of steps
                             represents the times 'engine.step()' has been called by the backend
                             instance for the request. Currently, `expected_steps` is used to
-                            implement prefill-decoding disaggregation. For requests dispatched to
+                            implement prefill-decode disaggregation. For requests dispatched to
                             prefill instances, `expected_steps` is set to 1.
             *args: Positional arguments that represent request-specific data.
             **kwargs: Keyword arguments that contain metadata of the backend request

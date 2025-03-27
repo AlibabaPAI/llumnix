@@ -274,7 +274,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         request_id1 = random_uuid()
         request_expected_steps_id1 = 1
         ray.get(llumlet_0.generate.remote(request_id1, server_info, request_expected_steps_id1, prompt, sampling_params))
-        # migrate request for decoding
+        # migrate request for decode
         while True:
             res = ray.get(llumlet_0.migrate_out.remote("1", llumlet_1))
             if len(res) == 1:

@@ -1,13 +1,14 @@
 from typing import Tuple
 
-from vllm.engine.arg_utils import AsyncEngineArgs
+from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+from vllm.config import EngineConfig, ParallelConfig
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.backend_interface import BackendType
-from llumnix.backends.vllm.utils import check_engine_args, check_instance_args
 from llumnix.arg_utils import EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixArgumentParser
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import load_engine_args
+from llumnix.internal_config import MigrationConfig
 
 logger = init_logger(__name__)
 
@@ -26,6 +27,36 @@ def add_engine_cli_args(parser: LlumnixArgumentParser) -> "Namespace":
     cli_args = parser.parse_args()
 
     return cli_args
+
+def detect_unsupported_engine_feature(engine_args: EngineArgs) -> None:
+    unsupported_feature = None
+    if engine_args.enable_lora:
+        unsupported_feature = "multi-lora serving"
+    elif engine_args.enable_prefix_caching:
+        unsupported_feature = "automatic prefix caching"
+    elif engine_args.enable_chunked_prefill:
+        unsupported_feature = "chunked prefill"
+    elif engine_args.speculative_model:
+        unsupported_feature = "speculative decoding"
+    elif engine_args.pipeline_parallel_size > 1:
+        unsupported_feature = "pipeline parallel"
+    elif engine_args.num_scheduler_steps > 1:
+        unsupported_feature = "multi-step scheduling"
+    if unsupported_feature:
+        raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
+
+def check_engine_args(engine_args: AsyncEngineArgs) -> None:
+    detect_unsupported_engine_feature(engine_args)
+    assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
+
+def check_instance_args(intance_args: InstanceArgs, engine_args: AsyncEngineArgs) -> None:
+    migration_config: MigrationConfig = intance_args.create_migration_config()
+    engine_config: EngineConfig = engine_args.create_engine_config()
+    parallel_config: ParallelConfig = engine_config.parallel_config
+    assert not (parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl'), \
+        "Llumnix does not support TP or PP when the migration backend is nccl, please change migration backend."
+    assert not (not engine_args.disable_async_output_proc and intance_args.simulator_mode), \
+        "Llumnix does not support async output processing when enabling simualtor mode, please disable async output processing."
 
 def get_args(cfg, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
         -> Tuple[EntrypointsArgs, ManagerArgs, InstanceArgs, AsyncEngineArgs]:

@@ -90,6 +90,8 @@ async def clean_up_llumnix_components(app):
         except:
             pass
 
+# Functions detect_unsupported_engine_feature, get_args and setup_llumnix_api_server cannot be put into arg_utils.py,
+# Because they need to import ServingArgs, when importing ServingArgs, it will raise no available gpu error.
 
 def detect_unsupported_engine_feature(engine_args: ServingArgs) -> None:
     unsupported_feature = None

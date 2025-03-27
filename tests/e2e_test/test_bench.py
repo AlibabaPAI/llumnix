@@ -95,6 +95,9 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         pytest.skip("Only test zmq queue type when simulator is disabled and prefill-decode "
                     "disaggregation is disabled.")
 
+    if request_output_queue_type == 'rayqueue' and launch_mode == 'local':
+        pytest.skip("Do not test rayqueue in local launch mode because it will cause unexpected ray job id error.")
+
     if enable_simulator and enable_pd_disagg:
         pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
 

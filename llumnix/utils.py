@@ -31,7 +31,10 @@ from ray.experimental.internal_kv import (
 )
 from ray.util import placement_group_table
 
+from vllm import envs as vllm_envs
+
 from llumnix.logging.logger import init_logger
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -293,3 +296,14 @@ def make_async(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         return loop.run_in_executor(executor=None, func=p_func)
 
     return _async_wrapper
+
+def get_llumnix_env_vars():
+    llumnix_env_vars = {}
+    env_vars = dict(os.environ)
+    llumnix_keys = list(llumnix_envs.environment_variables.keys())
+    llumnix_keys.extend(list(vllm_envs.environment_variables.keys()))
+    for key, value in env_vars.items():
+        if key in llumnix_keys:
+            llumnix_env_vars[key] = value
+
+    return llumnix_env_vars

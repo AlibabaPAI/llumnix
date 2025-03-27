@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
@@ -32,6 +33,8 @@ size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
 
 MIGRATION_BENCH_TIMEOUT_MINS = 30
+
+# TODO(s5u13b): Refine e2e tests for two backend engine.
 
 
 def parse_instance_log_file(log_files):
@@ -91,15 +94,17 @@ def get_instance_num_blocks():
 
     return instance_num_blocks_list
 
+# TODO(s5u13b): ray is likely to raise unknown error when enabling using ray spmd worker.
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'grpc', 'kvtransfer'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
+@pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_bladeLLM"])
 async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, tensor_parallel_size,
-                                   migration_backend, migration_request_status, engine):
+                                   migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
     if engine == "BladeLLM" and migration_backend not in ['grpc', 'kvtransfer']:
@@ -116,6 +121,19 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
 
     if tensor_parallel_size == 2 and migration_backend == 'nccl':
         pytest.skip("When the migration backend is nccl, tensor parallelism is not supported.")
+    if use_ray_spmd_worker and migration_backend != 'gloo':
+        pytest.skip("When use_ray_spmd_worker is True, only test the gloo migration backend.")
+    if use_ray_spmd_worker and tensor_parallel_size == 2:
+        pytest.skip("When using ray spmd worker, ray will raise RayCgraphCapacityExceeded exeception when tensor parallelism is enabled.")
+    if use_ray_spmd_worker and migration_request_status == 'waiting':
+        pytest.skip("When using ray spmd worker, only migrating running request will have different migration process.")
+
+    if use_ray_spmd_worker:
+        os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
+        os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "1"
+    else:
+        os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "0"
+        os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "0"
 
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()

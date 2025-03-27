@@ -57,7 +57,7 @@ def cleanup_ray_env_func():
     pg_table = placement_group_table()
     for placement_group_id in pg_table:
         try:
-            pg = PlacementGroup(PlacementGroupID(hex_to_binary(placement_group_id)) )
+            pg = PlacementGroup(PlacementGroupID(hex_to_binary(placement_group_id)))
             remove_placement_group(pg)
         # pylint: disable=bare-except
         except:

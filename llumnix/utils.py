@@ -16,7 +16,7 @@ import uuid
 import asyncio
 import traceback
 import threading
-from typing import Any, Union, Callable, Awaitable, TypeVar, Coroutine
+from typing import Any, Union, Callable, Awaitable, TypeVar, Coroutine, Dict, List
 from functools import partial
 import pickle
 from typing_extensions import ParamSpec
@@ -29,6 +29,7 @@ from ray.experimental.internal_kv import (
     _internal_kv_put,
     _internal_kv_exists
 )
+from ray.util import placement_group_table
 
 from llumnix.logging.logger import init_logger
 
@@ -92,9 +93,40 @@ def initialize_placement_group(
     # requested resources are available, and will timeout
     # if they cannot be provisioned.
     if block:
-        ray.get(current_placement_group.ready(), timeout=1800)
+        ray.get(current_placement_group.ready(), timeout=1.0)
 
     return current_placement_group
+
+def get_placement_group_infos_by_state(state: str = None) -> Dict[str, str]:
+    if state is None:
+        return placement_group_table().values()
+    target_placement_group_infos = []
+    for placement_group_info in placement_group_table().values():
+        if placement_group_info["state"] == state:
+            target_placement_group_infos.append(placement_group_info)
+    return target_placement_group_infos
+
+def get_placement_group_infos_by_name(name: str) -> Dict[str, str]:
+    target_placement_group_infos = []
+    for placement_group_info in placement_group_table().values():
+        if placement_group_info["name"] == name:
+            target_placement_group_infos.append(placement_group_info)
+    return target_placement_group_infos
+
+def actor_exists(name: str) -> bool:
+    try:
+        ray.get_actor(name, namespace="llumnix")
+        return True
+    except ValueError:
+        return False
+
+def get_actor_names_by_name_prefix(name_prefix: str) -> List[str]:
+    actor_infos = ray.util.list_named_actors(True)
+    target_actor_names = []
+    for actor_info in actor_infos:
+        if actor_info["name"].startswith(name_prefix):
+            target_actor_names.append(actor_info["name"])
+    return target_actor_names
 
 def random_uuid() -> str:
     return str(uuid.uuid4().hex)

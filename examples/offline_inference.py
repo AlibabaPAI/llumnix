@@ -85,10 +85,10 @@ async def main():
 asyncio.run(main())
 
 # Kill all actor, as detach actor will not be killed by ray.shutdown.
-named_actors = ray.util.list_named_actors(True)
-for actor in named_actors:
+named_actor_infos = ray.util.list_named_actors(True)
+for actor_info in named_actor_infos:
     try:
-        actor_handle = ray.get_actor(actor['name'], namespace=actor['namespace'])
+        actor_handle = ray.get_actor(actor_info['name'], namespace=actor_info['namespace'])
         ray.kill(actor_handle)
     except:
         continue

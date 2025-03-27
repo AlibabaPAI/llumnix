@@ -386,9 +386,9 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
     curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
-    actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
-    instance_ids = [actor_name_dict['name'].split("_")[-1] for actor_name_dict in actor_names_dict
-                    if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
+    actor_infos = ray.util.list_named_actors(all_namespaces=True)
+    instance_ids = [actor_info['name'].split("_")[-1] for actor_info in actor_infos
+                    if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
     assert len(instance_ids) == 4
     manager.clear_instance_ray_resources(instance_ids[0])
     manager.clear_instance_ray_resources(instance_ids[1])
@@ -409,9 +409,9 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     curr_pgs, curr_servers, curr_instances = manager._get_cluster_deployment_states()
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
 
-    actor_names_dict = ray.util.list_named_actors(all_namespaces=True)
-    instance_ids = [actor_name_dict['name'].split("_")[-1] for actor_name_dict in actor_names_dict
-                    if actor_name_dict['name'].startswith(INSTANCE_NAME_PREFIX)]
+    actor_infos = ray.util.list_named_actors(all_namespaces=True)
+    instance_ids = [actor_info['name'].split("_")[-1] for actor_info in actor_infos
+                    if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
     assert len(instance_ids) == 4
     remove_placement_group(instance_ids[0])
     kill_server(instance_ids[1])

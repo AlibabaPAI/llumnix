@@ -73,6 +73,8 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         driver_ip = get_ip()
         worker_wrapper_kwargs = self._get_worker_wrapper_args()
         for bundle_id, bundle in enumerate(placement_group.bundle_specs):
+            if bundle.get("PREFILL_GPU") or bundle.get("DECODE_GPU"):
+                continue
             if not bundle.get("GPU", 0):
                 raise Exception("GPU resource cannot be 0.")
             # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.

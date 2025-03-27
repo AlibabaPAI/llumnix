@@ -44,13 +44,20 @@ P = ParamSpec('P')
 T = TypeVar("T")
 
 
+class GPUBundlingStrategy(str, Enum):
+    SPREAD = "spread"
+    PACK = "pack"
+
+
+# pylint: disable=dangerous-default-value
 def initialize_placement_group(
     placement_group_name: str,
     num_cpus: int,
     num_gpus: int,
-    seperate_gpu_groups: bool = True,
+    gpu_bundling_strategy: GPUBundlingStrategy = GPUBundlingStrategy.SPREAD,
     detached: bool = False,
-    block: bool = True
+    block: bool = True,
+    resources: Dict[str, float] = {}
 ) -> PlacementGroup:
     """Initialize the distributed cluster probably with Ray.
 
@@ -58,7 +65,7 @@ def initialize_placement_group(
         placement_group_name: The name of placement group.
         num_cpus: The number of cpus in placement group.
         num_gpus: The number of gpus in placement group.
-        seperate_gpu_groups: Whether to seperate gpu in bundles.
+        gpu_bundling_strategy: GPU bundle st.
         detached: Whether the lifetime of the placement group being detached.
         block: If True, the function will block until the placement group is ready.
 
@@ -81,11 +88,16 @@ def initialize_placement_group(
 
     # Create a new placement group
     # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
-    if seperate_gpu_groups:
-        placement_group_specs = ([{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1))
-    else:
-        spec = {"CPU": num_cpus} if num_gpus == 0 else {"CPU": num_cpus, "GPU": num_gpus}
-        placement_group_specs = ([spec])
+    if gpu_bundling_strategy == GPUBundlingStrategy.SPREAD:
+        placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
+    else:  # GPUBundlingStrategy.PACK
+        placement_group_specs = [{"CPU": num_cpus}] if num_gpus == 0 else [{"CPU": num_cpus, "GPU": num_gpus}]
+    if resources:
+        placement_group_specs += [resources]
+    # pylint: disable=self-assigning-variable
+    placement_group_specs = (placement_group_specs)
+
+    logger.debug("placement_group_specs: {}".format(placement_group_specs))
 
     current_placement_group = ray.util.placement_group(
         placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
@@ -293,3 +305,14 @@ def make_async(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         return loop.run_in_executor(executor=None, func=p_func)
 
     return _async_wrapper
+
+def get_service_resouces(service_name: str, num_gpus: int) -> Dict[str, float]:
+    assert service_name in ["prefill", "decode", "no_constraints", None], \
+        "Only support prefill, decode, no_constraints, and None service name currently."
+    if service_name == "prefill":
+        resources = {"PREFILL_GPU": num_gpus}
+    elif service_name == "decode":
+        resources = {"DECODE_GPU": num_gpus}
+    else: # service_name == "no_constraints", service_name is None
+        resources = {}
+    return resources

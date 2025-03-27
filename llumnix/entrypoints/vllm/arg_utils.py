@@ -37,7 +37,7 @@ def get_args(cfg, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_ar
     entrypoints_args = EntrypointsArgs.from_llumnix_config(cfg)
 
     EntrypointsArgs.check_args(entrypoints_args, parser)
-    ManagerArgs.check_args(manager_args, parser, launch_mode)
+    ManagerArgs.check_args(manager_args, launch_mode, parser)
     InstanceArgs.check_args(instance_args, manager_args, launch_mode, parser)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))

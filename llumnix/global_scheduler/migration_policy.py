@@ -25,9 +25,9 @@ logger = init_logger(__name__)
 class PairMigrationConstraints(str, Enum):
     """Target of Migration."""
     NO_CONSTRAINTS = "NO_CONSTRAINTS"
-    # Enable the prefill-decoding disaggregration.
-    DECODING_2_DECODING = "DECODING_2_DECODING"
-    PREFILL_2_DECODING = "PREFILL_2_DECODING"
+    # Enable the prefill-decode disaggregration.
+    DECODE_2_DECODE = "DECODE_2_DECODE"
+    PREFILL_2_DECODE = "PREFILL_2_DECODE"
 
 
 class PairMigrationPolicy(ABC):

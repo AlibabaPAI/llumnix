@@ -30,7 +30,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, get_service_instance_type
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
@@ -89,7 +89,11 @@ class Manager:
         # migration args
         self.enable_migration = manager_args.enable_migration
         self.pair_migration_frequency = manager_args.pair_migration_frequency
+
+        # prefill decode disaggregation args
         self.enable_pd_disagg = manager_args.enable_pd_disagg
+        self.enable_engine_pd_disagg = manager_args.enable_engine_pd_disagg
+        self.enable_pdd_node_affinity_scheduling = manager_args.enable_pdd_node_affinity_scheduling
 
         # scaling args
         self.enable_scaling = manager_args.enable_scaling
@@ -150,7 +154,11 @@ class Manager:
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
             self.last_timeout_instance_id = None
-            asyncio.create_task(self._auto_scale_up_loop(AUTO_SCALE_UP_INTERVAL))
+            if self.enable_pdd_node_affinity_scheduling:
+                asyncio.create_task(self._auto_scale_up_loop(service_name="prefill", interval=AUTO_SCALE_UP_INTERVAL))
+                asyncio.create_task(self._auto_scale_up_loop(service_name="decode", interval=AUTO_SCALE_UP_INTERVAL))
+            else:
+                asyncio.create_task(self._auto_scale_up_loop(service_name="no_constraints", interval=AUTO_SCALE_UP_INTERVAL))
             asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
             if self.manager_args.enable_pd_disagg:
                 asyncio.create_task(self._check_pd_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
@@ -281,8 +289,8 @@ class Manager:
 
     async def _push_migrations(self) -> None:
         if self.enable_pd_disagg:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODING))
-            asyncio.create_task(self._migrate(PairMigrationConstraints.DECODING_2_DECODING))
+            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODE))
+            asyncio.create_task(self._migrate(PairMigrationConstraints.DECODE_2_DECODE))
         else:
             asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS))
 
@@ -346,7 +354,8 @@ class Manager:
             logger.error("Unexpected exception: {}".format(e))
             logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
-    async def _auto_scale_up_loop(self, interval: float) -> None:
+    async def _auto_scale_up_loop(self, service_name: str, interval: float) -> None:
+        logger.info("Auto scale up loop starts, service name: {}".format(service_name))
         while True:
             try:
                 new_pg = None
@@ -376,7 +385,7 @@ class Manager:
                 if new_pg is None:
                     new_instance_id = random_uuid()
                     new_pg = self.launcher.init_placement_group(get_placement_group_name(new_instance_id), self.engine_args, self.backend_type,
-                                                        init_server=True, block=False)
+                                                        init_server=True, block=False, service_name=service_name)
                 try:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
                 except asyncio.TimeoutError:
@@ -386,15 +395,23 @@ class Manager:
                     self.last_timeout_instance_id = new_instance_id
                     await asyncio.sleep(interval)
                     continue
-                self.launcher.init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
-                                                       self.engine_args, self.backend_type, new_pg,
-                                                       scale_up_callback=self.scale_up,
-                                                       scale_down_callback=self.clear_instance_ray_resources)
+                if service_name in ["prefill", "decode"]:
+                    self.launcher.init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
+                                                           self.engine_args, self.backend_type, new_pg,
+                                                           scale_up_callback=self.scale_up,
+                                                           scale_down_callback=self.clear_instance_ray_resources,
+                                                           instance_type=get_service_instance_type(service_name))
+                else:
+                    self.launcher.init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
+                                                           self.engine_args, self.backend_type, new_pg,
+                                                           scale_up_callback=self.scale_up,
+                                                           scale_down_callback=self.clear_instance_ray_resources)
                 logger.info("Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id))
             # pylint: disable=broad-except
             except Exception as e:
                 logger.error("Unexpected exception: {}".format(e))
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                await asyncio.sleep(interval)
 
     def scale_up(self,
                  instance_id: Union[str, Iterable[str]],
@@ -531,8 +548,8 @@ class Manager:
                 logger.error("Unexpected exception: {}".format(e))
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
-    # TODO(KuilongCui): Currently, only one naive state check policy is implemented,
-    # which prevents the cluster from consisting entirely of prefill or decode instances.
+    # TODO(KuilongCui): Currently, only one naive prefill-decode disaggregation deployment states check policy is implemented,
+    # which prevents all instances in the cluster are prefill instances or decode instances.
     async def _check_pd_deployment_states_loop(self, interval: float) -> None:
         previous_penging_pg_names = None
 
@@ -558,22 +575,22 @@ class Manager:
 
     def _check_pd_deployment_states(self) -> str:
         prefill_instance_ids = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set
-        cur_num_prefill = len(prefill_instance_ids)
+        cur_num_prefill_instances = len(prefill_instance_ids)
         decode_instance_ids = self.global_scheduler.instance_id_set - prefill_instance_ids
-        cur_num_decode = len(decode_instance_ids)
+        cur_num_decode_instances = len(decode_instance_ids)
 
-        scale_down_instance_id = ""
-        if cur_num_prefill == 0 and cur_num_decode > 0:
+        scale_down_instance_id = None
+        if cur_num_prefill_instances == 0 and cur_num_decode_instances > 0:
             scale_down_instance_id = random.choice(list(decode_instance_ids))
-            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
+            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill_instances: {}, cur_num_decode_instances: {}, "
                         "all decode instances is decode instance, scale down decode instance {}".format(self.manager_args.pd_ratio,
-                        cur_num_prefill, cur_num_decode, scale_down_instance_id))
+                        cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
 
-        if cur_num_decode == 0 and cur_num_prefill > 0:
+        if cur_num_decode_instances == 0 and cur_num_prefill_instances > 0:
             scale_down_instance_id = random.choice(list(prefill_instance_ids))
-            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill: {}, cur_num_decode: {}, "
+            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill_instances: {}, cur_num_decode_instances: {}, "
                         "all instances is prefill instance, scale down prefill instance {}".format(self.manager_args.pd_ratio,
-                        cur_num_prefill, cur_num_decode, scale_down_instance_id))
+                        cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
 
         if scale_down_instance_id:
             self.scale_down(scale_down_instance_id)

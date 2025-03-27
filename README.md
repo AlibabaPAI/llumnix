@@ -26,14 +26,14 @@ Llumnix provides optimized multi-instance serving performance in terms of:
   - **Reduced time-between-tokens** (TBT) and preemption stalls with better load balancing
 - *High throughput*
   - Integration with state-of-the-art inference engines
-  - Support for techniques like prefill-decoding disaggregation
+  - Support for techniques like prefill-decode disaggregation
 
 Llumnix achieves this with:
 
 - Dynamic, fine-grained, KV-cache-aware scheduling
 - Continuous **rescheduling** across instances
   - Enabled by a KV cache migration mechanism with near-zero overhead
-  - Exploited for continuous load balancing, de-fragmentation, and prefill-decoding disaggregation
+  - Exploited for continuous load balancing, de-fragmentation, and prefill-decode disaggregation
 
 Llumnix is easy to use with:
 
@@ -67,7 +67,7 @@ Visit our [documentation](./docs/) to get started:
 - [Supported Models](./docs/Supported_Models.md)
 - [Fault Tolerance](./docs/Fault_Tolerance.md)
 - [Simulator](./docs/Simulator.md)
-- [Prefill-decoding Disaggregation](./docs/Prefill-decoding_Disaggregation.md)
+- [Prefill-decode Disaggregation](./docs/Prefill-decode_Disaggregation.md)
 
 ## Performance
 We evaluate the performance of the KV-cache-aware load-balancing scheduler and migration mechanism of Llumnix with 16 Qwen2.5-7B instances (each using an A10-24GB GPU) and 16 Llama2-13B instances (each using an A800-80GB GPU).

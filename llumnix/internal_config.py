@@ -72,10 +72,12 @@ class MigrationConfig:
 
 class PDDConfig:
     def __init__(
-        self,
-        enable_pd_disagg: bool,
-        enable_engine_pd_disagg: bool,
-        pd_ratio: Union[str, List[int]]) -> None:
+            self,
+            enable_pd_disagg: bool,
+            enable_engine_pd_disagg: bool,
+            pd_ratio: Union[str, List[int]],
+            enable_pdd_node_affinity_scheduling: bool) -> None:
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
         self.pd_ratio = pd_ratio
+        self.enable_pdd_node_affinity_scheduling = enable_pdd_node_affinity_scheduling

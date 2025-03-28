@@ -44,9 +44,9 @@ class APIServerActor:
         self.entrypoints_context = setup_entrypoints_context(
                                         self.entrypoints_args, manager, [instance_id], [instance], self.request_output_queue)
 
-    def _run_uvicorn_server(self,
-                            entrypoints_args: EntrypointsArgs,
-                            entrypoints_context: EntrypointsContext):
+    def _run_server(self,
+                    entrypoints_args: EntrypointsArgs,
+                    entrypoints_context: EntrypointsContext):
         # pylint: disable=import-outside-toplevel
         import llumnix.entrypoints.vllm.api_server
         from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
@@ -68,8 +68,8 @@ class APIServerActor:
             instance: Llumlet):
         self._setup_entrypoints_context(manager, instance_id, instance)
         self.run_uvicorn_server_thread = threading.Thread(
-            target=self._run_uvicorn_server, args=(self.entrypoints_args, self.entrypoints_context),
-            daemon=True, name="run_uvicorn_server"
+            target=self._run_server, args=(self.entrypoints_args, self.entrypoints_context),
+            daemon=True, name="run_server"
         )
         self.run_uvicorn_server_thread.start()
 

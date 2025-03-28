@@ -13,15 +13,11 @@
 
 import time
 import asyncio
-import sys
 
 import pickle
-import ray
 from aiohttp import web
-from loguru import logger
 
 from blade_llm.service.args import ServingArgs, add_args
-from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.server import check_ports, init_engine_and_client, Entrypoint
 from blade_llm.service.elastic_attn.elastic_attention_inst_manager import InstManager
 from blade_llm.service.elastic_attn.elastic_attention_entrypoint import ElasticAttnEntrypoint
@@ -31,8 +27,11 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
-from llumnix.entrypoints.utils import EntrypointsContext, LaunchMode, is_gpu_available
+from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
 from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_llumnix_cli_args, get_args
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 class LlumnixEntrypoint(Entrypoint):
@@ -82,7 +81,7 @@ class LlumnixEntrypoint(Entrypoint):
         return app
 
 
-# pylint: disable=redefined-outer-name
+# pylint: disable=redefined-outer-name, unused-argument
 def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     llumnix_client = engine_args.llumnix_client
 
@@ -93,16 +92,6 @@ if __name__ == "__main__":
     parser = add_args()
     cli_args = parser.parse_args()
     engine_args = ServingArgs.from_cli_args(cli_args)
-
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        level=engine_args.log_level,
-        format=LOGGER_FORMAT,
-    )
-    logger.info('================ Serving Arguments ================')
-    for k, v in engine_args.__dict__.items():
-        logger.info("{:>20}: {}", k, v)
 
     # check port first
     check_ports(engine_args)
@@ -138,7 +127,7 @@ if __name__ == "__main__":
                 engine_args,
                 inst_mgr=mgr,
             ).create_web_app()
-            logger.info("Elastic-attentioon instance entrypoint ready at {}:{}", engine_args.host, engine_args.port)
+            logger.info("Elastic-attentioon instance entrypoint ready at {}:{}".format(engine_args.host, engine_args.port))
         else:
             llm_client = init_engine_and_client(engine_args, loop)
             # start entrypoint server
@@ -148,5 +137,5 @@ if __name__ == "__main__":
                 # pylint: disable=invalid-name
                 entrypoint_cls = LlumnixEntrypoint
             web_app = entrypoint_cls(client=llm_client, args=engine_args).create_web_app()
-            logger.info("Entrypoint API ready at {}:{}", engine_args.host, engine_args.port)
+            logger.info("Entrypoint API ready at {}:{}".format(engine_args.host, engine_args.port))
         web.run_app(web_app, host=engine_args.host, port=engine_args.port, loop=loop, handle_signals=False)

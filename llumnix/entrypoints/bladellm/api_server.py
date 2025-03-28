@@ -167,6 +167,7 @@ def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractE
         engine_args_llumnix = BladellmEngineArgs()
         engine_args_llumnix.engine_args = pickle.dumps(engine_args)
         engine_args_llumnix.world_size = bladellm_args.tensor_parallel_size * bladellm_args.pipeline_parallel_size
+        global entrypoints_context
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
         llumnix_client = LlumnixClientBladeLLM(bladellm_args, entrypoints_context, loop)
 

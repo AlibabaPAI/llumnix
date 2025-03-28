@@ -94,18 +94,6 @@ if __name__ == "__main__":
     cli_args = parser.parse_args()
     engine_args = ServingArgs.from_cli_args(cli_args)
 
-    # TODO(s5u13b): Fix it, cannot use parser of bladellm because Llumnix need to set namespace.
-    # generate llumnix_parser for checking parameters with choices
-    parser: LlumnixArgumentParser = LlumnixArgumentParser()
-    parser = add_llumnix_cli_args(parser)
-    llumnix_config = get_llumnix_config(engine_args.llumnix_config, cli_args=engine_args.llumnix_opts)
-
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, parser, engine_args)
-    launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
-
-    # Launch or connect to the ray cluster for multi-node serving.
-    setup_ray_cluster(entrypoints_args)
-
     logger.remove()
     logger.add(
         sys.stderr,
@@ -118,6 +106,18 @@ if __name__ == "__main__":
 
     # check port first
     check_ports(engine_args)
+
+    # TODO(s5u13b): Fix it, cannot use parser of bladellm because Llumnix need to set namespace.
+    # generate llumnix_parser for checking parameters with choices
+    parser: LlumnixArgumentParser = LlumnixArgumentParser()
+    parser = add_llumnix_cli_args(parser)
+    llumnix_config = get_llumnix_config(engine_args.llumnix_config, cli_args=engine_args.llumnix_opts)
+
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, parser, engine_args)
+    launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
+
+    # Launch or connect to the ray cluster for multi-node serving.
+    setup_ray_cluster(entrypoints_args)
 
     if is_gpu_available():
         loop = asyncio.get_event_loop()

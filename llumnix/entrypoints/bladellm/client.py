@@ -79,7 +79,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         resp_stream = await self._generate(llumnix_id, request.model_dump_json())
         return resp_stream
 
-    async def _generate(self, request_id: int, request: str) -> LLMResponse:
+    async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
         logger.info("Client add request: {}:{}".format(request_id, request))
         results_queue = asyncio.Queue()
         self.request_streams[request_id] = results_queue
@@ -100,7 +100,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             await self._generate_by_instance(request_id, server_info_copy, request)
         return LLMResponse(request_id, resp_queue=results_queue)
 
-    async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: str):
+    async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
         if self.log_request_timestamps:
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
@@ -108,7 +108,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         # await to catch exception
         await self.manager.generate.remote(str(request_id), server_info, server_request=request)
 
-    async def _generate_by_instance(self, request_id: int, server_info: ServerInfo, request: str):
+    async def _generate_by_instance(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
         try:
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)

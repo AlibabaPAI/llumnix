@@ -31,7 +31,7 @@ class BladellmEngineArgs:
     world_size: int = None
 
 
-def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
+def add_llumnix_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
     parser.set_namespace("llumnix")
     parser = EntrypointsArgs.add_cli_args(parser)
     parser = ManagerArgs.add_cli_args(parser)

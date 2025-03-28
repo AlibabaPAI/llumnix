@@ -25,9 +25,8 @@ def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
 
 def add_engine_cli_args(parser: LlumnixArgumentParser) -> "Namespace":
     parser = AsyncEngineArgs.add_cli_args(parser)
-    cli_args = parser.parse_args()
 
-    return cli_args
+    return parser
 
 def detect_unsupported_engine_feature(engine_args: EngineArgs) -> None:
     unsupported_feature = None

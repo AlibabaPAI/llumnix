@@ -13,27 +13,26 @@
 
 import time
 import asyncio
+import sys
 
 import pickle
 import ray
 from aiohttp import web
+from loguru import logger
 
-from blade_llm.service.args import ServingArgs
-from blade_llm.service.server import Entrypoint
+from blade_llm.service.args import ServingArgs, add_args
+from blade_llm.utils.constants import LOGGER_FORMAT
+from blade_llm.service.server import check_ports, init_engine_and_client, Entrypoint
+from blade_llm.service.elastic_attn.elastic_attention_inst_manager import InstManager
+from blade_llm.service.elastic_attn.elastic_attention_entrypoint import ElasticAttnEntrypoint
 
-from llumnix.logging.logger import init_logger
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.utils import EntrypointsContext, LaunchMode, is_gpu_available
-from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_cli_args, get_args
-
-
-logger = init_logger(__name__)
-
-entrypoints_context: EntrypointsContext = None
+from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_llumnix_cli_args, get_args
 
 
 class LlumnixEntrypoint(Entrypoint):
@@ -79,39 +78,75 @@ class LlumnixEntrypoint(Entrypoint):
             web.post('/generate_benchmark', self.generate_benchmark),
             web.get('/is_ready', self.is_ready)
         ])
-        app.on_cleanup.append(clean_up_llumnix_components)
+        # TODO(s5u13b): Add cleanup codes to kill instance.
         return app
 
-# pylint: disable=unused-argument
-async def clean_up_llumnix_components(app):
-    for instance in entrypoints_context.instances.values():
-        try:
-            ray.kill(instance)
-        # pylint: disable=bare-except
-        except:
-            pass
 
-def setup_llumnix_api_server(bladellm_args: ServingArgs, loop: asyncio.AbstractEventLoop):
+# pylint: disable=redefined-outer-name
+def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEventLoop):
+    llumnix_client = engine_args.llumnix_client
+
+    return llumnix_client
+
+
+if __name__ == "__main__":
+    parser = add_args()
+    cli_args = parser.parse_args()
+    engine_args = ServingArgs.from_cli_args(cli_args)
+
+    # TODO(s5u13b): Fix it, cannot use parser of bladellm because Llumnix need to set namespace.
     # generate llumnix_parser for checking parameters with choices
-    parser = LlumnixArgumentParser()
-    parser = add_cli_args(parser)
-    llumnix_config = get_llumnix_config(bladellm_args.llumnix_config, cli_args=bladellm_args.llumnix_opts)
+    parser: LlumnixArgumentParser = LlumnixArgumentParser()
+    parser = add_llumnix_cli_args(parser)
+    llumnix_config = get_llumnix_config(engine_args.llumnix_config, cli_args=engine_args.llumnix_opts)
 
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, parser, bladellm_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, parser, engine_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
 
+    # Launch or connect to the ray cluster for multi-node serving.
     setup_ray_cluster(entrypoints_args)
 
-    llumnix_client = None
-    # If gpu is not available, it means that this node is head pod without any llumnix components.
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        level=engine_args.log_level,
+        format=LOGGER_FORMAT,
+    )
+    logger.info('================ Serving Arguments ================')
+    for k, v in engine_args.__dict__.items():
+        logger.info("{:>20}: {}", k, v)
+
+    # check port first
+    check_ports(engine_args)
+
     if is_gpu_available():
+        loop = asyncio.get_event_loop()
+
         # Since importing the bladellm engine arguments requires available GPU,
         # serialize the engine parameters before passing them to the manager.
         engine_args_llumnix = BladellmEngineArgs()
         engine_args_llumnix.engine_args = pickle.dumps(engine_args)
-        engine_args_llumnix.world_size = bladellm_args.tensor_parallel_size * bladellm_args.pipeline_parallel_size
-        global entrypoints_context
+        engine_args_llumnix.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
-        llumnix_client = LlumnixClientBladeLLM(bladellm_args, entrypoints_context, loop)
+        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
+        # TODO(s5u13b): Fix it, hack to pass args to setup_llumnix_api_server.
+        engine_args.llumnix_client = llumnix_client
 
-    return llumnix_client
+        if engine_args.elastic_attn_cluster is not None:
+            mgr = InstManager(engine_args)
+            web_app = ElasticAttnEntrypoint(
+                engine_args,
+                inst_mgr=mgr,
+            ).create_web_app()
+            logger.info("Elastic-attentioon instance entrypoint ready at {}:{}", engine_args.host, engine_args.port)
+        else:
+            llm_client = init_engine_and_client(engine_args, loop)
+            # start entrypoint server
+            # pylint: disable=invalid-name
+            entrypoint_cls = Entrypoint
+            if engine_args.enable_llumnix:
+                # pylint: disable=invalid-name
+                entrypoint_cls = LlumnixEntrypoint
+            web_app = entrypoint_cls(client=llm_client, args=engine_args).create_web_app()
+            logger.info("Entrypoint API ready at {}:{}", engine_args.host, engine_args.port)
+        web.run_app(web_app, host=engine_args.host, port=engine_args.port, loop=loop, handle_signals=False)

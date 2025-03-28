@@ -18,7 +18,7 @@ from typing import List
 
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendInterface, BackendType
 
 logger = init_logger(__name__)
 
@@ -41,11 +41,13 @@ class MigrationStatus(enum.Enum):
 class MigrationCoordinator:
     def __init__(self,
                  backend_engine: BackendInterface,
+                 backend_type: BackendType,
                  migration_last_stage_max_blocks: int,
                  migration_max_stages: int) -> None:
+        self.backend_engine = backend_engine
+        self.backend_type = backend_type
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages
-        self.backend_engine = backend_engine
 
     async def migrate_out_running_request(self,
                                           migrate_in_ray_actor: "ray.actor.ActorHandle",
@@ -138,7 +140,10 @@ class MigrationCoordinator:
             else:
                 # last stage migration, stop inference, transfer all blocks
                 migration_status = MigrationStatus.FINISHED
-                found = await self.backend_engine.remove_running_request(migrate_out_request.request_id)
+                if self.backend_type == BackendType.BLADELLM:
+                    found = self.backend_engine.remove_running_request(migrate_out_request.request_id)
+                else:
+                    found = await self.backend_engine.remove_running_request(migrate_out_request.request_id)
                 # Request coule be finished by previous or current step.
                 if not found or migrate_out_request.finished:
                     return MigrationStatus.ABORTED_SRC

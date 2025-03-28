@@ -27,8 +27,8 @@ class LlumnixClientVLLM:
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
         self.server_info: ServerInfo = entrypoints_context.server_info
-        self.log_requests = entrypoints_context.log_requests
-        self.log_request_timestamps = entrypoints_context.log_request_timestamps
+        self.log_requests: bool = entrypoints_context.log_requests
+        self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
 
         self.request_streams: Dict[str, AsyncStream] = {}
         self.instance_num_requests: Dict[str, int] = {}

@@ -118,7 +118,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         enable_migration = True
     elif "BladeLLM" in engine:
         generate_launch_command = generate_bladellm_launch_command
-        enable_migration = not enable_pd_disagg
+        enable_migration = False
     else:
         raise ValueError(f"Unknown engine: {engine}")
 
@@ -164,7 +164,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                          port=port,
                                                          model=model,
                                                          enable_simulator=enable_simulator,
-                                                         request_output_queue_type=request_output_queue_type)
+                                                         request_output_queue_type=request_output_queue_type,
+                                                         enable_migration=enable_migration)
                 subprocess.run(launch_command, shell=True, check=True)
     else: # global
         for i in range(device_count):

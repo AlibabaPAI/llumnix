@@ -18,3 +18,4 @@ from dataclasses import dataclass
 class BladellmEngineArgs:
     engine_args: bytes = None
     world_size: int = None
+    instance_id: str = None

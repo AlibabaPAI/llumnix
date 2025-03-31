@@ -155,7 +155,7 @@ def generate_bladellm_launch_command(
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
-        f"nohup python -u -m llumnix.entrypoints.bladellm.api_server "
+        f"nohup blade_llm_server "
         f"--host {ip} "
         f"--port {port} "
         f"--model {model} "

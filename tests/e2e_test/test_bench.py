@@ -78,7 +78,7 @@ def parse_log_file(title: str):
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
-@pytest.mark.parametrize("enable_pd_disagg", [False])
+@pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
@@ -104,8 +104,6 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         num_prompts = 500 if not enable_pd_disagg else 50
     else:
         num_prompts = 50
-
-    num_prompts = 10
 
     ip = get_ip_address()
     base_port = random.randint(30000, 40000)

@@ -112,7 +112,8 @@ class Llumlet:
                 num_gpus = 0.5
             elif backend_type == BackendType.BLADELLM:
                 world_size = get_engine_world_size(engine_args, backend_type)
-                num_gpus = world_size
+                # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
+                num_gpus = world_size - 0.5
             else: # backend_type == BackendType.SIM_VLLM
                 num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,

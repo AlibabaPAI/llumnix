@@ -4,10 +4,10 @@ import asyncio
 
 import ray
 
-from llumnix import launch_ray_cluster, connect_to_ray_cluster, init_manager
-from llumnix import (ManagerArgs, InstanceArgs, EngineArgs, Manager,
-                     Llumlet, ServerInfo, QueueType, BackendType,
-                     SamplingParams)
+from llumnix.manager import Manager
+from llumnix import (launch_ray_cluster, connect_to_ray_cluster, init_manager,
+                     ManagerArgs, InstanceArgs, EngineArgs, Llumlet, ServerInfo,
+                     QueueType, BackendType, SamplingParams)
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
 

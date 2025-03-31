@@ -26,7 +26,9 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
-from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
+from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM
+from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.utils import (initialize_placement_group,
                            get_manager_name, get_server_name,
@@ -132,7 +134,7 @@ class Launcher:
         next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
         instance = self.init_instance(instance_id, next_instance_args, placement_group,
                                       request_output_queue_type, backend_type, next_engine_args)
-        server = self.init_server(get_server_name(instance_id), placement_group, next_entrypoints_args)
+        server = self.init_server(get_server_name(instance_id), placement_group, backend_type, next_entrypoints_args)
 
         self.inflight_num_prefill_instance += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
         self.inflight_num_decode_instance += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
@@ -141,10 +143,15 @@ class Launcher:
     def init_server(self,
                     server_name: str,
                     placement_group: PlacementGroup,
+                    backend_type: BackendType,
                     entrypoints_args: EntrypointsArgs) -> APIServerActor:
-        fastapi_server = APIServerActor.from_args(server_name, placement_group, entrypoints_args)
+        if backend_type == BackendType.BLADELLM:
+            # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
+            api_server = APIServerActorBladeLLM.from_args(0.5, server_name, placement_group, entrypoints_args)
+        else: # BackendType.VLLM, BackendType.SIM_VLLM
+            api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args)
 
-        return fastapi_server
+        return api_server
 
     def init_instance(self,
                       instance_id: str,

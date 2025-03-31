@@ -38,7 +38,7 @@ class MigrationFilterPolicy(ABC):
         raise NotImplementedError
 
 
-class MigrationInstanceFilter(ABC):
+class MigrationInstanceFilter:
     def __init__(self, filter_config: MigrationFilterConfig) -> None:
         self.filter_config = filter_config
         self.registered_filters: Dict[str, MigrationFilterPolicy] = {}

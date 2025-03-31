@@ -49,7 +49,7 @@ from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETR
                                MAX_NUM_LIST_ENTRIES)
 from llumnix.launcher import Launcher
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
+from llumnix.entrypoints.api_server_actor import APIServerActor
 
 logger = init_logger(__name__)
 

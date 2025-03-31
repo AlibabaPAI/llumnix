@@ -32,7 +32,6 @@ from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
@@ -49,7 +48,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.entrypoint_id2llumnix_id = {} # int32 -> int32
         self.llumnix_id2entrypoint_id = {} # int32 -> int32
 
-        self.manager: Manager = entrypoints_context.manager
+        self.manager: "Manager" = entrypoints_context.manager
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
         self.server_info: ServerInfo = entrypoints_context.server_info

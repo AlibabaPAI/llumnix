@@ -109,14 +109,13 @@ if __name__ == "__main__":
     setup_ray_cluster(entrypoints_args)
 
     if is_gpu_available():
-        loop = asyncio.get_event_loop()
-
         # Since importing the bladellm engine arguments requires available GPU,
         # serialize the engine parameters before passing them to the manager.
         engine_args_llumnix = BladellmEngineArgs()
         engine_args_llumnix.engine_args = pickle.dumps(engine_args)
         engine_args_llumnix.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
+        loop = asyncio.get_event_loop()
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
         # TODO(s5u13b): Fix it, hack to pass args to setup_llumnix_api_server.
         engine_args.llumnix_client = llumnix_client

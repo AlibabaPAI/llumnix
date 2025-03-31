@@ -43,7 +43,7 @@ if __name__ == "__main__":
     engine_args_llumnix.engine_args = pickle.dumps(engine_args)
     engine_args_llumnix.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
     # Hack to pass engine args to APIServerActor.
-    entrypoints_args.engine_args = engine_args
+    entrypoints_args.engine_args = engine_args_llumnix.engine_args
     setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
 
     # keep the process alive to get the terminal output.

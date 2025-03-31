@@ -84,6 +84,7 @@ class EntrypointsArgs:
 
     def init_from_engine_args(self, engine_args, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
+            self.host = engine_args.host
             self.port = engine_args.port
 
     @classmethod

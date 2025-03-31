@@ -98,7 +98,7 @@ if __name__ == "__main__":
     parser = add_llumnix_cli_args(parser)
     llumnix_config = get_llumnix_config(engine_args.llumnix_config, cli_args=engine_args.llumnix_opts)
 
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, parser, engine_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, engine_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
 
     # Launch or connect to the ray cluster for multi-node serving.

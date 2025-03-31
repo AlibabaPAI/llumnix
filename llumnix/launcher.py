@@ -154,25 +154,13 @@ class Launcher:
                     placement_group: PlacementGroup,
                     backend_type: BackendType,
                     entrypoints_args: EntrypointsArgs) -> APIServerActor:
-        try:
-            # pylint: disable=unused-import, import-outside-toplevel
-            import vllm
-            # pylint: disable=ungrouped-imports, import-outside-toplevel
-            from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM
-        except ImportError:
-            pass
-        try:
-            # pylint: disable=unused-import, import-outside-toplevel
-            import blade_llm
-            # pylint: disable=ungrouped-imports, import-outside-toplevel
-            from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM
-        except ImportError:
-            pass
-
         if backend_type == BackendType.BLADELLM:
+            # pylint: disable=import-outside-toplevel
+            from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM
             # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
             api_server = APIServerActorBladeLLM.from_args(0.5, server_name, placement_group, entrypoints_args)
         else: # BackendType.VLLM, BackendType.SIM_VLLM
+            from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
             api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args)
 
         return api_server

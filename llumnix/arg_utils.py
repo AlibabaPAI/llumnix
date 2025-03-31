@@ -82,6 +82,10 @@ class EntrypointsArgs:
         entrypoints_args = cls(**{attr: getattr(cfg.SERVER, attr.upper()) for attr in cfg_attrs})
         return entrypoints_args
 
+    def init_from_engine_args(self, engine_args, backend_type: BackendType):
+        if backend_type == BackendType.BLADELLM:
+            self.port = engine_args.port
+
     @classmethod
     def check_args(cls, args: 'EntrypointsArgs', parser: argparse.ArgumentParser) -> None:
         # pylint: disable=protected-access

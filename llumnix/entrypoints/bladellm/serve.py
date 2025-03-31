@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # Assume that there is an existing ray cluster when using centralized deployment.
     connect_to_ray_cluster()
 
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, parser, engine_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.GLOBAL, parser, engine_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=BackendType.BLADELLM)
 
     # magic actor to avoid fast api server actor initialization error

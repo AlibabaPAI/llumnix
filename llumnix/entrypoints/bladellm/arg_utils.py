@@ -56,16 +56,17 @@ def detect_unsupported_engine_feature(engine_args) -> None:
     if unsupported_feature:
         raise ValueError(f'Llumnix does not support "{unsupported_feature}" for BladeLLM currently.')
 
-def get_args(llumnix_cfg: LlumnixConfig, llumnix_parser: LlumnixArgumentParser, engine_args):
+def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser: LlumnixArgumentParser, engine_args):
     instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)
     instance_args.init_from_engine_args(engine_args, BackendType.BLADELLM)
     manager_args = ManagerArgs.from_llumnix_config(llumnix_cfg)
     manager_args.init_from_instance_args(instance_args)
     entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_cfg)
+    entrypoints_args.init_from_engine_args(engine_args, BackendType.BLADELLM)
 
     EntrypointsArgs.check_args(entrypoints_args, llumnix_parser)
-    InstanceArgs.check_args(instance_args, manager_args, LaunchMode.LOCAL, llumnix_parser)
-    ManagerArgs.check_args(manager_args, llumnix_parser, LaunchMode.LOCAL)
+    InstanceArgs.check_args(instance_args, manager_args, launch_mode, llumnix_parser)
+    ManagerArgs.check_args(manager_args, launch_mode, llumnix_parser)
 
     assert not instance_args.simulator_mode, "Only support the simulator mode for vLLM."
     assert not (engine_args.enable_disagg and manager_args.enable_pd_disagg), \

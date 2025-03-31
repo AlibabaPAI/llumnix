@@ -42,8 +42,8 @@ def generate_vllm_launch_command(
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
-    enable_migration: bool = True,
-    **kwargs):
+    enable_migration: bool = True
+):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -95,7 +95,8 @@ def generate_vllm_serve_command(
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
     tensor_parallel_size: int = 1,
-    ):
+    enable_migration: bool = True
+):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "
@@ -104,7 +105,7 @@ def generate_vllm_serve_command(
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
         f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
-        f"--enable-migration "
+        f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
         f"--max-model-len {max_model_len} "
@@ -147,8 +148,7 @@ def generate_bladellm_launch_command(
     engine_disagg_transfer_type: str = "ipc",
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
-    tensor_parallel_size: int = 1,
-    **kwargs
+    tensor_parallel_size: int = 1
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -194,8 +194,7 @@ def generate_bladellm_serve_command(
     engine_disagg_transfer_type: str = "ipc",
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
-    tensor_parallel_size: int = 1,
-    **kwargs
+    tensor_parallel_size: int = 1
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 "

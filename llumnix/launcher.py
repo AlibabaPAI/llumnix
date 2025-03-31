@@ -155,16 +155,16 @@ class Launcher:
                     backend_type: BackendType,
                     entrypoints_args: EntrypointsArgs) -> APIServerActor:
         try:
-            # pylint: disable=unused-import
+            # pylint: disable=unused-import, import-outside-toplevel
             import vllm
-            # pylint: disable=ungrouped-imports
+            # pylint: disable=ungrouped-imports, import-outside-toplevel
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM
         except ImportError:
             pass
         try:
-            # pylint: disable=unused-import
+            # pylint: disable=unused-import, import-outside-toplevel
             import blade_llm
-            # pylint: disable=ungrouped-imports
+            # pylint: disable=ungrouped-imports, import-outside-toplevel
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM
         except ImportError:
             pass

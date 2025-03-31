@@ -104,7 +104,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         num_prompts = 500 if not enable_pd_disagg else 50
     else:
         num_prompts = 50
-    
+
     num_prompts = 10
 
     ip = get_ip_address()

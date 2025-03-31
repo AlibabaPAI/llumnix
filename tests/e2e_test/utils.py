@@ -42,7 +42,8 @@ def generate_vllm_launch_command(
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
-    enable_migration: bool = True
+    enable_migration: bool = True,
+    **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -95,7 +96,8 @@ def generate_vllm_serve_command(
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
     tensor_parallel_size: int = 1,
-    enable_migration: bool = True
+    enable_migration: bool = True,
+    **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 "
@@ -148,7 +150,8 @@ def generate_bladellm_launch_command(
     engine_disagg_transfer_type: str = "ipc",
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
-    tensor_parallel_size: int = 1
+    tensor_parallel_size: int = 1,
+    **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -194,7 +197,8 @@ def generate_bladellm_serve_command(
     engine_disagg_transfer_type: str = "ipc",
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
-    tensor_parallel_size: int = 1
+    tensor_parallel_size: int = 1,
+    **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 "

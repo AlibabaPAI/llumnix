@@ -14,7 +14,6 @@ from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
-from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 
@@ -23,12 +22,12 @@ logger = init_logger(__name__)
 
 class LlumnixClientVLLM:
     def __init__(self, entrypoints_context: EntrypointsContext):
-        self.manager: Manager = entrypoints_context.manager
+        self.manager: "Manager" = entrypoints_context.manager
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
         self.server_info: ServerInfo = entrypoints_context.server_info
-        self.log_requests = entrypoints_context.log_requests
-        self.log_request_timestamps = entrypoints_context.log_request_timestamps
+        self.log_requests: bool = entrypoints_context.log_requests
+        self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
 
         self.request_streams: Dict[str, AsyncStream] = {}
         self.instance_num_requests: Dict[str, int] = {}

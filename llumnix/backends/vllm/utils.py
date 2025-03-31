@@ -16,50 +16,16 @@ from typing import Dict, List, Optional
 import torch
 
 from vllm.config import ModelConfig, ParallelConfig
-from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
 from vllm.sampling_params import SamplingType
 from vllm.model_executor.layers.sampler import SamplingMetadata, SamplingTensors, SampleResultArgsType, SampleReturnType, \
                                                 SampleResultsDictType, SampleMetadataType, MultinomialSamplesType, \
                                                 flashinfer_top_k_top_p_sampling, _top_k_top_p_multinomial_with_flashinfer, \
                                                 VLLM_INVALID_TOKEN_ID, _multinomial, _modify_greedy_probs_inplace, get_pythonized_sample_results
-from vllm.config import EngineConfig
 
 from llumnix.logging.logger import init_logger
-from llumnix.arg_utils import InstanceArgs
-from llumnix.internal_config import MigrationConfig
 
 logger = init_logger(__name__)
 
-
-def detect_unsupported_feature(engine_args: EngineArgs) -> None:
-    unsupported_feature = None
-    if engine_args.enable_lora:
-        unsupported_feature = "multi-lora serving"
-    elif engine_args.enable_prefix_caching:
-        unsupported_feature = "automatic prefix caching"
-    elif engine_args.enable_chunked_prefill:
-        unsupported_feature = "chunked prefill"
-    elif engine_args.speculative_model:
-        unsupported_feature = "speculative decoding"
-    elif engine_args.pipeline_parallel_size > 1:
-        unsupported_feature = "pipeline parallel"
-    elif engine_args.num_scheduler_steps > 1:
-        unsupported_feature = "multi-step scheduling"
-    if unsupported_feature:
-        raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
-
-def check_engine_args(engine_args: AsyncEngineArgs) -> None:
-    detect_unsupported_feature(engine_args)
-    assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
-
-def check_instance_args(intance_args: InstanceArgs, engine_args: AsyncEngineArgs) -> None:
-    migration_config: MigrationConfig = intance_args.create_migration_config()
-    engine_config: EngineConfig = engine_args.create_engine_config()
-    parallel_config: ParallelConfig = engine_config.parallel_config
-    assert not (parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl'), \
-        "Llumnix does not support TP or PP when the migration backend is nccl, please change migration backend."
-    assert not (not engine_args.disable_async_output_proc and intance_args.simulator_mode), \
-        "Llumnix does not support async output processing when enabling simualtor mode, please disable async output processing."
 
 def _get_dtype_size(dtype: torch.dtype) -> int:
     return torch.tensor([], dtype=dtype).element_size()

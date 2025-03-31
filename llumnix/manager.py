@@ -48,7 +48,7 @@ from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETR
                                WATCH_DEPLOYMENT_INTERVAL, INSTANCE_READY_TIMEOUT)
 from llumnix.launcher import Launcher
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.entrypoints.vllm.api_server_actor import APIServerActor
+from llumnix.entrypoints.api_server_actor import APIServerActor
 
 logger = init_logger(__name__)
 
@@ -222,11 +222,11 @@ class Manager:
         return manager
 
     async def init_instances(self,
-                       request_output_queue_type: QueueType,
-                       backend_type: BackendType,
-                       instance_args: InstanceArgs,
-                       engine_args
-                      ) -> Tuple[List[str], List[Llumlet]]:
+                             request_output_queue_type: QueueType,
+                             backend_type: BackendType,
+                             instance_args: InstanceArgs,
+                             engine_args
+                             ) -> Tuple[List[str], List[Llumlet]]:
         async def instance_ready_scale_up(instance_id: str, instance: "ray.actor.ActorHandle"):
             try:
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)

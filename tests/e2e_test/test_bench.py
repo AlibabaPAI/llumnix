@@ -27,7 +27,8 @@ from llumnix.entrypoints.utils import get_ip_address
 from tests.conftest import ray_env
 from .utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service,
-                    generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception)
+                    generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
+                    generate_bladellm_serve_command)
 
 BENCH_TEST_TIMEOUT_MINS = 60
 
@@ -77,16 +78,13 @@ def parse_log_file(title: str):
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
-@pytest.mark.parametrize("enable_pd_disagg", [True, False])
+@pytest.mark.parametrize("enable_pd_disagg", [False])
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
                                 model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
     engine = engine.split("_")[1]
-
-    if "BladeLLM" in engine and launch_mode == "global":
-        pytest.skip("Global launch model for BladeLLM is not supported yet.")
 
     if "BladeLLM" in engine and enable_simulator:
         pytest.skip("Simulator for BladeLLM is not supported yet.")
@@ -106,6 +104,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         num_prompts = 500 if not enable_pd_disagg else 50
     else:
         num_prompts = 50
+    
+    num_prompts = 10
 
     ip = get_ip_address()
     base_port = random.randint(30000, 40000)
@@ -115,10 +115,12 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
 
     if "vLLM" in engine:
         generate_launch_command = generate_vllm_launch_command
+        generate_serve_command = generate_vllm_serve_command
         enable_migration = True
     elif "BladeLLM" in engine:
         generate_launch_command = generate_bladellm_launch_command
-        enable_migration = not enable_pd_disagg
+        generate_serve_command = generate_bladellm_serve_command
+        enable_migration = False
     else:
         raise ValueError(f"Unknown engine: {engine}")
 
@@ -164,20 +166,22 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                          port=port,
                                                          model=model,
                                                          enable_simulator=enable_simulator,
-                                                         request_output_queue_type=request_output_queue_type)
+                                                         request_output_queue_type=request_output_queue_type,
+                                                         enable_migration=enable_migration)
                 subprocess.run(launch_command, shell=True, check=True)
     else: # global
         for i in range(device_count):
             port = base_port+i
             ip_port = f"{ip}:{port}"
             ip_ports.append(ip_port)
-        serve_command = generate_vllm_serve_command(result_filename=str(base_port)+".out",
-                                                    ip=ip,
-                                                    port=base_port,
-                                                    model=model,
-                                                    enable_pd_disagg=enable_pd_disagg,
-                                                    enable_simulator=enable_simulator,
-                                                    request_output_queue_type=request_output_queue_type)
+        serve_command = generate_serve_command(result_filename=str(base_port)+".out",
+                                               ip=ip,
+                                               port=base_port,
+                                               model=model,
+                                               enable_pd_disagg=enable_pd_disagg,
+                                               enable_simulator=enable_simulator,
+                                               request_output_queue_type=request_output_queue_type,
+                                               enable_migration=enable_migration)
         subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 

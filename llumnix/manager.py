@@ -123,7 +123,7 @@ class Manager:
         # instance states
         self.num_instances = 0
         self.instances: Dict[str, Llumlet] = {}
-        self.instance_id_2_engine_instance_id: Dict[str, str] = {}
+        self.instance_id_2_engine_disagg_inst_id: Dict[str, str] = {}
         self.pgs: Dict[str, PlacementGroup] = {}
         self.servers: Dict[str, APIServerActor] = None
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
@@ -172,7 +172,7 @@ class Manager:
         if self.manager_args.enable_engine_pd_disagg:
             # Only used in bladellm now
             decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
-            kwargs["decode_instance_id"] = self.instance_id_2_engine_instance_id.get(
+            kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
                 decode_instance_id, None
             )
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
@@ -457,7 +457,8 @@ class Manager:
                 indeed_update = True
                 instance_actor = instance_actor_handles[idx]
                 self.instances[ins_id] = instance_actor
-                self.instance_id_2_engine_instance_id[ins_id] = instance_actor.get_engine_instance_id.remote()
+                self.instance_id_2_engine_disagg_inst_id[ins_id] = ray.get(instance_actor.get_engine_disagg_inst_id.remote())
+                logger.info("bind instnance id {} with engine instance id {}".format(ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))
                 try:
                     pg = ray.util.get_placement_group(get_placement_group_name(ins_id))
                     self.pgs[ins_id] = pg
@@ -499,7 +500,7 @@ class Manager:
                 indeed_update = True
                 if ins_id in self.instances:
                     self.instances.pop(ins_id)
-                    self.instance_id_2_engine_instance_id.pop(ins_id, None)
+                    self.instance_id_2_engine_disagg_inst_id.pop(ins_id, None)
                     if ins_id in self.pgs:
                         self.pgs.pop(ins_id)
                     else:

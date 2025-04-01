@@ -61,6 +61,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--enable-port-increment]
             [--enable-port-offset-store]
             [--instance-type INSTANCE_TYPE]
+            [--use-podname-as-engine-disagg-instance-id]
 
 ```
 
@@ -277,6 +278,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--instance-type`
 - Instance types for the engine.
 - Possible choices: prefill, decode, no_constraints
+
+`--use-podname-as-engine-disagg-instance-id`
+- Use envorinment variable POD_NAME as engine instance id.
 
 # Unsupported vLLM feature options
 

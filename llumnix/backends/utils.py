@@ -25,7 +25,7 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logging.logger import init_logger
-from llumnix.utils import get_instance_name
+from llumnix.utils import get_instance_name, log_actor_ray_info
 from llumnix.internal_config import MigrationConfig
 from llumnix.metrics.timestamps import set_timestamp
 
@@ -34,13 +34,9 @@ logger = init_logger(__name__)
 
 class AsyncPutQueueActor:
     def __init__(self, instance_id: str, request_output_queue_type: QueueType):
-        self.job_id = ray.get_runtime_context().get_job_id()
-        self.worker_id = ray.get_runtime_context().get_worker_id()
-        self.actor_id = ray.get_runtime_context().get_actor_id()
-        self.node_id = ray.get_runtime_context().get_node_id()
+        log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
-        logger.info("AsyncPutQueueActor(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
-                        self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
+        logger.info("AsyncPutQueueActor(instance_id={}".format(instance_id))
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None

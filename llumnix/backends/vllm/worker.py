@@ -28,7 +28,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migration_backend
 from llumnix.internal_config import MigrationConfig
-from llumnix.utils import convert_bytes
+from llumnix.utils import convert_bytes, log_actor_ray_info
 
 logger = init_logger(__name__)
 
@@ -39,6 +39,7 @@ class MigrationWorker(Worker):
         # pylint: disable=import-outside-toplevel
         import vllm.model_executor.layers.sampler
         vllm.model_executor.layers.sampler._sample_with_torch = _sample_with_torch
+        log_actor_ray_info(self.__class__.__name__)
 
         super().__init__(*args, **kwargs)
 

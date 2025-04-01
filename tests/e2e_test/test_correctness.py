@@ -123,10 +123,14 @@ async def run_bladellm(model, enable_pd_disagg):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
+@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_correctness(ray_env, shutdown_llumnix_service,
-                           model, launch_mode, enable_pd_disagg, engine):
+                           model, launch_mode, enable_pd_disagg, tensor_parallel_size, engine):
     engine = engine.split("_")[1]
+
+    if tensor_parallel_size == 2 and launch_mode == "local":
+        pytest.skip("Only test tensor parallelism in global launch mode.")
 
     ip = get_ip_address()
     base_port = 37037

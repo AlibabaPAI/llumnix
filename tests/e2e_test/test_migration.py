@@ -141,7 +141,6 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
                             request_migration_policy=request_migration_policy,
                             tensor_parallel_size=tensor_parallel_size)
         subprocess.run(launch_command, shell=True, check=True)
-    # TODO(s5u13b): Support global launch mode for BladeLLM.
     else:
         for i in range(num_instances):
             port = base_port + i

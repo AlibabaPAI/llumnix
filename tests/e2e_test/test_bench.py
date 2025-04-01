@@ -219,7 +219,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     if num_prompts == 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(parse_log_file(title=request_output_queue_type))
-        await asyncio.sleep(3)
+        await asyncio.sleep(10.0)
 
     await asyncio.sleep(3)
 

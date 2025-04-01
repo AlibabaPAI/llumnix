@@ -209,7 +209,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(to_markdown_table(data))
-        await asyncio.sleep(3)
+        await asyncio.sleep(10.0)
 
     await asyncio.sleep(3)
 

@@ -27,6 +27,7 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.protocol import ServerRequest
 from blade_llm.service.communications.response import error_resp
 
+from llumnix.manager import Manager
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
@@ -48,7 +49,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.entrypoint_id2llumnix_id = {} # int32 -> int32
         self.llumnix_id2entrypoint_id = {} # int32 -> int32
 
-        self.manager: "Manager" = entrypoints_context.manager
+        self.manager: Manager = entrypoints_context.manager
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
         self.server_info: ServerInfo = entrypoints_context.server_info

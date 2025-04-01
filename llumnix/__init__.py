@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from llumnix.manager import Manager
 from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.setup import (launch_ray_cluster,
                                        connect_to_ray_cluster,
@@ -23,6 +24,7 @@ from llumnix.version import __version__
 
 __all__ = [
     "__version__",
+    "Manager",
     "ServerInfo",
     "launch_ray_cluster",
     "connect_to_ray_cluster",

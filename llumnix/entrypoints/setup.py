@@ -19,6 +19,7 @@ import time
 from typing import Dict, Optional, List, Tuple
 import ray
 
+from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, get_manager_name
@@ -96,9 +97,7 @@ def init_manager(manager_args: ManagerArgs,
                  entrypoints_args: EntrypointsArgs = None,
                  engine_args = None,
                  launch_args: LaunchArgs = None,
-                 ) -> "Manager":
-    # pylint: disable=import-outside-toplevel
-    from llumnix.manager import Manager
+                 ) -> Manager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:
         manager = Manager.from_args(
@@ -118,7 +117,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
                             instance_args: InstanceArgs,
                             engine_args,
                             launch_args: LaunchArgs,
-                            ) -> Tuple["Manager", List[str], List[Llumlet], QueueServerBase]:
+                            ) -> Tuple[Manager, List[str], List[Llumlet], QueueServerBase]:
     manager = init_manager(manager_args)
 
     backend_type: BackendType = launch_args.backend_type

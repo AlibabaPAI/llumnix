@@ -10,4 +10,3 @@ func_timeout
 pyyaml
 yacs
 pyzmq
-uvicorn

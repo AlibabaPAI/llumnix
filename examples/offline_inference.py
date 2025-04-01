@@ -4,9 +4,7 @@ import asyncio
 
 import ray
 
-# Do not import manager in __init__.py to avoid potential circular import.
-from llumnix.manager import Manager
-from llumnix import (launch_ray_cluster, connect_to_ray_cluster, init_manager,
+from llumnix import (Manager, launch_ray_cluster, connect_to_ray_cluster, init_manager,
                      ManagerArgs, InstanceArgs, EngineArgs, Llumlet, ServerInfo,
                      QueueType, BackendType, SamplingParams)
 from llumnix.utils import random_uuid

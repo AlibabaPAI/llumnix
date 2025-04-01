@@ -9,6 +9,7 @@ import ray
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm import SamplingParams
 
+from llumnix.manager import Manager
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
@@ -22,7 +23,7 @@ logger = init_logger(__name__)
 
 class LlumnixClientVLLM:
     def __init__(self, entrypoints_context: EntrypointsContext):
-        self.manager: "Manager" = entrypoints_context.manager
+        self.manager: Manager = entrypoints_context.manager
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
         self.server_info: ServerInfo = entrypoints_context.server_info

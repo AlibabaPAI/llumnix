@@ -1,7 +1,8 @@
-ray >= 2.9.0
+ray[default]
 pyarrow  # Required for Ray data.
 aiohttp
 pandas
 matplotlib
 pyyaml
 yacs
+protobuf == 3.20.1

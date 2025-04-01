@@ -178,7 +178,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     port=base_port,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="prefill",
-                                                    enable_migration=enable_migration))
+                                                    enable_migration=enable_migration,
+                                                    tensor_parallel_size=tensor_parallel_size))
             decode_port = base_port + 100
             launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
                                                     launch_ray_cluster=False,
@@ -187,7 +188,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     port=decode_port,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="decode",
-                                                    enable_migration=enable_migration))
+                                                    enable_migration=enable_migration,
+                                                    tensor_parallel_size=tensor_parallel_size))
         else:
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
@@ -198,7 +200,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                ip=ip,
                                                port=base_port,
                                                model=model,
-                                               enable_pd_disagg=enable_pd_disagg))
+                                               enable_pd_disagg=enable_pd_disagg,
+                                               tensor_parallel_size=tensor_parallel_size))
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(3)

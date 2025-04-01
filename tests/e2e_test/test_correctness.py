@@ -123,10 +123,14 @@ async def run_bladellm(model, enable_pd_disagg):
 @pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
+@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_correctness(ray_env, shutdown_llumnix_service,
-                           model, launch_mode, enable_pd_disagg, engine):
+                           model, launch_mode, enable_pd_disagg, tensor_parallel_size, engine):
     engine = engine.split("_")[1]
+
+    if tensor_parallel_size == 2 and launch_mode == "local":
+        pytest.skip("Only test tensor parallelism in global launch mode.")
 
     ip = get_ip_address()
     base_port = 37037
@@ -174,7 +178,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     port=base_port,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="prefill",
-                                                    enable_migration=enable_migration))
+                                                    enable_migration=enable_migration,
+                                                    tensor_parallel_size=tensor_parallel_size))
             decode_port = base_port + 100
             launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
                                                     launch_ray_cluster=False,
@@ -183,7 +188,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     port=decode_port,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="decode",
-                                                    enable_migration=enable_migration))
+                                                    enable_migration=enable_migration,
+                                                    tensor_parallel_size=tensor_parallel_size))
         else:
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
@@ -194,7 +200,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                ip=ip,
                                                port=base_port,
                                                model=model,
-                                               enable_pd_disagg=enable_pd_disagg))
+                                               enable_pd_disagg=enable_pd_disagg,
+                                               tensor_parallel_size=tensor_parallel_size))
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(3)

@@ -81,6 +81,7 @@ class Llumlet:
                                                                         engine_args,
                                                                         instance_args.profiling_result_file_path)
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
+                                                              backend_type,
                                                               migration_config.migration_last_stage_max_blocks,
                                                               migration_config.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
@@ -104,13 +105,14 @@ class Llumlet:
                   backend_type: BackendType,
                   engine_args):
         try:
-            assert backend_type in [backend_type.VLLM, backend_type.BLADELLM, backend_type.SIM_VLLM], \
+            assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
                 f'unimplemented backend {backend_type}'
             if backend_type == BackendType.VLLM:
                 num_gpus = 0.5
-            elif backend_type == backend_type.BLADELLM:
+            elif backend_type == BackendType.BLADELLM:
                 world_size = get_engine_world_size(engine_args, backend_type)
-                num_gpus = world_size
+                # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
+                num_gpus = world_size - 0.5
             else: # backend_type == BackendType.SIM_VLLM
                 num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,

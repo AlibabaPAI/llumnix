@@ -62,7 +62,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
 
         grpc_limit_migration_num_blocks = GRPC_MAX_MESSAGE_LENGTH / self.single_block_bytes
         if migration_config.migration_buffer_blocks >= grpc_limit_migration_num_blocks:
-            logger.warning("migration_buffer_blocks is too large {}, reset to grpc_limit_migration_num_blocks {}."
+            logger.warning("migration_buffer_blocks {} is too large, reset to grpc_limit_migration_num_blocks {}."
                            .format(migration_config.migration_buffer_blocks, grpc_limit_migration_num_blocks))
             migration_config.migration_buffer_blocks = int(grpc_limit_migration_num_blocks)
 

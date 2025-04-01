@@ -25,7 +25,8 @@ if __name__ == "__main__":
                         default='.',
                         help="Save path of the engine arguments.")
 
-    cli_args = add_engine_cli_args(parser)
+    parser = add_engine_cli_args(parser)
+    cli_args = parser.parse_args()
     engine_args = get_engine_args(cli_args)
 
     connect_to_ray_cluster()

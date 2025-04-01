@@ -29,7 +29,7 @@ from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_se
                     wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                     shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
                     generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
-                    check_log_exception)
+                    check_log_exception, generate_bladellm_serve_command)
 
 
 async def get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func):
@@ -127,8 +127,6 @@ async def run_bladellm(model, enable_pd_disagg):
 async def test_correctness(ray_env, shutdown_llumnix_service,
                            model, launch_mode, enable_pd_disagg, engine):
     engine = engine.split("_")[1]
-    if engine == "BladeLLM" and launch_mode == "global":
-        pytest.skip("Global launch model for BladeLLM is not supported yet.")
 
     ip = get_ip_address()
     base_port = 37037
@@ -140,6 +138,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
         generate_request_func = generate_vllm_request
         process_api_server_output_func = process_vllm_api_server_output
         generate_launch_command_func = generate_vllm_launch_command
+        generate_serve_command_func = generate_vllm_serve_command
         url = f'http://{ip}:{base_port}/generate'
         enable_migration = True
 
@@ -156,6 +155,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
         generate_request_func = generate_bladellm_request
         process_api_server_output_func = process_bladellm_api_server_output
         generate_launch_command_func = generate_bladellm_launch_command
+        generate_serve_command_func = generate_bladellm_serve_command
         url = f'http://{ip}:{base_port}/v1/chat/completions'
         enable_migration = not enable_pd_disagg
 
@@ -190,7 +190,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     ip=ip,
                                                     port=base_port))
     else:
-        launch_commands.append(generate_vllm_serve_command(result_filename=str(base_port)+".out",
+        launch_commands.append(generate_serve_command_func(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,
                                                model=model,

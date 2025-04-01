@@ -26,7 +26,7 @@ from llumnix.entrypoints.utils import get_ip_address
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 from tests.e2e_test.utils import (generate_bench_command, to_markdown_table, wait_for_llumnix_service_ready,
-                                  shutdown_llumnix_service, generate_bladellm_launch_command,
+                                  shutdown_llumnix_service, generate_bladellm_serve_command,
                                   check_log_exception, generate_vllm_serve_command)
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
@@ -141,24 +141,21 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
                             request_migration_policy=request_migration_policy,
                             tensor_parallel_size=tensor_parallel_size)
         subprocess.run(launch_command, shell=True, check=True)
-    # TODO(s5u13b): Support global launch mode for BladeLLM.
     else:
         for i in range(num_instances):
             port = base_port + i
-            ip_ports.append(f"{ip}:{base_port+i}")
-            output_log = f"{base_port+i}.out"
-            instance_output_logs.append("instance_"+output_log)
-            launch_command = generate_bladellm_launch_command(
-                                result_filename=output_log,
-                                launch_ray_cluster=False,
-                                ip=ip,
-                                port=port,
-                                model=model,
-                                dispatch_policy="flood",
-                                migration_backend=migration_backend,
-                                request_migration_policy=request_migration_policy,
-                                tensor_parallel_size=tensor_parallel_size)
-            subprocess.run(launch_command, shell=True, check=True)
+            ip_ports.append(f"{ip}:{port}")
+        result_filename = f"{port}.out"
+        instance_output_logs.append("instance_"+result_filename)
+        launch_command = generate_bladellm_serve_command(
+                            result_filename=result_filename,
+                            ip=ip,
+                            port=port,
+                            model=model,
+                            dispatch_policy="flood",
+                            migration_backend=migration_backend,
+                            tensor_parallel_size=tensor_parallel_size)
+        subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
 
@@ -212,7 +209,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
             f.write(to_markdown_table(data))
-        await asyncio.sleep(3)
+        await asyncio.sleep(10.0)
 
     await asyncio.sleep(3)
 

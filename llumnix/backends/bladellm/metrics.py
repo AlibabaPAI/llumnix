@@ -17,6 +17,7 @@ from llumnix.metrics.variable import Status, PassiveStatus
 from llumnix.metrics.base_metrics import LlumnixMetrics
 from llumnix.metrics.dumper import LoggerDumper
 
+
 class BladeLLMMetrics(LlumnixMetrics):
     def __init__(self):
         super().__init__()

@@ -43,7 +43,8 @@ def generate_vllm_launch_command(
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
     enable_migration: bool = True,
-    **kwargs):
+    **kwargs
+):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"nohup python -u -m llumnix.entrypoints.vllm.api_server "
@@ -95,7 +96,9 @@ def generate_vllm_serve_command(
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
     tensor_parallel_size: int = 1,
-    ):
+    enable_migration: bool = True,
+    **kwargs
+):
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.vllm.serve "
@@ -104,7 +107,7 @@ def generate_vllm_serve_command(
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
         f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
-        f"--enable-migration "
+        f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
         f"--max-model-len {max_model_len} "
@@ -175,7 +178,55 @@ def generate_bladellm_launch_command(
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
-        f"{'> instance_' + result_filename if len(result_filename) > 0 else ''} 2>&1 &"
+        f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
+    )
+    return command
+
+def generate_bladellm_serve_command(
+    config_file: str = "configs/bladellm.yml",
+    result_filename: str = "",
+    model = "facebook/opt-125m",
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    max_num_batched_tokens: int = 16000,
+    enable_llumnix: bool = True,
+    enable_pd_disagg: bool = False,
+    enable_migration: bool = True,
+    dispatch_policy: str = "load",
+    instance_type: str = "prefill",
+    engine_disagg_transfer_type: str = "ipc",
+    max_gpu_memory_utilization: float = 0.85,
+    migration_backend: str = "grpc",
+    tensor_parallel_size: int = 1,
+    **kwargs
+):
+    command = (
+        f"RAY_DEDUP_LOGS=0 "
+        f"nohup python -u -m llumnix.entrypoints.bladellm.serve "
+        f"--host {ip} "
+        f"--port {port} "
+        f"--model {model} "
+        f"{'--enable_llumnix' if enable_llumnix else ''} "
+        f"--llumnix_config {config_file} "
+        f"--disable_prompt_cache "
+        f"--log_level INFO "
+        f"-tp {tensor_parallel_size} "
+        f"--attn_cls ragged_flash "
+        f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
+        f"--disable_frontend_multiprocessing "
+        f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "
+        f"{'--enable_disagg' if enable_pd_disagg else ''} "
+        f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
+        f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
+        f"--disagg_pd.inst_role={instance_type} "
+        f"--disagg_pd.token_port={port + 5000} "
+        f"--naming_url={NAMING_URL} "
+        f"INSTANCE.GRPC_MIGRATION_BACKEND_SERVER_PORT {port + 10000} "
+        f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
+        f"MANAGER.ENABLE_MIGRATION {enable_migration} "
+        f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
+        f"MANAGER.ENABLE_PORT_INCREMENT True "
+        f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     return command
 

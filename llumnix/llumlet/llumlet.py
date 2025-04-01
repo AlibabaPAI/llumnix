@@ -16,6 +16,7 @@ import traceback
 from typing import List, Union, Iterable
 import time
 import pickle
+import os
 
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -54,6 +55,7 @@ class Llumlet:
                 engine_args = pickle.loads(engine_args.engine_args)
             log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
+            self.engine_instance_id = os.environ.get('POD_NAME', instance_id)
             logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
             self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)
@@ -63,7 +65,7 @@ class Llumlet:
                 enable_defrag=instance_args.enable_defrag
             )
             migration_config: MigrationConfig = instance_args.create_migration_config()
-            self.backend_engine: BackendInterface = init_backend_engine(instance_id,
+            self.backend_engine: BackendInterface = init_backend_engine(self.engine_instance_id,
                                                                         placement_group,
                                                                         request_output_queue_type,
                                                                         migration_config,
@@ -216,6 +218,9 @@ class Llumlet:
 
     def get_instance_type(self) -> InstanceType:
         return self.instance_args.instance_type
+
+    def get_engine_instance_id(self) -> str:
+        return self.engine_instance_id
 
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()

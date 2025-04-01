@@ -125,6 +125,7 @@ class Manager:
         # instance states
         self.num_instances = 0
         self.instances: Dict[str, Llumlet] = {}
+        self.instance_id_2_engine_instance_id: Dict[str, str] = {}
         self.pgs: Dict[str, PlacementGroup] = {}
         self.servers: Dict[str, APIServerActor] = None
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
@@ -160,7 +161,10 @@ class Manager:
         prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
         if self.manager_args.enable_engine_pd_disagg:
             # Only used in bladellm now
-            kwargs['decode_instance_id'],_ = self.global_scheduler.dispatch(InstanceType.DECODE)
+            decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
+            kwargs["decode_instance_id"] = self.instance_id_2_engine_instance_id.get(
+                decode_instance_id, None
+            )
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         self.instances[prefill_instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
         if self.log_requests:
@@ -362,7 +366,9 @@ class Manager:
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
                 indeed_update = True
-                self.instances[ins_id] = instance_actor_handles[idx]
+                instance_actor = instance_actor_handles[idx]
+                self.instances[ins_id] = instance_actor
+                self.instance_id_2_engine_instance_id[ins_id] = instance_actor.get_engine_instance_id.remote()
                 self.pgs[ins_id] = placement_groups[idx]
                 if self.servers is not None and servers is not None:
                     self.servers[ins_id] = servers[idx]
@@ -397,6 +403,7 @@ class Manager:
                 indeed_update = True
                 if ins_id in self.instances:
                     self.instances.pop(ins_id)
+                    self.instance_id_2_engine_instance_id.pop(ins_id, None)
                     if ins_id in self.pgs:
                         self.pgs.pop(ins_id)
                     else:

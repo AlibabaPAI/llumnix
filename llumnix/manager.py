@@ -438,17 +438,6 @@ class Manager:
 
         return self.num_instances
 
-    def get_num_prefill_decode_instances(self):
-        num_prefill_instances = len(self.global_scheduler.available_prefill_instance_info)
-        num_decode_instances = len(self.global_scheduler.available_decode_instance_info)
-
-        return num_prefill_instances, num_decode_instances
-
-    def get_prefill_decode_instance_id_set(self):
-        prefill_instance_id_set = set(self.global_scheduler.available_prefill_instance_info.values())
-        decode_instance_id_set = set(self.global_scheduler.available_decode_instance_info.values())
-        return prefill_instance_id_set, decode_instance_id_set
-
     # TODO(KuilongCui): Add comments for this function.
     async def _rebuild_migration_backend(self) -> None:
         # Wait for all instances to finish migration

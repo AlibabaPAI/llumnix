@@ -33,11 +33,11 @@ class GlobalScheduler:
         self.instance_id_set: Set[str] = set()
         self.instance_info: Dict[str, InstanceInfo] = {}
 
-        self.available_prefill_instance_info: Dict[str, InstanceInfo] = {}
-        self.available_prefill_instance_num_requests: Dict[str, int] = {}
+        self.prefill_instance_info: Dict[str, InstanceInfo] = {}
+        self.prefill_instance_num_requests: Dict[str, int] = {}
 
-        self.available_decode_instance_info: Dict[str, InstanceInfo] = {}
-        self.available_decode_instance_num_requests: Dict[str, int] = {}
+        self.decode_instance_info: Dict[str, InstanceInfo] = {}
+        self.decode_instance_num_requests: Dict[str, int] = {}
 
         # dispatch args
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
@@ -61,16 +61,16 @@ class GlobalScheduler:
     def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
         if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
             instance_id = self.dispatch_scheduler.dispatch(
-                instance_info=self.available_prefill_instance_info,
-                instance_num_requests=self.available_prefill_instance_num_requests,
+                instance_info=self.prefill_instance_info,
+                instance_num_requests=self.prefill_instance_num_requests,
             )
-            self.available_prefill_instance_num_requests[instance_id] += 1
+            self.prefill_instance_num_requests[instance_id] += 1
         elif instance_type == InstanceType.DECODE:
             instance_id = self.dispatch_scheduler.dispatch(
-                instance_info=self.available_decode_instance_info,
-                instance_num_requests=self.available_decode_instance_num_requests,
+                instance_info=self.decode_instance_info,
+                instance_num_requests=self.decode_instance_num_requests,
             )
-            self.available_decode_instance_num_requests[instance_id] += 1
+            self.decode_instance_num_requests[instance_id] += 1
         else:
             logger.error("instance_type {} is not supported".format(instance_type))
             raise TypeError("instance_type {} is not supported".format(instance_type))
@@ -128,11 +128,11 @@ class GlobalScheduler:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
         if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
-            self.available_prefill_instance_info[instance_id] = new_intance_info
-            self.available_prefill_instance_num_requests[instance_id] = 0
+            self.prefill_instance_info[instance_id] = new_intance_info
+            self.prefill_instance_num_requests[instance_id] = 0
         elif instance_type == InstanceType.DECODE:
-            self.available_decode_instance_info[instance_id] = new_intance_info
-            self.available_decode_instance_num_requests[instance_id] = 0
+            self.decode_instance_info[instance_id] = new_intance_info
+            self.decode_instance_num_requests[instance_id] = 0
 
     def _remove_instance(self, instance_id: str) -> None:
         logger.info("Scale down instance: {}.".format(instance_id))
@@ -140,16 +140,14 @@ class GlobalScheduler:
             logger.warning("instance {} is not in instance_id_set".format(instance_id))
         if instance_id not in self.instance_info:
             logger.warning("instance {} is not in instance_info".format(instance_id))
-        print(self.available_prefill_instance_num_requests)
-        print(self.available_prefill_instance_info)
         instance_info = self.instance_info.get(instance_id, None)
         if instance_info:
             if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
-                self.available_prefill_instance_info.pop(instance_id, 0)
-                self.available_prefill_instance_num_requests.pop(instance_id, 0)
+                self.prefill_instance_info.pop(instance_id, 0)
+                self.prefill_instance_num_requests.pop(instance_id, 0)
             elif instance_info.instance_type == InstanceType.DECODE:
-                self.available_decode_instance_info.pop(instance_id, 0)
-                self.available_decode_instance_num_requests.pop(instance_id, 0)
+                self.decode_instance_info.pop(instance_id, 0)
+                self.decode_instance_num_requests.pop(instance_id, 0)
 
         self.instance_id_set.discard(instance_id)
         self.instance_info.pop(instance_id, 0)

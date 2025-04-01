@@ -42,6 +42,8 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_se
                            actor_exists, get_actor_names_by_name_prefix)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
+from llumnix.queue.queue_server_base import QueueServerBase
+from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_GENERATE_INTERVAL,
                                WAIT_ALL_MIGRATIONS_DONE_INTERVAL, AUTO_SCALE_UP_INTERVAL,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
@@ -251,6 +253,9 @@ class Manager:
             asyncio.create_task(instance_ready_scale_up(instance_id, instance))
 
         return instance_ids, instances
+
+    def init_request_output_queue_server(self, ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
+        return init_request_output_queue_server(ip, port, queue_type)
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""

@@ -49,60 +49,60 @@ def test_add_instance_and_remove_instance(global_scheduler):
     assert global_scheduler.num_instances == 1
     assert len(global_scheduler.instance_info) == 1
     assert len(global_scheduler.instance_id_set) == 1
-    assert len(global_scheduler.available_prefill_instance_info) == 1
-    assert len(global_scheduler.available_decode_instance_info) == 0
-    assert global_scheduler.available_prefill_instance_num_requests['instance_1'] == 0
-    assert global_scheduler.available_decode_instance_num_requests.get("instance_1", None) is None
+    assert len(global_scheduler.prefill_instance_info) == 1
+    assert len(global_scheduler.decode_instance_info) == 0
+    assert global_scheduler.prefill_instance_num_requests['instance_1'] == 0
+    assert global_scheduler.decode_instance_num_requests.get("instance_1", None) is None
     assert 'instance_1' in global_scheduler.instance_id_set
 
     global_scheduler.scale_down('instance_1')
     assert global_scheduler.num_instances == 0
     assert len(global_scheduler.instance_info) == 0
     assert len(global_scheduler.instance_id_set) == 0
-    assert len(global_scheduler.available_prefill_instance_info) == 0
-    assert len(global_scheduler.available_decode_instance_info) == 0
-    assert global_scheduler.available_prefill_instance_num_requests.get("instance_1", None) is None
-    assert global_scheduler.available_decode_instance_num_requests.get("instance_1", None) is None
+    assert len(global_scheduler.prefill_instance_info) == 0
+    assert len(global_scheduler.decode_instance_info) == 0
+    assert global_scheduler.prefill_instance_num_requests.get("instance_1", None) is None
+    assert global_scheduler.decode_instance_num_requests.get("instance_1", None) is None
 
 
     global_scheduler.scale_up('instance_2', [InstanceArgs(instance_type="prefill")])
-    assert len(global_scheduler.available_prefill_instance_num_requests) == 1
-    assert global_scheduler.available_prefill_instance_num_requests['instance_2'] == 0
-    assert len(global_scheduler.available_prefill_instance_info) == 1
+    assert len(global_scheduler.prefill_instance_num_requests) == 1
+    assert global_scheduler.prefill_instance_num_requests['instance_2'] == 0
+    assert len(global_scheduler.prefill_instance_info) == 1
     assert len(global_scheduler.instance_id_set) == 1
     global_scheduler.scale_up('instance_3', [InstanceArgs(instance_type="prefill")])
-    assert len(global_scheduler.available_prefill_instance_num_requests) == 2
-    assert global_scheduler.available_prefill_instance_num_requests['instance_3'] == 0
-    assert len(global_scheduler.available_prefill_instance_info) == 2
+    assert len(global_scheduler.prefill_instance_num_requests) == 2
+    assert global_scheduler.prefill_instance_num_requests['instance_3'] == 0
+    assert len(global_scheduler.prefill_instance_info) == 2
     assert len(global_scheduler.instance_id_set) == 2
 
 
     global_scheduler.scale_down('instance_2')
-    assert len(global_scheduler.available_prefill_instance_info) == 1
+    assert len(global_scheduler.prefill_instance_info) == 1
     assert len(global_scheduler.instance_info) == 1
     global_scheduler.scale_down('instance_3')
-    assert len(global_scheduler.available_prefill_instance_info) == 0
+    assert len(global_scheduler.prefill_instance_info) == 0
     assert len(global_scheduler.instance_info) == 0
 
     # test decode instance
     global_scheduler.scale_up('instance_1', [InstanceArgs(instance_type="decode")])
-    assert len(global_scheduler.available_decode_instance_info) == 1
-    assert len(global_scheduler.available_prefill_instance_info) == 0
+    assert len(global_scheduler.decode_instance_info) == 1
+    assert len(global_scheduler.prefill_instance_info) == 0
     global_scheduler.scale_down('instance_1')
     assert global_scheduler.num_instances == 0
-    assert len(global_scheduler.available_decode_instance_num_requests) == 0
+    assert len(global_scheduler.decode_instance_num_requests) == 0
     assert len(global_scheduler.instance_info) == 0
     assert len(global_scheduler.instance_id_set) == 0
-    assert len(global_scheduler.available_prefill_instance_info) == 0
-    assert len(global_scheduler.available_decode_instance_info) == 0
+    assert len(global_scheduler.prefill_instance_info) == 0
+    assert len(global_scheduler.decode_instance_info) == 0
 
     global_scheduler.scale_up('instance_2', [InstanceArgs(instance_type="decode")])
-    assert len(global_scheduler.available_decode_instance_info) == 1
+    assert len(global_scheduler.decode_instance_info) == 1
     global_scheduler.scale_up('instance_3', [InstanceArgs(instance_type="decode")])
-    assert len(global_scheduler.available_decode_instance_info) == 2
+    assert len(global_scheduler.decode_instance_info) == 2
     assert global_scheduler.num_instances == 2
-    assert len(global_scheduler.available_decode_instance_num_requests) == 2
-    assert len(global_scheduler.available_prefill_instance_num_requests) == 0
+    assert len(global_scheduler.decode_instance_num_requests) == 2
+    assert len(global_scheduler.prefill_instance_num_requests) == 0
     assert len(global_scheduler.instance_info) == 2
     assert len(global_scheduler.instance_id_set) == 2
 

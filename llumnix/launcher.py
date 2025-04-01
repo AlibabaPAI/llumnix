@@ -189,8 +189,8 @@ class Launcher:
             return instance_args
 
         next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
-        cur_num_prefill_instances = len(self.global_scheduler.available_prefill_instance_info)
-        cur_num_decode_instances = len(self.global_scheduler.available_decode_instance_info)
+        cur_num_prefill_instances = len(self.global_scheduler.prefill_instance_info)
+        cur_num_decode_instances = len(self.global_scheduler.decode_instance_info)
         next_instance_args.instance_type = self._get_next_instance_type(
             cur_num_prefill_instances,
             cur_num_decode_instances,

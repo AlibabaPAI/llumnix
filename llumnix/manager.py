@@ -601,9 +601,9 @@ class Manager:
                 logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
     def _check_pd_deployment_states(self) -> str:
-        prefill_instance_ids = self.global_scheduler.available_prefill_instance_info.keys()
+        prefill_instance_ids = self.global_scheduler.prefill_instance_info.keys()
         cur_num_prefill_instances = len(prefill_instance_ids)
-        decode_instance_ids = self.global_scheduler.available_decode_instance_info.keys()
+        decode_instance_ids = self.global_scheduler.decode_instance_info.keys()
         cur_num_decode_instances = len(decode_instance_ids)
 
         scale_down_instance_id = None

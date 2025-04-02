@@ -1,5 +1,7 @@
 import uvicorn
 
+from vllm.engine.arg_utils import AsyncEngineArgs
+
 from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
@@ -11,6 +13,7 @@ logger = init_logger(__name__)
 class APIServerActorVLLM(APIServerActor):
     def _run_server(self,
                     entrypoints_args: EntrypointsArgs,
+                    engine_args: AsyncEngineArgs,
                     entrypoints_context: EntrypointsContext):
         # pylint: disable=import-outside-toplevel
         import llumnix.entrypoints.vllm.api_server

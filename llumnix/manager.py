@@ -30,7 +30,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
-from llumnix.instance_info import InstanceInfo, get_service_instance_type
+from llumnix.instance_info import InstanceInfo
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
@@ -39,7 +39,8 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_se
                            INSTANCE_NAME_PREFIX, SERVER_NAME_PREFIX, run_coroutine_in_new_thread,
                            kill_server, kill_instance, remove_placement_group,
                            get_placement_group_infos_by_state, get_placement_group_infos_by_name,
-                           actor_exists, get_actor_names_by_name_prefix, log_actor_ray_info)
+                           actor_exists, get_actor_names_by_name_prefix, get_service_instance_type,
+                           log_actor_ray_info)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_server_base import QueueServerBase
@@ -820,7 +821,9 @@ class Manager:
         for instance_info in instance_infos:
             instance_id = instance_info.instance_id
             gpu_cache_usage = instance_info.gpu_cache_usage
-            should_log = (gpu_cache_usage > 0) or (gpu_cache_usage == 0 and not self.instance_last_logged_empty[instance_id])
+            should_log = (gpu_cache_usage > 0) or (gpu_cache_usage == 0 and \
+                                                   instance_id in self.instance_last_logged_empty and \
+                                                   not self.instance_last_logged_empty[instance_id])
             if should_log:
                 self.instance_last_logged_empty[instance_id] = (gpu_cache_usage == 0)
                 self.instance_info_csv.writerow([

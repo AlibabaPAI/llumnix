@@ -186,6 +186,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
         self.state_manager._request_groups.pop(0, None)
         return True
 
+    # pylint: disable=arguments-differ
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         ip_address = src_handle.src_handlers[self.state_manager.rank].ip_address
         src_blocks = src_handle.src_blocks
@@ -347,6 +348,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
                 worker_id=self.worker_id), [0], [1])
         return True
 
+    # pylint: disable=arguments-differ
     def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         ip_address = src_handle.src_handlers[self.state_manager.rank].ip_address
         kv_transfer_instance_id = src_handle.src_handlers[self.state_manager.rank].kv_transfer_instance_id

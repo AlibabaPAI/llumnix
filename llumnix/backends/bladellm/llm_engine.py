@@ -524,7 +524,7 @@ class BackendBladeLLM(BackendInterface):
     def add_waiting_request(self, *args, **kwargs) -> None:
         self.engine.scheduler.add_waiting_request(*args, **kwargs)
 
-    def remove_running_request(self, request_id: int) -> bool:
+    async def remove_running_request(self, request_id: int) -> bool:
         ret = self.engine.scheduler.remove_running_request(request_id)
         self.engine.scheduler.running_filter_request_ids.remove(request_id)
         self.engine._req_tracker.remove_span(request_id)
@@ -533,11 +533,11 @@ class BackendBladeLLM(BackendInterface):
     def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
         return self.engine.scheduler.add_migrating_out_request_last_stage(*args, **kwargs)
 
-    def remove_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.remove_migrating_out_request_last_stage(*args, **kwargs)
+    def pop_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
+        return self.engine.scheduler.pop_migrating_out_request_last_stage(*args, **kwargs)
 
-    def pop_migrating_out_requests_last_stage(self, *args, **kwargs) -> List[Any]:
-        return self.engine.scheduler.pop_migrating_out_requests_last_stage(*args, **kwargs)
+    def free_migrating_out_requests_last_stage(self, *args, **kwargs) -> List[Any]:
+        return self.engine.scheduler.free_migrating_out_requests_last_stage(*args, **kwargs)
 
     def pre_alloc(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.pre_alloc(*args, **kwargs)
@@ -553,8 +553,12 @@ class BackendBladeLLM(BackendInterface):
         self.engine.trans_wrapper.drop_request(backend_request.request_id)
         return self.engine.scheduler.free_src_request(backend_request)
 
-    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
-                          src_blocks: List[int], dst_blocks: List[int], is_last_stage: bool):
+    async def send_blocks(self,
+                          dst_ray_actor: ray.actor.ActorHandle,
+                          src_blocks: List[int],
+                          dst_blocks: List[int],
+                          request_id: str,
+                          is_last_stage: bool):
         request = MigrateCacheRequest(
             src_handlers=self.worker_infos,
             request_id=request_id,
@@ -562,9 +566,9 @@ class BackendBladeLLM(BackendInterface):
             src_blocks=src_blocks,
             dst_blocks=dst_blocks,
         )
-        await dst_ray_actor.execute_async_engine_method.remote("_run_workers", "migrate_cache", request)
+        await dst_ray_actor.execute_engine_method_async.remote("_run_workers", "migrate_cache", request)
 
-    def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
+    async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         assert len(backend_request.paged_reqs) == 1, "currently llumnix doesn't support multi-paged-req migration."
 
         seq = backend_request.paged_reqs[0]

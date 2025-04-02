@@ -11,13 +11,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Callable
 import torch
 from func_timeout import func_set_timeout, FunctionTimedOut
 
 import ray
 import ray.util.collective as col
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+
 from vllm.worker.cache_engine import CacheEngine
+
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logging.logger import init_logger
@@ -29,10 +32,14 @@ logger = init_logger(__name__)
 
 @ray.remote(num_cpus=0, max_concurrency=2)
 class ProxyActor:
-    def exec_method(self, is_driver_worker, handle, *args, **kwargs):
+    def __init__(self, is_driver_worker: bool, use_ray_spmd_worker: bool):
+        self.is_driver_worker = is_driver_worker
+        self.use_ray_spmd_worker = use_ray_spmd_worker
+
+    def exec_method(self, handle, *args, **kwargs):
         try:
-            if is_driver_worker:
-                ret = ray.get(handle.execute_async_engine_method.remote("execute_worker_method_async", *args, **kwargs))
+            if self.is_driver_worker and not self.use_ray_spmd_worker:
+                ret = ray.get(handle.execute_engine_method_async.remote("execute_worker_method_async", *args, **kwargs))
             else:
                 ret = ray.get(handle.execute_method.remote(*args, **kwargs))
         # pylint: disable=try-except-raise
@@ -42,9 +49,21 @@ class ProxyActor:
         return ret
 
 
+NUMPY_SUPPORTED_DTYPES = [torch.float32, torch.float16]
+
+
 class RayRpcMigrationBackend(MigrationBackendBase):
-    def __init__(self, instance_id: str, migration_config: MigrationConfig, cache_engine: List[CacheEngine],
-                 worker_rank, worker_handle_list, scheduling_strategy, is_driver_worker, gpu_cache) -> None:
+    def __init__(self,
+                 instance_id: str,
+                 migration_config: MigrationConfig,
+                 cache_engine: List[CacheEngine],
+                 worker_rank: int,
+                 worker_handle_list: List["ray.actor.ActorHandle"],
+                 scheduling_strategy: PlacementGroupSchedulingStrategy,
+                 is_driver_worker: bool,
+                 gpu_cache: Optional[List[List[torch.Tensor]]],
+                 use_ray_spmd_worker: bool,
+                 worker_stage_seq_group_metadata_callback: Callable) -> None:
         super().__init__()
 
         self.instance_id = instance_id
@@ -54,7 +73,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
-                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote()
+                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote(is_driver_worker, use_ray_spmd_worker)
 
         if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION:
             self.rpc_dtype = self.cache_engine[0].dtype
@@ -62,8 +81,10 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             self.rpc_dtype = torch.float32
             logger.warning("Detect numpy unsupported dtype: {}. Using torch.float32.".format(self.cache_engine[0].dtype))
 
-        self.is_driver_worker = is_driver_worker
         self.gpu_cache = gpu_cache
+        self.use_ray_spmd_worker = use_ray_spmd_worker
+        self.worker_stage_seq_group_metadata_callback = worker_stage_seq_group_metadata_callback
+
         self.cache_device = "cpu"
         self.num_migration_buffer_blocks = self.migration_config.migration_buffer_blocks
         self.num_layers = self.cache_engine[0].num_attention_layers
@@ -87,28 +108,43 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         pass
 
     def warmup(self) -> bool:
-        self.actor.exec_method.remote(self.is_driver_worker, self.worker_handle_list[self.worker_rank], "do_send", None, [0])
+        self.actor.exec_method.remote(self.worker_handle_list[self.worker_rank], "do_send", None, [0])
         logger.info("Rayrpc migration backend warmup successfully.")
         return True
 
     # The src actor will pack the kv-cache data layer by layer. Specifically, NumPy is used for the transfer
     # because, for a single node, Ray RPC can transfer NumPy arrays via shared memory. Then, the recv actor
     # first copies the data to a pinned-memory dummy cache before transferring it to the GPU to accelerate data transfer.
-    def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+    def migrate_cache(self,
+                      src_handle: "ray.actor.ActorHandle",
+                      src_blocks: List[int],
+                      dst_blocks: List[int],
+                      request_id: str,
+                      is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
+        src_seq_group_metadata = None
         for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
             offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
+            is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
             send_blocks = src_blocks[start_idx:start_idx+offset]
-            ray_obj = self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", send_blocks)
+            send_worker_metadata = self.use_ray_spmd_worker and is_last_stage and is_last_comm
+            ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
+                                                    None, send_blocks, request_id=request_id, send_worker_metadata=send_worker_metadata)
             if rpc_numpy_cache is not None:
                 self.do_recv(rpc_numpy_cache, recv_blocks)
-            rpc_numpy_cache = ray.get(ray_obj)
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
-        self.do_recv(rpc_numpy_cache, recv_blocks)
 
-    # pylint: disable=arguments-differ
-    def do_send(self, blocks: List[int], virtuel_engine: int=0):
+            if send_worker_metadata:
+                rpc_numpy_cache, src_seq_group_metadata = ray.get(ray_obj)
+            else:
+                rpc_numpy_cache = ray.get(ray_obj)
+
+        self.do_recv(rpc_numpy_cache, recv_blocks)
+        if src_seq_group_metadata:
+            self.worker_stage_seq_group_metadata_callback(request_id, src_seq_group_metadata)
+
+    def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         # src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
@@ -145,6 +181,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
                     .swap_blocks(recv_cache[layer_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         torch.cuda.Stream.synchronize(self.migration_stream)
 
+
 def try_import_gloo():
     try:
         # pylint: disable=C0415
@@ -160,8 +197,16 @@ def try_import_gloo():
 
 
 class RayColMigrationBackend(MigrationBackendBase):
-    def __init__(self, instance_id: str, migration_config: MigrationConfig, cache_engine: List[CacheEngine], local_rank,
-                 scheduling_strategy, is_driver_worker, gpu_cache) -> None:
+    def __init__(self,
+                 instance_id: str,
+                 migration_config: MigrationConfig,
+                 cache_engine: List[CacheEngine],
+                 local_rank: int,
+                 scheduling_strategy: PlacementGroupSchedulingStrategy,
+                 is_driver_worker: bool,
+                 gpu_cache: Optional[List[List[torch.Tensor]]],
+                 use_ray_spmd_worker: bool,
+                 worker_stage_seq_group_metadata_callback: Callable) -> None:
         super().__init__()
 
         # pylint: disable=C0415
@@ -181,9 +226,10 @@ class RayColMigrationBackend(MigrationBackendBase):
 
         self.local_rank = local_rank
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
-                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote()
-        self.is_driver_worker = is_driver_worker
+                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote(is_driver_worker, use_ray_spmd_worker)
         self.gpu_cache = gpu_cache
+        self.use_ray_spmd_worker = use_ray_spmd_worker
+        self.worker_stage_seq_group_metadata_callback = worker_stage_seq_group_metadata_callback
 
         self.migration_cache_size = self.cache_engine[0].block_size * self.cache_engine[0].num_kv_heads * self.cache_engine[0].head_size
 
@@ -203,7 +249,7 @@ class RayColMigrationBackend(MigrationBackendBase):
 
         self.migration_stream = cupy.cuda.Stream()
 
-    def init_backend(self, group_name, world_size, rank) -> bool:
+    def init_backend(self, group_name: str, world_size: int, rank: int) -> bool:
         @func_set_timeout(self.migration_config.migration_backend_init_timeout)
         def init_group(world_size, rank, backend, group_name):
             col.init_collective_group(world_size, rank, backend, group_name)
@@ -259,19 +305,31 @@ class RayColMigrationBackend(MigrationBackendBase):
 
     # Ray.collective is used to construct the gloo and nccl backends. The do_send/do_recv functions will transmit
     # data layer by layer. Take into consideration that col.send/recv are blocking operations.
-    def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+    def migrate_cache(self,
+                      src_handle: "ray.actor.ActorHandle",
+                      src_blocks: List[int],
+                      dst_blocks: List[int],
+                      request_id: str,
+                      is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
-        src_rank = ray.get(self.actor.exec_method.remote(self.is_driver_worker, src_handle, "get_global_rank"))
+        src_rank = ray.get(self.actor.exec_method.remote(src_handle, "get_global_rank"))
 
+        src_seq_group_metadata = None
         for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
             offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
+            is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
-            self.actor.exec_method.remote(self.is_driver_worker, src_handle, "do_send", self.global_rank, send_blocks)
+            send_worker_metadata = self.use_ray_spmd_worker and is_last_stage and is_last_comm
+            ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
+                                                    self.global_rank, send_blocks, request_id=request_id, send_worker_metadata=send_worker_metadata)
             self.do_recv(src_rank, recv_blocks)
+            if send_worker_metadata:
+                _, src_seq_group_metadata = ray.get(ray_obj)
+        if src_seq_group_metadata:
+            self.worker_stage_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 
-    # pylint: disable=unused-argument,arguments-differ
-    def do_send(self, dst_handle, blocks: List[int], virtuel_engine: int=0):
+    def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst: List[Tuple[int, int]] = []
@@ -290,8 +348,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                     col.send(send_cache, dst_handle, self.group_name)
         self.migration_stream.synchronize()
 
-    # pylint: disable=unused-argument,arguments-differ
-    def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int=0):
+    def do_recv(self, src_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
         num_blocks = len(blocks)
         src_to_dst: List[Tuple[int, int]] = []
         for idx in range(num_blocks):
@@ -310,9 +367,19 @@ class RayColMigrationBackend(MigrationBackendBase):
                     .swap_blocks(recv_cache[cache_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         self.migration_stream.synchronize()
 
-def get_migration_backend(instance_id: str, migration_config: MigrationConfig, cache_engine: List[CacheEngine],
-                          worker_handle_list, scheduling_strategy, is_driver_worker, gpu_cache, worker_rank,
-                          local_rank) -> MigrationBackendBase:
+
+# TODO(s5u13b): Remove unnescessary args.
+def get_migration_backend(instance_id: str,
+                          migration_config: MigrationConfig,
+                          cache_engine: List[CacheEngine],
+                          worker_handle_list: List["ray.actor.ActorHandle"],
+                          scheduling_strategy: PlacementGroupSchedulingStrategy,
+                          is_driver_worker: bool,
+                          gpu_cache: Optional[List[List[torch.Tensor]]],
+                          worker_rank: int,
+                          local_rank: int,
+                          use_ray_spmd_worker: bool,
+                          worker_stage_seq_group_metadata_callback: Callable) -> MigrationBackendBase:
     if cache_engine[0].num_gpu_blocks < migration_config.migration_buffer_blocks:
         logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
                        .format(migration_config.migration_buffer_blocks, cache_engine[0].num_gpu_blocks))
@@ -324,10 +391,25 @@ def get_migration_backend(instance_id: str, migration_config: MigrationConfig, c
     assert backend in ['nccl', 'rayrpc', 'gloo'], "Unsupported migration backend: {} for llumnix".format(backend)
 
     if backend in ['nccl', 'gloo']:
-        target_migration_backend = RayColMigrationBackend(instance_id, migration_config, cache_engine, local_rank, scheduling_strategy,
-                                            is_driver_worker, gpu_cache)
+        target_migration_backend = RayColMigrationBackend(instance_id,
+                                                          migration_config,
+                                                          cache_engine,
+                                                          local_rank,
+                                                          scheduling_strategy,
+                                                          is_driver_worker,
+                                                          gpu_cache,
+                                                          use_ray_spmd_worker,
+                                                          worker_stage_seq_group_metadata_callback)
     else:
-        target_migration_backend = RayRpcMigrationBackend(instance_id, migration_config, cache_engine, worker_rank, worker_handle_list,
-                                            scheduling_strategy, is_driver_worker, gpu_cache)
+        target_migration_backend = RayRpcMigrationBackend(instance_id,
+                                                          migration_config,
+                                                          cache_engine,
+                                                          worker_rank,
+                                                          worker_handle_list,
+                                                          scheduling_strategy,
+                                                          is_driver_worker,
+                                                          gpu_cache,
+                                                          use_ray_spmd_worker,
+                                                          worker_stage_seq_group_metadata_callback)
 
     return target_migration_backend

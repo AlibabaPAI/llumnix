@@ -34,6 +34,7 @@ from ray.experimental.internal_kv import (
 from ray.util import placement_group_table
 
 from llumnix.logging.logger import init_logger
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -107,7 +108,7 @@ def initialize_placement_group(
     # requested resources are available, and will timeout
     # if they cannot be provisioned.
     if block:
-        ray.get(current_placement_group.ready(), timeout=1.0)
+        ray.get(current_placement_group.ready(), timeout=3.0)
 
     return current_placement_group
 
@@ -337,3 +338,31 @@ def log_actor_ray_info(actor_class_name: str) -> None:
     session_dir = ray._private.worker._global_node.get_session_dir_path()
     pattern = os.path.join(session_dir, "logs", f"worker-{worker_id}*")
     logger.info("{}(log_dir={})".format(actor_class_name, glob.glob(pattern)))
+
+def get_llumnix_env_vars():
+    llumnix_env_vars = {}
+    env_vars = dict(os.environ)
+    llumnix_keys = list(llumnix_envs.environment_variables.keys())
+    try:
+        # pylint: disable=import-outside-toplevel
+        from vllm import envs as vllm_envs
+        llumnix_keys.extend(list(vllm_envs.environment_variables.keys()))
+    except ImportError:
+        pass
+    for key, value in env_vars.items():
+        if key in llumnix_keys:
+            llumnix_env_vars[key] = value
+
+    return llumnix_env_vars
+
+# Cannot put it to utils.py due to circular import.
+def get_service_instance_type(service_name: str) -> "InstanceType":
+    # pylint: disable=import-outside-toplevel
+    from llumnix.instance_info import InstanceType
+    assert service_name in ["prefill", "decode"], \
+        "Only specify instance type when the service is prefill or decode."
+    if service_name == "prefill":
+        instance_type = InstanceType.PREFILL
+    else:
+        instance_type = InstanceType.DECODE
+    return instance_type

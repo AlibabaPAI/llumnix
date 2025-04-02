@@ -163,13 +163,3 @@ class ScalingLoadComputation(LoadComputationStrategy):
 
     def compute_instance_load(self, instance_info: InstanceInfo) -> float:
         return self.load_calculator.compute_instance_load(instance_info)
-
-# Cannot put it to utils.py due to circular import.
-def get_service_instance_type(service_name: str) -> InstanceType:
-    assert service_name in ["prefill", "decode"], \
-        "Only specify instance type when the service is prefill or decode."
-    if service_name == "prefill":
-        instance_type = InstanceType.PREFILL
-    else:
-        instance_type = InstanceType.DECODE
-    return instance_type

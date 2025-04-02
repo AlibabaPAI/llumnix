@@ -17,9 +17,10 @@ import asyncio
 import queue
 from typing import List, Dict
 
-import ray
 from ray.util.placement_group import PlacementGroup
+
 from vllm.engine.arg_utils import EngineArgs
+from vllm import envs as vllm_envs
 
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import MigrationConfig
@@ -63,6 +64,8 @@ class BackendSimVLLM(BackendVLLM):
 
         self.disable_async_output_proc = engine_args.disable_async_output_proc
 
+        self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
+
         self._step_done_event_queue = queue.Queue()
         self._remove_running_request_ret: Dict[str] = {}
 
@@ -90,6 +93,10 @@ class BackendSimVLLM(BackendVLLM):
         return latency_mem
 
     # pylint: disable=unused-argument
-    async def send_blocks(self, dst_ray_actor: ray.actor.ActorHandle, request_id: int,
-                          src_blocks: List[int], dst_blocks: List[int], is_last_stage: bool):
+    async def send_blocks(self,
+                          dst_ray_actor: "ray.actor.ActorHandle",
+                          src_blocks: List[int],
+                          dst_blocks: List[int],
+                          request_id: str,
+                          is_last_stage: bool) -> None:
         await self.engine.model_executor.send_blocks(len(src_blocks))

@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
+    # ================== Llumnix environment variables ==================
+
     # Logging configuration
     # If set to 0, llumnix will not configure logging
     # If set to 1, llumnix will configure logging using the default configuration

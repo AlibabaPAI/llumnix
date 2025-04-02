@@ -108,7 +108,7 @@ def initialize_placement_group(
     # requested resources are available, and will timeout
     # if they cannot be provisioned.
     if block:
-        ray.get(current_placement_group.ready(), timeout=1.0)
+        ray.get(current_placement_group.ready(), timeout=3.0)
 
     return current_placement_group
 

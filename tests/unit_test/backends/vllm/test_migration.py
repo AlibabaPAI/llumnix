@@ -80,8 +80,13 @@ def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_a
     placement_group = initialize_placement_group(get_placement_group_name(instance_id), num_cpus=3, num_gpus=num_gpus, detached=True)
     llumlet = MockLlumletTestMigration.options(
                 num_cpus=1,
-                num_gpus=num_gpus,
+                num_gpus=0.5,
                 name=f"instance_{instance_id}",
+                scheduling_strategy=PlacementGroupSchedulingStrategy(
+                    placement_group=placement_group,
+                    placement_group_bundle_index=0,
+                    placement_group_capture_child_tasks=True
+                ),
                 namespace='llumnix').remote(
                     instance_id=instance_id,
                     instance_args=instance_args,

@@ -32,6 +32,7 @@ class LlumnixClientVLLM:
 
         self.request_streams: Dict[str, AsyncStream] = {}
         self.instance_num_requests: Dict[str, int] = {}
+        self.request_streams_last_resp_len: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
         self.num_finished_requests = 0
@@ -125,7 +126,6 @@ class LlumnixClientVLLM:
         ready_status = await self.manager.is_ready.remote()
         return ready_status
 
-    # TODO(s5u13b): Fix the potential output token out-of-order issue caused by the migration.
     async def get_request_outputs_loop(self):
         while True:
             request_outputs = await self.request_output_queue.get()
@@ -135,7 +135,15 @@ class LlumnixClientVLLM:
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
+                last_response_len = self.request_streams_last_resp_len.get(request_id, 0)
+                response_len = sum(len(output.text) for output in request_output.outputs)
+                # avoid potential output token out-of-order issue caused by the migration.
+                if response_len <= last_response_len:
+                    logger.info("request[{}] output len shorter than last len, skip current output...".format(request_id))
+                    continue
                 self.request_streams[request_id].put(request_output)
+                self.request_streams_last_resp_len[request_id] = response_len
                 if request_output.finished:
                     self.request_streams[request_id].finish()
                     del self.request_streams[request_id]
+                    self.request_streams_last_resp_len.pop(request_id, None)

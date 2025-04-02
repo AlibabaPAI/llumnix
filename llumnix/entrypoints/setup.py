@@ -12,17 +12,17 @@
 # limitations under the License.
 
 import subprocess
-import traceback
 import sys
 import os
 import time
 from typing import Dict, Optional, List, Tuple
+import traceback
 import ray
 
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
-from llumnix.utils import random_uuid, get_manager_name
+from llumnix.utils import random_uuid, get_manager_name, get_llumnix_env_vars
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, InstanceArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
@@ -79,10 +79,13 @@ def connect_to_ray_cluster(head_node_ip: str = None,
                            port: int = None,
                            namespace: str ="llumnix",
                            log_to_driver: bool=True) -> None:
+    # env_vars of runtime_env can only set once in ray.init or ray actor initialization, otherwise will get ray error.
     if head_node_ip is not None and port is not None:
-        ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
+        ray.init(address=f"{head_node_ip}:{port}", ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver,
+                 runtime_env={"env_vars": get_llumnix_env_vars()})
     else:
-        ray.init(ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver)
+        ray.init(ignore_reinit_error=True, namespace=namespace, log_to_driver=log_to_driver,
+                 runtime_env={"env_vars": get_llumnix_env_vars()})
 
 def setup_ray_cluster(entrypoints_args) -> None:
     if entrypoints_args.launch_ray_cluster:

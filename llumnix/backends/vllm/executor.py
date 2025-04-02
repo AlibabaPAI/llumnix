@@ -27,6 +27,7 @@ from vllm.worker.worker_base import WorkerBase
 
 from vllm.sequence import Logprob, SequenceOutput, ExecuteModelRequest
 from vllm.utils import GiB_bytes
+from vllm.model_executor.layers.sampler import SamplerOutput
 
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
@@ -174,6 +175,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 " network configuration. If you set `VLLM_HOST_IP` or "
                 "`HOST_IP` environment variable, make sure it is unique for"
                 " each node.")
+
         # pylint: disable=invalid-name
         VLLM_INSTANCE_ID = get_vllm_instance_id()
 
@@ -264,9 +266,51 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         worker_class_name = "MigrationWorker"
         return (worker_module_name, worker_class_name, worker_class_fn)
 
-    async def execute_model_async(self, *args, **kwargs):
+    async def execute_model_async(self, execute_model_req: ExecuteModelRequest) -> List[SamplerOutput]:
         t0 = time.time()
-        outputs = await super().execute_model_async(*args, **kwargs)
+        if not self.use_ray_spmd_worker:
+            return await super().execute_model_async(execute_model_req)
+
+        # pylint: disable=access-member-before-definition
+        if self.forward_dag is None:
+            self.forward_dag = self._compiled_ray_dag(enable_asyncio=True)
+
+        serialized_data = self.input_encoder.encode(execute_model_req)
+        dag_future = await self.forward_dag.execute_async(serialized_data)
+        outputs = await dag_future[0]
+        request_outputs = self.output_decoder.decode(outputs)
+
         t1 = time.time()
         self.last_inference_latency = (t1 - t0) * 1000
-        return outputs
+        return request_outputs
+
+    # _check_ray_adag_installation in vllm-v0.6.3.post1 requires ray version == 2.35.
+    # _check_ray_adag_installation here (follows vllm-v0.7.2) requires ray version >= 2.40.
+    # Llumnix requires ray version == 3.0.0.dev0, so we override the `_check_ray_adag_installation` method.
+    def _check_ray_adag_installation(self):
+        # pylint: disable=import-outside-toplevel
+        import pkg_resources
+        # pylint: disable=import-outside-toplevel
+        from packaging import version
+
+        required_version = version.parse("2.40")
+        current_version = version.parse(
+            pkg_resources.get_distribution("ray").version)
+        if current_version < required_version:
+            raise ValueError(f"Ray version {required_version} is "
+                             f"required, but found {current_version}")
+
+        # pylint: disable=import-outside-toplevel
+        import importlib.util
+        adag_spec = importlib.util.find_spec(
+            "ray.experimental.compiled_dag_ref")
+        if adag_spec is None:
+            raise ValueError("Ray accelerated DAG is not installed. "
+                             "Run `pip install ray[adag]` to install it.")
+
+        cupy_spec = importlib.util.find_spec("cupy")
+        if cupy_spec is None and envs.VLLM_USE_RAY_COMPILED_DAG_NCCL_CHANNEL:
+            raise ValueError(
+                "cupy is not installed but required since "
+                "VLLM_USE_RAY_COMPILED_DAG_NCCL_CHANNEL is set."
+                "Run `pip install ray[adag]` and check cupy installation.")

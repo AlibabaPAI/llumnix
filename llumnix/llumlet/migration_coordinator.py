@@ -77,7 +77,7 @@ class MigrationCoordinator:
                                                                     migrate_out_request.token_ids)
             if len(dst_blocks) != migrate_out_request.prefill_num_blocks:
                 self.backend_engine.add_waiting_request(migrate_out_request)
-                self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 return MigrationStatus.ABORTED_DST
 
             return MigrationStatus.FINISHED
@@ -118,6 +118,7 @@ class MigrationCoordinator:
                 return MigrationStatus.ABORTED_SRC
 
             pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
+            # TODO(s5u13b): Make migration codes of vLLM and BladeLLM uniform (some functions are not async).
             incremental_blocks, incremental_token_ids, is_last_stage = \
                 await self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
 
@@ -161,7 +162,7 @@ class MigrationCoordinator:
                 # migrate-in instance failed to pre alloc
                 if is_last_stage:
                     self.backend_engine.add_running_request(migrate_out_request)
-                    self.backend_engine.remove_migrating_out_request_last_stage(migrate_out_request)
+                    self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 return MigrationStatus.ABORTED_DST
 
             if migrate_out_request.should_abort_migration():
@@ -171,8 +172,7 @@ class MigrationCoordinator:
             migrate_out_request.stage_timestamps.append(time.time())
             migrate_out_request.stage_num_blocks_list.append(stage_block_num)
             # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
-            await self.backend_engine.send_blocks(migrate_in_ray_actor, migrate_out_request.request_id,
-                                                  src_blocks, dst_blocks, is_last_stage)
+            await self.backend_engine.send_blocks(migrate_in_ray_actor, src_blocks, dst_blocks, migrate_out_request.request_id, is_last_stage)
 
             if not is_last_stage and migrate_out_request.should_abort_migration():
                 # migrate-out request abort by scheduler during send/recv

@@ -31,13 +31,14 @@ from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.llumlet.request import RequestStatus
 from llumnix.server_info import ServerInfo
 
+
 class PagedSchedulerLlumnix(PagedScheduler):
     def __init__(self, serving_args: ServingArgs, *args, **kwargs) -> None:
         PagedScheduler.__init__(self, serving_args, *args, **kwargs)
         self.llumnix_metrics = BladeLLMMetrics()
         self.id2group: Dict[int, GenerationGroupStateLlumnix] = {}
         self.pre_alloc_cache_dict: Dict[int, BlockTable] = {}
-        self.migrating_out_request_last_stage: Set[int] = set()
+        self.migrating_out_request_last_stage: Dict[int, int] = {}
         self.llumnix_metrics.block_manager_init_metrics(self.block_manager)
         self.llumnix_metrics.scheduler_init_metrics(self)
 
@@ -138,7 +139,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         return False
 
     def add_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
-        self.migrating_out_request_last_stage.add(backend_request.request_group_id)
+        self.migrating_out_request_last_stage[backend_request.request_group_id] = backend_request.request_group_id
 
     def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.id2group[backend_request.request_id] = backend_request
@@ -152,8 +153,10 @@ class PagedSchedulerLlumnix(PagedScheduler):
     def add_waiting_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         heapq.push(self.waiting, backend_request)
 
-    def remove_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
-        self.migrating_out_request_last_stage.remove(backend_request.request_id)
+    def pop_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
+        assert backend_request.request_id in self.migrating_out_request_last_stage, \
+            "the request id of migrating out request in last stage should exist in migrating out request last stage"
+        self.migrating_out_request_last_stage.pop(backend_request.request_id)
 
     # pylint: disable=unused-argument
     def pre_alloc(self, request_id: int, request_status: RequestStatus, request_arrival_time: float,
@@ -193,10 +196,10 @@ class PagedSchedulerLlumnix(PagedScheduler):
                 # pylint: disable=protected-access
                 self.block_manager._free_block_table(blocks)
 
-    def pop_migrating_out_requests_last_stage(self) -> List[GenerationGroupStateLlumnix]:
-        migrating_out_request_last_stage = self.migrating_out_request_last_stage.copy()
+    def free_migrating_out_requests_last_stage(self) -> List[GenerationGroupStateLlumnix]:
+        migrating_out_requests_last_stage = list(self.migrating_out_request_last_stage.values())
         self.migrating_out_request_last_stage.clear()
-        return migrating_out_request_last_stage
+        return migrating_out_requests_last_stage
 
     def add_block_table(self, block_table: BlockTable, block_table_id: int) -> None:
         self.block_manager.block_tables[block_table_id] = block_table

@@ -25,7 +25,10 @@ class APIServerActor(ABC):
         logger.info("APIServerActor(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
                         self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
         self.entrypoints_args = entrypoints_args
-        self.host = get_ip_address()
+        if entrypoints_args.host in ("127.0.0.1", "0.0.0.0"):
+            self.host = entrypoints_args.host
+        else:
+            self.host = get_ip_address()
         self.request_output_queue_port = self.entrypoints_args.request_output_queue_port
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         self.request_output_queue = init_request_output_queue_server(

@@ -20,6 +20,7 @@ class APIServerActorBladeLLM(APIServerActor):
         from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
         # bladellm engine_args is dumped by pickle
         engine_args = pickle.loads(entrypoints_args.engine_args)
+        engine_args.host = self.host
         loop = asyncio.new_event_loop()
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
         web_app = LlumnixEntrypoint(client=llumnix_client, args=engine_args).create_web_app()

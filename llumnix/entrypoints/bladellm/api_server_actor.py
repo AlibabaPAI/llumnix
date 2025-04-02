@@ -13,13 +13,14 @@ logger = init_logger(__name__)
 class APIServerActorBladeLLM(APIServerActor):
     def _run_server(self,
                     entrypoints_args: EntrypointsArgs,
+                    engine_args,
                     entrypoints_context: EntrypointsContext):
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.bladellm.api_server import LlumnixEntrypoint
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
         # bladellm engine_args is dumped by pickle
-        engine_args = pickle.loads(entrypoints_args.engine_args)
+        engine_args = pickle.loads(engine_args.engine_args)
         engine_args.host = self.host
         loop = asyncio.new_event_loop()
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)

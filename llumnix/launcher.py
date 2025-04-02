@@ -143,7 +143,7 @@ class Launcher:
         next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
         instance = self.init_instance(instance_id, next_instance_args, placement_group,
                                       request_output_queue_type, backend_type, next_engine_args)
-        server = self.init_server(get_server_name(instance_id), placement_group, backend_type, next_entrypoints_args)
+        server = self.init_server(get_server_name(instance_id), placement_group, backend_type, next_entrypoints_args, next_engine_args)
 
         self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
         self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
@@ -153,15 +153,16 @@ class Launcher:
                     server_name: str,
                     placement_group: PlacementGroup,
                     backend_type: BackendType,
-                    entrypoints_args: EntrypointsArgs) -> APIServerActor:
+                    entrypoints_args: EntrypointsArgs,
+                    engine_args) -> APIServerActor:
         if backend_type == BackendType.BLADELLM:
             # pylint: disable=import-outside-toplevel
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM
             # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
-            api_server = APIServerActorBladeLLM.from_args(0.5, server_name, placement_group, entrypoints_args)
+            api_server = APIServerActorBladeLLM.from_args(0.5, server_name, placement_group, entrypoints_args, engine_args)
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
-            api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args)
+            api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args, engine_args)
 
         return api_server
 

@@ -57,6 +57,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
 
         self.request_streams: Dict[int, asyncio.Queue] = {}
+        self.request_streams_last_resp_len: Dict[str, int] = {}
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
@@ -153,8 +154,14 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
+                last_response_len = self.request_streams_last_resp_len.get(request_id, 0)
+                response_len = sum(len(output.text) for output in request_output.outputs)
+                # avoid potential output token out-of-order issue caused by the migration.
+                if response_len <= last_response_len:
+                    logger.info("request[{}] output len shorter than last len, skip current output...".format(request_id))
+                    continue
                 self.request_streams[request_id].put_nowait(request_output)
-
+                self.request_streams_last_resp_len[request_id] = response_len
                 if request_output.is_finished:
                     # TODO(KuilongCui): fix logging output error
                     print("Client finish request output: {}".format(output_message), flush=True)
@@ -162,6 +169,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     del self.entrypoint_id2llumnix_id[self.llumnix_id2entrypoint_id[request_id]]
                     del self.llumnix_id2entrypoint_id[request_id]
                     del self.request_streams[request_id]
+                    self.request_streams_last_resp_len.pop(request_id, None)
 
     def connect(self):
         pass

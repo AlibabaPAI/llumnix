@@ -11,19 +11,16 @@ from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.logging.logger import init_logger
+from llumnix.utils import log_actor_ray_info
 
 logger = init_logger(__name__)
 
 
 class APIServerActor(ABC):
     def __init__(self, server_name: str, entrypoints_args: EntrypointsArgs):
-        self.job_id = ray.get_runtime_context().get_job_id()
-        self.worker_id = ray.get_runtime_context().get_worker_id()
-        self.actor_id = ray.get_runtime_context().get_actor_id()
-        self.node_id = ray.get_runtime_context().get_node_id()
+        log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = server_name.split("_")[-1]
-        logger.info("APIServerActor(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
-                        self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
+        logger.info("APIServerActor(instance_id={})".format(self.instance_id))
         self.entrypoints_args = entrypoints_args
         if entrypoints_args.host in ("127.0.0.1", "0.0.0.0"):
             self.host = entrypoints_args.host

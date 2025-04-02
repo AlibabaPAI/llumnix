@@ -20,6 +20,7 @@ from typing import Any, Union, Callable, Awaitable, TypeVar, Coroutine, Dict, Li
 from enum import Enum
 from functools import partial
 import pickle
+import glob
 from typing_extensions import ParamSpec
 import ray
 import ray.actor
@@ -317,3 +318,22 @@ def get_service_resouces(service_name: str, num_gpus: int) -> Dict[str, float]:
     else: # service_name == "no_constraints", service_name is None
         resources = {}
     return resources
+
+def log_actor_ray_info(actor_class_name: str) -> None:
+    actor_name = ray.get_runtime_context().get_actor_name()
+    actor_id = ray.get_runtime_context().get_actor_id()
+    placement_group_id = ray.get_runtime_context().get_placement_group_id()
+    namespace = ray.get_runtime_context().namespace
+    job_id = ray.get_runtime_context().get_job_id()
+    worker_id = ray.get_runtime_context().get_worker_id()
+    node_id = ray.get_runtime_context().get_node_id()
+    # assigned_resources = ray.get_runtime_context().get_assigned_resources()
+    logger.info("{}(actor_name={}, actor_id={}, placement_group_id={}, namespace={}, " \
+                "job_id={}, worker_id={}, node_id={})".format(
+                    actor_class_name, actor_name, actor_id, placement_group_id, namespace,
+                    job_id, worker_id, node_id))
+    # It seems that the logging directory of ray cannot easily get by codes, so use the indirect way below.
+    # pylint: disable=protected-access
+    session_dir = ray._private.worker._global_node.get_session_dir_path()
+    pattern = os.path.join(session_dir, "logs", f"worker-{worker_id}*")
+    logger.info("{}(log_dir={})".format(actor_class_name, glob.glob(pattern)))

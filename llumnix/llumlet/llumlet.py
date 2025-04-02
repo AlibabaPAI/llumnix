@@ -33,7 +33,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import get_instance_name
+from llumnix.utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 
@@ -52,19 +52,9 @@ class Llumlet:
             # bladellm engine_args is dumped by pickle
             if hasattr(engine_args, 'engine_args'):
                 engine_args = pickle.loads(engine_args.engine_args)
-
-            self.job_id = ray.get_runtime_context().get_job_id()
-            self.worker_id = ray.get_runtime_context().get_worker_id()
-            self.actor_id = ray.get_runtime_context().get_actor_id()
-            self.node_id = ray.get_runtime_context().get_node_id()
+            log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
-            logger.info("Llumlet(job_id={}, worker_id={}, actor_id={}, node_id={}, instance_id={})".format(
-                            self.job_id, self.worker_id, self.actor_id, self.node_id, self.instance_id))
-            # TODO(s5u13b): Support reading ray log dir and enable this feature for all actors.
-            # session_log_dir = os.readlink('/tmp/ray/session_latest')
-            # pattern = os.path.join(session_log_dir, "logs", f"worker-{self.worker_id}*")
-            # logger.info("Llumlet log dir: {}".format(glob.glob(pattern)))
-            logger.info("Llumlet backend type: {}".format(backend_type))
+            logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
             self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)
             self.instance_load_calculator = InstanceLoadCalculator(

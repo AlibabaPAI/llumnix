@@ -39,7 +39,7 @@ from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_se
                            INSTANCE_NAME_PREFIX, SERVER_NAME_PREFIX, run_coroutine_in_new_thread,
                            kill_server, kill_instance, remove_placement_group,
                            get_placement_group_infos_by_state, get_placement_group_infos_by_name,
-                           actor_exists, get_actor_names_by_name_prefix)
+                           actor_exists, get_actor_names_by_name_prefix, log_actor_ray_info)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_server_base import QueueServerBase
@@ -68,12 +68,7 @@ class Manager:
                  work_dir: str,
                  ) -> None:
         os.chdir(work_dir)
-        self.job_id = ray.get_runtime_context().get_job_id()
-        self.worker_id = ray.get_runtime_context().get_worker_id()
-        self.actor_id = ray.get_runtime_context().get_actor_id()
-        self.node_id = ray.get_runtime_context().get_node_id()
-        logger.info("Manager(job_id={}, worker_id={}, actor_id={}, node_id={})".format(
-                        self.job_id, self.worker_id, self.actor_id, self.node_id))
+        log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.actor_name = get_manager_name()
         self.manager_args = manager_args
 

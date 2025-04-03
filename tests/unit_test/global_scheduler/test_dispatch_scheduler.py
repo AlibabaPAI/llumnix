@@ -16,7 +16,7 @@ import random
 
 from llumnix.instance_info import InstanceInfo
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
-from llumnix.arg_utils import InstanceArgs
+from llumnix.instance_info import InstanceType
 
 
 def init_dispatch_scheduler(policy='load'):
@@ -25,14 +25,14 @@ def init_dispatch_scheduler(policy='load'):
 
 def test_add_instance_and_remove_instance():
     dispatch_scheduler = init_dispatch_scheduler('balanced')
-    dispatch_scheduler.add_instance('instance_1', InstanceArgs(instance_type="no_constraints"))
+    dispatch_scheduler.add_instance('instance_1', InstanceType.NO_CONSTRAINTS)
     assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
     dispatch_scheduler.remove_instance('instance_1')
     assert len(dispatch_scheduler.available_dispatch_instance_set) == 0
 
-    dispatch_scheduler.add_instance('instance_2', InstanceArgs(instance_type="no_constraints"))
+    dispatch_scheduler.add_instance('instance_2', InstanceType.NO_CONSTRAINTS)
     assert len(dispatch_scheduler.available_dispatch_instance_set) == 1
-    dispatch_scheduler.add_instance('instance_3', InstanceArgs(instance_type="no_constraints"))
+    dispatch_scheduler.add_instance('instance_3', InstanceType.NO_CONSTRAINTS)
     assert len(dispatch_scheduler.available_dispatch_instance_set) == 2
 
     dispatch_scheduler.remove_instance('instance_2')
@@ -61,7 +61,7 @@ def test_dispatch_to_no_constraints_and_prefill():
             instance_type = random.choice(['no_constraints', 'prefill'])
         else:
             instance_type = random.choice(available_instance_type)
-        dispatch_scheduler.add_instance(instance_id, InstanceArgs(instance_type=instance_type))
+        dispatch_scheduler.add_instance(instance_id, InstanceType.NO_CONSTRAINTS)
         if instance_type != 'decode':
             dispatched_instance_ids.append(instance_id)
         else:

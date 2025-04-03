@@ -49,7 +49,7 @@ from llumnix.instance_info import InstanceType
 
 logger = init_logger(__name__)
 
-# TODllumnix.scalere exception of ray operations.
+# TODO(s5u13b): Handle exception of ray operations.
 # TODO(s5u13b): Refactor manager to divide functions into different classes.
 
 

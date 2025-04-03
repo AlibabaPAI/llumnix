@@ -29,10 +29,9 @@ from vllm import EngineArgs
 from llumnix.launcher import Launcher
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, InstanceArgs
 from llumnix.manager import Manager
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
-from llumnix.global_scheduler.scaling_scheduler import InstanceType
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
@@ -49,6 +48,7 @@ from tests.conftest import ray_env, cleanup_ray_env_func, ray_stop, ray_start
 class MockLlumlet:
     def __init__(self, instance_id):
         self.instance_id = instance_id
+        self.engine_disagg_inst_id = instance_id
         self.actor_name = get_instance_name(instance_id)
         self.num_requests = 0
         self.request_id_set = set()
@@ -108,6 +108,9 @@ class MockLlumlet:
 
     def get_num_migrate_in(self):
         return self.num_migrate_in
+    
+    def get_engine_disagg_inst_id(self) -> str:
+        return self.engine_disagg_inst_id
 
 def init_manager():
     try:
@@ -232,11 +235,12 @@ def test_scale_up_and_down(ray_env, manager):
     instance_ids_1, instances_1 = init_instances(initial_instances)
     num_instances = ray.get(manager.scale_down.remote(instance_ids_1))
     assert num_instances == initial_instances
-    num_instances = ray.get(manager.scale_up.remote(instance_ids_1, instances_1, [InstanceArgs()]*initial_instances))
+    instance_ids_2, instances_2 = init_instances(initial_instances)
+    num_instances = ray.get(manager.scale_up.remote(instance_ids_2, instances_2, [InstanceArgs()]*initial_instances))
     assert num_instances == initial_instances * 2
     num_instances = ray.get(manager.scale_down.remote(instance_ids))
     assert num_instances == initial_instances
-    num_instances = ray.get(manager.scale_down.remote(instance_ids_1))
+    num_instances = ray.get(manager.scale_down.remote(instance_ids_2))
     assert num_instances == 0
 
 def test_connect_to_instances(ray_env):

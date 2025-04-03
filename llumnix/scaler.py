@@ -128,12 +128,18 @@ class Scaler:
                   enable_port_offset_store: bool,
                   load_registered_service: bool,
                   load_registered_service_path: str,
-                  pdd_config: PDDConfig):
+                  pdd_config: PDDConfig,
+                  node_id: str):
         scaler_class = ray.remote(num_cpus=1,
                                   max_restarts=-1,
                                   name=get_scaler_name(),
                                   namespace="llumnix",
-                                  lifetime="detached")(cls)
+                                  lifetime="detached")(cls).options(
+                                      scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
+                                        node_id=node_id,
+                                        soft=False,
+                                    )
+                                  )
         scaler = scaler_class.remote(entrypoints_args,
                                      manager_args,
                                      instance_args,

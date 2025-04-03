@@ -102,6 +102,7 @@ class Manager:
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
 
         pdd_config = manager_args.create_pdd_config()
+        node_id = ray.get_runtime_context().get_node_id()
         self.scaler: ray.actor.ActorHandle = Scaler.from_args(entrypoints_args,
                                                               manager_args,
                                                               instance_args,
@@ -111,7 +112,8 @@ class Manager:
                                                               manager_args.enable_port_offset_store,
                                                               manager_args.load_registered_service,
                                                               manager_args.load_registered_service_path,
-                                                              pdd_config)
+                                                              pdd_config,
+                                                              node_id)
 
         # log args
         self.log_requests = not manager_args.disable_log_requests_manager

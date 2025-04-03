@@ -428,7 +428,7 @@ class Scaler:
                                           instance_type: InstanceType, placement_group: PlacementGroup):
             try:
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
-                await self.manager.scale_up(instance_id, instance, instance_type, placement_group)
+                await self.manager.scale_up.remote(instance_id, instance, instance_type, placement_group)
             except asyncio.TimeoutError:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
                 self.clear_instance_ray_resources(instance_id)

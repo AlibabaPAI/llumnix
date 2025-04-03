@@ -1,5 +1,6 @@
 from typing import List
 import os
+import time
 import asyncio
 
 import ray
@@ -47,7 +48,11 @@ instance_ids: List[str] = None
 instances: List[Llumlet] = None
 instance_ids, instances = ray.get(manager.init_instances.remote(
     QueueType("rayqueue"), BackendType.VLLM, instance_args, engine_args))
-ray.get(manager.scale_up.remote(instance_ids, instances, [instance_args]*len(instance_ids)))
+while True:
+    num_instance = ray.get(manager.scale_up.remote([], [], [], []))
+    if num_instance == 1:
+        break
+    time.sleep(1.0)
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = random_uuid()

@@ -16,7 +16,6 @@ import numpy as np
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType
-from llumnix.arg_utils import InstanceArgs
 from llumnix.global_scheduler.scaling_policy import ScalePolicyFactory
 
 logger = init_logger(__name__)
@@ -64,10 +63,9 @@ class ScalingScheduler:
     def update_instance_infos(self, instance_info: Dict[str, InstanceInfo]) -> None:
         self.instance_info = instance_info
 
-    def add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
+    def add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
-        instance_type = InstanceType(instance_args.instance_type)
         self.instance_type_id_set[instance_type].add(instance_id)
 
     def remove_instance(self, instance_id: str) -> None:

@@ -18,7 +18,7 @@ from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.utils import random_uuid
-from llumnix.arg_utils import InstanceArgs
+from llumnix.instance_info import InstanceType
 
 from .test_manager import get_instance_info_migrate_in, get_instance_info_migrate_out
 
@@ -47,7 +47,7 @@ def test_scale_up_and_scale_down(global_scheduler):
     initial_instances = 4
     instance_infos = init_instance_infos(initial_instances)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    num_instances = global_scheduler.scale_up(instance_ids, [InstanceArgs(instance_type="no_constraints")]*len(instance_ids))
+    num_instances = global_scheduler.scale_up(instance_ids, [InstanceType("no_constraints")]*len(instance_ids))
     assert num_instances == initial_instances
     instance_infos = init_instance_infos(initial_instances)
     instance_ids_1 = [instance_info.instance_id for instance_info in instance_infos]
@@ -62,7 +62,7 @@ def test_update_instance_infos(global_scheduler):
     global_scheduler.update_instance_infos(instance_infos)
     assert len(global_scheduler.instance_info) == 0
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    global_scheduler.scale_up(instance_ids, [InstanceArgs(instance_type="no_constraints")]*len(instance_ids))
+    global_scheduler.scale_up(instance_ids, [InstanceType("no_constraints")]*len(instance_ids))
     global_scheduler.update_instance_infos(instance_infos)
     assert len(global_scheduler.instance_info) == initial_instances
 
@@ -70,7 +70,7 @@ def test_dispatch(global_scheduler):
     initial_instances = 4
     instance_infos = init_instance_infos(initial_instances)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    global_scheduler.scale_up(instance_ids, [InstanceArgs(instance_type="no_constraints")]*len(instance_ids))
+    global_scheduler.scale_up(instance_ids, [InstanceType("no_constraints")]*len(instance_ids))
     global_scheduler.update_instance_infos(instance_infos)
     instance_id, request_expected_steps = global_scheduler.dispatch()
     assert instance_id in instance_ids
@@ -88,7 +88,7 @@ def test_pair_migration(global_scheduler):
     print("-------", instance_info_migrate_in.migration_load_metric)
     print(instance_info_migrate_out.migration_load_metric)
     instance_infos = [instance_info_migrate_in, instance_info_migrate_out]
-    global_scheduler.scale_up(instance_ids, [InstanceArgs(instance_type="no_constraints")]*len(instance_ids))
+    global_scheduler.scale_up(instance_ids, [InstanceType("no_constraints")]*len(instance_ids))
     global_scheduler.update_instance_infos(instance_infos)
 
     migrate_instace_pairs = global_scheduler.pair_migration("NO_CONSTRAINTS")

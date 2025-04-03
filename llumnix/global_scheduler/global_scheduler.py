@@ -21,7 +21,7 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
-from llumnix.arg_utils import InstanceArgs
+from llumnix.instance_info import InstanceType
 
 logger = init_logger(__name__)
 
@@ -68,17 +68,17 @@ class GlobalScheduler:
         scale_up_num, scale_down_num = self.scaling_scheduler.check_scale()
         return scale_up_num, scale_down_num
 
-    def scale_up(self, instance_id: Union[str, Iterable[str]], instance_args: List[InstanceArgs]) -> int:
+    def scale_up(self, instance_id: Union[str, Iterable[str]], instance_type: List[InstanceType]) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
-        for ins_id, ins_args in zip(instance_ids, instance_args):
+        for ins_id, ins_type in zip(instance_ids, instance_type):
             if ins_id not in self.instance_id_set:
                 logger.info("Scale up instance: {}.".format(ins_id))
                 new_intance_info = self._get_empty_instance_info()
                 new_intance_info.instance_id = ins_id
                 self.instance_info[ins_id] = new_intance_info
-                self._add_instance(ins_id, ins_args)
+                self._add_instance(ins_id, ins_type)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
@@ -97,12 +97,12 @@ class GlobalScheduler:
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
-    def _add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
+    def _add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
         for scheduler in (self.dispatch_scheduler, self.migration_scheduler, self.scaling_scheduler):
             scheduler.update_instance_infos(self.instance_info)
-            scheduler.add_instance(instance_id, instance_args)
+            scheduler.add_instance(instance_id, instance_type)
 
     def _remove_instance(self, instance_id: str) -> None:
         self.instance_id_set.remove(instance_id)

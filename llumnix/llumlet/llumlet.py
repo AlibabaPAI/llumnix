@@ -23,7 +23,7 @@ from ray.util.placement_group import PlacementGroup
 import ray.actor
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
 from llumnix.backends.utils import init_backend_engine, get_engine_world_size
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
@@ -210,12 +210,12 @@ class Llumlet:
         self.instance_load_calculator.compute_instance_load(instance_info)
         return instance_info
 
-    async def is_ready(self) -> InstanceArgs:
+    async def is_ready(self):
         await self.backend_engine.is_ready()
         return True
 
-    def get_instance_args(self) -> InstanceArgs:
-        return self.instance_args
+    def get_instance_type(self) -> InstanceType:
+        return self.instance_args.instance_type
 
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()

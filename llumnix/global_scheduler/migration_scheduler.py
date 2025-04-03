@@ -14,10 +14,9 @@
 from typing import Dict, List, Set, Tuple
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig, CustomFilter
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
-from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
 
@@ -56,7 +55,7 @@ class MigrationScheduler:
         self.instance_info = instance_info
 
     # pylint: disable=unused-argument
-    def add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
+    def add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
 

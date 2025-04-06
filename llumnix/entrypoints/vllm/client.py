@@ -2,7 +2,7 @@ import copy
 import math
 import time
 import asyncio
-from typing import Dict
+from typing import Dict, List
 
 import ray
 
@@ -32,6 +32,8 @@ class LlumnixClientVLLM:
 
         self.request_streams: Dict[str, AsyncStream] = {}
         self.instance_num_requests: Dict[str, int] = {}
+        self.request_streams_last_completion_tokens: Dict[str, int] = {}
+        self.request_streams_output_stash: Dict[str, list] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
         self.num_finished_requests = 0
@@ -125,7 +127,6 @@ class LlumnixClientVLLM:
         ready_status = await self.manager.is_ready.remote()
         return ready_status
 
-    # TODO(s5u13b): Fix the potential output token out-of-order issue caused by the migration.
     async def get_request_outputs_loop(self):
         while True:
             request_outputs = await self.request_output_queue.get()
@@ -135,7 +136,56 @@ class LlumnixClientVLLM:
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
-                self.request_streams[request_id].put(request_output)
+                processed_output = self.process_output_order(request_id, request_output)
+                if not processed_output:
+                    continue
+                for req in processed_output:
+                    self.request_streams[request_id].put(req)
+                self.request_streams_last_completion_tokens[request_id] = 
                 if request_output.finished:
                     self.request_streams[request_id].finish()
                     del self.request_streams[request_id]
+                    self.request_streams_last_completion_tokens.pop(request_id, None)
+                    self.request_streams_output_stash.pop(request_id, None)
+    def process_output_order(self, request_id: int, request_output) -> List:
+        current_completion_tokens = None
+        logger.info("request_output {} ...".format(request_output))
+        if hasattr(request_output, 'usage'):
+            current_completion_tokens = request_output.usage.completion_tokens
+
+        if not current_completion_tokens:
+            # No usage info, return the request_output directly.
+            return [request_output]
+
+        last_completion_tokens = self.request_streams_last_completion_tokens.get(request_id, 0)
+        support_completion_tokens = last_completion_tokens + len(request_output.tokens)
+        if current_completion_tokens > support_completion_tokens:
+            # process the out-of-order output
+            logger.info("request[{}] out-of-order output,last completion tokens is {}"
+                        ", current completion tokens is {}, current tokens is {}, stash current output..."
+                        .format(request_id,last_completion_tokens,current_completion_tokens,len(request_output.tokens)))
+
+            self.request_streams_output_stash.setdefault(request_id, []).append(request_output)
+            return []
+
+        if current_completion_tokens == support_completion_tokens:
+            if not self.request_streams_output_stash.get(request_id, None):
+                # no history output in stash
+                return [request_output]
+
+            # process the history output in buffer
+            output_stash = self.request_streams_output_stash[request_id]
+            output_stash.sort(key=lambda x: x.usage.completion_tokens)
+            last_correct_output_index = 0
+            for output in output_stash:
+                if output.usage.completion_tokens > current_completion_tokens + len(output.tokens):
+                    break
+                last_correct_output_index += 1
+                current_completion_tokens = output.usage.completion_tokens
+            if last_correct_output_index == 0:
+                return [request_output]
+            res = [request_output] + output_stash[:last_correct_output_index]
+            self.request_streams_output_stash[request_id] = output_stash[last_correct_output_index:]
+            return res
+
+        return [request_output]

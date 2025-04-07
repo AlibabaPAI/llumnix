@@ -15,7 +15,6 @@ from typing import Dict, Set
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType
-from llumnix.arg_utils import InstanceArgs
 from llumnix.constants import DISPATCH_LOG_FREQUENCY
 from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory
 
@@ -52,8 +51,8 @@ class DispatchScheduler:
                 continue
             self.instance_info[instance_id] = instance_info
 
-    def add_instance(self, instance_id: str, instance_args: InstanceArgs) -> None:
-        if instance_args.instance_type in [InstanceType.NO_CONSTRAINTS, InstanceType.PREFILL]:
+    def add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
+        if instance_type in [InstanceType.NO_CONSTRAINTS, InstanceType.PREFILL]:
             self.available_dispatch_instance_set.add(instance_id)
             self.instance_num_requests[instance_id] = 0
 

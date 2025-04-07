@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import asyncio
-import random
 import time
 import csv
 import os
@@ -34,24 +33,19 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_server_name,
-                           get_instance_name, get_manager_name, get_placement_group_name,
-                           INSTANCE_NAME_PREFIX, SERVER_NAME_PREFIX, run_coroutine_in_new_thread,
-                           kill_server, kill_instance, remove_placement_group,
-                           get_placement_group_infos_by_state, get_placement_group_infos_by_name,
-                           actor_exists, get_actor_names_by_name_prefix, get_service_instance_type,
-                           log_actor_ray_info)
+from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_manager_name,
+                           INSTANCE_NAME_PREFIX, run_coroutine_in_new_thread,
+                           get_placement_group_name, log_actor_ray_info)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_GENERATE_INTERVAL,
-                               WAIT_ALL_MIGRATIONS_DONE_INTERVAL, AUTO_SCALE_UP_INTERVAL,
-                               WAIT_PLACEMENT_GROUP_TIMEOUT, CHECK_DEPLOYMENT_STATES_INTERVAL,
-                               WATCH_DEPLOYMENT_INTERVAL, INSTANCE_READY_TIMEOUT)
-from llumnix.launcher import Launcher
+                               WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
+from llumnix.scaler import Scaler
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix.instance_info import InstanceType
 
 logger = init_logger(__name__)
 
@@ -88,10 +82,8 @@ class Manager:
         self.enable_migration = manager_args.enable_migration
         self.pair_migration_frequency = manager_args.pair_migration_frequency
 
-        # prefill decode disaggregation args
+        # prefill-decode disaggregation args
         self.enable_pd_disagg = manager_args.enable_pd_disagg
-        self.enable_engine_pd_disagg = manager_args.enable_engine_pd_disagg
-        self.enable_pdd_node_affinity_scheduling = manager_args.enable_pdd_node_affinity_scheduling
 
         # scaling args
         self.enable_scaling = manager_args.enable_scaling
@@ -105,13 +97,23 @@ class Manager:
         self.polling_interval = manager_args.polling_interval
 
         self.is_group_kind_migration_backend = manager_args.is_group_kind_migration_backend
+
         global_scheduler_config = manager_args.create_global_scheduler_config()
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
 
         pdd_config = manager_args.create_pdd_config()
-        self.launcher: Launcher = Launcher(self.global_scheduler, manager_args.enable_port_increment,
-                                           manager_args.enable_port_offset_store, manager_args.load_registered_service,
-                                           manager_args.load_registered_service_path, pdd_config)
+        node_id = ray.get_runtime_context().get_node_id()
+        self.scaler: ray.actor.ActorHandle = Scaler.from_args(entrypoints_args,
+                                                              manager_args,
+                                                              instance_args,
+                                                              engine_args,
+                                                              launch_args,
+                                                              manager_args.enable_port_increment,
+                                                              manager_args.enable_port_offset_store,
+                                                              manager_args.load_registered_service,
+                                                              manager_args.load_registered_service_path,
+                                                              pdd_config,
+                                                              node_id)
 
         # log args
         self.log_requests = not manager_args.disable_log_requests_manager
@@ -148,18 +150,6 @@ class Manager:
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
-
-        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
-            assert self.entrypoints_args is not None and self.engine_args is not None
-            self.last_timeout_instance_id = None
-            if self.enable_pdd_node_affinity_scheduling:
-                asyncio.create_task(self._auto_scale_up_loop(service_name="prefill", interval=AUTO_SCALE_UP_INTERVAL))
-                asyncio.create_task(self._auto_scale_up_loop(service_name="decode", interval=AUTO_SCALE_UP_INTERVAL))
-            else:
-                asyncio.create_task(self._auto_scale_up_loop(service_name="no_constraints", interval=AUTO_SCALE_UP_INTERVAL))
-            asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
-            if self.manager_args.enable_pd_disagg:
-                asyncio.create_task(self._check_pd_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
 
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
         while self.num_instances == 0:
@@ -210,13 +200,12 @@ class Manager:
                                    name=get_manager_name(),
                                    namespace="llumnix",
                                    lifetime="detached")(cls)
-        manager = manager_class.remote(
-            entrypoints_args,
-            manager_args,
-            instance_args,
-            engine_args,
-            launch_args,
-            os.getcwd())
+        manager = manager_class.remote(entrypoints_args,
+                                       manager_args,
+                                       instance_args,
+                                       engine_args,
+                                       launch_args,
+                                       os.getcwd())
         return manager
 
     async def init_instances(self,
@@ -225,30 +214,7 @@ class Manager:
                              instance_args: InstanceArgs,
                              engine_args
                              ) -> Tuple[List[str], List[Llumlet]]:
-        async def instance_ready_scale_up(instance_id: str, instance: "ray.actor.ActorHandle"):
-            try:
-                await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
-                self.scale_up(instance_id, instance, instance_args)
-            except asyncio.TimeoutError:
-                logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
-                self.clear_instance_ray_resources(instance_id)
-            except Exception as e: # pylint: disable=broad-except
-                logger.error("Unexpected exception occurs: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
-                self.clear_instance_ray_resources(instance_id)
-
-        instance_ids: List[str] = []
-        instances: List[Llumlet] = []
-        for _ in range(self.manager_args.initial_instances):
-            instance_id = random_uuid()
-            placement_group = self.launcher.init_placement_group(get_placement_group_name(instance_id), engine_args, backend_type)
-            instance = self.launcher.init_instance(instance_id, instance_args, placement_group, request_output_queue_type,
-                                        backend_type, engine_args)
-            instance_ids.append(instance_id)
-            instances.append(instance)
-            asyncio.create_task(instance_ready_scale_up(instance_id, instance))
-
-        return instance_ids, instances
+        return await self.scaler.init_instances.remote(request_output_queue_type, backend_type, instance_args, engine_args)
 
     def init_request_output_queue_server(self, ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
         return init_request_output_queue_server(ip, port, queue_type)
@@ -260,15 +226,20 @@ class Manager:
         return all(is_ready_list)
 
     async def _poll_instance_info_loop(self, interval: float) -> None:
-        def get_instance_info_done_callback(instance_id: str, fut):
-            ret = fut.result()[0]
+        async def get_instance_info_done_callback(ret, instance_id: str):
             if not isinstance(ret, ray.exceptions.RayActorError):
                 if ret is not None:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
             else:
                 logger.info("Instance {} is dead.".format(instance_id))
-                self.scale_down(instance_id)
+                await self.scale_down(instance_id)
+
+        def get_instance_info_done_callback_wrapper(instance_id: str, fut) -> None:
+            ret = fut.result()[0]
+            loop = asyncio.get_event_loop()
+            loop.create_task(get_instance_info_done_callback(ret, instance_id))
+
         while True:
             try:
                 await asyncio.sleep(interval)
@@ -277,7 +248,7 @@ class Manager:
                 for instance_id, instance in self.instances.items():
                     # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
-                    task.add_done_callback(partial(get_instance_info_done_callback, instance_id))
+                    task.add_done_callback(partial(get_instance_info_done_callback_wrapper, instance_id))
                     tasks.append(task)
                 if self.num_instance_info_updates % 100 == 0:
                     logger.debug("Polling instance infos of {} instances starts.".format(self.num_instances))
@@ -324,13 +295,13 @@ class Manager:
                     if has_error:
                         instance_id = migrate_instance_pair[i]
                         logger.info("Instance {} is dead.".format(instance_id))
-                        self.scale_down(instance_id)
+                        await self.scale_down(instance_id)
             else:
                 migrate_out_request_ids = ret
                 if migrate_out_request_ids:
                     migrate_out_request_id = migrate_out_request_ids[0]
                     self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
-                if not self.manager_args.enable_pd_disagg:
+                if not self.enable_pd_disagg:
                     logger.info("Instance {}->{} migrate done, migrate request {}".format(
                         migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
 
@@ -353,86 +324,34 @@ class Manager:
                                         dst_instance_id, dst_instance_actor_handle), return_exceptions=True)
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
-            if len(migration_tasks) > 0 and not self.manager_args.enable_pd_disagg:
+            if len(migration_tasks) > 0 and not self.enable_pd_disagg:
                 logger.info("{} migration tasks starts.".format(len(migration_tasks)))
             await asyncio.gather(*migration_tasks, return_exceptions=True)
-            if len(migration_tasks) > 0 and not self.manager_args.enable_pd_disagg:
+            if len(migration_tasks) > 0 and not self.enable_pd_disagg:
                 logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
             logger.error("Unexpected exception: {}".format(e))
             logger.error("Exception traceback: {}".format(traceback.format_exc()))
 
-    async def _auto_scale_up_loop(self, service_name: str, interval: float) -> None:
-        logger.info("Auto scale up loop starts, service name: {}".format(service_name))
-        while True:
-            try:
-                new_pg = None
-                if self.last_timeout_instance_id is not None:
-                    last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
-                    last_timeout_pg_infos = get_placement_group_infos_by_name(name=last_timeout_pg_name)
-                    if len(last_timeout_pg_infos) > 0 and last_timeout_pg_infos[0]["state"] != "REMOVED":
-                        new_instance_id = self.last_timeout_instance_id
-                        # pending, created(without server and instance) or rescheduling
-                        new_pg = ray.util.get_placement_group(last_timeout_pg_name)
-                    # reset
-                    self.last_timeout_instance_id = None
-                pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
-                pending_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
-                for pending_pg_info in pending_pg_infos:
-                    instance_id = pending_pg_info["name"].split("_")[-1]
-                    if new_pg is not None and instance_id == new_instance_id:
-                        continue
-                    self.clear_instance_ray_resources(instance_id)
-                alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
-                alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
-                alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
-                if self.max_instances != -1 and len(alive_pg_infos) >= self.max_instances:
-                    logger.debug("The number of alive placement groups has reached the max_instances.")
-                    await asyncio.sleep(interval)
-                    continue
-                if new_pg is None:
-                    new_instance_id = random_uuid()
-                    new_pg = self.launcher.init_placement_group(get_placement_group_name(new_instance_id), self.engine_args, self.backend_type,
-                                                        init_server=True, block=False, service_name=service_name)
-                try:
-                    await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
-                except asyncio.TimeoutError:
-                    logger.debug("Waiting for new placement group {} ready timeout.".format(new_instance_id))
-                    # After timeout, the new placement group might be pending,
-                    # created(without server and instance), rescheduling.
-                    self.last_timeout_instance_id = new_instance_id
-                    await asyncio.sleep(interval)
-                    continue
-                if service_name in ["prefill", "decode"]:
-                    self.launcher.init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
-                                                           self.engine_args, self.backend_type, new_pg,
-                                                           scale_up_callback=self.scale_up,
-                                                           scale_down_callback=self.clear_instance_ray_resources,
-                                                           instance_type=get_service_instance_type(service_name))
-                else:
-                    self.launcher.init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
-                                                           self.engine_args, self.backend_type, new_pg,
-                                                           scale_up_callback=self.scale_up,
-                                                           scale_down_callback=self.clear_instance_ray_resources)
-                logger.info("Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id))
-            # pylint: disable=broad-except
-            except Exception as e:
-                logger.error("Unexpected exception: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
-                await asyncio.sleep(interval)
-
     def scale_up(self,
                  instance_id: Union[str, Iterable[str]],
                  instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
-                 instance_args: Union[InstanceArgs, Iterable[InstanceArgs]]) -> None:
+                 instance_type: Union[InstanceType, Iterable[InstanceType]],
+                 placement_group: Union[PlacementGroup, Iterable[PlacementGroup]],
+                 server: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]] = None) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
             instance_actor_handle = [instance_actor_handle,]
-            instance_args = [instance_args,]
+            instance_type = [instance_type,]
+            placement_group = [placement_group,]
+            server = [server,] if server is not None else None
+
         instance_ids = list(instance_id)
         instance_actor_handles = list(instance_actor_handle)
-        instance_args_list = list(instance_args)
+        instance_types = list(instance_type)
+        placement_groups = list(placement_group)
+        servers = list(server) if server is not None else None
 
         indeed_update = False
         no_pending_instance = (self.pending_rebuild_migration_instances == 0)
@@ -441,21 +360,14 @@ class Manager:
             if ins_id not in self.instances:
                 indeed_update = True
                 self.instances[ins_id] = instance_actor_handles[idx]
-                try:
-                    pg = ray.util.get_placement_group(get_placement_group_name(ins_id))
-                    self.pgs[ins_id] = pg
-                except ValueError:
-                    logger.warning("Placement group of instance {} is not found".format(ins_id))
-                if self.servers is not None:
-                    try:
-                        self.servers[ins_id] = ray.get_actor(get_server_name(ins_id), namespace="llumnix")
-                    except ValueError:
-                        logger.warning("APIServerActor of instance {} is not found".format(ins_id))
+                self.pgs[ins_id] = placement_groups[idx]
+                if self.servers is not None and servers is not None:
+                    self.servers[ins_id] = servers[idx]
                 self.instance_migrating[ins_id] = False
                 if self.log_instance_info:
                     self.instance_last_logged_empty[ins_id] = False
                 self.pending_rebuild_migration_instances += 1
-        self.global_scheduler.scale_up(instance_ids, instance_args_list)
+        self.global_scheduler.scale_up(instance_ids, instance_types)
         self.num_instances = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
@@ -468,7 +380,7 @@ class Manager:
 
         return self.num_instances
 
-    def scale_down(self, instance_id: Union[str, Iterable[str]], rebuild_migration_backend: bool = True) -> None:
+    async def scale_down(self, instance_id: Union[str, Iterable[str]], rebuild_migration_backend: bool = True) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
@@ -477,7 +389,7 @@ class Manager:
         no_pending_instance = self.pending_rebuild_migration_instances == 0
 
         for ins_id in instance_ids:
-            self.clear_instance_ray_resources(ins_id)
+            await self.scaler.clear_instance_ray_resources.remote(ins_id)
             if ins_id in self.instances:
                 indeed_update = True
                 if ins_id in self.instances:
@@ -503,6 +415,7 @@ class Manager:
                     else:
                         logger.warning("instance {} is not in instance_last_logged_empty".format(ins_id))
                 self.pending_rebuild_migration_instances += 1
+
         self.global_scheduler.scale_down(instance_ids)
         self.num_instances = len(self.instances)
 
@@ -515,141 +428,19 @@ class Manager:
 
         return self.num_instances
 
-    def clear_instance_ray_resources(self, instance_id: str):
-        placement_group = None
-        server = None
-        instance = None
-        if instance_id in self.pgs:
-            placement_group = self.pgs[instance_id]
-        if self.servers and instance_id in self.servers:
-            server = self.servers[instance_id]
-        if instance_id in self.instances:
-            instance = self.instances[instance_id]
-        if not remove_placement_group(instance_id, placement_group):
-            logger.warning("Failed to remove placement group {}.".format(instance_id))
-        if self.servers and not kill_server(instance_id, server):
-            logger.warning("Failed to kill server {}.".format(instance_id))
-        if not kill_instance(instance_id, instance):
-            logger.warning("Failed to kill instance {}.".format(instance_id))
+    def get_num_prefill_decode_instances(self):
+        instance_id_set = self.global_scheduler.instance_id_set
+        available_dispatch_instance_set = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set
+        num_prefill_instances = len(available_dispatch_instance_set)
+        num_decode_instances = len(instance_id_set - available_dispatch_instance_set)
 
-    async def _check_deployment_states_loop(self, interval: float) -> None:
-        async def watch_instance_deployment_states(instance_id: str):
-            # There might be some delays of calling _init_server_and_instance, so sleep first.
-            await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
-            pg_created, server_exists, instance_exists = self._get_instance_deployment_states(instance_id)
-            if pg_created and (not server_exists or not instance_exists):
-                logger.warning("Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
-                               .format(instance_id, pg_created, server_exists, instance_exists))
-                self.scale_down(instance_id)
+        return num_prefill_instances, num_decode_instances
 
-        while True:
-            try:
-                curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
-                assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
-                tasks = []
-                for instance_id in curr_pgs:
-                    if instance_id not in curr_servers or instance_id not in curr_instances:
-                        tasks.append(asyncio.create_task(watch_instance_deployment_states(instance_id)))
-                await asyncio.gather(*tasks, return_exceptions=True)
-                await asyncio.sleep(interval)
-            # pylint: disable=broad-except
-            except Exception as e:
-                logger.error("Unexpected exception: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+    def get_prefill_decode_instance_id_set(self):
+        prefill_instance_id_set = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set
+        decode_instance_id_set = self.global_scheduler.instance_id_set - prefill_instance_id_set
 
-    # TODO(KuilongCui): Currently, only one naive prefill-decode disaggregation deployment states check policy is implemented,
-    # which prevents all instances in the cluster are prefill instances or decode instances.
-    async def _check_pd_deployment_states_loop(self, interval: float) -> None:
-        previous_penging_pg_names = None
-
-        while True:
-            try:
-                pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
-                rescheduling_pg_infos = get_placement_group_infos_by_state(state="RESCHEDULING")
-                all_penging_pg_names = [pg["name"] for pg in pending_pg_infos]
-                if previous_penging_pg_names and len(rescheduling_pg_infos) == 0 :
-                    new_pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
-                    all_new_penging_pg_names = [pg["name"] for pg in new_pending_pg_infos]
-                    if len(set(previous_penging_pg_names).difference(set(all_new_penging_pg_names))) == 0:
-                        self._check_pd_deployment_states()
-                    previous_penging_pg_names = all_new_penging_pg_names
-                else:
-                    previous_penging_pg_names = all_penging_pg_names
-
-                await asyncio.sleep(interval)
-            # pylint: disable=broad-except
-            except Exception as e:
-                logger.error("Unexpected exception: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
-
-    def _check_pd_deployment_states(self) -> str:
-        prefill_instance_ids = self.global_scheduler.dispatch_scheduler.available_dispatch_instance_set
-        cur_num_prefill_instances = len(prefill_instance_ids)
-        decode_instance_ids = self.global_scheduler.instance_id_set - prefill_instance_ids
-        cur_num_decode_instances = len(decode_instance_ids)
-
-        scale_down_instance_id = None
-        if cur_num_prefill_instances == 0 and cur_num_decode_instances > 0:
-            scale_down_instance_id = random.choice(list(decode_instance_ids))
-            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill_instances: {}, cur_num_decode_instances: {}, "
-                        "all decode instances is decode instance, scale down decode instance {}".format(self.manager_args.pd_ratio,
-                        cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
-
-        if cur_num_decode_instances == 0 and cur_num_prefill_instances > 0:
-            scale_down_instance_id = random.choice(list(prefill_instance_ids))
-            logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill_instances: {}, cur_num_decode_instances: {}, "
-                        "all instances is prefill instance, scale down prefill instance {}".format(self.manager_args.pd_ratio,
-                        cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
-
-        if scale_down_instance_id:
-            self.scale_down(scale_down_instance_id)
-
-        return scale_down_instance_id
-
-    def _get_cluster_deployment_states(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, APIServerActor], Dict[str, Llumlet]]:
-        curr_pgs: Dict[str, PlacementGroup] = {}
-        curr_servers: Dict[str, PlacementGroup] = {}
-        curr_instances: Dict[str, Llumlet] = {}
-
-        created_pg_infos = get_placement_group_infos_by_state(state="CREATED")
-        for created_pg_info in created_pg_infos:
-            instance_id = created_pg_info["name"].split("_")[-1]
-            try:
-                curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_info["name"])
-            except ValueError:
-                continue
-
-        curr_server_names = get_actor_names_by_name_prefix(name_prefix=SERVER_NAME_PREFIX)
-        for curr_server_name in curr_server_names:
-            instance_id = curr_server_name.split("_")[-1]
-            if instance_id in self.servers:
-                curr_servers[instance_id] = self.servers[instance_id]
-            else:
-                try:
-                    curr_servers[instance_id] = ray.get_actor(curr_server_name, namespace="llumnix")
-                except ValueError:
-                    continue
-
-        curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
-        for curr_instance_name in curr_instance_names:
-            instance_id = curr_instance_name.split("_")[-1]
-            if instance_id in self.instances:
-                curr_instances[instance_id] = self.instances[instance_id]
-            else:
-                try:
-                    curr_instances[instance_id] = ray.get_actor(curr_instance_name, namespace="llumnix")
-                except ValueError:
-                    continue
-
-        return curr_pgs, curr_servers, curr_instances
-
-    def _get_instance_deployment_states(self, instance_id: str):
-        pg_infos = get_placement_group_infos_by_name(name=get_placement_group_name(instance_id))
-        pg_created = len(pg_infos) == 1 and pg_infos[0]["state"] == "CREATED"
-        server_exists = actor_exists(get_server_name(instance_id))
-        instance_exists = actor_exists(get_instance_name(instance_id))
-
-        return pg_created, server_exists, instance_exists
+        return prefill_instance_id_set, decode_instance_id_set
 
     # TODO(KuilongCui): Add comments for this function.
     async def _rebuild_migration_backend(self) -> None:
@@ -672,7 +463,7 @@ class Manager:
                 if isinstance(ret, ray.exceptions.RayActorError):
                     dead_instances.add(instance_name)
             if len(dead_instances) > 0:
-                self.scale_down(dead_instances, rebuild_migration_backend=False)
+                await self.scale_down(dead_instances, rebuild_migration_backend=False)
                 clear_gloo_backend_ray_resources()
             return dead_instances
 
@@ -711,13 +502,17 @@ class Manager:
         self.enable_migration = origin_config
 
     async def _connect_to_instances(self):
-        def connect_to_instances_done_callback(instance_id: str, instance_actor_handle: "ray.actor.ActorHandle", fut):
+        def connect_to_instance_done_callback(instance_id: str, instance_actor_handle: "ray.actor.ActorHandle", fut):
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
-                scale_up_instance_ids.append(instance_id)
-                scale_up_instance_actor_handles.append(instance_actor_handle)
-                scale_up_instance_args.append(ret)
-                logger.info("Connect to instance {}".format(instance_id))
+                try:
+                    placement_groups.append(ray.util.get_placement_group(get_placement_group_name(instance_id)))
+                    instance_ids.append(instance_id)
+                    instances.append(instance_actor_handle)
+                    instance_types.append(ret)
+                    logger.info("Connect to instance {}".format(instance_id))
+                except ValueError:
+                    logger.warning("Connect to instance {} failed, placement group not found.".format(instance_id))
             else:
                 logger.warning("Connect to instance {} failed, exception: {}".format(instance_id, ret))
 
@@ -726,20 +521,20 @@ class Manager:
         instance_actor_names = [actor_info['name'] for actor_info in actor_infos
                                 if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
         instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
-        scale_up_instance_ids = []
-        scale_up_instance_args = []
-        scale_up_instance_actor_handles = []
-        scale_up_instance_args = []
+        instance_ids = []
+        instances = []
+        instance_types = []
+        placement_groups = []
         tasks = []
         for instance_actor_name, instance_actor_handle in zip(instance_actor_names, instance_actor_handles):
             instance_id = instance_actor_name[len('instance_'):]
             if instance_id not in self.instances:
-                task = asyncio.gather(instance_actor_handle.get_instance_args.remote(), return_exceptions=True)
-                task.add_done_callback(partial(connect_to_instances_done_callback, instance_id, instance_actor_handle))
+                task = asyncio.gather(instance_actor_handle.get_instance_type.remote(), return_exceptions=True)
+                task.add_done_callback(partial(connect_to_instance_done_callback, instance_id, instance_actor_handle))
                 tasks.append(task)
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
-        self.scale_up(scale_up_instance_ids, scale_up_instance_actor_handles, scale_up_instance_args)
+        self.scale_up(instance_ids, instances, instance_types, placement_groups)
 
     async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
         def check_instance_error_done_callback(idx: int, instance_id: str, fut):
@@ -762,14 +557,14 @@ class Manager:
         return results
 
     async def _get_request_instance(self) -> None:
-        def get_request_instance_done_callback(instance_id: str, fut):
+        async def get_request_instance_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
             if not isinstance(ret, ray.exceptions.RayActorError):
                 instance_requests.append(ret)
                 instance_ids.append(instance_id)
             else:
                 logger.info("Instance {} is dead.".format(instance_id))
-                self.scale_down(instance_id)
+                await self.scale_down(instance_id)
 
         instance_requests = []
         instance_ids = []

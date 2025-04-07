@@ -39,6 +39,7 @@ from llumnix import envs as llumnix_envs
 logger = init_logger(__name__)
 
 MANAGER_NAME = "manager"
+SCALER_NAME = "scaler"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
@@ -92,7 +93,10 @@ def initialize_placement_group(
     # Create a new placement group
     # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
     if gpu_bundling_strategy == GPUBundlingStrategy.SPREAD:
-        placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
+        if num_gpus >= 1:
+            placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
+        else:
+            placement_group_specs = [{"CPU": num_cpus}]
     else:  # GPUBundlingStrategy.PACK
         placement_group_specs = [{"CPU": num_cpus}] if num_gpus == 0 else [{"CPU": num_cpus, "GPU": num_gpus}]
     if resources:
@@ -171,6 +175,9 @@ def clear_gloo_backend_ray_resources():
 
 def get_manager_name() -> str:
     return MANAGER_NAME
+
+def get_scaler_name() -> str:
+    return SCALER_NAME
 
 def get_placement_group_name(instance_id: str) -> str:
     return f"{PLACEMENT_GROUP_NAME_PREFIX}{instance_id}"
@@ -355,7 +362,6 @@ def get_llumnix_env_vars():
 
     return llumnix_env_vars
 
-# Cannot put it to utils.py due to circular import.
 def get_service_instance_type(service_name: str) -> "InstanceType":
     # pylint: disable=import-outside-toplevel
     from llumnix.instance_info import InstanceType

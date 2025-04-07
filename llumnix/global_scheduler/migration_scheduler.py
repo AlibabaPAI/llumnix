@@ -14,7 +14,7 @@
 from typing import Dict, List, Tuple
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceType
+from llumnix.instance_info import InstanceInfo
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig, CustomFilter
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
 

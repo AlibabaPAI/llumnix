@@ -21,7 +21,6 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
-from llumnix.instance_info import InstanceType
 
 logger = init_logger(__name__)
 

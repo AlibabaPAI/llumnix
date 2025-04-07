@@ -18,7 +18,6 @@ from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
 from llumnix.utils import random_uuid
-from llumnix.instance_info import InstanceType
 
 from .test_manager import get_instance_info_migrate_in, get_instance_info_migrate_out
 
@@ -45,7 +44,7 @@ def global_scheduler():
 
 def test_add_instance_and_remove_instance(global_scheduler):
     # test prefill instance
-    global_scheduler.scale_up('instance_1', [InstanceArgs(instance_type="no_constraints")])
+    global_scheduler.scale_up('instance_1', [InstanceType.NO_CONSTRAINTS])
     assert global_scheduler.num_instances == 1
     assert len(global_scheduler.instance_info) == 1
     assert len(global_scheduler.instance_id_set) == 1
@@ -65,12 +64,12 @@ def test_add_instance_and_remove_instance(global_scheduler):
     assert global_scheduler.decode_instance_num_requests.get("instance_1", None) is None
 
 
-    global_scheduler.scale_up('instance_2', [InstanceArgs(instance_type="prefill")])
+    global_scheduler.scale_up('instance_2', [InstanceType.PREFILL])
     assert len(global_scheduler.prefill_instance_num_requests) == 1
     assert global_scheduler.prefill_instance_num_requests['instance_2'] == 0
     assert len(global_scheduler.prefill_instance_info) == 1
     assert len(global_scheduler.instance_id_set) == 1
-    global_scheduler.scale_up('instance_3', [InstanceArgs(instance_type="prefill")])
+    global_scheduler.scale_up('instance_3', [InstanceType.PREFILL])
     assert len(global_scheduler.prefill_instance_num_requests) == 2
     assert global_scheduler.prefill_instance_num_requests['instance_3'] == 0
     assert len(global_scheduler.prefill_instance_info) == 2
@@ -85,7 +84,7 @@ def test_add_instance_and_remove_instance(global_scheduler):
     assert len(global_scheduler.instance_info) == 0
 
     # test decode instance
-    global_scheduler.scale_up('instance_1', [InstanceArgs(instance_type="decode")])
+    global_scheduler.scale_up('instance_1', [InstanceType.DECODE])
     assert len(global_scheduler.decode_instance_info) == 1
     assert len(global_scheduler.prefill_instance_info) == 0
     global_scheduler.scale_down('instance_1')
@@ -96,9 +95,9 @@ def test_add_instance_and_remove_instance(global_scheduler):
     assert len(global_scheduler.prefill_instance_info) == 0
     assert len(global_scheduler.decode_instance_info) == 0
 
-    global_scheduler.scale_up('instance_2', [InstanceArgs(instance_type="decode")])
+    global_scheduler.scale_up('instance_2', [InstanceType.DECODE])
     assert len(global_scheduler.decode_instance_info) == 1
-    global_scheduler.scale_up('instance_3', [InstanceArgs(instance_type="decode")])
+    global_scheduler.scale_up('instance_3', [InstanceType.DECODE])
     assert len(global_scheduler.decode_instance_info) == 2
     assert global_scheduler.num_instances == 2
     assert len(global_scheduler.decode_instance_num_requests) == 2
@@ -148,12 +147,12 @@ def test_dispatch_decode(global_scheduler):
     prefill_instance_infos = init_instance_infos(initial_instances)
     prefill_instance_ids = [instance_info.instance_id for instance_info in prefill_instance_infos]
     global_scheduler.global_scheduler_config.enable_pd_disagg = True
-    global_scheduler.scale_up(prefill_instance_ids, [InstanceArgs(instance_type="prefill")]*len(prefill_instance_ids))
+    global_scheduler.scale_up(prefill_instance_ids, [InstanceType.PREFILL]*len(prefill_instance_ids))
     global_scheduler.update_instance_infos(prefill_instance_infos)
 
     decode_instance_infos = init_instance_infos(initial_instances)
     decode_instance_ids = [instance_info.instance_id for instance_info in decode_instance_infos]
-    global_scheduler.scale_up(decode_instance_ids, [InstanceArgs(instance_type="decode")]*len(decode_instance_ids))
+    global_scheduler.scale_up(decode_instance_ids, [InstanceType.DECODE]*len(decode_instance_ids))
     global_scheduler.update_instance_infos(decode_instance_infos)
 
 

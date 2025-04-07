@@ -45,7 +45,6 @@ from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETR
 from llumnix.scaler import Scaler
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.api_server_actor import APIServerActor
-from llumnix.instance_info import InstanceType
 
 logger = init_logger(__name__)
 
@@ -438,6 +437,18 @@ class Manager:
                 asyncio.create_task(self._rebuild_migration_backend())
 
         return self.num_instances
+
+    def get_num_prefill_decode_instances(self):
+        num_prefill_instances = len(self.global_scheduler.prefill_instance_info)
+        num_decode_instances = len(self.global_scheduler.decode_instance_info)
+
+        return num_prefill_instances, num_decode_instances
+
+    def get_prefill_decode_instance_id_set(self):
+        prefill_instance_id_set = set(self.global_scheduler.prefill_instance_info.keys())
+        decode_instance_id_set = set(self.global_scheduler.decode_instance_info.keys())
+        return prefill_instance_id_set, decode_instance_id_set
+
 
     # TODO(KuilongCui): Add comments for this function.
     async def _rebuild_migration_backend(self) -> None:

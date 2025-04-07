@@ -7,6 +7,7 @@ from typing import Dict
 import ray
 
 from vllm.engine.async_llm_engine import AsyncStream
+from vllm.outputs import RequestOutput
 from vllm import SamplingParams
 
 from llumnix.manager import Manager
@@ -32,6 +33,7 @@ class LlumnixClientVLLM:
 
         self.request_streams: Dict[str, AsyncStream] = {}
         self.instance_num_requests: Dict[str, int] = {}
+        self.request_streams_last_completion_tokens: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
         self.num_finished_requests = 0
@@ -125,7 +127,6 @@ class LlumnixClientVLLM:
         ready_status = await self.manager.is_ready.remote()
         return ready_status
 
-    # TODO(s5u13b): Fix the potential output token out-of-order issue caused by the migration.
     async def get_request_outputs_loop(self):
         while True:
             request_outputs = await self.request_output_queue.get()
@@ -135,7 +136,39 @@ class LlumnixClientVLLM:
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
-                self.request_streams[request_id].put(request_output)
+                processed_output = self.process_output_order(request_id, request_output)
+                if not processed_output:
+                    continue
+                self.request_streams[request_id].put(processed_output)
                 if request_output.finished:
                     self.request_streams[request_id].finish()
                     del self.request_streams[request_id]
+                    self.request_streams_last_completion_tokens.pop(request_id, None)
+
+    def process_output_order(
+        self, request_id: int, request_output: RequestOutput
+    ) -> RequestOutput:
+        current_completion_tokens = None
+        if hasattr(request_output, "outputs") and len(request_output.outputs) > 0:
+            current_completion_tokens = len(request_output.outputs[-1].token_ids)
+
+        if not current_completion_tokens:
+            # request_output has no outputs, return the request_output directly.
+            return request_output
+
+        last_completion_tokens = self.request_streams_last_completion_tokens.get(
+            request_id, 0
+        )
+        if current_completion_tokens <= last_completion_tokens:
+            # process the out-of-order output
+            logger.info(
+                "request[{}] out-of-order output,last completion tokens is {}"
+                ", current completion tokens is {}, skip current output...".format(
+                    request_id, last_completion_tokens, current_completion_tokens
+                )
+            )
+            return None
+        self.request_streams_last_completion_tokens[request_id] = (
+            current_completion_tokens
+        )
+        return request_output

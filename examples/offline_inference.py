@@ -5,9 +5,11 @@ import asyncio
 
 import ray
 
+from vllm.engine.arg_utils import EngineArgs
+from vllm.sampling_params import SamplingParams
+
 from llumnix import (Manager, launch_ray_cluster, connect_to_ray_cluster, init_manager,
-                     ManagerArgs, InstanceArgs, EngineArgs, Llumlet, ServerInfo,
-                     QueueType, BackendType, SamplingParams)
+                     ManagerArgs, InstanceArgs, Llumlet, ServerInfo, QueueType, BackendType)
 from llumnix.utils import random_uuid
 from llumnix.queue.ray_queue_server import RayQueueServer
 
@@ -48,10 +50,9 @@ instance_ids: List[str] = None
 instances: List[Llumlet] = None
 instance_ids, instances = ray.get(manager.init_instances.remote(
     QueueType("rayqueue"), BackendType.VLLM, instance_args, engine_args))
-while True:
+num_instance = 0
+while num_instance == 0:
     num_instance = ray.get(manager.scale_up.remote([], [], [], []))
-    if num_instance == 1:
-        break
     time.sleep(1.0)
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.

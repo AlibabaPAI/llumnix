@@ -43,6 +43,7 @@ def generate_vllm_launch_command(
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
     enable_migration: bool = True,
+    enforce_eager: bool = True,
     **kwargs
 ):
     command = (
@@ -57,6 +58,7 @@ def generate_vllm_launch_command(
         f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
+        f"{'--enforce-eager' if enforce_eager else ''} "
         f"--max-model-len {max_model_len} "
         f"--dispatch-policy {dispatch_policy} "
         f"--trust-remote-code "
@@ -97,6 +99,7 @@ def generate_vllm_serve_command(
     config_path: str = "configs/vllm.yml",
     tensor_parallel_size: int = 1,
     enable_migration: bool = True,
+    enforce_eager: bool = True,
     **kwargs
 ):
     command = (
@@ -110,6 +113,7 @@ def generate_vllm_serve_command(
         f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
+        f"{'--enforce-eager' if enforce_eager else ''} "
         f"--max-model-len {max_model_len} "
         f"--dispatch-policy {dispatch_policy} "
         f"--trust-remote-code "
@@ -271,7 +275,6 @@ def generate_bladellm_request(prompt):
 def process_bladellm_api_server_output(output):
     return output['choices'][0]['message']['content']
 
-
 def wait_for_llumnix_service_ready(ip_ports, timeout=120):
     start_time = time.time()
     while True:
@@ -293,7 +296,7 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
         if elapsed_time > timeout:
             raise TimeoutError(f"Wait for llumnix service timeout ({timeout}s).")
 
-        time.sleep(1)
+        time.sleep(5.0)
 
 def generate_bench_command(backend: str,
                            ip_ports: str,
@@ -331,6 +334,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
     subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
+    subprocess.run('pkill -f llumnix.entrypoints.bladellm.serve', shell=True, check=False)
     subprocess.run('pkill -f multiprocess', shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
     subprocess.run(f'rm -rf {NAMING_URL}', shell=True, check=False)

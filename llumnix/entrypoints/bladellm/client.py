@@ -16,7 +16,7 @@ import time
 import asyncio
 import copy
 import random
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import ray
 
@@ -24,7 +24,7 @@ from blade_llm.service.communications.engine_client import MultiProcessingLLMCli
 from blade_llm.service.communications.protocol import Stats, GenerateStreamMessage
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest
+from blade_llm.protocol import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.manager import Manager
@@ -57,6 +57,8 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
 
         self.request_streams: Dict[int, asyncio.Queue] = {}
+        self.request_streams_last_completion_tokens: Dict[str, int] = {}
+        self.request_streams_output_stash: Dict[str, list[GenerateStreamResponse]] = {}
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
@@ -153,15 +155,64 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
-                self.request_streams[request_id].put_nowait(request_output)
-
-                if request_output.is_finished:
+                processed_output: List[GenerateStreamResponse] = self.process_output_order(request_id, request_output)
+                if not processed_output:
+                    continue
+                for req in processed_output:
+                    self.request_streams[request_id].put_nowait(req)
+                self.request_streams_last_completion_tokens[request_id] = processed_output[-1].usage.completion_tokens
+                if processed_output[-1].is_finished:
                     # TODO(KuilongCui): fix logging output error
-                    print("Client finish request output: {}".format(output_message), flush=True)
-                    logger.debug("Client finish request output: {}".format(output_message))
+                    logger.debug("Client finish request output: {}".format(processed_output[-1]))
                     del self.entrypoint_id2llumnix_id[self.llumnix_id2entrypoint_id[request_id]]
                     del self.llumnix_id2entrypoint_id[request_id]
                     del self.request_streams[request_id]
+                    self.request_streams_last_completion_tokens.pop(request_id, None)
+                    self.request_streams_output_stash.pop(request_id, None)
+
+
+    def process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
+        current_completion_tokens = None
+        if hasattr(request_output, 'usage'):
+            current_completion_tokens = request_output.usage.completion_tokens
+
+        if not current_completion_tokens:
+            # No usage info, return the request_output directly.
+            return [request_output]
+
+        last_completion_tokens = self.request_streams_last_completion_tokens.get(request_id, 0)
+        support_completion_tokens = last_completion_tokens + len(request_output.tokens)
+        if current_completion_tokens > support_completion_tokens:
+            # process the out-of-order output
+            logger.info("request[{}] out-of-order output,last completion tokens is {}"
+                        ", current completion tokens is {}, current tokens is {}, stash current output..."
+                        .format(request_id,last_completion_tokens,current_completion_tokens,len(request_output.tokens)))
+
+            self.request_streams_output_stash.setdefault(request_id, []).append(request_output)
+            return []
+
+        if current_completion_tokens == support_completion_tokens:
+            if not self.request_streams_output_stash.get(request_id, None):
+                # no history output in stash
+                return [request_output]
+
+            # process the history output in buffer
+            output_stash: List[GenerateStreamResponse] = self.request_streams_output_stash[request_id]
+            output_stash.sort(key=lambda x: x.usage.completion_tokens)
+            last_correct_output_index = 0
+            for output in output_stash:
+                if output.usage.completion_tokens > current_completion_tokens + len(output.tokens):
+                    break
+                last_correct_output_index += 1
+                current_completion_tokens = output.usage.completion_tokens
+            if last_correct_output_index == 0:
+                return [request_output]
+            res = [request_output] + output_stash[:last_correct_output_index]
+            self.request_streams_output_stash[request_id] = output_stash[last_correct_output_index:]
+            return res
+
+        return [request_output]
+
 
     def connect(self):
         pass

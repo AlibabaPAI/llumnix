@@ -87,8 +87,8 @@ def initialize_placement_group(
     num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
     if num_gpus > num_gpus_in_cluster:
         raise ValueError(
-            "The number of required GPUs exceeds the total number of "
-            "available GPUs in the cluster.")
+            "The number of required GPUs {} exceeds the total number of "
+            "available GPUs {} in the cluster.".format(num_gpus, num_gpus_in_cluster))
 
     # Create a new placement group
     # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
@@ -106,8 +106,9 @@ def initialize_placement_group(
 
     logger.debug("placement_group_specs: {}".format(placement_group_specs))
 
+    # PACK (not STRICT_PACK) to support multi-node placement group.
     current_placement_group = ray.util.placement_group(
-        placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime)
+        placement_group_specs, "PACK", name=placement_group_name, lifetime=lifetime)
     # Wait until PG is ready - this will block until all
     # requested resources are available, and will timeout
     # if they cannot be provisioned.
@@ -335,11 +336,12 @@ def log_actor_ray_info(actor_class_name: str) -> None:
     job_id = ray.get_runtime_context().get_job_id()
     worker_id = ray.get_runtime_context().get_worker_id()
     node_id = ray.get_runtime_context().get_node_id()
+    gpu_ids = ray.get_runtime_context().get_accelerator_ids()["GPU"]
     # assigned_resources = ray.get_runtime_context().get_assigned_resources()
     logger.info("{}(actor_name={}, actor_id={}, placement_group_id={}, namespace={}, " \
-                "job_id={}, worker_id={}, node_id={})".format(
+                "job_id={}, worker_id={}, node_id={}, gpu_ids={})".format(
                     actor_class_name, actor_name, actor_id, placement_group_id, namespace,
-                    job_id, worker_id, node_id))
+                    job_id, worker_id, node_id, gpu_ids))
     # It seems that the logging directory of ray cannot easily get by codes, so use the indirect way below.
     # pylint: disable=protected-access
     session_dir = ray._private.worker._global_node.get_session_dir_path()

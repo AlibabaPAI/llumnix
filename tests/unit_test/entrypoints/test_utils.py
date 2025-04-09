@@ -19,7 +19,7 @@ from llumnix.arg_utils import ManagerArgs
 from llumnix.entrypoints.setup import launch_ray_cluster, init_manager
 from llumnix.entrypoints.utils import get_ip_address, retry_manager_method_sync, retry_manager_method_async
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.utils import get_manager_name
+from llumnix.ray_utils import get_manager_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

@@ -15,9 +15,9 @@ import time
 from typing import Dict, List, Union
 import math
 import traceback
+
 import ray
 import torch
-
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
@@ -33,7 +33,8 @@ from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migration_backend
 from llumnix.internal_config import MigrationConfig
-from llumnix.utils import convert_bytes, log_actor_ray_info
+from llumnix.utils import convert_bytes
+from llumnix.ray_utils import log_actor_ray_info
 
 logger = init_logger(__name__)
 

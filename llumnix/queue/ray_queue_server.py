@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import time
+
 import ray
 from ray.util.queue import Queue as RayQueue
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy

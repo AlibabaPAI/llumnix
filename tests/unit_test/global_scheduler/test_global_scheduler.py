@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import math
+
 import pytest
 
 from llumnix.internal_config import GlobalSchedulerConfig

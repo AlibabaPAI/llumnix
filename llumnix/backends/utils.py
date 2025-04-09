@@ -25,7 +25,7 @@ from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logging.logger import init_logger
-from llumnix.utils import get_instance_name, log_actor_ray_info
+from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.internal_config import MigrationConfig
 from llumnix.metrics.timestamps import set_timestamp
 

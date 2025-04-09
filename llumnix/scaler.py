@@ -29,20 +29,20 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.backends.utils import get_engine_world_size
-from llumnix.utils import (initialize_placement_group, get_manager_name, get_server_name,
-                           get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
-                           load_engine_args, GPUBundlingStrategy, get_service_resouces,
-                           get_scaler_name, get_placement_group_name, get_placement_group_infos_by_name,
-                           get_placement_group_infos_by_state, random_uuid, kill_server,
-                           kill_instance, remove_placement_group, get_actor_names_by_name_prefix,
-                           SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX, actor_exists,
-                           get_instance_name)
+from llumnix.utils import (load_engine_args, get_service_resouces, random_uuid,
+                           get_service_instance_type)
+from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get_server_name,
+                               get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
+                               GPUBundlingStrategy, get_scaler_name, get_placement_group_name,
+                               get_placement_group_infos_by_name, get_placement_group_infos_by_state,
+                               kill_server, kill_instance, remove_placement_group,
+                               get_actor_names_by_name_prefix, SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX,
+                               actor_exists, get_instance_name)
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
                                CHECK_DEPLOYMENT_STATES_INTERVAL, WATCH_DEPLOYMENT_INTERVAL)
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.utils import get_service_instance_type
 
 logger = init_logger(__name__)
 

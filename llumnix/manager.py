@@ -33,9 +33,9 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import (random_uuid, clear_gloo_backend_ray_resources, get_manager_name,
-                           INSTANCE_NAME_PREFIX, run_coroutine_in_new_thread,
-                           get_placement_group_name, log_actor_ray_info)
+from llumnix.utils import random_uuid, run_coroutine_in_new_thread
+from llumnix.ray_utils import (clear_gloo_backend_ray_resources, get_manager_name, INSTANCE_NAME_PREFIX,
+                               get_placement_group_name, log_actor_ray_info)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_server_base import QueueServerBase

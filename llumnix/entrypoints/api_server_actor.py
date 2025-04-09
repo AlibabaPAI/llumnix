@@ -11,7 +11,7 @@ from llumnix.entrypoints.utils import EntrypointsContext, get_ip_address
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.logging.logger import init_logger
-from llumnix.utils import log_actor_ray_info
+from llumnix.ray_utils import log_actor_ray_info
 
 logger = init_logger(__name__)
 

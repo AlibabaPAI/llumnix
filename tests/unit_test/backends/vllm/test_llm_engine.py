@@ -30,7 +30,7 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
-from llumnix.utils import initialize_placement_group, get_placement_group_name
+from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

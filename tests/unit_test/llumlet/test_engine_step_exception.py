@@ -23,7 +23,7 @@ from llumnix.arg_utils import InstanceArgs
 from llumnix.backends.backend_interface import BackendType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
-from llumnix.utils import initialize_placement_group, get_placement_group_name
+from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

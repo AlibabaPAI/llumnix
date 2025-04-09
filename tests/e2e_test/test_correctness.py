@@ -15,6 +15,7 @@
 import subprocess
 import asyncio
 from typing import List
+import random
 
 import ray
 import pytest
@@ -133,7 +134,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
         pytest.skip("Only test tensor parallelism in global launch mode.")
 
     ip = get_ip_address()
-    base_port = 37037
+    base_port = random.randint(30000, 40000)
 
     global engine_prompt_output
     global engine_pdd_prompt_output

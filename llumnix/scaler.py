@@ -466,6 +466,8 @@ class Scaler:
             logger.warning("Failed to remove placement group {}.".format(instance_id))
 
     async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceType:
+        # TODO(s5u13b): Change gprc_migration_backend_server_port for BladeLLM to avoid confict.
+
         if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
             return instance_args
 

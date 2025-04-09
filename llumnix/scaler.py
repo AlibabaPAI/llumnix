@@ -466,12 +466,16 @@ class Scaler:
             logger.warning("Failed to remove placement group {}.".format(instance_id))
 
     async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceType:
-        # TODO(s5u13b): Change gprc_migration_backend_server_port for BladeLLM to avoid confict.
+        if not self.enable_port_increment:
+            return instance_args
+
+        next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
+        # self.port_offset will be incremented by 1 in the next _get_next_entrypoints_args call.
+        next_instance_args.grpc_migration_backend_server_port += self.port_offset
 
         if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
             return instance_args
 
-        next_instance_args: InstanceType = copy.deepcopy(instance_args)
         # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
         cur_num_prefill_instances, cur_num_decode_instances = await self.manager.get_num_prefill_decode_instances.remote()
         next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill_instances, cur_num_decode_instances,

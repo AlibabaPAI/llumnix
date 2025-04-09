@@ -44,7 +44,7 @@ def parse_log_file(title: str):
             for json_file in json_files:
                 with open(json_file, 'r', encoding="utf-8") as file:
                     data = json.load(file)[-1]
-                    latencies.append(data.get(key, []))
+                    latencies.extend(data.get(key, []))
             latencies_array = np.array(latencies)
         # pylint: disable=broad-except
         except Exception as e:

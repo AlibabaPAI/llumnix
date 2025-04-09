@@ -169,7 +169,11 @@ class Manager:
         if self.log_requests:
             logger.info("manager receive request {}".format(request_id))
             logger.info("dispath request {} to instance {}".format(request_id, prefill_instance_id))
-            self.request_instance[request_id] = prefill_instance_id
+            if self.manager_args.enable_engine_pd_disagg:
+                logger.info("request {} specified decode instance {}".format(request_id, decode_instance_id))
+                self.request_instance[request_id] = decode_instance_id
+            else:
+                self.request_instance[request_id] = prefill_instance_id
 
     async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):

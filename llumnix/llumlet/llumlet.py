@@ -55,8 +55,8 @@ class Llumlet:
                 engine_args = pickle.loads(engine_args.engine_args)
             log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
-            if instance_args.use_podname_as_engine_disagg_instance_id:
-                self.engine_disagg_inst_id = os.environ.get("POD_NAME", instance_id)
+            if instance_args.engine_disagg_inst_id_env_var:
+                self.engine_disagg_inst_id = os.environ.get(instance_args.engine_disagg_inst_id_env_var, instance_id)
             elif getattr(engine_args, 'disagg_options', None) and getattr(engine_args.disagg_options, 'inst_id', None):
                 self.engine_disagg_inst_id = engine_args.disagg_options.inst_id
             else:

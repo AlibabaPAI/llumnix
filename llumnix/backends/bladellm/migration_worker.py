@@ -119,6 +119,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             resp.error_msg = f"warmup failed: {e}"
         return resp
 
+
 class MigrationLocalWorker(LocalWorker, MigrationWorker):
     def __init__(self, rank: int, serving_args: ServingArgs,
                  instance_id: str, migration_config: MigrationConfig,) -> None:
@@ -128,7 +129,7 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
             self.request_sync_group = WorkerRequestSyncGroup(self._engine._state_manager._request_groups,
                                                              self._req_tracker)
             MigrationWorker.__init__(self, self._engine._state_manager, instance_id, migration_config,
-                                    self.request_sync_group, self, rank, serving_args)
+                                     self.request_sync_group, self, rank, serving_args)
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Failed to initialize MigrationLocalWorker: {}".format(e))

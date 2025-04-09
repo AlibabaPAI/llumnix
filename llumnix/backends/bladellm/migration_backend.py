@@ -98,6 +98,7 @@ class WorkerRequestSyncGroup:
             request_tracker_data = self._backup_request_tracker[request_group_id]
             return state_manager_data, request_tracker_data
 
+
 class GrpcMigrationBackend(MigrationBackendBase):
     def __init__(self, rank: int, migration_config: MigrationConfig,
                  request_sync_group: WorkerRequestSyncGroup, state_manager: StateManagerBase):
@@ -291,6 +292,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 logits_processors_params=LogitsProcessorParams(repetition_penalty=1.0),
                 detoken_params=DetokenParams(cat_prompt=True),)
 
+
 class KvTransferMigrationBackend(MigrationBackendBase):
     def __init__(self, rank: int, instance_id: str, worker_id: int, migration_config: MigrationConfig,
                  request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker, serving_args: ServingArgs,
@@ -418,6 +420,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             "src worker id {}, dst instance id {}, dst worker id {}, src blocks: {}, dst blocks: {}"
             .format(kv_request_id, timeout_threshold_s, src_instance_id, src_worker_id, self.instance_id,
             self.worker_id, src_blocks, dst_blocks))
+
 
 def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration_config: MigrationConfig,
                           request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker,

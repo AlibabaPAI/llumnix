@@ -1,4 +1,3 @@
-import socket
 from enum import Enum
 from typing import Dict
 import subprocess

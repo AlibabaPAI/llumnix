@@ -217,7 +217,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
 
     assert instance_num_blocks_list_before_bench == instance_num_blocks_list_after_bench
 
-    if migration_request_status == 'running' and tensor_parallel_size == 1:
+    if migration_request_status == 'running' and tensor_parallel_size == 1 and not use_ray_spmd_worker:
         average_speed = parse_instance_log_file(instance_output_logs)
         sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0])*1024 if 'GB' in x else float(x.split()[0]))
         data = [

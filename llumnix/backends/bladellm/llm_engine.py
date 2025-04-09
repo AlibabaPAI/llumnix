@@ -69,6 +69,7 @@ class RequestBarrier:
     async def wait(self):
         await self.wait_event.wait()
 
+
 class AsyncBackQueueWrapper(APIWrapper):
     def __init__(self, placement_group, instance_id, request_output_queue_type) -> None:
         super().__init__(args=None, resp_queue=None)
@@ -166,6 +167,7 @@ class AsyncBackQueueWrapper(APIWrapper):
 
     def stop(self):
         pass
+
 
 class AsyncLLMEngineLlumnixMixin:
     # pylint: disable=unused-argument
@@ -325,6 +327,7 @@ class AsyncLLMEngineLlumnixMixin:
     def get_num_wait_update_request_ids(self) -> int:
         return self.request_barriers.qsize()
 
+
 class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
     def __init__(self,
                 instance_id: str,
@@ -338,6 +341,7 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
         AsyncLLMEngine.__init__(self, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers)
+
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,
@@ -359,6 +363,7 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             self.trans_wrapper.add_request(req.id, None, back_queue)
         return reqs, back_queues
 
+
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
             instance_id: str,
@@ -372,6 +377,7 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
         DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers)
+
 
 class BackendBladeLLM(BackendInterface):
     def __init__(

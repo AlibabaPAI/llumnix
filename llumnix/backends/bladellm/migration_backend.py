@@ -98,6 +98,7 @@ class WorkerRequestSyncGroup:
             request_tracker_data = self._backup_request_tracker[request_group_id]
             return state_manager_data, request_tracker_data
 
+
 class GrpcMigrationBackend(MigrationBackendBase):
     def __init__(self, rank: int, migration_config: MigrationConfig,
                  request_sync_group: WorkerRequestSyncGroup, state_manager: StateManagerBase):
@@ -290,6 +291,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 stopping_criterial=StoppingCriteria(max_new_tokens=0),
                 logits_processors_params=LogitsProcessorParams(repetition_penalty=1.0),
                 detoken_params=DetokenParams(cat_prompt=True),)
+
 
 class KvTransferMigrationBackend(MigrationBackendBase):
     def __init__(self, rank: int, instance_id: str, worker_id: int, migration_config: MigrationConfig,

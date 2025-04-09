@@ -119,6 +119,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             resp.error_msg = f"warmup failed: {e}"
         return resp
 
+
 class MigrationLocalWorker(LocalWorker, MigrationWorker):
     def __init__(self, rank: int, serving_args: ServingArgs,
                  instance_id: str, migration_config: MigrationConfig,) -> None:

@@ -23,6 +23,7 @@ import torch
 import ray
 
 from llumnix.entrypoints.utils import get_ip_address
+from llumnix.utils import get_free_port
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -137,7 +138,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
 
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
-    base_port = random.randint(30000, 40000)
+    base_port = get_free_port()
     ip_ports = []
     instance_output_logs = []
     device_count = torch.cuda.device_count()

@@ -37,7 +37,7 @@ from blade_llm.service.workers.base_worker import BaseWorker
 from blade_llm.service.proto.bladellm_pb2 import (SamplingParams, LogitsProcessorParams,
                                                   DetokenParams, StoppingCriteria, WorkerRequest)
 
-from llumnix.entrypoints.setup import get_ip_address
+from llumnix.utils import get_ip_address
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2

@@ -142,6 +142,11 @@ def get_service_instance_type(service_name: str) -> "InstanceType":
         instance_type = InstanceType.DECODE
     return instance_type
 
+def get_ip_address():
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
+    return ip_address
+
 def _bind_and_close_port(port: Optional[int] = None, host: str = '0.0.0.0') -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # the SO_REUSEADDR flag tells the kernel to reuse a local socket in TIME_WAIT state,

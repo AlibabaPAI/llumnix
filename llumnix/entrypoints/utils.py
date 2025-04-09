@@ -34,12 +34,6 @@ class EntrypointsContext:
         self.log_requests = log_requests
         self.log_request_timestamps = log_request_timestamps
 
-
-def get_ip_address():
-    hostname = socket.gethostname()
-    ip_address = socket.gethostbyname(hostname)
-    return ip_address
-
 def is_gpu_available() -> bool:
     try:
         subprocess.check_output(['nvidia-smi'])

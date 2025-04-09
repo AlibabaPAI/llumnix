@@ -21,8 +21,7 @@ import pytest
 import aiohttp
 import torch
 
-from llumnix.entrypoints.utils import get_ip_address
-from llumnix.utils import get_free_port
+from llumnix.utils import get_ip_address, get_free_port
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func

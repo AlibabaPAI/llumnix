@@ -28,13 +28,12 @@ from blade_llm.service.workers.local_worker import LocalWorker
 from blade_llm.service.workers.base_worker import BaseWorker
 from blade_llm.service.proto import bladellm_pb2
 
-from llumnix.entrypoints.setup import get_ip_address
 from llumnix.backends.bladellm.migration_backend import get_migration_backend, WorkerRequestSyncGroup
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH
-from llumnix.utils import convert_bytes
+from llumnix.utils import get_ip_address, convert_bytes
 
 logger = init_logger(__name__)
 

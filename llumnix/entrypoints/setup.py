@@ -29,8 +29,8 @@ from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, Instance
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.entrypoints.utils import (LaunchMode, EntrypointsContext, get_ip_address,
-                                       retry_manager_method_sync)
+from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext, retry_manager_method_sync
+from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL

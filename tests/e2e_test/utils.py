@@ -168,6 +168,7 @@ def generate_bladellm_launch_command(
         f"--disable_prompt_cache "
         f"--log_level INFO "
         f"-tp {tensor_parallel_size} "
+        f"--dist_init_addr {ip}:{port+13737} "
         f"--attn_cls ragged_flash "
         f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
         f"--disable_frontend_multiprocessing "

@@ -20,6 +20,8 @@ import ray
 
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.server import Entrypoint
+from blade_llm.module.parallel import is_distributed_inference
+
 
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType

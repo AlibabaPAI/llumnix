@@ -16,6 +16,7 @@ import traceback
 from typing import List, Union, Iterable
 import time
 import pickle
+import os
 
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -54,6 +55,12 @@ class Llumlet:
                 engine_args = pickle.loads(engine_args.engine_args)
             log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
+            if instance_args.engine_disagg_inst_id_env_var:
+                self.engine_disagg_inst_id = os.environ.get(instance_args.engine_disagg_inst_id_env_var, instance_id)
+            elif getattr(engine_args, 'disagg_options', None) and getattr(engine_args.disagg_options, 'inst_id', None):
+                self.engine_disagg_inst_id = engine_args.disagg_options.inst_id
+            else:
+                self.engine_disagg_inst_id =  instance_id
             logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
             self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)
@@ -63,7 +70,7 @@ class Llumlet:
                 enable_defrag=instance_args.enable_defrag
             )
             migration_config: MigrationConfig = instance_args.create_migration_config()
-            self.backend_engine: BackendInterface = init_backend_engine(instance_id,
+            self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
                                                                         placement_group,
                                                                         request_output_queue_type,
                                                                         migration_config,
@@ -216,6 +223,9 @@ class Llumlet:
 
     def get_instance_type(self) -> InstanceType:
         return self.instance_args.instance_type
+
+    def get_engine_disagg_inst_id(self) -> str:
+        return self.engine_disagg_inst_id
 
     def get_all_request_ids(self) -> List[str]:
         return self.backend_engine.get_all_request_ids()

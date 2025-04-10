@@ -11,11 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Tuple, Set
+from typing import Dict, Tuple, Set
 import numpy as np
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceType
+from llumnix.instance_info import InstanceInfo
 from llumnix.global_scheduler.scaling_policy import ScalePolicyFactory
 
 logger = init_logger(__name__)
@@ -32,24 +32,15 @@ class ScalingScheduler:
         self.scale_down_threshold = scale_down_threshold
         self.scaling_policy = ScalePolicyFactory.get_policy(scaling_policy, scaling_load_metric=scaling_load_metric)
 
-        self.num_instances = 0
-        self.instance_id_set: Set[str] = set()
         self.enable_pd_disagg = enable_pd_disagg
 
-        # instance info args
-        self.instance_info: Dict[str, InstanceInfo] = None
-        self.sorted_instance_infos: List[InstanceInfo] = None
-
-        # TODO(Xinyi): Tag instance type for scheduler, should be extended to auto-scaling for prefill/decode instances.
-        self.instance_type_id_set: Dict[InstanceType, Set[str]] = {instance_type: set() for instance_type in InstanceType}
-
-    def check_scale(self) -> Tuple[str, str]:
+    def check_scale(self, instance_info: Dict[str, InstanceInfo], instance_id_set: Set[str]) -> Tuple[str, str]:
         scale_up_num = 0
         scale_down_num = 0
         # if not all instances have returned instance_info, not scale
-        if len(self.instance_info.keys()) < self.num_instances:
+        if len(instance_info.keys()) < len(instance_id_set):
             return scale_up_num, scale_down_num
-        now_instances = [self.instance_info[instance_id] for instance_id in self.instance_id_set]
+        now_instances = [instance_info[instance_id] for instance_id in instance_id_set]
         load_metric_up = self.scaling_policy.compute_load_metric_up(now_instances)
         load_metric_down = self.scaling_policy.compute_load_metric_down(now_instances)
         if load_metric_up > self.scale_up_threshold:
@@ -60,22 +51,6 @@ class ScalingScheduler:
             scale_down_num = 1
         return scale_up_num, scale_down_num
 
-    def update_instance_infos(self, instance_info: Dict[str, InstanceInfo]) -> None:
-        self.instance_info = instance_info
-
-    def add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
-        self.instance_id_set.add(instance_id)
-        self.num_instances = len(self.instance_id_set)
-        self.instance_type_id_set[instance_type].add(instance_id)
-
-    def remove_instance(self, instance_id: str) -> None:
-        if instance_id in self.instance_id_set:
-            self.instance_id_set.remove(instance_id)
-        for instance_type in InstanceType:
-            if instance_id in self.instance_type_id_set[instance_type]:
-                self.instance_type_id_set[instance_type].remove(instance_id)
-                break
-        self.num_instances = len(self.instance_id_set)
 
     def get_empty_instance_info(self) -> InstanceInfo:
         dummy_intance_info = InstanceInfo()

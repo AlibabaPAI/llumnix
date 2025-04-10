@@ -16,12 +16,11 @@ import math
 
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
-from llumnix.instance_info import InstanceType
 
 logger = init_logger(__name__)
 
@@ -32,6 +31,12 @@ class GlobalScheduler:
         self.num_instances = 0
         self.instance_id_set: Set[str] = set()
         self.instance_info: Dict[str, InstanceInfo] = {}
+
+        self.prefill_instance_info: Dict[str, InstanceInfo] = {}
+        self.prefill_instance_num_requests: Dict[str, int] = {}
+
+        self.decode_instance_info: Dict[str, InstanceInfo] = {}
+        self.decode_instance_num_requests: Dict[str, int] = {}
 
         # dispatch args
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
@@ -52,20 +57,41 @@ class GlobalScheduler:
             if instance_info.instance_id in self.instance_id_set:
                 self.instance_info[instance_info.instance_id] = instance_info
 
-    def dispatch(self) -> str:
-        self.dispatch_scheduler.update_instance_infos(self.instance_info)
-        instance_id = self.dispatch_scheduler.dispatch()
-        request_expected_steps = 1 if self.global_scheduler_config.enable_pd_disagg else math.inf
+    def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
+        if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+            instance_id = self.dispatch_scheduler.dispatch(
+                instance_info=self.prefill_instance_info,
+                instance_num_requests=self.prefill_instance_num_requests,
+            )
+            self.prefill_instance_num_requests[instance_id] += 1
+        elif instance_type == InstanceType.DECODE:
+            instance_id = self.dispatch_scheduler.dispatch(
+                instance_info=self.decode_instance_info,
+                instance_num_requests=self.decode_instance_num_requests,
+            )
+            self.decode_instance_num_requests[instance_id] += 1
+        else:
+            logger.error("instance_type {} is not supported".format(instance_type))
+            raise TypeError("instance_type {} is not supported".format(instance_type))
+        if self.global_scheduler_config.enable_pd_disagg and instance_type in (
+            InstanceType.PREFILL,
+            InstanceType.NO_CONSTRAINTS,
+        ):
+            request_expected_steps = 1
+        else:
+            request_expected_steps = math.inf
         return instance_id, request_expected_steps
 
-    def pair_migration(self, pair_migration_type: PairMigrationConstraints) -> List[Tuple[str, str]]:
-        self.migration_scheduler.update_instance_infos(self.instance_info)
-        migrate_instance_pairs = self.migration_scheduler.pair_migration(pair_migration_type)
+    def pair_migration(
+        self, pair_migration_type: PairMigrationConstraints
+    ) -> List[Tuple[str, str]]:
+        migrate_instance_pairs = self.migration_scheduler.pair_migration(
+            instance_info=self.instance_info, pair_migration_type=pair_migration_type
+        )
         return migrate_instance_pairs
 
     def check_scale(self) -> Tuple[str, str]:
-        self.scaling_scheduler.update_instance_infos(self.instance_info)
-        scale_up_num, scale_down_num = self.scaling_scheduler.check_scale()
+        scale_up_num, scale_down_num = self.scaling_scheduler.check_scale(self.instance_info, self.instance_id_set)
         return scale_up_num, scale_down_num
 
     def scale_up(self, instance_id: Union[str, Iterable[str]], instance_type: List[InstanceType]) -> int:
@@ -88,28 +114,43 @@ class GlobalScheduler:
         instance_ids = list(instance_id)
         for ins_id in instance_ids:
             if ins_id in self.instance_id_set:
-                logger.info("Scale down instance: {}.".format(ins_id))
-                if ins_id in self.instance_info:
-                    del self.instance_info[ins_id]
-                else:
-                    logger.warning("instance {} is not in instance_info".format(ins_id))
                 self._remove_instance(ins_id)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
     def _add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
+        logger.info("Scale up instance: {}.".format(instance_id))
+        new_intance_info = self._get_empty_instance_info()
+        new_intance_info.instance_id = instance_id
+        new_intance_info.instance_type = instance_type
+        self.instance_info[instance_id] = new_intance_info
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
-        for scheduler in (self.dispatch_scheduler, self.migration_scheduler, self.scaling_scheduler):
-            scheduler.update_instance_infos(self.instance_info)
-            scheduler.add_instance(instance_id, instance_type)
+        if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+            self.prefill_instance_info[instance_id] = new_intance_info
+            self.prefill_instance_num_requests[instance_id] = 0
+        elif instance_type == InstanceType.DECODE:
+            self.decode_instance_info[instance_id] = new_intance_info
+            self.decode_instance_num_requests[instance_id] = 0
 
     def _remove_instance(self, instance_id: str) -> None:
-        self.instance_id_set.remove(instance_id)
+        logger.info("Scale down instance: {}.".format(instance_id))
+        if instance_id not in self.instance_id_set:
+            logger.warning("instance {} is not in instance_id_set".format(instance_id))
+        if instance_id not in self.instance_info:
+            logger.warning("instance {} is not in instance_info".format(instance_id))
+        instance_info = self.instance_info.get(instance_id, None)
+        if instance_info:
+            if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+                self.prefill_instance_info.pop(instance_id, 0)
+                self.prefill_instance_num_requests.pop(instance_id, 0)
+            elif instance_info.instance_type == InstanceType.DECODE:
+                self.decode_instance_info.pop(instance_id, 0)
+                self.decode_instance_num_requests.pop(instance_id, 0)
+
+        self.instance_id_set.discard(instance_id)
+        self.instance_info.pop(instance_id, 0)
         self.num_instances = len(self.instance_id_set)
-        for scheduler in (self.dispatch_scheduler, self.migration_scheduler, self.scaling_scheduler):
-            scheduler.update_instance_infos(self.instance_info)
-            scheduler.remove_instance(instance_id)
 
     def _get_empty_instance_info(self) -> InstanceInfo:
         return self.scaling_scheduler.get_empty_instance_info()

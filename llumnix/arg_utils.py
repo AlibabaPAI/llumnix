@@ -383,6 +383,7 @@ class InstanceArgs:
     kvtransfer_migration_backend_naming_url: str = None
     migration_last_stage_max_blocks: int = None
     migration_max_stages: int = None
+    engine_disagg_inst_id_env_var: str = None
 
     # init from engine args
     enable_engine_pd_disagg: bool = None
@@ -522,4 +523,7 @@ class InstanceArgs:
         parser.add_argument('--migration-last-stage-max-blocks',
                             type=int,
                             help='if the number pf remain blocks < migration_last_stage_max_blocks, do last stage migration')
+        parser.add_argument('--engine-disagg-inst-id-env-var',
+                            type=str,
+                            help='environment variable used as engine instance id')
         return parser

@@ -50,6 +50,7 @@ from tests.conftest import ray_env, cleanup_ray_env_func, ray_stop, ray_start
 class MockLlumlet:
     def __init__(self, instance_id):
         self.instance_id = instance_id
+        self.engine_disagg_inst_id = instance_id
         self.actor_name = get_instance_name(instance_id)
         self.num_requests = 0
         self.request_id_set = set()
@@ -109,6 +110,9 @@ class MockLlumlet:
 
     def get_num_migrate_in(self):
         return self.num_migrate_in
+
+    def get_engine_disagg_inst_id(self) -> str:
+        return self.engine_disagg_inst_id
 
 def init_manager():
     try:
@@ -223,15 +227,22 @@ def test_scale_up_and_down(ray_env, manager):
     num_instances = ray.get(manager.scale_up.remote(instance_ids, instances, [InstanceType("no_constraints")]*initial_instances,
                                                     [None]*initial_instances))
     assert num_instances == initial_instances
-    instance_ids_1, instances_1 = init_instances(initial_instances)
+    instance_ids_1, _ = init_instances(initial_instances)
     num_instances = ray.get(manager.scale_down.remote(instance_ids_1))
     assert num_instances == initial_instances
-    num_instances = ray.get(manager.scale_up.remote(instance_ids_1, instances_1, [InstanceType("no_constraints")]*initial_instances,
-                                                    [None]*initial_instances))
+    instance_ids_2, instances_2 = init_instances(initial_instances)
+    num_instances = ray.get(
+        manager.scale_up.remote(
+            instance_ids_2,
+            instances_2,
+            [InstanceType("no_constraints")] * initial_instances,
+            [None] * initial_instances,
+        )
+    )
     assert num_instances == initial_instances * 2
     num_instances = ray.get(manager.scale_down.remote(instance_ids))
     assert num_instances == initial_instances
-    num_instances = ray.get(manager.scale_down.remote(instance_ids_1))
+    num_instances = ray.get(manager.scale_down.remote(instance_ids_2))
     assert num_instances == 0
 
 def test_connect_to_instances(ray_env):
@@ -478,7 +489,6 @@ def test_load_registered_service(ray_env, manager, load_registered_service, enab
 async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env):
     manager, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, enable_pd_disagg=True, pd_ratio="1:1")
     await asyncio.sleep(60.0)
-
     num_instances = ray.get(manager.scale_up.remote([], [], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
@@ -542,23 +552,20 @@ async def test_pd_disagg_deployment_states(ray_env):
     scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
     assert not ray.get(scaler._check_pd_deployment_states.remote())
 
-    prefill_instance_ids = [random_uuid() for _ in range(3)]
-    decode_instance_ids = [random_uuid() for _ in range(3)]
-    # Create dummy instance, which is used to get instance info by manager.
-    _, instances = init_instances(1)
-    instance = instances[0]
+    prefill_instance_ids, prefill_instances = init_instances(3)
+    decode_instance_ids, decode_instances = init_instances(3)
 
-    ray.get(manager.scale_up.remote(prefill_instance_ids, [instance]*len(prefill_instance_ids),
+    ray.get(manager.scale_up.remote(prefill_instance_ids, prefill_instances,
                      [InstanceType("prefill")]*len(prefill_instance_ids), [None]*len(prefill_instance_ids)))
     assert ray.get(scaler._check_pd_deployment_states.remote()) in prefill_instance_ids
-
     ray.get(manager.scale_down.remote(prefill_instance_ids))
-    ray.get(manager.scale_up.remote(decode_instance_ids, [instance]*len(decode_instance_ids),
+    ray.get(manager.scale_up.remote(decode_instance_ids, decode_instances,
                      [InstanceType("decode")]*len(decode_instance_ids), [None]*len(decode_instance_ids)))
     assert ray.get(scaler._check_pd_deployment_states.remote()) in decode_instance_ids
 
-    ray.get(manager.scale_up.remote(prefill_instance_ids, [instance]*len(prefill_instance_ids),
-                     [InstanceType("prefill")]*len(prefill_instance_ids), [None]*len(prefill_instance_ids)))
+    prefill_instance_ids2, prefill_instances2 = init_instances(3)
+    ray.get(manager.scale_up.remote(prefill_instance_ids2, prefill_instances2,
+                     [InstanceType("prefill")]*len(prefill_instance_ids2), [None]*len(prefill_instance_ids2)))
     assert not ray.get(scaler._check_pd_deployment_states.remote())
 
 @pytest.mark.asyncio

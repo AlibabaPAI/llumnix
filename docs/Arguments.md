@@ -280,7 +280,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: prefill, decode, no_constraints
 
 `--engine-disagg-inst-id-env-var`
-- Use which envorinment variable as engine instance id.
+- specify which environment variable to use as the engine instance id.
 
 # Unsupported vLLM feature options
 

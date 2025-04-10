@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import threading
-import traceback
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -86,8 +85,7 @@ class APIServerActor(ABC):
             api_server = api_server_class.remote(server_name, entrypoints_args, engine_args)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize APIServer: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Failed to initialize APIServer: {}".format(e))
             raise
 
         return api_server

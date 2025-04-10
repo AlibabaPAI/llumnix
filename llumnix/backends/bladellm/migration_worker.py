@@ -16,7 +16,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import time
-import traceback
 from typing import List
 
 import grpc
@@ -97,8 +96,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
                         .format(len(request.src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to migrate cache, request {}, error: {}".format(request, e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Failed to migrate cache, request {}, error: {}".format(request, e))
         return empty_pb2.Empty()
 
     def do_send(self, request, context):
@@ -131,8 +129,7 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
                                      self.request_sync_group, self, rank, serving_args)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize MigrationLocalWorker: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Failed to initialize MigrationLocalWorker: {}".format(e))
             raise
 
     # used for wait_worker_ready

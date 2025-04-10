@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import time
-import traceback
 import enum
 from typing import List
 
@@ -55,8 +54,7 @@ class MigrationCoordinator:
         try:
             return await self._migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
         except Exception as e:
-            logger.error("Unexpected exception: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
             raise
 
     async def migrate_out_waiting_request(self,
@@ -82,8 +80,7 @@ class MigrationCoordinator:
 
             return MigrationStatus.FINISHED
         except Exception as e:
-            logger.error("Unexpected exception: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
             raise
 
     async def _migrate_out_multistage(self,
@@ -104,8 +101,7 @@ class MigrationCoordinator:
             # exceed max stages
             return MigrationStatus.ABORTED_SRC
         except Exception as e:
-            logger.error("Unexpected exception: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
             raise
 
     async def _migrate_out_onestage(self,
@@ -180,8 +176,7 @@ class MigrationCoordinator:
 
             return migration_status
         except Exception as e:
-            logger.error("Unexpected exception: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
             raise
 
     def migrate_in_pre_alloc(self,

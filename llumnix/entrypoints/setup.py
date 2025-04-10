@@ -16,7 +16,6 @@ import sys
 import os
 import time
 from typing import Dict, Optional, List, Tuple
-import traceback
 
 import ray
 
@@ -141,8 +140,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
         # pylint: disable=broad-except
         except Exception as e:
             logger.error("Instance {} is dead.".format(instance_id))
-            logger.error("Unexpected exception occurs: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
             retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
 
     if len(available_instance_ids) > 0:

@@ -14,7 +14,6 @@
 import time
 from typing import Dict, List, Union
 import math
-import traceback
 
 import ray
 import torch
@@ -137,8 +136,7 @@ class MigrationWorker(Worker):
             logger.info("rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Unexpected exception occurs: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
             raise
         end_time = time.time()
 

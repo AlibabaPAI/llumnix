@@ -1,6 +1,5 @@
 from typing import Any, Union, Dict, List
 from enum import Enum
-import traceback
 import glob
 import os
 import pickle
@@ -221,8 +220,7 @@ def put_data_to_ray_internal_kv(data_name: str, value: Any) -> None:
             _internal_kv_put(_make_key(data_name), value, overwrite=True)
         # pylint: disable=W0703
         except Exception as e:
-            logger.error("Unexpected exception: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
     else:
         logger.error("Ray internal key-value storage is not initilized, failed to put the given data {}.".format(data_name))
 

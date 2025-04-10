@@ -13,7 +13,6 @@
 
 import asyncio
 import copy
-import traceback
 import random
 from typing import List, Tuple, Dict
 
@@ -206,8 +205,7 @@ class Scaler:
                             "instance_id: {}.".format(new_instance_id))
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("Unexpected exception: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                logger.exception("Unexpected exception: {}".format(e))
                 await asyncio.sleep(interval)
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
@@ -232,8 +230,7 @@ class Scaler:
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("Unexpected exception: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                logger.exception("Unexpected exception: {}".format(e))
 
     # TODO(KuilongCui): Deploy prefill and decode instances strictly according to the pd_ratio.
     # Currently, only one naive prefill-decode disaggregation deployment states check policy is implemented,
@@ -257,8 +254,7 @@ class Scaler:
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.error("Unexpected exception: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                logger.exception("Unexpected exception: {}".format(e))
 
     async def _check_pd_deployment_states(self) -> str:
         prefill_instance_id_set, decode_instance_id_set = await self.manager.get_prefill_decode_instance_id_set.remote()
@@ -371,8 +367,7 @@ class Scaler:
                     logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
                 self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
-                logger.error("Unexpected exception occurs: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                logger.exception("Unexpected exception: {}".format(e))
                 self.clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
@@ -439,8 +434,7 @@ class Scaler:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
                 self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
-                logger.error("Unexpected exception occurs: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                logger.exception("Unexpected exception: {}".format(e))
                 self.clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []

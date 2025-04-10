@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import asyncio
-import traceback
 from typing import List, Union, Iterable
 import time
 import pickle
@@ -86,8 +85,7 @@ class Llumlet:
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize Llumlet: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Failed to initialize Llumlet: {}".format(e))
             raise
 
     def __repr__(self):
@@ -132,8 +130,7 @@ class Llumlet:
                                            engine_args)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Failed to initialize Llumlet: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Failed to initialize Llumlet: {}".format(e))
             raise
 
         return llumlet
@@ -205,8 +202,7 @@ class Llumlet:
             raise
         # pylint: disable=W0703
         except Exception as e:
-            logger.error("Unexpected exception: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
             raise
         return migrated_request
 

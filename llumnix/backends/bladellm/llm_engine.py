@@ -16,7 +16,6 @@
 import sys
 from functools import partial
 import json
-import traceback
 from typing import List, Optional, Tuple, Union, Iterable, Any
 from collections import defaultdict
 import threading
@@ -255,8 +254,7 @@ class AsyncLLMEngineLlumnixMixin:
             await super()._loop()
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Error in engine loop: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Exception in engine loop: {}".format(e))
 
             previous_state = self.state
             self.state = EngineState.CRASHED

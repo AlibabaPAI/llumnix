@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import time
-import traceback
 import asyncio
 
 import ray
@@ -57,5 +56,4 @@ class AsyncPutQueueActor:
                     self.engine_actor_handle.abort.remote(request_ids)
         # pylint: disable=W0703
         except Exception as e:
-            logger.error("Error in engine loop: {}".format(e))
-            logger.error("exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Error in engine loop: {}".format(e))

@@ -17,7 +17,6 @@ import csv
 import os
 from typing import Dict, List, Tuple, Union, Iterable
 from collections import defaultdict
-import traceback
 from functools import partial
 
 import ray
@@ -274,8 +273,7 @@ class Manager:
                     self._log_instance_infos_to_csv(instance_infos)
             # pylint: disable=W0703
             except Exception as e:
-                logger.error("Unexpected exception: {}".format(e))
-                logger.error("Exception traceback: {}".format(traceback.format_exc()))
+                logger.exception("Unexpected exception: {}".format(e))
 
     async def _push_migrations(self) -> None:
         if self.enable_pd_disagg:
@@ -341,8 +339,7 @@ class Manager:
                 logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
-            logger.error("Unexpected exception: {}".format(e))
-            logger.error("Exception traceback: {}".format(traceback.format_exc()))
+            logger.exception("Unexpected exception: {}".format(e))
 
     def scale_up(self,
                  instance_id: Union[str, Iterable[str]],

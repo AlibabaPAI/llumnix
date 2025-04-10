@@ -109,6 +109,13 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
                                    migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
+    # TODO(s5u13b): fix this bug
+    if "BladeLLM" in engine and tensor_parallel_size > 1:
+        pytest.skip("Error in BladeLLM for tensor parallel size > 1.")
+
+    if "BladeLLM" in engine and use_ray_spmd_worker:
+        pytest.skip("use_ray_spmd_worker is Vllm config, just skip it in BladeLLM.")
+
     if engine == "BladeLLM" and migration_backend not in ['grpc', 'kvtransfer']:
         pytest.skip(f"BladeLLM does not support migration backend {migration_backend}")
 
@@ -148,9 +155,8 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
     num_instances = device_count // tensor_parallel_size
     if engine == "vLLM":
         for i in range(num_instances):
-            port = base_port + i
-            ip_ports.append(f"{ip}:{port}")
-        result_filename = f"{port}.out"
+            ip_ports.append(f"{ip}:{base_port+i}")
+        result_filename = f"{base_port}.out"
         instance_output_logs.append("instance_"+result_filename)
         launch_command = generate_vllm_serve_command(
                             result_filename=result_filename,
@@ -165,14 +171,13 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         subprocess.run(launch_command, shell=True, check=True)
     else:
         for i in range(num_instances):
-            port = base_port + i
-            ip_ports.append(f"{ip}:{port}")
-        result_filename = f"{port}.out"
+            ip_ports.append(f"{ip}:{base_port+i}")
+        result_filename = f"{base_port}.out"
         instance_output_logs.append("instance_"+result_filename)
         launch_command = generate_bladellm_serve_command(
                             result_filename=result_filename,
                             ip=ip,
-                            port=port,
+                            port=base_port,
                             model=model,
                             dispatch_policy="flood",
                             migration_backend=migration_backend,

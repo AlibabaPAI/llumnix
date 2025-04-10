@@ -22,15 +22,16 @@ import torch
 import grpc
 import numpy as np
 
+from blade_kvt import nic_affinity
+from blade_kvt.kv_transfer import (
+    KVTransferClient, KVTransferServer, KVTransferProtocolType, connect_naming)
 from blade_llm.generation.statemanagers.base_state_manager import StateManagerBase
 from blade_llm.generation.statemanagers.ragged_flash_state_manager import RaggedFlashStateManager
 from blade_llm.generation.statemanagers.disagg_ragged_flash_state_manager import (
     DisaggPrefillStateManager, DisaggDecodeStateManager)
 from blade_llm.generation.statemanagers.paged_state_manager import PagedStateManager
 from blade_llm.generation.kvcache.kv_cache_arena import PagedKVCacheArena, RaggedFlashKVCacheArena
-from blade_llm.generation.kvcache.kv_transfer import (KVTransferClient, KVTransferServer,
-                                                      KVTransferProtocolType, connect_naming)
-from blade_llm.service import nic_affinity
+from blade_llm.generation.statemanagers.utils import get_kv_tranfer_context
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.tracing import ReqTracker
 from blade_llm.service.workers.base_worker import BaseWorker
@@ -250,6 +251,11 @@ class GrpcMigrationBackend(MigrationBackendBase):
         # set request state manager meta
         if request.is_last_stage:
             state_manager_data, request_tracker_data = self.request_sync_group.get_request_meta(request.request_id)
+            # some pb repeated field is not allowed in pickle, so we use list to replace it
+            for request_state in state_manager_data.request_states:
+                request_state.vlm_prompt = list(request_state.vlm_prompt)
+                request_state.prompt_tokens = list(request_state.prompt_tokens)
+
             responce.state_manager_data = pickle.dumps(state_manager_data)
             responce.request_tracker_data = pickle.dumps(request_tracker_data)
             logger.debug("Pickle state manager meta for request id {}, data length: {}".format(
@@ -310,7 +316,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
         # TODO(KuilongCui): support PagedStateManager
         assert isinstance(state_manager, RaggedFlashStateManager)
         self.kv_cache = state_manager.kv_cache_arena.gpu_kv_cache
-        token_bytes, block_bytes = state_manager._get_kv_tranfer_context()
+        token_bytes, block_bytes = get_kv_tranfer_context(state_manager)
         naming_url = migration_config.kvtransfer_migration_backend_naming_url
         if isinstance(state_manager, (DisaggPrefillStateManager, DisaggDecodeStateManager)):
             naming_url = serving_args.naming_url
@@ -330,7 +336,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
                                         block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
                                         [self.tranfer_type])
 
-            kvt_info = BaseWorker.info(base_worker).kvt_info
+            kvt_info = BaseWorker.info(base_worker, kvt_worker_kind="server").kvt_info
             self._naming_client = connect_naming(self.instance_id, migration_config.kvtransfer_migration_backend_naming_url)
             self._naming_client.store(f"worker_{rank}", kvt_info)
             logger.info("store worker info to naming server, instance_id: {}, rank: {}, kvt_info: {}".format(
@@ -394,10 +400,17 @@ class KvTransferMigrationBackend(MigrationBackendBase):
         responce = migration_worker_pb2.SendKvCacheResponse(request_id=request.request_id)
         if request.is_last_stage:
             state_manager_data, request_tracker_data = self.request_sync_group.get_request_meta(request.request_id)
+            # some pb repeated field is not allowed in pickle, so we use list to replace it
+            for request_state in state_manager_data.request_states:
+                request_state.vlm_prompt = list(request_state.vlm_prompt)
+                request_state.prompt_tokens = list(request_state.prompt_tokens)
+
             responce.state_manager_data = pickle.dumps(state_manager_data)
             responce.request_tracker_data = pickle.dumps(request_tracker_data)
             logger.debug("Pickle state manager meta for request id {}, data length: {}".format(
                 request.request_id, len(responce.state_manager_data)))
+
+        self.client_kv.check_req_transfer_done(str(request.request_id))
 
         return responce
 

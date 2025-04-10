@@ -26,6 +26,7 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.service.workers.local_worker import LocalWorker
 from blade_llm.service.workers.base_worker import BaseWorker
 from blade_llm.service.proto import bladellm_pb2
+from blade_llm.module.parallel import nums_rank_per_node
 
 from llumnix.backends.bladellm.migration_backend import get_migration_backend, WorkerRequestSyncGroup
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
@@ -42,8 +43,8 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
                  request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker, rank: int,
                  args: ServingArgs) -> None:
         migration_worker_pb2_grpc.MigrationWorkerServicer.__init__(self)
-        device = args.device if args.device else torch.cuda.device(rank)
-        torch.cuda.set_device(device)
+        local_rank = rank % nums_rank_per_node()
+        torch.cuda.set_device(f"cuda:{local_rank}")
         self.instance_id = instance_id
         self.migration_config = migration_config
         self.rank = rank

@@ -168,6 +168,7 @@ def generate_bladellm_launch_command(
         f"--disable_prompt_cache "
         f"--log_level INFO "
         f"-tp {tensor_parallel_size} "
+        f"--dist_init_addr {ip}:{port+13737} "
         f"--attn_cls ragged_flash "
         f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
         f"--disable_frontend_multiprocessing "
@@ -282,6 +283,7 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
         for ip_port in ip_ports:
             try:
                 response = requests.get(f"http://{ip_port}/is_ready", timeout=5)
+                print(f"Entrypoint {ip_port} is ready.")
                 if 'true' not in response.text.lower():
                     all_ready = False
                     break
@@ -337,7 +339,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.bladellm.serve', shell=True, check=False)
     subprocess.run('pkill -f multiprocess', shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
-    subprocess.run(f'rm -rf {NAMING_URL}', shell=True, check=False)
+    subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
     time.sleep(5.0)
 
 @pytest.fixture

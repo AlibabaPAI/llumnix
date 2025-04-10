@@ -40,17 +40,18 @@ def add_llumnix_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser
     return parser
 
 def detect_unsupported_engine_feature(engine_args) -> None:
+    # pylint: disable=import-outside-toplevel
+    from blade_llm.service.args import ServingArgs
+    assert isinstance(engine_args, ServingArgs)
     unsupported_feature = None
     if engine_args.enable_lora:
         unsupported_feature = "multi-lora serving"
-    elif not engine_args.disable_prompt_cache:
-        unsupported_feature = "automatic prompt caching"
     elif engine_args.use_sps:
         unsupported_feature = "speculative decoding"
-    elif engine_args.enable_remote_worker:
+    elif engine_args.dist_inference_options.nnodes > 1 or engine_args.pipeline_parallel_size > 1:
         unsupported_feature = "enable_remote_worker"
-    elif engine_args.enable_hybrid_dp:
-        unsupported_feature = "hybrid data parallel"
+    elif engine_args.dp_attention:
+        unsupported_feature = "attention data parallel"
     elif engine_args.elastic_attn_cluster:
         unsupported_feature = "elastic attention"
 
@@ -58,6 +59,10 @@ def detect_unsupported_engine_feature(engine_args) -> None:
         raise ValueError(f'Llumnix does not support "{unsupported_feature}" for BladeLLM currently.')
 
 def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser: LlumnixArgumentParser, engine_args):
+    # pylint: disable=import-outside-toplevel
+    from blade_llm.service.args import ServingArgs
+    assert isinstance(engine_args, ServingArgs)
+
     instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)
     instance_args.init_from_engine_args(engine_args, BackendType.BLADELLM)
     manager_args = ManagerArgs.from_llumnix_config(llumnix_cfg)
@@ -74,11 +79,12 @@ def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser
         "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Llumnix."
     assert 'W' not in instance_args.request_migration_policy, \
         "Migrating waiting request is not supported for BladeLLM temporarily."
-    assert not engine_args.enable_disagg or not manager_args.enable_migration, \
-        "Migration feature is temporarily unavailable for the engine based pd-disaggregation."
     assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
         "Migration feature is temporarily unavailable for pipeline parallelism in BladeLLM."
-
+    if engine_args.enable_disagg and manager_args.enable_migration:
+        logger.warning("Migration feature is temporarily unavailable for the engine based pd-disaggregation, "
+                       "set enable_migration to False.")
+        manager_args.enable_migration = False
     detect_unsupported_engine_feature(engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))

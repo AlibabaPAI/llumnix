@@ -17,18 +17,20 @@ import os
 import time
 from typing import Dict, Optional, List, Tuple
 import traceback
+
 import ray
 
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
-from llumnix.utils import random_uuid, get_manager_name, get_llumnix_env_vars
+from llumnix.utils import random_uuid, get_llumnix_env_vars
+from llumnix.ray_utils import get_manager_name
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, InstanceArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.entrypoints.utils import (LaunchMode, EntrypointsContext, get_ip_address,
-                                       retry_manager_method_sync)
+from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext, retry_manager_method_sync
+from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL

@@ -18,10 +18,10 @@ import subprocess
 import time
 import math
 import shutil
+
 import ray
 import pytest
 import numpy as np
-
 import torch
 
 from vllm import EngineArgs
@@ -34,10 +34,11 @@ from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.utils import (get_placement_group_name, get_server_name, get_instance_name,
-                           remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
-                           kill_instance, random_uuid, get_manager_name,
-                           get_scaler_name, initialize_placement_group)
+from llumnix.utils import random_uuid
+from llumnix.ray_utils import (get_placement_group_name, get_server_name, get_instance_name,
+                               remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
+                               kill_instance, get_manager_name, get_scaler_name,
+                               initialize_placement_group)
 from llumnix.internal_config import PDDConfig
 from llumnix.entrypoints.vllm.register_service import save_engine_args
 

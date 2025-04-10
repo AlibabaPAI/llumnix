@@ -1,4 +1,3 @@
-import socket
 from enum import Enum
 from typing import Dict
 import subprocess
@@ -33,12 +32,6 @@ class EntrypointsContext:
         self.server_info = server_info
         self.log_requests = log_requests
         self.log_request_timestamps = log_request_timestamps
-
-
-def get_ip_address():
-    hostname = socket.gethostname()
-    ip_address = socket.gethostbyname(hostname)
-    return ip_address
 
 def is_gpu_available() -> bool:
     try:

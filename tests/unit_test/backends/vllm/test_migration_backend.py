@@ -13,6 +13,7 @@
 
 import random
 import os
+
 import pytest
 import torch
 import ray
@@ -21,7 +22,8 @@ from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.backends.vllm.worker import MigrationWorker
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import random_uuid, initialize_placement_group, get_placement_group_name
+from llumnix.utils import random_uuid
+from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

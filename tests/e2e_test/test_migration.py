@@ -13,7 +13,6 @@
 
 import os
 import subprocess
-import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 from collections import defaultdict
@@ -22,7 +21,7 @@ import pytest
 import torch
 import ray
 
-from llumnix.entrypoints.utils import get_ip_address
+from llumnix.utils import get_ip_address, get_free_port
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -137,7 +136,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
 
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
-    base_port = random.randint(30000, 40000)
+    base_port = get_free_port()
     ip_ports = []
     instance_output_logs = []
     device_count = torch.cuda.device_count()
@@ -218,7 +217,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
 
     assert instance_num_blocks_list_before_bench == instance_num_blocks_list_after_bench
 
-    if migration_request_status == 'running' and tensor_parallel_size == 1:
+    if migration_request_status == 'running' and tensor_parallel_size == 1 and not use_ray_spmd_worker:
         average_speed = parse_instance_log_file(instance_output_logs)
         sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0])*1024 if 'GB' in x else float(x.split()[0]))
         data = [

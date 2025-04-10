@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import time
+
 import pytest
 import torch
 import ray
@@ -24,7 +25,7 @@ from vllm.executor.ray_gpu_executor import RayWorkerWrapper
 
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import random_uuid
-from llumnix.utils import initialize_placement_group, get_placement_group_name
+from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 from llumnix.backends.vllm.worker import MigrationWorker
 
 # pylint: disable=unused-import

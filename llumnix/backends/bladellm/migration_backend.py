@@ -37,7 +37,7 @@ from blade_llm.service.workers.base_worker import BaseWorker
 from blade_llm.service.proto.bladellm_pb2 import (SamplingParams, LogitsProcessorParams,
                                                   DetokenParams, StoppingCriteria, WorkerRequest)
 
-from llumnix.entrypoints.setup import get_ip_address
+from llumnix.utils import get_ip_address
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
@@ -420,6 +420,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             "src worker id {}, dst instance id {}, dst worker id {}, src blocks: {}, dst blocks: {}"
             .format(kv_request_id, timeout_threshold_s, src_instance_id, src_worker_id, self.instance_id,
             self.worker_id, src_blocks, dst_blocks))
+
 
 def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration_config: MigrationConfig,
                           request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker,

@@ -33,7 +33,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import get_instance_name, log_actor_ray_info
+from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 

@@ -18,7 +18,7 @@ import uuid
 import pytest
 import requests
 
-from llumnix.entrypoints.utils import get_ip_address
+from llumnix.utils import get_ip_address
 
 
 def generate_vllm_launch_command(

@@ -42,7 +42,7 @@ from blade_llm.service.communications.engine_msg_server import EngineMsgServer
 from blade_llm.service.engine_args import CommunicationArgs
 from blade_llm.service.worker import launch_worker
 
-from llumnix.entrypoints.setup import get_ip_address
+from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo

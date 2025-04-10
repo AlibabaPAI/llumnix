@@ -15,6 +15,7 @@ import asyncio
 import math
 import os
 from unittest.mock import MagicMock
+
 import pytest
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -29,8 +30,9 @@ from llumnix.backends.utils import BackendType
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import (initialize_placement_group, get_placement_group_name, get_llumnix_env_vars,
-                           remove_placement_group, kill_instance)
+from llumnix.utils import get_llumnix_env_vars
+from llumnix.ray_utils import (initialize_placement_group, get_placement_group_name,
+                               remove_placement_group, kill_instance)
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import

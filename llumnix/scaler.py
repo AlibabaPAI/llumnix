@@ -29,20 +29,20 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.backends.utils import get_engine_world_size
-from llumnix.utils import (initialize_placement_group, get_manager_name, get_server_name,
-                           get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
-                           load_engine_args, GPUBundlingStrategy, get_service_resouces,
-                           get_scaler_name, get_placement_group_name, get_placement_group_infos_by_name,
-                           get_placement_group_infos_by_state, random_uuid, kill_server,
-                           kill_instance, remove_placement_group, get_actor_names_by_name_prefix,
-                           SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX, actor_exists,
-                           get_instance_name)
+from llumnix.utils import (load_engine_args, get_service_resouces, random_uuid,
+                           get_service_instance_type)
+from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get_server_name,
+                               get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
+                               GPUBundlingStrategy, get_scaler_name, get_placement_group_name,
+                               get_placement_group_infos_by_name, get_placement_group_infos_by_state,
+                               kill_server, kill_instance, remove_placement_group,
+                               get_actor_names_by_name_prefix, SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX,
+                               actor_exists, get_instance_name)
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
                                CHECK_DEPLOYMENT_STATES_INTERVAL, WATCH_DEPLOYMENT_INTERVAL)
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.utils import get_service_instance_type
 
 logger = init_logger(__name__)
 
@@ -348,7 +348,7 @@ class Scaler:
     async def _init_server_and_instance(self,
                                         instance_id: str,
                                         entrypoints_args: EntrypointsArgs,
-                                        instance_args: InstanceType,
+                                        instance_args: InstanceArgs,
                                         engine_args,
                                         backend_type: BackendType,
                                         placement_group: PlacementGroup,
@@ -391,11 +391,11 @@ class Scaler:
         asyncio.create_task(done_scale_up(instance_id, instance, next_instance_args.instance_type, placement_group, server))
 
     def _init_server(self,
-                    server_name: str,
-                    placement_group: PlacementGroup,
-                    backend_type: BackendType,
-                    entrypoints_args: EntrypointsArgs,
-                    engine_args) -> APIServerActor:
+                     server_name: str,
+                     placement_group: PlacementGroup,
+                     backend_type: BackendType,
+                     entrypoints_args: EntrypointsArgs,
+                     engine_args) -> APIServerActor:
         if backend_type == BackendType.BLADELLM:
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM # pylint: disable=import-outside-toplevel
             # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
@@ -407,13 +407,13 @@ class Scaler:
         return api_server
 
     def _init_instance(self,
-                      instance_id: str,
-                      instance_args: InstanceType,
-                      placement_group: PlacementGroup,
-                      request_output_queue_type: QueueType,
-                      backend_type: BackendType,
-                      engine_args
-                      ) -> Tuple[str, Llumlet]:
+                       instance_id: str,
+                       instance_args: InstanceArgs,
+                       placement_group: PlacementGroup,
+                       request_output_queue_type: QueueType,
+                       backend_type: BackendType,
+                       engine_args
+                       ) -> Tuple[str, Llumlet]:
         instance = Llumlet.from_args(
                         instance_id,
                         instance_args,
@@ -427,7 +427,7 @@ class Scaler:
     async def init_instances(self,
                              request_output_queue_type: QueueType,
                              backend_type: BackendType,
-                             instance_args: InstanceType,
+                             instance_args: InstanceArgs,
                              engine_args
                              ) -> Tuple[List[str], List[Llumlet]]:
         async def instance_ready_scale_up(instance_id: str, instance: ray.actor.ActorHandle,
@@ -465,11 +465,17 @@ class Scaler:
         if not remove_placement_group(instance_id):
             logger.warning("Failed to remove placement group {}.".format(instance_id))
 
-    async def _get_next_instance_args(self, instance_args: InstanceType, instance_type: InstanceType) -> InstanceType:
+    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceType:
+        if not self.enable_port_increment:
+            return instance_args
+
+        next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
+        # self.port_offset will be incremented by 1 in the next _get_next_entrypoints_args call.
+        next_instance_args.grpc_migration_backend_server_port += self.port_offset
+
         if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
             return instance_args
 
-        next_instance_args: InstanceType = copy.deepcopy(instance_args)
         # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
         cur_num_prefill_instances, cur_num_decode_instances = await self.manager.get_num_prefill_decode_instances.remote()
         next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill_instances, cur_num_decode_instances,
@@ -482,12 +488,11 @@ class Scaler:
             return entrypoints_args
 
         next_entrypoints_args = copy.deepcopy(entrypoints_args)
-        if self.enable_port_increment:
-            next_entrypoints_args.port += self.port_offset
-            next_entrypoints_args.request_output_queue_port += self.port_offset
-            self.port_offset += 1
-            if self.enable_port_offset_store:
-                put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)
+        next_entrypoints_args.port += self.port_offset
+        next_entrypoints_args.request_output_queue_port += self.port_offset
+        self.port_offset += 1
+        if self.enable_port_offset_store:
+            put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)
 
         return next_entrypoints_args
 

@@ -17,6 +17,7 @@ from blade_llm.service.scheduler_types import GenerationGroupState
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
+
 class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
     def __init__(self, gen_group: GenerationGroupState, *args) -> None:
         GenerationGroupState.__init__(self, **gen_group.__dict__)

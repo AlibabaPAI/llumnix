@@ -18,6 +18,7 @@ from collections import defaultdict
 import threading
 import asyncio
 import queue
+
 import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -41,7 +42,8 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
-from llumnix.utils import get_instance_name, make_async
+from llumnix.utils import make_async
+from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix import constants
 from llumnix.metrics.timestamps import set_timestamp

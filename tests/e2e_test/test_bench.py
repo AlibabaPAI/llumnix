@@ -16,12 +16,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 import json
 import os
+import random
 
 import pytest
 import torch
 import numpy as np
 
-from llumnix.utils import get_ip_address, get_free_port
+from llumnix.utils import get_ip_address
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -107,7 +108,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         num_prompts = 50
 
     ip = get_ip_address()
-    base_port = get_free_port()
+    base_port = random.randint(10000, 60000)
 
     ip_ports = []
     device_count = torch.cuda.device_count()

@@ -137,9 +137,10 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "0"
         os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "0"
 
+    global test_times
+
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
-    global test_times
     base_port = 30000 + test_times * 100
     ip_ports = []
     instance_output_logs = []

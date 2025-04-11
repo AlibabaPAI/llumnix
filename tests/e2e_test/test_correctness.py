@@ -72,7 +72,6 @@ def run_vllm(model):
 
 async def run_bladellm(model, enable_pd_disagg):
     ip = get_ip_address()
-    global test_times
     port = 50000 + test_times * 100
 
     if not enable_pd_disagg:
@@ -135,8 +134,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
     if tensor_parallel_size == 2 and launch_mode == "local":
         pytest.skip("Only test tensor parallelism in global launch mode.")
 
-    ip = get_ip_address()
     global test_times
+
+    ip = get_ip_address()
     base_port = 40000 + test_times * 100
 
     global engine_prompt_output

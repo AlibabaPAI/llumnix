@@ -21,7 +21,7 @@ import pytest
 import aiohttp
 import torch
 
-from llumnix.utils import get_ip_address, get_free_port
+from llumnix.utils import get_ip_address
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func
@@ -50,6 +50,8 @@ prompts = [
 engine_prompt_output = {}
 engine_pdd_prompt_output = {}
 
+test_times = 0
+
 @ray.remote(num_gpus=1)
 def run_vllm(model):
     # pylint: disable=import-outside-toplevel
@@ -70,7 +72,7 @@ def run_vllm(model):
 
 async def run_bladellm(model, enable_pd_disagg):
     ip = get_ip_address()
-    port = get_free_port()
+    port = 50000 + test_times * 100
 
     if not enable_pd_disagg:
         launch_command = generate_bladellm_launch_command(
@@ -132,8 +134,10 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
     if tensor_parallel_size == 2 and launch_mode == "local":
         pytest.skip("Only test tensor parallelism in global launch mode.")
 
+    global test_times
+
     ip = get_ip_address()
-    base_port = get_free_port()
+    base_port = 40000 + test_times * 100
 
     global engine_prompt_output
     global engine_pdd_prompt_output
@@ -223,3 +227,5 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
     await asyncio.sleep(3)
 
     check_log_exception()
+
+    test_times += 1

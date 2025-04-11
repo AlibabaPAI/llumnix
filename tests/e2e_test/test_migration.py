@@ -17,11 +17,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 from collections import defaultdict
 import re
+
 import pytest
 import torch
 import ray
 
-from llumnix.utils import get_ip_address, get_free_port
+from llumnix.utils import get_ip_address
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -33,6 +34,8 @@ size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
 
 MIGRATION_BENCH_TIMEOUT_MINS = 30
+# Used to caculate port to avoid port conficts between tests.
+test_times = 0
 
 # TODO(s5u13b): Refine e2e tests for two backend engines.
 
@@ -134,9 +137,11 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "0"
         os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "0"
 
+    global test_times
+
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
-    base_port = get_free_port()
+    base_port = 30000 + test_times * 100
     ip_ports = []
     instance_output_logs = []
     device_count = torch.cuda.device_count()
@@ -231,3 +236,5 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
     await asyncio.sleep(3)
 
     check_log_exception()
+
+    test_times += 1

@@ -21,7 +21,7 @@ import pytest
 import torch
 import numpy as np
 
-from llumnix.utils import get_ip_address, get_free_port
+from llumnix.utils import get_ip_address
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -31,6 +31,8 @@ from .utils import (generate_vllm_launch_command, generate_bench_command, to_mar
                     generate_bladellm_serve_command)
 
 BENCH_TEST_TIMEOUT_MINS = 60
+# Used to caculate port to avoid port conficts between tests.
+test_times = 0
 
 # TODO(s5u13b): Reorganize the bench test to make codes cleaner.
 
@@ -106,8 +108,10 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     else:
         num_prompts = 50
 
+    global test_times
+
     ip = get_ip_address()
-    base_port = get_free_port()
+    base_port = 20000 + test_times * 100
 
     ip_ports = []
     device_count = torch.cuda.device_count()
@@ -126,7 +130,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     if launch_mode == 'local':
         if enable_pd_disagg:
             for i in range(device_count//2):
-                port = base_port+i*100
+                port = base_port + i
                 ip_port = f"{ip}:{port}"
                 ip_ports.append(ip_port)
                 launch_command = generate_launch_command(result_filename=str(port)+".out",
@@ -140,7 +144,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                          request_output_queue_type=request_output_queue_type)
                 subprocess.run(launch_command, shell=True, check=True)
             for i in range(device_count//2):
-                port = base_port+i*100+(device_count//2)*100
+                port = base_port + i + (device_count//2)
                 ip_port = f"{ip}:{port}"
                 if engine == "vLLM":
                     ip_ports.append(ip_port)
@@ -156,7 +160,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 subprocess.run(launch_command, shell=True, check=True)
         else:
             for i in range(device_count):
-                port = base_port+i
+                port = base_port + i
                 ip_port = f"{ip}:{port}"
                 ip_ports.append(ip_port)
                 launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
@@ -170,7 +174,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 subprocess.run(launch_command, shell=True, check=True)
     else: # global
         for i in range(device_count):
-            port = base_port+i
+            port = base_port + i
             ip_port = f"{ip}:{port}"
             ip_ports.append(ip_port)
         serve_command = generate_serve_command(result_filename=str(base_port)+".out",
@@ -226,3 +230,5 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     await asyncio.sleep(3)
 
     check_log_exception()
+
+    test_times += 1

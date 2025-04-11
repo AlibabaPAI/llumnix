@@ -15,7 +15,6 @@
 import subprocess
 import asyncio
 from typing import List
-import random
 
 import ray
 import pytest
@@ -51,6 +50,8 @@ prompts = [
 engine_prompt_output = {}
 engine_pdd_prompt_output = {}
 
+test_times = 0
+
 @ray.remote(num_gpus=1)
 def run_vllm(model):
     # pylint: disable=import-outside-toplevel
@@ -71,7 +72,7 @@ def run_vllm(model):
 
 async def run_bladellm(model, enable_pd_disagg):
     ip = get_ip_address()
-    port = random.randint(10000, 60000)
+    port = 40000 + test_times * 100
 
     if not enable_pd_disagg:
         launch_command = generate_bladellm_launch_command(
@@ -134,7 +135,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
         pytest.skip("Only test tensor parallelism in global launch mode.")
 
     ip = get_ip_address()
-    base_port = random.randint(10000, 60000)
+    base_port = 30000 + test_times * 100
 
     global engine_prompt_output
     global engine_pdd_prompt_output

@@ -15,7 +15,6 @@ import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
-import random
 from collections import defaultdict
 import re
 
@@ -35,6 +34,8 @@ size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')
 
 MIGRATION_BENCH_TIMEOUT_MINS = 30
+# Used to caculate port to avoid port conficts between tests.
+test_times = 0
 
 # TODO(s5u13b): Refine e2e tests for two backend engines.
 
@@ -138,7 +139,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
 
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
-    base_port = random.randint(10000, 60000)
+    base_port = 20000 + test_times * 100
     ip_ports = []
     instance_output_logs = []
     device_count = torch.cuda.device_count()
@@ -233,3 +234,5 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
     await asyncio.sleep(3)
 
     check_log_exception()
+
+    test_times += 1

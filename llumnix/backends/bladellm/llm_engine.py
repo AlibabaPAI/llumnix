@@ -240,8 +240,8 @@ class AsyncLLMEngineLlumnixMixin:
                 self._scheduler.id2group[request_group_id]._inference_type = \
                     RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
-    async def update_callback(self, resp_list, step_requests, metrics):
-        await super().update_callback(resp_list, step_requests, metrics)
+    async def update_callback(self, resp_list, *args, **kwargs):
+        await super().update_callback(resp_list, *args, **kwargs)
         self._update_request_inference_type(resp_list)
         self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
 

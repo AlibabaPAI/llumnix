@@ -140,7 +140,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
     global test_times
-    base_port = 20000 + test_times * 100
+    base_port = 30000 + test_times * 100
     ip_ports = []
     instance_output_logs = []
     device_count = torch.cuda.device_count()

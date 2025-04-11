@@ -73,7 +73,7 @@ def run_vllm(model):
 async def run_bladellm(model, enable_pd_disagg):
     ip = get_ip_address()
     global test_times
-    port = 40000 + test_times * 100
+    port = 50000 + test_times * 100
 
     if not enable_pd_disagg:
         launch_command = generate_bladellm_launch_command(
@@ -137,7 +137,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     ip = get_ip_address()
     global test_times
-    base_port = 30000 + test_times * 100
+    base_port = 40000 + test_times * 100
 
     global engine_prompt_output
     global engine_pdd_prompt_output

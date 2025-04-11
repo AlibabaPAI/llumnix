@@ -476,7 +476,7 @@ def test_load_registered_service(ray_env, manager, load_registered_service, enab
     pdd_config = PDDConfig(enable_pd_disagg, False, [1, 2], False)
     scaler = Scaler(None, ManagerArgs(), None, None, None, True, False, load_registered_service, load_registered_service_path, pdd_config)
     for instance_type in instance_type_list:
-        get_engine_args = scaler._get_next_engine_args(engine_args, instance_type)
+        get_engine_args, _ = scaler._get_next_engine_args(engine_args, instance_type)
         if load_registered_service:
             assert get_engine_args.model == instance_type
         else:

@@ -25,7 +25,7 @@ from llumnix.instance_info import InstanceType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs
+from llumnix.arg_utils import EngineOverrideArgs, EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.backends.utils import get_engine_world_size
 from llumnix.utils import (load_engine_args, get_service_resouces, random_uuid,
@@ -76,7 +76,7 @@ class Scaler:
         self.load_registered_service = load_registered_service
         self.load_registered_service_path = load_registered_service_path
         self.pdd_config = pdd_config
-
+        self.disagg_options_token_port_offset = 0 # used in bladellm
         if enable_port_increment:
             self.port_offset = 0
             if enable_port_offset_store:
@@ -376,10 +376,26 @@ class Scaler:
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
         next_instance_args = await self._get_next_instance_args(instance_args, instance_type)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
-        next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
-        instance = self._init_instance(instance_id, next_instance_args, placement_group,
-                                       request_output_queue_type, backend_type, next_engine_args)
-        server = self._init_server(get_server_name(instance_id), placement_group, backend_type, next_entrypoints_args, next_engine_args)
+        next_engine_args, engine_override_args = self._get_next_engine_args(
+            engine_args, next_instance_args.instance_type
+        )
+        instance = self._init_instance(
+            instance_id,
+            next_instance_args,
+            placement_group,
+            request_output_queue_type,
+            backend_type,
+            next_engine_args,
+            engine_override_args,
+        )
+        server = self._init_server(
+            get_server_name(instance_id),
+            placement_group,
+            backend_type,
+            next_entrypoints_args,
+            next_engine_args,
+            engine_override_args,
+        )
 
         self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
         self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
@@ -390,14 +406,15 @@ class Scaler:
                      placement_group: PlacementGroup,
                      backend_type: BackendType,
                      entrypoints_args: EntrypointsArgs,
-                     engine_args) -> APIServerActor:
+                     engine_args,
+                     engine_override_args: EngineOverrideArgs) -> APIServerActor:
         if backend_type == BackendType.BLADELLM:
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM # pylint: disable=import-outside-toplevel
             # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
-            api_server = APIServerActorBladeLLM.from_args(0.5, server_name, placement_group, entrypoints_args, engine_args)
+            api_server = APIServerActorBladeLLM.from_args(0.5, server_name, placement_group, entrypoints_args, engine_args, engine_override_args)
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
-            api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args, engine_args)
+            api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args, engine_args, engine_override_args)
 
         return api_server
 
@@ -407,15 +424,15 @@ class Scaler:
                        placement_group: PlacementGroup,
                        request_output_queue_type: QueueType,
                        backend_type: BackendType,
-                       engine_args
-                       ) -> Tuple[str, Llumlet]:
+                       engine_args,
+                       engine_override_args: EngineOverrideArgs = None) -> Tuple[str, Llumlet]:
         instance = Llumlet.from_args(
                         instance_id,
                         instance_args,
                         placement_group,
                         request_output_queue_type,
                         backend_type,
-                        engine_args)
+                        engine_args, engine_override_args)
 
         return instance
 
@@ -467,7 +484,7 @@ class Scaler:
         if not remove_placement_group(instance_id):
             logger.warning("Failed to remove placement group {}.".format(instance_id))
 
-    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceType:
+    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
         if not self.enable_port_increment:
             return instance_args
 
@@ -498,13 +515,22 @@ class Scaler:
 
         return next_entrypoints_args
 
-    def _get_next_engine_args(self, engine_args, instance_type: str):
+    def _get_next_engine_args(self, engine_args, instance_type: str | InstanceType):
         if not self.load_registered_service:
-            return engine_args
+            engine_override_args = EngineOverrideArgs(
+                disagg_options_token_port=self.disagg_options_token_port_offset,
+                disagg_options_inst_role=(
+                    instance_type.value
+                    if isinstance(instance_type, InstanceType)
+                    else instance_type
+                ),
+            )
+            self.disagg_options_token_port_offset += 10
+            return engine_args, engine_override_args
 
         new_engine_args = self.engine_args_dict[instance_type]
 
-        return new_engine_args
+        return new_engine_args, None
 
     def _get_next_instance_type(self,
                                 cur_num_prefill_instances: int,

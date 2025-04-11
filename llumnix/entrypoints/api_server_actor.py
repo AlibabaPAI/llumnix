@@ -5,7 +5,7 @@ import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
-from llumnix.arg_utils import EntrypointsArgs
+from llumnix.arg_utils import EngineOverrideArgs, EntrypointsArgs
 from llumnix.utils import get_ip_address
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.llumlet.llumlet import Llumlet
@@ -17,12 +17,13 @@ logger = init_logger(__name__)
 
 
 class APIServerActor(ABC):
-    def __init__(self, server_name: str, entrypoints_args: EntrypointsArgs, engine_args):
+    def __init__(self, server_name: str, entrypoints_args: EntrypointsArgs, engine_args, engine_override_args: EngineOverrideArgs = None):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = server_name.split("_")[-1]
         logger.info("APIServerActor(instance_id={})".format(self.instance_id))
         self.entrypoints_args = entrypoints_args
         self.engine_args = engine_args
+        self.engine_override_args: EngineOverrideArgs = engine_override_args
         if entrypoints_args.host in ("127.0.0.1", "0.0.0.0"):
             self.host = entrypoints_args.host
         else:
@@ -69,7 +70,8 @@ class APIServerActor(ABC):
                   server_name: str,
                   placement_group: PlacementGroup,
                   entrypoints_args: EntrypointsArgs,
-                  engine_args):
+                  engine_args,
+                  engine_override_args: EngineOverrideArgs = None):
         try:
             api_server_class = ray.remote(num_cpus=1,
                                           num_gpus=num_gpus,
@@ -82,7 +84,7 @@ class APIServerActor(ABC):
                                                     placement_group_capture_child_tasks=True
                                                 )
                                              )
-            api_server = api_server_class.remote(server_name, entrypoints_args, engine_args)
+            api_server = api_server_class.remote(server_name, entrypoints_args, engine_args, engine_override_args)
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Failed to initialize APIServer: {}".format(e))

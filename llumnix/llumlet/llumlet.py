@@ -32,7 +32,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-from llumnix.arg_utils import InstanceArgs
+from llumnix.arg_utils import EngineOverrideArgs, InstanceArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
@@ -47,11 +47,16 @@ class Llumlet:
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  backend_type: BackendType,
-                 engine_args) -> None:
+                 engine_args,
+                 engine_override_args: EngineOverrideArgs) -> None:
         try:
             # bladellm engine_args is dumped by pickle
             if hasattr(engine_args, 'engine_args'):
                 engine_args = pickle.loads(engine_args.engine_args)
+                if engine_override_args:
+                    if engine_args.disagg_options:
+                        engine_args.disagg_options.token_port = engine_override_args.disagg_options_token_port
+                        engine_args.disagg_options.inst_role = engine_override_args.disagg_options_inst_role
             log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
             if instance_args.engine_disagg_inst_id_env_var:
@@ -98,7 +103,8 @@ class Llumlet:
                   placement_group: PlacementGroup,
                   request_output_queue_type: QueueType,
                   backend_type: BackendType,
-                  engine_args):
+                  engine_args,
+                  engine_override_args: EngineOverrideArgs):
         try:
             assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
                 f'unimplemented backend {BackendType}'
@@ -127,7 +133,8 @@ class Llumlet:
                                            placement_group,
                                            request_output_queue_type,
                                            backend_type,
-                                           engine_args)
+                                           engine_args,
+                                           engine_override_args)
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Failed to initialize Llumlet: {}".format(e))

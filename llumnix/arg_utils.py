@@ -360,6 +360,12 @@ class LaunchArgs:
     launch_mode: LaunchMode = None
     backend_type: BackendType = None
 
+@dataclass
+class EngineOverrideArgs:
+    # bladellm engine args
+    disagg_options_token_port: int = None
+    disagg_options_inst_role: str = None
+
 
 @dataclass
 class InstanceArgs:

@@ -14,7 +14,6 @@
 import asyncio
 from typing import List, Union, Iterable
 import time
-import pickle
 import os
 
 import ray
@@ -25,14 +24,15 @@ import ray.actor
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
-from llumnix.backends.utils import init_backend_engine, get_engine_world_size
+from llumnix.backends.utils import init_backend_engine
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-from llumnix.arg_utils import InstanceArgs
+from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
+from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
@@ -46,21 +46,22 @@ class Llumlet:
                  instance_args: InstanceArgs,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 backend_type: BackendType,
-                 engine_args) -> None:
+                 engine_args: LlumnixEngineArgs) -> None:
         try:
-            # bladellm engine_args is dumped by pickle
-            if hasattr(engine_args, 'engine_args'):
-                engine_args = pickle.loads(engine_args.engine_args)
             log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
-            if instance_args.engine_disagg_inst_id_env_var:
-                self.engine_disagg_inst_id = os.environ.get(instance_args.engine_disagg_inst_id_env_var, instance_id)
-            elif getattr(engine_args, 'disagg_options', None) and getattr(engine_args.disagg_options, 'inst_id', None):
-                self.engine_disagg_inst_id = engine_args.disagg_options.inst_id
-            else:
-                self.engine_disagg_inst_id =  instance_id
+            self.engine_disagg_inst_id: str = (
+                os.environ.get(instance_args.engine_disagg_inst_id_env_var)
+                if instance_args.engine_disagg_inst_id_env_var
+                else instance_id
+            )
+            backend_type: BackendType = engine_args.backend_type
             logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
+            # bladellm engine_args is dumped by pickle
+            if isinstance(engine_args, BladellmEngineArgs):
+                engine_args.override_engine_args.engine_disagg_inst_id = self.engine_disagg_inst_id
+            engine_args = engine_args.get_current_engine_args()
+
             self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)
             self.instance_load_calculator = InstanceLoadCalculator(
@@ -97,9 +98,9 @@ class Llumlet:
                   instance_args: InstanceArgs,
                   placement_group: PlacementGroup,
                   request_output_queue_type: QueueType,
-                  backend_type: BackendType,
-                  engine_args):
+                  engine_args: LlumnixEngineArgs):
         try:
+            backend_type = engine_args.backend_type
             assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
                 f'unimplemented backend {BackendType}'
             # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
@@ -108,7 +109,7 @@ class Llumlet:
                 num_gpus = 0.5
             elif backend_type == BackendType.BLADELLM:
                 # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
-                num_gpus = get_engine_world_size(engine_args, backend_type) - 0.5
+                num_gpus = engine_args.get_engine_world_size() - 0.5
             else: # backend_type == BackendType.SIM_VLLM
                 num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,
@@ -126,7 +127,6 @@ class Llumlet:
                                            instance_args,
                                            placement_group,
                                            request_output_queue_type,
-                                           backend_type,
                                            engine_args)
         # pylint: disable=broad-except
         except Exception as e:

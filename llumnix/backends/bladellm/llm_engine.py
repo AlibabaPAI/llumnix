@@ -388,6 +388,7 @@ class BackendBladeLLM(BackendInterface):
     ) -> None:
         self._config_inner_engine_logger(engine_args)
 
+        # add instance_id to avoid path conflict when multi-engine running in a single pod 
         engine_args.worker_socket_path = engine_args.worker_socket_path + "_" + str(instance_id)[:5]
         self.instance_id = instance_id
         self.engine_args = engine_args

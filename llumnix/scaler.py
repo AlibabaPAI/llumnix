@@ -25,9 +25,9 @@ from llumnix.instance_info import InstanceType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs
+from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs
+from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 from llumnix.entrypoints.api_server_actor import APIServerActor
-from llumnix.backends.utils import get_engine_world_size
 from llumnix.utils import (load_engine_args, get_service_resouces, random_uuid,
                            get_service_instance_type)
 from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get_server_name,
@@ -51,7 +51,7 @@ class Scaler:
                  entrypoints_args: EntrypointsArgs,
                  manager_args: ManagerArgs,
                  instance_args: InstanceArgs,
-                 engine_args,
+                 engine_args: LlumnixEngineArgs,
                  launch_args: LaunchArgs,
                  enable_port_increment: bool,
                  enable_port_offset_store: bool,
@@ -76,6 +76,7 @@ class Scaler:
         self.load_registered_service = load_registered_service
         self.load_registered_service_path = load_registered_service_path
         self.pdd_config = pdd_config
+        self.disagg_options_token_port_offset = 0 # used in bladellm
 
         if enable_port_increment:
             self.port_offset = 0
@@ -121,7 +122,7 @@ class Scaler:
                   entrypoints_args: EntrypointsArgs,
                   manager_args: ManagerArgs,
                   instance_args: InstanceArgs,
-                  engine_args,
+                  engine_args: LlumnixEngineArgs,
                   launch_args: LaunchArgs,
                   enable_port_increment: bool,
                   enable_port_offset_store: bool,
@@ -183,7 +184,7 @@ class Scaler:
                 if new_pg is None:
                     new_instance_id = random_uuid()
                     new_pg = self._init_placement_group(get_placement_group_name(new_instance_id), self.engine_args,
-                                                        self.backend_type, init_server=True, block=False,
+                                                        init_server=True, block=False,
                                                         service_name=service_name)
                 try:
                     await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
@@ -320,17 +321,17 @@ class Scaler:
 
     def _init_placement_group(self,
                               placement_group_name: str,
-                              engine_args,
-                              backend_type: BackendType,
+                              engine_args: LlumnixEngineArgs,
                               init_server: bool = False,
                               block: bool = True,
                               node_id: str = None,
                               service_name: str = None
                               ) -> PlacementGroup:
+        backend_type = engine_args.backend_type
         # num_cpus=2+(0/1), for Llumlet + AsyncPutQueueActor + (ApiServerActor)
         if not BackendType.is_sim_backend(backend_type):
             # num_gpus=world_size, for world_size Workers
-            world_size = get_engine_world_size(engine_args, backend_type)
+            world_size = engine_args.get_engine_world_size()
             resources = get_service_resouces(service_name, world_size)
             placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
                                                          num_gpus=world_size, detached=True, block=block, node_id=node_id,
@@ -345,7 +346,7 @@ class Scaler:
                                         instance_id: str,
                                         entrypoints_args: EntrypointsArgs,
                                         instance_args: InstanceArgs,
-                                        engine_args,
+                                        engine_args: LlumnixEngineArgs,
                                         backend_type: BackendType,
                                         placement_group: PlacementGroup,
                                         instance_type: InstanceType = None):
@@ -378,8 +379,13 @@ class Scaler:
         next_instance_args = await self._get_next_instance_args(instance_args, instance_type, world_size)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
-        instance = self._init_instance(instance_id, next_instance_args, placement_group,
-                                       request_output_queue_type, backend_type, next_engine_args)
+        instance = self._init_instance(
+            instance_id,
+            next_instance_args,
+            placement_group,
+            request_output_queue_type,
+            next_engine_args,
+        )
         server = self._init_server(get_server_name(instance_id), placement_group, backend_type, next_entrypoints_args, next_engine_args)
 
         self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
@@ -407,24 +413,21 @@ class Scaler:
                        instance_args: InstanceArgs,
                        placement_group: PlacementGroup,
                        request_output_queue_type: QueueType,
-                       backend_type: BackendType,
-                       engine_args
+                       engine_args: LlumnixEngineArgs
                        ) -> Tuple[str, Llumlet]:
         instance = Llumlet.from_args(
                         instance_id,
                         instance_args,
                         placement_group,
                         request_output_queue_type,
-                        backend_type,
                         engine_args)
 
         return instance
 
     async def init_instances(self,
                              request_output_queue_type: QueueType,
-                             backend_type: BackendType,
                              instance_args: InstanceArgs,
-                             engine_args,
+                             engine_args: LlumnixEngineArgs,
                              node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
         async def instance_ready_scale_up(instance_id: str, instance: ray.actor.ActorHandle,
@@ -441,6 +444,7 @@ class Scaler:
 
         instance_ids: List[str] = []
         instances: List[Llumlet] = []
+        backend_type = engine_args.backend_type
         for _ in range(self.manager_args.initial_instances):
             if (
                 backend_type == BackendType.BLADELLM
@@ -451,15 +455,20 @@ class Scaler:
                 instance_id = engine_args.instance_id
             else:
                 instance_id = random_uuid()
-            placement_group = self._init_placement_group(get_placement_group_name(instance_id), engine_args, backend_type,
+            placement_group = self._init_placement_group(get_placement_group_name(instance_id), engine_args,
                                                          init_server=False, block=True, node_id=node_id)
             if placement_group is None:
                 logger.warning("Failed to initialize placement group for instance {}, "
                                "the remaining resources of node {} might be not enough, "
                                "stop initializing instances.".format(instance_id, node_id))
                 return instance_ids, instances
-            instance = self._init_instance(instance_id, instance_args, placement_group, request_output_queue_type,
-                                           backend_type, engine_args)
+            instance = self._init_instance(
+                instance_id,
+                instance_args,
+                placement_group,
+                request_output_queue_type,
+                engine_args,
+            )
             instance_ids.append(instance_id)
             instances.append(instance)
             asyncio.create_task(instance_ready_scale_up(instance_id, instance, instance_args.instance_type, placement_group))
@@ -509,13 +518,27 @@ class Scaler:
 
         return next_entrypoints_args
 
-    def _get_next_engine_args(self, engine_args, instance_type: str):
-        if not self.load_registered_service:
-            return engine_args
+    def _get_next_engine_args(
+        self, engine_args: LlumnixEngineArgs, instance_type: str | InstanceType
+    ):
+        if self.load_registered_service:
+            return self.engine_args_dict[instance_type]
 
-        new_engine_args = self.engine_args_dict[instance_type]
+        if isinstance(engine_args, BladellmEngineArgs):
+            new_engine_args = copy.deepcopy(engine_args)
+            new_engine_args.override_engine_args.disagg_options_inst_role = (
+                instance_type.value
+                if isinstance(instance_type, InstanceType)
+                else instance_type
+            )
+            new_engine_args.override_engine_args.disagg_options_token_port_offset = (
+                self.disagg_options_token_port_offset
+            )
+            if self.enable_port_increment:
+                self.disagg_options_token_port_offset += 10
+            return new_engine_args
 
-        return new_engine_args
+        return engine_args
 
     def _get_next_instance_type(self,
                                 cur_num_prefill_instances: int,

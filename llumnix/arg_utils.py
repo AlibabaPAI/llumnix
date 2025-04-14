@@ -17,6 +17,7 @@ import argparse
 import dataclasses
 from dataclasses import dataclass
 from typing import List, Tuple, Union
+from abc import ABC, abstractmethod
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
@@ -360,6 +361,28 @@ class LaunchArgs:
     launch_mode: LaunchMode = None
     backend_type: BackendType = None
 
+class LlumnixEngineArgs(ABC):
+
+    def __init__(
+        self, origin_engine_args=None, override_engine_args=None, backend_type=None
+    ) -> None:
+        self.origin_engine_args = origin_engine_args
+        self.override_engine_args = override_engine_args
+        self.backend_type: BackendType = backend_type
+
+    @classmethod
+    @abstractmethod
+    def from_cli_args(cls, cli_args="Namespace"):
+        pass
+
+    @abstractmethod
+    def get_current_engine_args(self):
+        # returun the engine args after overriding
+        pass
+
+    @abstractmethod
+    def get_engine_world_size(self):
+        pass
 
 @dataclass
 class InstanceArgs:
@@ -398,7 +421,7 @@ class InstanceArgs:
                 if hasattr(_C.INSTANCE, attr.name.upper()):
                     setattr(self, attr.name, getattr(_C.INSTANCE, attr.name.upper()))
 
-    def init_from_engine_args(self, engine_args, backend_type: BackendType):
+    def init_from_engine_args(self, engine_args: LlumnixEngineArgs, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
             self.enable_engine_pd_disagg = engine_args.enable_disagg
             if self.enable_engine_pd_disagg:

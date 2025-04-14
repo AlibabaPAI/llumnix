@@ -5,7 +5,7 @@ from vllm.config import EngineConfig, ParallelConfig
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixArgumentParser
+from llumnix.arg_utils import EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixArgumentParser, LlumnixEngineArgs
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.utils import load_engine_args
 from llumnix.internal_config import MigrationConfig
@@ -13,6 +13,27 @@ from llumnix.config import LlumnixConfig
 
 logger = init_logger(__name__)
 
+class VllmEngineArgs(LlumnixEngineArgs):
+
+    def __init__(self, origin_engine_args=None, override_engine_args=None) -> None:
+        super().__init__(
+            origin_engine_args=origin_engine_args,
+            override_engine_args=override_engine_args,
+        )
+        self.backend_type: BackendType = BackendType.VLLM
+
+    @classmethod
+    def from_cli_args(cls, cli_args="Namespace"):
+        engine_args = VllmEngineArgs()
+        engine_args.origin_engine_args = AsyncEngineArgs.from_cli_args(cli_args)
+        return engine_args
+
+    def get_current_engine_args(self):
+        return self.origin_engine_args
+
+    def get_engine_world_size(self):
+        engine_config = self.origin_engine_args.create_engine_config()
+        return engine_config.parallel_config.world_size
 
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
     parser.set_namespace("llumnix")

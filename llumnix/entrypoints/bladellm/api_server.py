@@ -108,7 +108,7 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
         # Since importing the bladellm engine arguments requires available GPU,
         # serialize the engine parameters before passing them to the manager.
         engine_args_llumnix = BladellmEngineArgs()
-        engine_args_llumnix.engine_args = pickle.dumps(engine_args)
+        engine_args_llumnix.origin_engine_args = pickle.dumps(engine_args)
         engine_args_llumnix.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         if engine_args.disagg_options is not None:
             engine_args_llumnix.instance_id = engine_args.disagg_options.inst_id

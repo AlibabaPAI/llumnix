@@ -29,7 +29,7 @@ from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
 from llumnix.instance_info import InstanceInfo, InstanceType
-from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs
+from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs, LlumnixEngineArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import random_uuid, run_coroutine_in_new_thread
@@ -56,7 +56,7 @@ class Manager:
                  entrypoints_args: EntrypointsArgs,
                  manager_args: ManagerArgs,
                  instance_args: InstanceArgs,
-                 engine_args,
+                 engine_args: LlumnixEngineArgs,
                  launch_args: LaunchArgs,
                  work_dir: str,
                  ) -> None:
@@ -201,7 +201,7 @@ class Manager:
                   entrypoints_args: EntrypointsArgs,
                   manager_args: ManagerArgs,
                   instance_args: InstanceArgs,
-                  engine_args,
+                  engine_args: LlumnixEngineArgs,
                   launch_args: LaunchArgs,
                   ) -> "Manager":
         manager_class = ray.remote(num_cpus=1,
@@ -219,13 +219,11 @@ class Manager:
 
     async def init_instances(self,
                              request_output_queue_type: QueueType,
-                             backend_type: BackendType,
                              instance_args: InstanceArgs,
-                             engine_args,
+                             engine_args: LlumnixEngineArgs,
                              node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
-        return await self.scaler.init_instances.remote(request_output_queue_type, backend_type, instance_args, engine_args,
-                                                       node_id)
+        return await self.scaler.init_instances.remote(request_output_queue_type, instance_args, engine_args, node_id)
 
     def init_request_output_queue_server(self, ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
         return init_request_output_queue_server(ip, port, queue_type)

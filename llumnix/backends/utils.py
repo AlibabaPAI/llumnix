@@ -103,11 +103,3 @@ def init_backend_engine(instance_id: str,
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine
-
-def get_engine_world_size(engine_args, backend_type: BackendType):
-    if backend_type == BackendType.VLLM:
-        engine_config = engine_args.create_engine_config()
-        world_size = engine_config.parallel_config.world_size
-    else: # BLADE_LLM
-        world_size = engine_args.world_size
-    return world_size

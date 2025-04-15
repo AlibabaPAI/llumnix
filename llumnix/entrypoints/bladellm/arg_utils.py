@@ -41,7 +41,7 @@ class BladellmEngineArgs(LlumnixEngineArgs):
     def gen_next_engine_args(self, **kwargs):
         engine_args_copied = copy.deepcopy(self.engine_args)
         next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
-        next_engine_args.update_args(kwargs)
+        next_engine_args.update_args(**kwargs)
         return next_engine_args
 
     def get_latest_engine_args(self):

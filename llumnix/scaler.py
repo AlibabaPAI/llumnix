@@ -26,7 +26,6 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs, load_engine_args
-from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.utils import (get_service_resouces, random_uuid,
                            get_service_instance_type)

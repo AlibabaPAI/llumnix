@@ -42,7 +42,7 @@ instance_args = InstanceArgs()
 engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370, enforce_eager=True)
 node_id = ray.get_runtime_context().get_node_id()
-llumnix_engine_args = VllmEngineArgs(origin_engine_args=engine_args)
+llumnix_engine_args = VllmEngineArgs(engine_args=engine_args)
 # Create a manager. If the manager is created first, and then the instances are created.
 manager: Manager = init_manager(manager_args)
 ray.get(manager.is_ready.remote())

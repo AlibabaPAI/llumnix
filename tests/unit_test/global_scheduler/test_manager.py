@@ -139,7 +139,7 @@ def init_manager_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio=
     instance_args = InstanceArgs(migration_backend="rayrpc")
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000)
     engine_args = VllmEngineArgs(
-        origin_engine_args=EngineArgs(
+        engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
             worker_use_ray=True,
@@ -213,7 +213,7 @@ def test_init_llumlet(ray_env, llumlet):
 
 def test_init_instances(ray_env, manager):
     engine_args = VllmEngineArgs(
-        origin_engine_args=EngineArgs(
+        engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
             worker_use_ray=True,
@@ -232,7 +232,7 @@ def test_init_instances_sim(ray_env, manager):
     # cannot catch by pytest.raises
     try:
         engine_args = VllmEngineArgs(
-            origin_engine_args=EngineArgs(
+            engine_args=EngineArgs(
                 model=try_convert_to_local_path("facebook/opt-125m"),
                 download_dir="/mnt/model",
                 worker_use_ray=True,
@@ -494,7 +494,7 @@ def test_pd_disagg_gloal_launch_instance_type(ray_env, manager):
 @pytest.mark.parametrize("load_registered_service", [False, True])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 def test_load_registered_service(ray_env, manager, load_registered_service, enable_pd_disagg):
-    engine_args = VllmEngineArgs(origin_engine_args=EngineArgs(model="no_constraints"))
+    engine_args = VllmEngineArgs(engine_args=EngineArgs(model="no_constraints"))
     save_path = 'test'
     save_key = "test"
     load_registered_service_path = os.path.join(save_path, save_key)
@@ -504,16 +504,16 @@ def test_load_registered_service(ray_env, manager, load_registered_service, enab
             instance_type_list = ['prefill', 'decode']
         for instance_type in instance_type_list:
             put_engine_args = copy.deepcopy(engine_args)
-            put_engine_args.origin_engine_args.model = instance_type
+            put_engine_args.engine_args.model = instance_type
             save_engine_args(instance_type, save_path, put_engine_args, save_key)
     pdd_config = PDDConfig(enable_pd_disagg, False, [1, 2], False)
     scaler = Scaler(None, ManagerArgs(), None, None, None, True, False, load_registered_service, load_registered_service_path, pdd_config)
     for instance_type in instance_type_list:
         get_engine_args = scaler._get_next_engine_args(engine_args, instance_type)
         if load_registered_service:
-            assert get_engine_args.get_current_engine_args().model == instance_type
+            assert get_engine_args.get_latest_engine_args().model == instance_type
         else:
-            assert get_engine_args.get_current_engine_args().model == 'no_constraints'
+            assert get_engine_args.get_latest_engine_args().model == 'no_constraints'
     if load_registered_service:
         shutil.rmtree(load_registered_service_path)
 
@@ -578,7 +578,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
 async def test_pd_disagg_deployment_states(ray_env):
     manager_args = ManagerArgs(enable_migration=True, enable_pd_disagg=True, pd_ratio="1:2")
     engine_args = VllmEngineArgs(
-        origin_engine_args=EngineArgs(
+        engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
             worker_use_ray=True,

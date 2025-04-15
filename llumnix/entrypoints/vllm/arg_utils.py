@@ -1,3 +1,4 @@
+import copy
 from typing import Tuple
 
 from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
@@ -15,18 +16,16 @@ logger = init_logger(__name__)
 
 class VllmEngineArgs(LlumnixEngineArgs):
 
-    def __init__(self, origin_engine_args=None, override_engine_args=None) -> None:
-        super().__init__(
-            origin_engine_args=origin_engine_args,
-            override_engine_args=override_engine_args,
-        )
-        self.backend_type: BackendType = BackendType.VLLM
+    def __init__(self, engine_args=None) -> None:
+        super().__init__(engine_args=engine_args, backend_type=BackendType.VLLM)
 
-    def get_current_engine_args(self):
-        return self.origin_engine_args
+    def gen_next_engine_args(self, **kwargs):
+        return copy.deepcopy(self)
+    def get_latest_engine_args(self):
+        return self.engine_args
 
     def get_engine_world_size(self):
-        engine_config = self.origin_engine_args.create_engine_config()
+        engine_config = self.engine_args.create_engine_config()
         return engine_config.parallel_config.world_size
 
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
@@ -97,7 +96,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
             instance_type_list = ['prefill', 'decode']
         for instance_type in instance_type_list:
             engine_args_registered = load_engine_args(instance_type, manager_args.load_registered_service_path)
-            check_instance_args(instance_args, engine_args_registered.origin_engine_args)
+            check_instance_args(instance_args, engine_args_registered.engine_args)
         return entrypoints_args, manager_args, instance_args, engine_args
 
     check_engine_args(engine_args)

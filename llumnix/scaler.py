@@ -534,25 +534,24 @@ class Scaler:
         if self.load_registered_service:
             return self.engine_args_dict[instance_type]
 
-        if isinstance(engine_args, BladellmEngineArgs):
-            new_engine_args = copy.deepcopy(engine_args)
-            new_engine_args.update_args(
-                args_key="disagg_options_inst_role",
-                args_value=(
-                    instance_type.value
-                    if isinstance(instance_type, InstanceType)
-                    else instance_type
-                ),
-            )
-            if self.enable_port_increment:
-                new_engine_args.update_args(
-                    args_key="disagg_options_token_port_offset",
-                    args_value=self.disagg_options_token_port_offset,
-                )
-                self.disagg_options_token_port_offset += 10
-            return new_engine_args
+        # args need to be updated, used in bladellm
+        args_need_update = {
+            "disagg_options_inst_role": (
+                instance_type.value
+                if isinstance(instance_type, InstanceType)
+                else instance_type
+            ),
+            "disagg_options_token_port_offset": (
+                self.disagg_options_token_port_offset
+                if self.enable_port_increment
+                else 0
+            ),
+        }
 
-        return engine_args
+        new_engine_args = engine_args.gen_next_engine_args(**args_need_update)
+        if self.enable_port_increment:
+            self.disagg_options_token_port_offset += 10
+        return new_engine_args
 
     def _get_next_instance_type(self,
                                 cur_num_prefill_instances: int,

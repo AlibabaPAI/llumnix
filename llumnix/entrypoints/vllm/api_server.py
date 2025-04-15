@@ -190,7 +190,7 @@ if __name__ == "__main__":
     llumnix_config = get_llumnix_config(cli_args.config_file, cli_args)
 
     entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, cli_args)
-    vllm_engine_args = VllmEngineArgs(origin_engine_args=engine_args)
+    vllm_engine_args = VllmEngineArgs(engine_args=engine_args)
     backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
     vllm_engine_args.backend_type = backend_type
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=backend_type)

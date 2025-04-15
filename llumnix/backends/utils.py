@@ -19,6 +19,7 @@ import os
 import ray
 from ray.util.placement_group import PlacementGroup
 
+from llumnix.arg_utils import LlumnixEngineArgs
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
@@ -72,8 +73,9 @@ def init_backend_engine(instance_id: str,
                         request_output_queue_type: QueueType,
                         migration_config: MigrationConfig,
                         backend_type: BackendType,
-                        engine_args,
+                        engine_args: LlumnixEngineArgs,
                         profiling_result_file_path: str = None) -> BackendInterface:
+    engine_args = engine_args.get_current_engine_args()
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.llm_engine import BackendVLLM

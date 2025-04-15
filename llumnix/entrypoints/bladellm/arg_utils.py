@@ -20,6 +20,7 @@ from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentPars
                                InstanceArgs, LlumnixEngineArgs)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
+from llumnix.instance_info import InstanceType
 from llumnix.logging.logger import init_logger
 from llumnix.config import LlumnixConfig
 
@@ -33,16 +34,11 @@ class BladellmEngineArgs(LlumnixEngineArgs):
     ):
         super().__init__(
             origin_engine_args=origin_engine_args,
-            override_engine_args=override_engine_args,
+            override_engine_args=override_engine_args if override_engine_args else self.EngineOverrideArgs(),
             backend_type=BackendType.BLADELLM,
         )
-        self.override_engine_args = self.EngineOverrideArgs()
         self.world_size: int = None
         self.instance_id: str = None
-
-    @classmethod
-    def from_cli_args(cls, cli_args="Namespace"):
-        pass
 
     def get_current_engine_args(self):
         engine_args = pickle.loads(self.origin_engine_args)

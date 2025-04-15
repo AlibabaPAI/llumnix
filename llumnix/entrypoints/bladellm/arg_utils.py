@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from dataclasses import dataclass, field
 import pickle
 # When importing ServingArgs, it will raise no available gpu error.
@@ -20,7 +21,6 @@ from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentPars
                                InstanceArgs, LlumnixEngineArgs)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.instance_info import InstanceType
 from llumnix.logging.logger import init_logger
 from llumnix.config import LlumnixConfig
 
@@ -29,19 +29,23 @@ logger = init_logger(__name__)
 
 class BladellmEngineArgs(LlumnixEngineArgs):
 
-    def __init__(
-        self, origin_engine_args=None, override_engine_args=None
-    ):
+    def __init__(self, engine_args=None):
         super().__init__(
-            origin_engine_args=origin_engine_args,
-            override_engine_args=override_engine_args if override_engine_args else self.EngineOverrideArgs(),
+            engine_args=engine_args,
             backend_type=BackendType.BLADELLM,
         )
+        self.override_engine_args = EngineOverrideArgs()
         self.world_size: int = None
         self.instance_id: str = None
 
-    def get_current_engine_args(self):
-        engine_args = pickle.loads(self.origin_engine_args)
+    def gen_next_engine_args(self, **kwargs):
+        engine_args_copied = copy.deepcopy(self.engine_args)
+        next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
+        next_engine_args.update_args(kwargs)
+        return next_engine_args
+
+    def get_latest_engine_args(self):
+        engine_args = pickle.loads(self.engine_args)
         engine_override_args = self.override_engine_args
         if engine_args.disagg_options:
             if engine_override_args.disagg_options_token_port_offset:
@@ -55,12 +59,12 @@ class BladellmEngineArgs(LlumnixEngineArgs):
     def get_engine_world_size(self):
         return self.world_size
 
-    @dataclass
-    class EngineOverrideArgs:
-        # bladellm engine args need to override
-        disagg_options_token_port_offset: int = field(default=None)
-        disagg_options_inst_role: str = field(default=None)
-        engine_disagg_inst_id: str = field(default=None)
+@dataclass
+class EngineOverrideArgs:
+    # bladellm engine args need to override
+    disagg_options_token_port_offset: int = field(default=None)
+    disagg_options_inst_role: str = field(default=None)
+    engine_disagg_inst_id: str = field(default=None)
 
 
 def add_llumnix_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:

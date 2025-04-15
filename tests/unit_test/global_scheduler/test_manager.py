@@ -511,9 +511,9 @@ def test_load_registered_service(ray_env, manager, load_registered_service, enab
     for instance_type in instance_type_list:
         get_engine_args = scaler._get_next_engine_args(engine_args, instance_type)
         if load_registered_service:
-            assert get_engine_args.get_latest_engine_args().model == instance_type
+            assert get_engine_args.get_overridden_engine_args().model == instance_type
         else:
-            assert get_engine_args.get_latest_engine_args().model == 'no_constraints'
+            assert get_engine_args.get_overridden_engine_args().model == 'no_constraints'
     if load_registered_service:
         shutil.rmtree(load_registered_service_path)
 

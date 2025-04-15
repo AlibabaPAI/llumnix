@@ -376,7 +376,7 @@ class LlumnixEngineArgs(ABC):
         self.backend_type: BackendType = backend_type
 
     @abstractmethod
-    def get_latest_engine_args(self):
+    def get_overridden_engine_args(self):
         # returun the engine args after overriding
         pass
 

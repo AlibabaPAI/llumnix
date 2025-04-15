@@ -87,7 +87,7 @@ class GlobalScheduler:
         self, pair_migration_type: PairMigrationConstraints
     ) -> List[Tuple[str, str]]:
         migrate_instance_pairs = self.migration_scheduler.pair_migration(
-            instance_info=self.decode_instance_info, pair_migration_type=pair_migration_type
+            instance_info=self.instance_info, pair_migration_type=pair_migration_type
         )
         return migrate_instance_pairs
 

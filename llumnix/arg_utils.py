@@ -375,11 +375,6 @@ class LlumnixEngineArgs(ABC):
         self.override_engine_args = override_engine_args
         self.backend_type: BackendType = backend_type
 
-    @classmethod
-    @abstractmethod
-    def from_cli_args(cls, cli_args="Namespace"):
-        pass
-
     @abstractmethod
     def get_current_engine_args(self):
         # returun the engine args after overriding
@@ -388,6 +383,10 @@ class LlumnixEngineArgs(ABC):
     @abstractmethod
     def get_engine_world_size(self):
         pass
+
+    def update_args(self, args_key: str, args_value):
+        if self.override_engine_args and hasattr(self.override_engine_args, args_key):
+            setattr(self.override_engine_args, args_key, args_value)
 
 @dataclass
 class InstanceArgs:

@@ -536,14 +536,18 @@ class Scaler:
 
         if isinstance(engine_args, BladellmEngineArgs):
             new_engine_args = copy.deepcopy(engine_args)
-            new_engine_args.override_engine_args.disagg_options_inst_role = (
-                instance_type.value
-                if isinstance(instance_type, InstanceType)
-                else instance_type
+            new_engine_args.update_args(
+                args_key="disagg_options_inst_role",
+                args_value=(
+                    instance_type.value
+                    if isinstance(instance_type, InstanceType)
+                    else instance_type
+                ),
             )
             if self.enable_port_increment:
-                new_engine_args.override_engine_args.disagg_options_token_port_offset = (
-                    self.disagg_options_token_port_offset
+                new_engine_args.update_args(
+                    args_key="disagg_options_token_port_offset",
+                    args_value=self.disagg_options_token_port_offset,
                 )
                 self.disagg_options_token_port_offset += 10
             return new_engine_args

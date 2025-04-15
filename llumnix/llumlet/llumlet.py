@@ -32,7 +32,6 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
-from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
@@ -58,10 +57,10 @@ class Llumlet:
             )
             backend_type: BackendType = engine_args.backend_type
             logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
-            # bladellm engine_args is dumped by pickle
-            if isinstance(engine_args, BladellmEngineArgs):
-                engine_args.override_engine_args.engine_disagg_inst_id = self.engine_disagg_inst_id
-            engine_args = engine_args.get_current_engine_args()
+            # update disagg_options.inst_id for baldellm PDD
+            engine_args.update_args(
+                args_key="engine_disagg_inst_id", args_value=self.engine_disagg_inst_id
+            )
 
             self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)

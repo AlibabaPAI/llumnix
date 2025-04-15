@@ -22,12 +22,6 @@ class VllmEngineArgs(LlumnixEngineArgs):
         )
         self.backend_type: BackendType = BackendType.VLLM
 
-    @classmethod
-    def from_cli_args(cls, cli_args="Namespace"):
-        engine_args = VllmEngineArgs()
-        engine_args.origin_engine_args = AsyncEngineArgs.from_cli_args(cli_args)
-        return engine_args
-
     def get_current_engine_args(self):
         return self.origin_engine_args
 

@@ -369,14 +369,14 @@ class LaunchArgs:
 class LlumnixEngineArgs(ABC):
 
     def __init__(
-        self, origin_engine_args=None, override_engine_args=None, backend_type=None
+        self, engine_args, backend_type
     ) -> None:
-        self.origin_engine_args = origin_engine_args
-        self.override_engine_args = override_engine_args
+        self.engine_args = engine_args
+        self.override_engine_args = None
         self.backend_type: BackendType = backend_type
 
     @abstractmethod
-    def get_current_engine_args(self):
+    def get_latest_engine_args(self):
         # returun the engine args after overriding
         pass
 
@@ -384,9 +384,18 @@ class LlumnixEngineArgs(ABC):
     def get_engine_world_size(self):
         pass
 
-    def update_args(self, args_key: str, args_value):
+    @abstractmethod
+    def gen_next_engine_args(self, **kwargs):
+        pass
+
+    def update_arg(self, args_key: str, args_value):
         if self.override_engine_args and hasattr(self.override_engine_args, args_key):
             setattr(self.override_engine_args, args_key, args_value)
+
+    def update_args(self, **kwargs):
+        for args_key, args_value in kwargs.items():
+            self.update_arg(args_key, args_value)
+
 
 @dataclass
 class InstanceArgs:

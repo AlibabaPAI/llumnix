@@ -40,7 +40,7 @@ if __name__ == "__main__":
     # Since importing the bladellm engine arguments requires available GPU,
     # serialize the engine parameters before passing them to the manager.
     engine_args_llumnix = BladellmEngineArgs()
-    engine_args_llumnix.origin_engine_args = pickle.dumps(engine_args)
+    engine_args_llumnix.engine_args = pickle.dumps(engine_args)
     engine_args_llumnix.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
     setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
 

@@ -57,7 +57,7 @@ class MockLlumlet(Llumlet):
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(ray_env):
     engine_args = VllmEngineArgs(
-        origin_engine_args=EngineArgs(
+        engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
             max_model_len=8,

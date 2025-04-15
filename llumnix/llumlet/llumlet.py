@@ -58,7 +58,7 @@ class Llumlet:
             backend_type: BackendType = engine_args.backend_type
             logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
             # update disagg_options.inst_id for baldellm PDD
-            engine_args.update_args(
+            engine_args.update_arg(
                 args_key="engine_disagg_inst_id", args_value=self.engine_disagg_inst_id
             )
 

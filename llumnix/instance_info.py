@@ -82,8 +82,8 @@ class InstanceInfo:
 
 class InstanceLoadCalculator:
     def __init__(self, dispatch_load_metric: str, migration_load_metric: str, enable_defrag: bool) -> None:
-        self.dispatch_load_calculator = DispatchLoadComputation(migration_load_metric)
-        self.migration_load_calculator = MigrationLoadComputation(dispatch_load_metric, enable_defrag)
+        self.dispatch_load_calculator = DispatchLoadComputation(dispatch_load_metric)
+        self.migration_load_calculator = MigrationLoadComputation(migration_load_metric, enable_defrag)
 
     def compute_instance_load(self, instance_info: InstanceInfo):
         instance_info.dispatch_load_metric = self.dispatch_load_calculator.compute_instance_load(instance_info)

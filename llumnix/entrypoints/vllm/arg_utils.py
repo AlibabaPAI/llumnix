@@ -21,7 +21,7 @@ class VllmEngineArgs(LlumnixEngineArgs):
 
     def gen_next_engine_args(self, **kwargs):
         return copy.deepcopy(self)
-    def get_latest_engine_args(self):
+    def get_overridden_engine_args(self):
         return self.engine_args
 
     def get_engine_world_size(self):

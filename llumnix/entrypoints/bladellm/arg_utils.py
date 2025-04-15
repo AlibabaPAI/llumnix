@@ -44,7 +44,7 @@ class BladellmEngineArgs(LlumnixEngineArgs):
         next_engine_args.update_args(**kwargs)
         return next_engine_args
 
-    def get_latest_engine_args(self):
+    def get_overridden_engine_args(self):
         engine_args = pickle.loads(self.engine_args)
         engine_override_args = self.override_engine_args
         if engine_args.disagg_options:

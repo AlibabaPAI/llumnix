@@ -3,8 +3,8 @@ import pytest
 
 from vllm import EngineArgs
 
-from llumnix.utils import (save_engine_args, load_engine_args, _get_engine_args_filename,
-                           _get_engine_args_filepath)
+from llumnix.arg_utils import _get_engine_args_filename, load_engine_args, save_engine_args
+from llumnix.arg_utils import (_get_engine_args_filepath)
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

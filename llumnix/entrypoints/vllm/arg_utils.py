@@ -7,7 +7,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixArgumentParser, LlumnixEngineArgs
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.utils import load_engine_args
+from llumnix.arg_utils import load_engine_args
 from llumnix.internal_config import MigrationConfig
 from llumnix.config import LlumnixConfig
 
@@ -103,7 +103,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
             instance_type_list = ['prefill', 'decode']
         for instance_type in instance_type_list:
             engine_args_registered = load_engine_args(instance_type, manager_args.load_registered_service_path)
-            check_instance_args(instance_args, engine_args_registered)
+            check_instance_args(instance_args, engine_args_registered.origin_engine_args)
         return entrypoints_args, manager_args, instance_args, engine_args
 
     check_engine_args(engine_args)

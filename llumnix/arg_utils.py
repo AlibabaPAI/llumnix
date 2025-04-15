@@ -16,6 +16,8 @@
 import argparse
 import dataclasses
 from dataclasses import dataclass
+import os
+import pickle
 from typing import List, Tuple, Union
 from abc import ABC, abstractmethod
 
@@ -24,6 +26,9 @@ from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 # All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None for default.
@@ -549,3 +554,34 @@ class InstanceArgs:
                             type=str,
                             help='environment variable used as engine instance id')
         return parser
+
+
+def _get_engine_args_filename(engine_type: str) -> str:
+    return f"engine_args_{engine_type}.pkl"
+
+
+def _get_engine_args_filepath(save_path: str, save_key: str = None) -> str:
+    if save_key is not None:
+        save_filepath = os.path.join(save_path, save_key)
+    else:
+        save_filepath = save_path
+    return save_filepath
+
+
+def save_engine_args(engine_type: str, save_path: str, engine_args: LlumnixEngineArgs, save_key: str = None) -> None:
+    engine_args_filename = _get_engine_args_filename(engine_type)
+    save_filepath = _get_engine_args_filepath(save_path, save_key)
+    save_filename = os.path.join(save_filepath, engine_args_filename)
+    os.makedirs(save_filepath, exist_ok=True)
+    with open(save_filename, 'wb') as file:
+        pickle.dump(engine_args, file)
+    logger.info("Save engine arguments of {} engine type as file: {}".format(engine_type, save_filename))
+
+
+def load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
+    engine_args_filename = _get_engine_args_filename(engine_type)
+    load_filename = os.path.join(load_path, engine_args_filename)
+    with open(load_filename, 'rb') as file:
+        engine_args =  pickle.load(file)
+    logger.info("Load engine arguments of {} engine type from path: {}".format(engine_type, load_path))
+    return engine_args

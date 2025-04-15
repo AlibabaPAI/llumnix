@@ -26,13 +26,13 @@ from vllm.sequence import SequenceStatus
 
 from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.backends.utils import BackendType
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import get_llumnix_env_vars, try_convert_to_local_path
 from llumnix.ray_utils import (initialize_placement_group, get_placement_group_name,
                                remove_placement_group, kill_instance)
+from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -94,7 +94,6 @@ def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_a
                     instance_args=instance_args,
                     placement_group=placement_group,
                     request_output_queue_type=request_output_queue_type,
-                    backend_type=BackendType.VLLM,
                     engine_args=engine_args
                 )
     return llumlet
@@ -195,9 +194,16 @@ async def test_migration_correctness(migration_backend, migration_request_status
 
     ray.init(namespace="llumnix", ignore_reinit_error=True, runtime_env={"env_vars": get_llumnix_env_vars()})
 
-    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model",
-                             worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
-                             enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
+    engine_args = VllmEngineArgs(
+        origin_engine_args=EngineArgs(
+            model=try_convert_to_local_path("facebook/opt-125m"),
+            download_dir="/mnt/model",
+            worker_use_ray=True,
+            tensor_parallel_size=tensor_parallel_size,
+            enforce_eager=True,
+            disable_async_output_proc=disable_async_output_proc,
+        )
+    )
     id_rank_map = {"0": 0, "1": 1}
     if migration_request_status == 'running':
         request_migration_policy = "SR"
@@ -334,7 +340,6 @@ async def test_migration_correctness(migration_backend, migration_request_status
                 instance_id="2",
                 instance_args=instance_args,
                 request_output_queue_type=request_output_queue_type,
-                backend_type=BackendType.VLLM,
                 engine_args=engine_args,
                 placement_group=placement_group
             )
@@ -359,8 +364,15 @@ async def test_migration_correctness(migration_backend, migration_request_status
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("disable_async_output_proc", [False, True])
 async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_async_output_proc):
-    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
-                             enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
+    engine_args = VllmEngineArgs(
+        origin_engine_args=EngineArgs(
+            try_convert_to_local_path("facebook/opt-125m")
+            download_dir="/mnt/model",
+            worker_use_ray=True,
+            enforce_eager=True,
+            disable_async_output_proc=disable_async_output_proc,
+        )
+    )
     id_rank_map = {"0":0, "1":1}
 
     instance_args = InstanceArgs()

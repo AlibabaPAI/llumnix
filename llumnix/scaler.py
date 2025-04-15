@@ -25,10 +25,10 @@ from llumnix.instance_info import InstanceType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs
+from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs, load_engine_args
 from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 from llumnix.entrypoints.api_server_actor import APIServerActor
-from llumnix.utils import (load_engine_args, get_service_resouces, random_uuid,
+from llumnix.utils import (get_service_resouces, random_uuid,
                            get_service_instance_type)
 from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get_server_name,
                                get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
@@ -76,10 +76,10 @@ class Scaler:
         self.load_registered_service = load_registered_service
         self.load_registered_service_path = load_registered_service_path
         self.pdd_config = pdd_config
-        self.disagg_options_token_port_offset = 0 # used in bladellm
 
         if enable_port_increment:
             self.port_offset = 0
+            self.disagg_options_token_port_offset = 0 # used in bladellm
             if enable_port_offset_store:
                 # TODO(s5u13b): Do not use ray interval kv.
                 value = get_data_from_ray_internal_kv("manager.port_offset")
@@ -196,12 +196,22 @@ class Scaler:
                     await asyncio.sleep(interval)
                     continue
                 if service_name in ["prefill", "decode"]:
-                    await self._init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
-                                                         self.engine_args, self.backend_type, new_pg,
-                                                         instance_type=get_service_instance_type(service_name))
+                    await self._init_server_and_instance(
+                        new_instance_id,
+                        self.entrypoints_args,
+                        self.instance_args,
+                        self.engine_args,
+                        new_pg,
+                        instance_type=get_service_instance_type(service_name),
+                    )
                 else:
-                    await self._init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
-                                                         self.engine_args, self.backend_type, new_pg)
+                    await self._init_server_and_instance(
+                        new_instance_id,
+                        self.entrypoints_args,
+                        self.instance_args,
+                        self.engine_args,
+                        new_pg,
+                    )
                 logger.info("Deploy server and instance to new placement group done, "
                             "instance_id: {}.".format(new_instance_id))
             # pylint: disable=broad-except
@@ -347,7 +357,6 @@ class Scaler:
                                         entrypoints_args: EntrypointsArgs,
                                         instance_args: InstanceArgs,
                                         engine_args: LlumnixEngineArgs,
-                                        backend_type: BackendType,
                                         placement_group: PlacementGroup,
                                         instance_type: InstanceType = None):
         async def done_scale_up(instance_id: str, instance: ray.actor.ActorHandle,
@@ -374,6 +383,7 @@ class Scaler:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
                 self.inflight_num_decode_instances -= 1 if instance_type == InstanceType.DECODE else 0
 
+        backend_type = engine_args.backend_type
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
         world_size = get_engine_world_size(engine_args, backend_type)
         next_instance_args = await self._get_next_instance_args(instance_args, instance_type, world_size)
@@ -531,10 +541,10 @@ class Scaler:
                 if isinstance(instance_type, InstanceType)
                 else instance_type
             )
-            new_engine_args.override_engine_args.disagg_options_token_port_offset = (
-                self.disagg_options_token_port_offset
-            )
             if self.enable_port_increment:
+                new_engine_args.override_engine_args.disagg_options_token_port_offset = (
+                    self.disagg_options_token_port_offset
+                )
                 self.disagg_options_token_port_offset += 10
             return new_engine_args
 

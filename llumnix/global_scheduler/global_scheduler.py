@@ -56,9 +56,13 @@ class GlobalScheduler:
         for instance_info in instance_infos:
             if instance_info.instance_id in self.instance_id_set:
                 self.instance_info[instance_info.instance_id] = instance_info
+                if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+                    self.prefill_instance_info[instance_info.instance_id] = instance_info
+                if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
+                    self.decode_instance_info[instance_info.instance_id] = instance_info
 
     def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
-        if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+        if instance_type == InstanceType.PREFILL:
             instance_id = self.dispatch_scheduler.dispatch(
                 instance_info=self.prefill_instance_info,
                 instance_num_requests=self.prefill_instance_num_requests,
@@ -73,10 +77,7 @@ class GlobalScheduler:
         else:
             logger.error("instance_type {} is not supported".format(instance_type))
             raise TypeError("instance_type {} is not supported".format(instance_type))
-        if self.global_scheduler_config.enable_pd_disagg and instance_type in (
-            InstanceType.PREFILL,
-            InstanceType.NO_CONSTRAINTS,
-        ):
+        if self.global_scheduler_config.enable_pd_disagg and instance_type == InstanceType.PREFILL:
             request_expected_steps = 1
         else:
             request_expected_steps = math.inf
@@ -103,7 +104,6 @@ class GlobalScheduler:
                 logger.info("Scale up instance: {}.".format(ins_id))
                 new_intance_info = self._get_empty_instance_info()
                 new_intance_info.instance_id = ins_id
-                self.instance_info[ins_id] = new_intance_info
                 self._add_instance(ins_id, ins_type)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
@@ -129,7 +129,7 @@ class GlobalScheduler:
         if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
             self.prefill_instance_info[instance_id] = new_intance_info
             self.prefill_instance_num_requests[instance_id] = 0
-        elif instance_type == InstanceType.DECODE:
+        if instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
             self.decode_instance_info[instance_id] = new_intance_info
             self.decode_instance_num_requests[instance_id] = 0
 
@@ -144,7 +144,7 @@ class GlobalScheduler:
             if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
                 self.prefill_instance_info.pop(instance_id, 0)
                 self.prefill_instance_num_requests.pop(instance_id, 0)
-            elif instance_info.instance_type == InstanceType.DECODE:
+            if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
                 self.decode_instance_info.pop(instance_id, 0)
                 self.decode_instance_num_requests.pop(instance_id, 0)
 

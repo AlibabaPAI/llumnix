@@ -25,7 +25,7 @@ from llumnix.instance_info import InstanceType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs, load_engine_args
+from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs, LlumnixEngineArgsFactory
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.utils import (get_service_resouces, random_uuid,
                            get_service_instance_type)
@@ -73,25 +73,21 @@ class Scaler:
         self.enable_port_increment = enable_port_increment
         self.enable_port_offset_store = enable_port_offset_store
         self.load_registered_service = load_registered_service
-        self.load_registered_service_path = load_registered_service_path
         self.pdd_config = pdd_config
 
         if enable_port_increment:
             self.port_offset = 0
-            self.disagg_options_token_port_offset = 0 # used in bladellm
             if enable_port_offset_store:
                 # TODO(s5u13b): Do not use ray interval kv.
                 value = get_data_from_ray_internal_kv("manager.port_offset")
                 self.port_offset = int(value)
 
-        if self.load_registered_service:
-            self.engine_args_dict = {}
-            if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
-                instance_type_list = ['no_constraints']
-            else:
-                instance_type_list = ['prefill', 'decode']
-            for instance_type in instance_type_list:
-                self.engine_args_dict[instance_type] = load_engine_args(instance_type, self.load_registered_service_path)
+        self.llumnix_engine_args_factory = LlumnixEngineArgsFactory(
+            enable_port_increment=enable_port_increment,
+            load_registered_service=load_registered_service,
+            load_registered_service_path=load_registered_service_path,
+            pdd_config=pdd_config,
+        )
 
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
@@ -387,7 +383,10 @@ class Scaler:
         world_size = get_engine_world_size(engine_args, backend_type)
         next_instance_args = await self._get_next_instance_args(instance_args, instance_type, world_size)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
-        next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
+        next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
+            current_engine_args=engine_args,
+            instance_type=next_instance_args.instance_type,
+        )
         instance = self._init_instance(
             instance_id,
             next_instance_args,
@@ -526,31 +525,6 @@ class Scaler:
             put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)
 
         return next_entrypoints_args
-
-    def _get_next_engine_args(
-        self, engine_args: LlumnixEngineArgs, instance_type: str | InstanceType
-    ):
-        if self.load_registered_service:
-            return self.engine_args_dict[instance_type]
-
-        # args need to be updated, used in bladellm
-        args_need_update = {
-            "disagg_options_inst_role": (
-                instance_type.value
-                if isinstance(instance_type, InstanceType)
-                else instance_type
-            ),
-            "disagg_options_token_port_offset": (
-                self.disagg_options_token_port_offset
-                if self.enable_port_increment
-                else 0
-            ),
-        }
-
-        new_engine_args = engine_args.gen_next_engine_args(**args_need_update)
-        if self.enable_port_increment:
-            self.disagg_options_token_port_offset += 10
-        return new_engine_args
 
     def _get_next_instance_type(self,
                                 cur_num_prefill_instances: int,

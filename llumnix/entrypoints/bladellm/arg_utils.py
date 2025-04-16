@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 from dataclasses import dataclass, field
 import pickle
 # When importing ServingArgs, it will raise no available gpu error.
@@ -37,12 +36,6 @@ class BladellmEngineArgs(LlumnixEngineArgs):
         self.override_engine_args = EngineOverrideArgs()
         self.world_size: int = None
         self.instance_id: str = None
-
-    def gen_next_engine_args(self, **kwargs):
-        engine_args_copied = copy.deepcopy(self.engine_args)
-        next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
-        next_engine_args.update_args(**kwargs)
-        return next_engine_args
 
     def get_overridden_engine_args(self):
         engine_args = pickle.loads(self.engine_args)

@@ -1,4 +1,3 @@
-import copy
 from typing import Tuple
 
 from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
@@ -19,8 +18,6 @@ class VllmEngineArgs(LlumnixEngineArgs):
     def __init__(self, engine_args=None) -> None:
         super().__init__(engine_args=engine_args, backend_type=BackendType.VLLM)
 
-    def gen_next_engine_args(self, **kwargs):
-        return copy.deepcopy(self)
     def get_overridden_engine_args(self):
         return self.engine_args
 

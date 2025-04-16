@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import argparse
+import copy
 import dataclasses
 from dataclasses import dataclass
 import os
@@ -21,6 +22,7 @@ import pickle
 from typing import List, Tuple, Union
 from abc import ABC, abstractmethod
 
+from llumnix.instance_info import InstanceType
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
@@ -384,10 +386,6 @@ class LlumnixEngineArgs(ABC):
     def get_engine_world_size(self):
         pass
 
-    @abstractmethod
-    def gen_next_engine_args(self, **kwargs):
-        pass
-
     def update_arg(self, args_key: str, args_value):
         if self.override_engine_args and hasattr(self.override_engine_args, args_key):
             setattr(self.override_engine_args, args_key, args_value)
@@ -395,6 +393,65 @@ class LlumnixEngineArgs(ABC):
     def update_args(self, **kwargs):
         for args_key, args_value in kwargs.items():
             self.update_arg(args_key, args_value)
+
+
+class LlumnixEngineArgsFactory:
+
+    def __init__(
+        self,
+        load_registered_service: bool,
+        enable_port_increment: bool,
+        load_registered_service_path: str,
+        pdd_config: PDDConfig,
+    ) -> None:
+        self.load_registered_service: bool = load_registered_service
+        self.load_registered_service_path: str = load_registered_service_path
+        self.pdd_config: PDDConfig = pdd_config
+        self.engine_args_dict: dict[str, LlumnixEngineArgs] = {}
+        self.enable_port_increment: bool = enable_port_increment
+        self.disagg_options_token_port_offset = 0  # used in bladellm
+
+        if self.load_registered_service:
+            if (
+                not self.pdd_config.enable_pd_disagg
+                and not self.pdd_config.enable_engine_pd_disagg
+            ):
+                instance_type_list = ["no_constraints"]
+            else:
+                instance_type_list = ["prefill", "decode"]
+            for instance_type in instance_type_list:
+                self.engine_args_dict[instance_type] = load_engine_args(
+                    instance_type, self.load_registered_service_path
+                )
+
+    def gen_next_engine_args(
+        self, current_engine_args: LlumnixEngineArgs, instance_type
+    ):
+        if self.load_registered_service:
+            return self.engine_args_dict[instance_type]
+        # lazy import to void circular import
+        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs # pylint: disable=import-outside-toplevel
+
+        engine_args_copied = copy.deepcopy(current_engine_args.engine_args)
+        if isinstance(current_engine_args, BladellmEngineArgs):
+            next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
+            if self.enable_port_increment:
+                next_engine_args.override_engine_args.disagg_options_token_port_offset = (
+                    self.disagg_options_token_port_offset
+                )
+                self.disagg_options_token_port_offset += 10
+            next_engine_args.override_engine_args.disagg_options_inst_role = (
+                instance_type.value
+                if isinstance(instance_type, InstanceType)
+                else instance_type
+            )
+            return next_engine_args
+        if isinstance(current_engine_args, VllmEngineArgs):
+            return VllmEngineArgs(engine_args=engine_args_copied)
+        raise TypeError(
+            "Unsupported engine args type when generating next engine args."
+        )
 
 
 @dataclass

@@ -429,11 +429,11 @@ class LlumnixEngineArgsFactory:
     ):
         if self.load_registered_service:
             return self.engine_args_dict[instance_type]
-        # lazy import to void circular import
-        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs # pylint: disable=import-outside-toplevel
-        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs # pylint: disable=import-outside-toplevel
 
         engine_args_copied = copy.deepcopy(current_engine_args.engine_args)
+
+        # lazy import to void circular import
+        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs # pylint: disable=import-outside-toplevel
         if isinstance(current_engine_args, BladellmEngineArgs):
             next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
             if self.enable_port_increment:
@@ -441,14 +441,18 @@ class LlumnixEngineArgsFactory:
                     self.disagg_options_token_port_offset
                 )
                 self.disagg_options_token_port_offset += 10
-            next_engine_args.override_engine_args.disagg_options_inst_role = (
-                instance_type.value
-                if isinstance(instance_type, InstanceType)
-                else instance_type
-            )
+            if self.pdd_config.enable_engine_pd_disagg:
+                next_engine_args.override_engine_args.disagg_options_inst_role = (
+                    instance_type.value
+                    if isinstance(instance_type, InstanceType)
+                    else instance_type
+                )
             return next_engine_args
+
+        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs # pylint: disable=import-outside-toplevel
         if isinstance(current_engine_args, VllmEngineArgs):
             return VllmEngineArgs(engine_args=engine_args_copied)
+
         raise TypeError(
             "Unsupported engine args type when generating next engine args."
         )

@@ -126,9 +126,10 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
 
     backend_type: BackendType = launch_args.backend_type
     request_output_queue_type: QueueType = QueueType(entrypoints_args.request_output_queue_type)
+    node_id = ray.get_runtime_context().get_node_id()
     instance_ids, instances = retry_manager_method_sync(
         manager.init_instances.remote, 'init_instances', request_output_queue_type,
-        backend_type, instance_args, engine_args)
+        backend_type, instance_args, engine_args, node_id)
 
     available_instance_ids = []
     available_instances = []

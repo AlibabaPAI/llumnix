@@ -40,6 +40,7 @@ manager_args = ManagerArgs()
 instance_args = InstanceArgs()
 engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370, enforce_eager=True)
+node_id = ray.get_runtime_context().get_node_id()
 
 # Create a manager. If the manager is created first, and then the instances are created.
 manager: Manager = init_manager(manager_args)
@@ -49,7 +50,7 @@ ray.get(manager.is_ready.remote())
 instance_ids: List[str] = None
 instances: List[Llumlet] = None
 instance_ids, instances = ray.get(manager.init_instances.remote(
-    QueueType("rayqueue"), BackendType.VLLM, instance_args, engine_args))
+    QueueType("rayqueue"), BackendType.VLLM, instance_args, engine_args, node_id))
 num_instance = 0
 while num_instance == 0:
     num_instance = ray.get(manager.scale_up.remote([], [], [], []))
@@ -97,7 +98,7 @@ for actor_info in named_actor_infos:
         ray.kill(actor_handle)
     except:
         continue
-    
+
 cleanup_ray_env_func()
 
 # Shutdown ray cluster.

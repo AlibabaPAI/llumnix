@@ -221,9 +221,11 @@ class Manager:
                              request_output_queue_type: QueueType,
                              backend_type: BackendType,
                              instance_args: InstanceArgs,
-                             engine_args
+                             engine_args,
+                             node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
-        return await self.scaler.init_instances.remote(request_output_queue_type, backend_type, instance_args, engine_args)
+        return await self.scaler.init_instances.remote(request_output_queue_type, backend_type, instance_args, engine_args,
+                                                       node_id)
 
     def init_request_output_queue_server(self, ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
         return init_request_output_queue_server(ip, port, queue_type)

@@ -16,6 +16,7 @@ from ray.experimental.internal_kv import (
 from ray.util import placement_group_table
 
 from llumnix.logging.logger import init_logger
+from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
 
 logger = init_logger(__name__)
 

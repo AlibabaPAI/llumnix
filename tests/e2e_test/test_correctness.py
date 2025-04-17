@@ -21,7 +21,7 @@ import pytest
 import aiohttp
 import torch
 
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, as_local
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func
@@ -122,7 +122,7 @@ async def run_bladellm(model, enable_pd_disagg):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for correctness test")
-@pytest.mark.parametrize("model", ['/mnt/model/Qwen-7B'])
+@pytest.mark.parametrize("model", [as_local('Qwen/Qwen-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])

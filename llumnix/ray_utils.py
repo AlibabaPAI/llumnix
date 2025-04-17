@@ -16,7 +16,6 @@ from ray.experimental.internal_kv import (
 from ray.util import placement_group_table
 
 from llumnix.logging.logger import init_logger
-from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -113,11 +112,7 @@ def initialize_placement_group(
     # requested resources are available, and will timeout
     # if they cannot be provisioned.
     if block:
-        try:
-            ray.get(current_placement_group.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
-        except ray.exceptions.GetTimeoutError:
-            logger.warning("Waiting for new placement group {} ready timeout.".format(placement_group_name))
-            return None
+        ray.get(current_placement_group.ready(), timeout=3.0)
 
     return current_placement_group
 

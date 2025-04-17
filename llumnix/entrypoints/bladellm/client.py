@@ -18,8 +18,6 @@ import copy
 import random
 from typing import Dict, List, Tuple
 
-import ray
-
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
 from blade_llm.service.communications.protocol import Stats, GenerateStreamMessage
 from blade_llm.service.communications.response import LLMResponse

@@ -4,8 +4,6 @@ import time
 import asyncio
 from typing import Dict
 
-import ray
-
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
 from vllm import SamplingParams

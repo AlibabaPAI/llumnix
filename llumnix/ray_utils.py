@@ -139,8 +139,7 @@ def actor_exists(name: str) -> bool:
         return True
     except ValueError:
         return False
-    # pylint: disable=broad-except
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         logger.exception("Unexpected exception: {}".format(e))
         return False
 
@@ -170,8 +169,7 @@ def remove_placement_group(instance_id: str, placement_group: PlacementGroup = N
         logger.info("Remove placement group {}.".format(instance_id))
     except ValueError:
         return False
-    # pylint: disable=broad-except
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         logger.exception("Unexpected exception: {}".format(e))
         return False
     return True
@@ -184,8 +182,7 @@ def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) -> bool:
         logger.info("Kill server {}.".format(instance_id))
     except ValueError:
         return False
-    # pylint: disable=broad-except
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         logger.exception("Unexpected exception: {}".format(e))
         return False
     return True
@@ -198,8 +195,7 @@ def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None) -> b
         logger.info("Kill instance {}.".format(instance_id))
     except ValueError:
         return False
-    # pylint: disable=broad-except
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         logger.exception("Unexpected exception: {}".format(e))
         return False
     return True

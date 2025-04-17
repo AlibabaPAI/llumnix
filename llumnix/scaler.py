@@ -198,8 +198,7 @@ class Scaler:
                     self.last_timeout_instance_id = new_instance_id
                     await asyncio.sleep(interval)
                     continue
-                # pylint: disable=broad-except
-                except Exception as e:
+                except Exception as e: # pylint: disable=broad-except
                     logger.exception("Failed to initialize placement group {}, exception: {}.".format(new_instance_id, e))
                     await asyncio.sleep(interval)
                     continue

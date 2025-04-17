@@ -524,8 +524,7 @@ class Manager:
                     logger.info("Connect to instance {}".format(instance_id))
                 except ValueError:
                     logger.warning("Connect to instance {} failed, placement group not found.".format(instance_id))
-                # pylint: disable=broad-except
-                except Exception as e:
+                except Exception as e: # pylint: disable=broad-except
                     logger.exception("Unexpected exception: {}".format(e))
             else:
                 logger.warning("Connect to instance {} failed, exception: {}.".format(instance_id, ret))

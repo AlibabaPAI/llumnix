@@ -187,6 +187,7 @@ def check_free_port(host='0.0.0.0', port=8081):
 def exception_wrapper(func=None, reraise=False):
     def decorator(f):
         @functools.wraps(f)
+        # pylint: disable=inconsistent-return-statements
         def wrapper(*args, **kwargs):
             try:
                 return f(*args, **kwargs)

@@ -37,7 +37,7 @@ def is_gpu_available() -> bool:
     try:
         subprocess.check_output(['nvidia-smi'])
         return True
-    # pylint: disable=broad-except
+    # pylint: disable=bare-except
     except:
         return False
 

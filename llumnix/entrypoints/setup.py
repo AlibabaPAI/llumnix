@@ -47,7 +47,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     except subprocess.CalledProcessError as e:
         logger.error("'ray stop' failed with: \n{}".format(e.stderr))
         sys.exit(1)
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         logger.error("'ray stop' failed, exeption: {}.".format(e))
         sys.exit(1)
     # Need to specify the head node ip through environment variable currently.
@@ -63,7 +63,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         except subprocess.CalledProcessError as e:
             logger.error("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
             sys.exit(1)
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-except
             logger.error("'ray stop' failed, exeption: {}.".format(e))
             sys.exit(1)
     else:
@@ -81,7 +81,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
                 else:
                     logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
                     sys.exit(1)
-            except Exception as e:
+            except Exception as e: # pylint: disable=broad-except
                 logger.error("'ray stop' failed, exeption: {}.".format(e))
                 sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
@@ -125,7 +125,7 @@ def init_manager(manager_args: ManagerArgs,
     except ValueError:
         manager = ray.get_actor(get_manager_name(), namespace='llumnix')
         logger.info("Get existing Manager.")
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         logger.exception("Failed to initialize manager, exception: {}.".format(e))
         sys.exit(1)
     return manager

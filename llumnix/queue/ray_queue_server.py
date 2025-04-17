@@ -35,8 +35,8 @@ class RayQueueServer(QueueServerBase):
             }
         )
 
-    async def get(self):
-        item = await self.queue.actor.get.remote()
+    async def get(self, timeout=None):
+        item = await self.queue.actor.get.remote(timeout=timeout)
         set_timestamp(item, 'queue_server_receive_timestamp', time.time())
         return item
 

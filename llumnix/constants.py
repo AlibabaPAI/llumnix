@@ -31,6 +31,7 @@ DISPATCH_LOG_FREQUENCY = 100
 # llumnix/entrypoints/setup.py
 MAX_RAY_RESTART_TIMES: int = 10
 RAY_RESTART_INTERVAL: float = 10.0
+SUBPROCESS_RUN_TIMEOUT: float = 60.0
 
 # llumnix/entrypoints/vllm/client.py, llumnix/entrypoints/bladellm/client.py
 WAIT_MANAGER_INTERVAL: float = 1.0
@@ -53,7 +54,7 @@ RPC_ZMQ_HWM: int = 0
 RETRY_BIND_ADDRESS_INTERVAL: float = 10.0
 MAX_BIND_ADDRESS_RETRY_TIMES: int = 10
 ZMQ_IO_THREADS: int = 8
-SERVER_QUEUE_TIMEOUT: int = 10
+SERVER_QUEUE_TIMEOUT: float = 10.0
 
 # llumnix/entrypoints/utils.py
 MAX_MANAGER_RETRY_TIMES: int = 10

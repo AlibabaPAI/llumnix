@@ -205,7 +205,9 @@ def test_init_llumlet(ray_env, llumlet):
 
 def test_init_instances(ray_env, manager):
     engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
-    _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, InstanceArgs(), engine_args))
+    node_id = ray.get_runtime_context().get_node_id()
+    _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, InstanceArgs(), engine_args,
+                                                         node_id))
     num_instances = len(instances)
     manager_args = ManagerArgs()
     assert num_instances == manager_args.initial_instances
@@ -215,8 +217,9 @@ def test_init_instances_sim(ray_env, manager):
     # cannot catch by pytest.raises
     try:
         engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
+        node_id = ray.get_runtime_context().get_node_id()
         _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM,
-                                                            InstanceArgs(profiling_result_file_path="/"), engine_args))
+                                                     InstanceArgs(profiling_result_file_path="/"), engine_args, node_id))
     # pylint: disable=broad-except
     except Exception as e:
         assert isinstance(e, IsADirectoryError)

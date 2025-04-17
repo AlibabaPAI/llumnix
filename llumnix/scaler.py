@@ -324,6 +324,7 @@ class Scaler:
                               backend_type: BackendType,
                               init_server: bool = False,
                               block: bool = True,
+                              node_id: str = None,
                               service_name: str = None
                               ) -> PlacementGroup:
         # num_cpus=2+(0/1), for Llumlet + AsyncPutQueueActor + (ApiServerActor)
@@ -333,11 +334,11 @@ class Scaler:
             gpu_bundling_strategy = GPUBundlingStrategy.SPREAD if backend_type == BackendType.VLLM else GPUBundlingStrategy.PACK
             resources = get_service_resouces(service_name, world_size)
             placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
-                                                         num_gpus=world_size, detached=True, block=block,
+                                                         num_gpus=world_size, detached=True, block=block, node_id=node_id,
                                                          gpu_bundling_strategy=gpu_bundling_strategy, resources=resources)
         else:
             placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
-                                                         num_gpus=0, detached=True, block=block)
+                                                         num_gpus=0, detached=True, block=block, node_id=node_id)
 
         return placement_group
 
@@ -423,7 +424,8 @@ class Scaler:
                              request_output_queue_type: QueueType,
                              backend_type: BackendType,
                              instance_args: InstanceArgs,
-                             engine_args
+                             engine_args,
+                             node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
         async def instance_ready_scale_up(instance_id: str, instance: ray.actor.ActorHandle,
                                           instance_type: InstanceType, placement_group: PlacementGroup):
@@ -450,7 +452,12 @@ class Scaler:
             else:
                 instance_id = random_uuid()
             placement_group = self._init_placement_group(get_placement_group_name(instance_id), engine_args, backend_type,
-                                                         init_server=False, block=True)
+                                                         init_server=False, block=True, node_id=node_id)
+            if placement_group is None:
+                logger.warning("Failed to initialize placement group for instance {}, "
+                               "the remaining resources of node {} might be not enough, "
+                               "stop initializing instances.".format(instance_id, node_id))
+                return instance_ids, instances
             instance = self._init_instance(instance_id, instance_args, placement_group, request_output_queue_type,
                                            backend_type, engine_args)
             instance_ids.append(instance_id)

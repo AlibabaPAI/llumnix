@@ -55,6 +55,7 @@ def initialize_placement_group(
     gpu_bundling_strategy: GPUBundlingStrategy = GPUBundlingStrategy.SPREAD,
     detached: bool = False,
     block: bool = True,
+    node_id: str = None,
     resources: Dict[str, float] = {}
 ) -> PlacementGroup:
     """Initialize the distributed cluster probably with Ray.
@@ -101,13 +102,21 @@ def initialize_placement_group(
     logger.debug("placement_group_specs: {}".format(placement_group_specs))
 
     # PACK (not STRICT_PACK) to support multi-node placement group.
-    current_placement_group = ray.util.placement_group(
-        placement_group_specs, "PACK", name=placement_group_name, lifetime=lifetime)
+    if node_id is None:
+        current_placement_group = ray.util.placement_group(
+            placement_group_specs, "PACK", name=placement_group_name, lifetime=lifetime)
+    else:
+        current_placement_group = ray.util.placement_group(
+            placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime, _soft_target_node_id=node_id)
     # Wait until PG is ready - this will block until all
     # requested resources are available, and will timeout
     # if they cannot be provisioned.
     if block:
-        ray.get(current_placement_group.ready(), timeout=3.0)
+        try:
+            ray.get(current_placement_group.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
+        except ray.exceptions.GetTimeoutError:
+            logger.warning("Waiting for new placement group {} ready timeout.".format(placement_group_name))
+            return None
 
     return current_placement_group
 

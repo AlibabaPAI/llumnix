@@ -57,7 +57,9 @@ class LlumnixClientVLLM:
         try:
             await self._generate_by_manager(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
             self.manager_available = True
-        except ray.exceptions.RayActorError:
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.error("Manager is unavailable, exception: {}.".format(e))
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
@@ -95,13 +97,14 @@ class LlumnixClientVLLM:
                 logger.warning("Manager is unavailable temporarily, dispatch request {} to instance {}".format(
                     request_id, instance_id))
             else:
-                logger.warning("Manager is unavailable temporarily, but there is no instance behind this api server, "
+                logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
                 await asyncio.sleep(WAIT_MANAGER_INTERVAL)
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
-        except (ray.exceptions.RayActorError, KeyError):
+        # pylint: disable=broad-except
+        except Exception as e:
             if instance_id in self.instances:
-                logger.info("Instance {} is dead.".format(instance_id))
+                logger.info("Instance {} is dead, exception: {}.".format(instance_id, e))
                 if instance_id in self.instances:
                     del self.instances[instance_id]
                 else:
@@ -116,8 +119,9 @@ class LlumnixClientVLLM:
         try:
             logger.info("Abort request: {}.".format(request_id))
             await self.manager.abort.remote(request_id)
-        except ray.exceptions.RayActorError:
-            logger.warning("Manager is unavailable.")
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.warning("Manager is unavailable, exception: {}.".format(e))
 
     def abort_request(self, request_id: str) -> None:
         logger.info("Abort request: {}.".format(request_id))

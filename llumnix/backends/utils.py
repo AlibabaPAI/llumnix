@@ -36,7 +36,6 @@ class AsyncPutQueueActor:
     def __init__(self, instance_id: str, request_output_queue_type: QueueType):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
-        logger.info("AsyncPutQueueActor(instance_id={}".format(instance_id))
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None
@@ -59,7 +58,7 @@ class AsyncPutQueueActor:
             if isinstance(ret, Exception):
                 server_id = list(server_request_outputs.keys())[idx]
                 server_info = server_info_dict[server_id]
-                logger.error("Server {} is dead, exception: {}".format(server_id, ret))
+                logger.error("Server {} is dead, exception: {}.".format(server_id, ret))
                 if self.request_output_queue_type == QueueType.ZMQ:
                     logger.debug("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
                                                                                 server_info.request_output_queue_port))
@@ -108,6 +107,6 @@ def get_engine_world_size(engine_args, backend_type: BackendType):
     if backend_type == BackendType.VLLM:
         engine_config = engine_args.create_engine_config()
         world_size = engine_config.parallel_config.world_size
-    else: # BLADE_LLM
+    else: # BLADELLM
         world_size = engine_args.world_size
     return world_size

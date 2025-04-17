@@ -17,6 +17,7 @@ import asyncio
 import threading
 from typing import Any, Callable, Awaitable, TypeVar, Coroutine, Dict, Optional
 import socket
+import functools
 from functools import partial
 import pickle
 
@@ -118,15 +119,15 @@ def get_service_resouces(service_name: str, num_gpus: int) -> Dict[str, float]:
 def get_llumnix_env_vars():
     llumnix_env_vars = {}
     env_vars = dict(os.environ)
-    llumnix_keys = list(llumnix_envs.environment_variables.keys())
+    llumnix_env_vars_keys = list(llumnix_envs.environment_variables.keys())
     try:
         # pylint: disable=import-outside-toplevel
         from vllm import envs as vllm_envs
-        llumnix_keys.extend(list(vllm_envs.environment_variables.keys()))
+        llumnix_env_vars_keys.extend(list(vllm_envs.environment_variables.keys()))
     except ImportError:
         pass
     for key, value in env_vars.items():
-        if key in llumnix_keys:
+        if key in llumnix_env_vars_keys:
             llumnix_env_vars[key] = value
 
     return llumnix_env_vars
@@ -182,3 +183,18 @@ def check_free_port(host='0.0.0.0', port=8081):
             return False
         else:
             raise
+
+def exception_wrapper(func=None, reraise=False):
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            try:
+                return f(*args, **kwargs)
+            # pylint: disable=broad-except
+            except Exception as e:
+                logger.exception("Unexpected exception: {}".format(e))
+                if reraise:
+                    raise
+        return wrapper
+
+    return decorator(func)

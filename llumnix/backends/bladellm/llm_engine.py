@@ -255,7 +255,6 @@ class AsyncLLMEngineLlumnixMixin:
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Exception in engine loop: {}".format(e))
-
             previous_state = self.state
             self.state = EngineState.CRASHED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))

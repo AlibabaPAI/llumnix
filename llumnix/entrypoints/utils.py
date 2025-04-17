@@ -37,7 +37,8 @@ def is_gpu_available() -> bool:
     try:
         subprocess.check_output(['nvidia-smi'])
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    # pylint: disable=broad-except
+    except:
         return False
 
 def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
@@ -45,12 +46,13 @@ def retry_manager_method_sync(ray_call, method_name, *args, **kwargs):
         try:
             ret = ray.get(ray_call(*args, **kwargs))
             break
-        except ray.exceptions.RayActorError:
+        # pylint: disable=broad-except
+        except Exception as e:
             if attempt < MAX_MANAGER_RETRY_TIMES - 1:
-                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRY_MANAGER_INTERVAL, method_name))
+                logger.warning("Manager is unavailable, exception: {}, sleep {}s, and retry {} again.".format(e, RETRY_MANAGER_INTERVAL, method_name))
                 time.sleep(RETRY_MANAGER_INTERVAL)
             else:
-                logger.error("Manager is still unavailable after {} times retries.".format(MAX_MANAGER_RETRY_TIMES))
+                logger.error("Manager is still unavailable after {} times retries, exception: {}.".format(MAX_MANAGER_RETRY_TIMES, e))
                 raise
     return ret
 
@@ -59,11 +61,12 @@ async def retry_manager_method_async(ray_call, method_name, *args, **kwargs):
         try:
             ret = await ray_call(*args, **kwargs)
             break
-        except ray.exceptions.RayActorError:
+        # pylint: disable=broad-except
+        except Exception as e:
             if attempt < MAX_MANAGER_RETRY_TIMES - 1:
-                logger.warning("Manager is unavailable, sleep {}s, and retry {} again.".format(RETRY_MANAGER_INTERVAL, method_name))
+                logger.warning("Manager is unavailable, exception: {}, sleep {}s, and retry {} again.".format(e, RETRY_MANAGER_INTERVAL, method_name))
                 await asyncio.sleep(RETRY_MANAGER_INTERVAL)
             else:
-                logger.error("Manager is still unavailable after {} times retries.".format(MAX_MANAGER_RETRY_TIMES))
+                logger.error("Manager is still unavailable after {} times retries, exception: {}.".format(MAX_MANAGER_RETRY_TIMES, e))
                 raise
     return ret

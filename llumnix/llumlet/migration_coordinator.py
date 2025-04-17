@@ -53,6 +53,7 @@ class MigrationCoordinator:
                                           migrate_out_request: LlumnixRequest) -> "MigrationStatus":
         try:
             return await self._migrate_out_multistage(migrate_in_ray_actor, migrate_out_request)
+        # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Unexpected exception: {}".format(e))
             raise
@@ -79,6 +80,7 @@ class MigrationCoordinator:
                 return MigrationStatus.ABORTED_DST
 
             return MigrationStatus.FINISHED
+        # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Unexpected exception: {}".format(e))
             raise
@@ -100,6 +102,7 @@ class MigrationCoordinator:
                     return status
             # exceed max stages
             return MigrationStatus.ABORTED_SRC
+        # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Unexpected exception: {}".format(e))
             raise
@@ -175,6 +178,7 @@ class MigrationCoordinator:
                 return MigrationStatus.ABORTED_SRC
 
             return migration_status
+        # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Unexpected exception: {}".format(e))
             raise

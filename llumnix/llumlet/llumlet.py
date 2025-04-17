@@ -18,6 +18,7 @@ import pickle
 import os
 
 import ray
+import ray.exceptions
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 import ray.actor
@@ -85,7 +86,7 @@ class Llumlet:
             asyncio.create_task(self._check_engine_state_loop())
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Failed to initialize Llumlet: {}".format(e))
+            logger.exception("Failed to initialize Llumlet, exception: {}.".format(e))
             raise
 
     def __repr__(self):
@@ -130,7 +131,7 @@ class Llumlet:
                                            engine_args)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Failed to initialize Llumlet: {}".format(e))
+            logger.exception("Failed to initialize Llumlet, exception: {}.".format(e))
             raise
 
         return llumlet
@@ -197,6 +198,7 @@ class Llumlet:
             logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
                         .format(self.instance_id, dst_instance_id, migrated_request, status, \
                                 sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
+        # pylint: disable=broad-except
         except ray.exceptions.RayActorError:
             logger.info("Instance {} is dead.".format(dst_instance_id))
             raise

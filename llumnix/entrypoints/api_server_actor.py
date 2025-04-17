@@ -85,7 +85,7 @@ class APIServerActor(ABC):
             api_server = api_server_class.remote(server_name, entrypoints_args, engine_args)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Failed to initialize APIServer: {}".format(e))
+            logger.exception("Failed to initialize APIServerActor, exception: {}.".format(e))
             raise
 
         return api_server

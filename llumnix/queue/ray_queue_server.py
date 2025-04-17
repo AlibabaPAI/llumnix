@@ -21,6 +21,7 @@ from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import random_uuid
 
+
 class RayQueueServer(QueueServerBase):
     def __init__(self) -> None:
         self.queue = RayQueue(
@@ -51,6 +52,6 @@ class RayQueueServer(QueueServerBase):
     def cleanup(self):
         try:
             ray.kill(self.queue)
-        # pylint: disable=broad-except, unused-variable
-        except Exception as e:
+        # pylint: disable=bare-except
+        except:
             pass

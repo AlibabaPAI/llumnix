@@ -236,12 +236,12 @@ class Manager:
 
     async def _poll_instance_info_loop(self, interval: float) -> None:
         async def get_instance_info_done_callback(ret, instance_id: str):
-            if not isinstance(ret, ray.exceptions.RayActorError):
+            if not isinstance(ret, Exception):
                 if ret is not None:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
             else:
-                logger.info("Instance {} is dead.".format(instance_id))
+                logger.info("Instance {} is dead, exception: {}.".format(instance_id, ret))
                 await self.scale_down(instance_id)
 
         def get_instance_info_done_callback_wrapper(instance_id: str, fut) -> None:
@@ -289,7 +289,7 @@ class Manager:
                 self.instance_migrating[migrate_instance_pair[0]] = False
             if migrate_instance_pair[1] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[1]] = False
-            if isinstance(ret, (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError)):
+            if isinstance(ret, Exception):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):
                     # Instance without error should clear migration states.
@@ -297,12 +297,12 @@ class Manager:
                     if not has_error:
                         try:
                             await self.instances[migrate_instance_pair[i]].clear_migration_states.remote(is_migrate_in=bool(i))
-                        except (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError):
+                        # pylint: disable=bare-except
+                        except:
                             has_error = True
                 for i, has_error in enumerate(has_error_pair):
                     if has_error:
                         instance_id = migrate_instance_pair[i]
-                        logger.info("Instance {} is dead.".format(instance_id))
                         await self.scale_down(instance_id)
             else:
                 migrate_out_request_ids = ret
@@ -469,7 +469,9 @@ class Manager:
             rets = await asyncio.gather(*tasks, return_exceptions=True)
             dead_instances = set()
             for instance_name, ret in zip(alive_instances, rets):
-                if isinstance(ret, ray.exceptions.RayActorError):
+                if isinstance(ret, Exception):
+                    instance_id = instance_name[:len(INSTANCE_NAME_PREFIX)]
+                    logger.info("Instance {} is dead, exception: {}.".format(instance_id, ret))
                     dead_instances.add(instance_name)
             if len(dead_instances) > 0:
                 await self.scale_down(dead_instances, rebuild_migration_backend=False)
@@ -522,8 +524,11 @@ class Manager:
                     logger.info("Connect to instance {}".format(instance_id))
                 except ValueError:
                     logger.warning("Connect to instance {} failed, placement group not found.".format(instance_id))
+                # pylint: disable=broad-except
+                except Exception as e:
+                    logger.exception("Unexpected exception: {}".format(e))
             else:
-                logger.warning("Connect to instance {} failed, exception: {}".format(instance_id, ret))
+                logger.warning("Connect to instance {} failed, exception: {}.".format(instance_id, ret))
 
         # Must set True despite set namespance to llumnix.
         actor_infos = ray.util.list_named_actors(all_namespaces=True)
@@ -548,11 +553,11 @@ class Manager:
     async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
         def check_instance_error_done_callback(idx: int, instance_id: str, fut):
             ret = fut.result()[0]
-            if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
+            if not isinstance(ret, Exception):
                 logger.info("Instance {} is alive.".format(instance_id))
                 results[idx] = False
             else:
-                logger.info("Instance {} is dead.".format(instance_id))
+                logger.info("Instance {} is dead, exception: {}.".format(instance_id, ret))
                 results[idx] = True
 
         results = [None, None]
@@ -568,7 +573,7 @@ class Manager:
     async def _get_request_instance(self) -> None:
         async def get_request_instance_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
-            if not isinstance(ret, ray.exceptions.RayActorError):
+            if not isinstance(ret, Exception):
                 instance_requests.append(ret)
                 instance_ids.append(instance_id)
             else:

@@ -35,7 +35,7 @@ def ray_start():
         result = subprocess.run(["ray", "status"], check=False, capture_output=True, text=True)
         if result.returncode == 0:
             return
-        print("Ray start failed, exception: {}".format(result.stderr.strip()))
+        print("Ray start failed, exception: {}.".format(result.stderr.strip()))
         time.sleep(3.0)
     raise Exception("Ray start failed after 5 attempts.")
 

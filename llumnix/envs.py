@@ -51,11 +51,6 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("LLUMNIX_LOG_NODE_PATH", ""),
 }
 
-# In sciprt
-# export MODEL=/mnt/model/opt-125m
-# In tests
-model=os.get_env("MODEL", "facebook/opt-125m")
-
 
 # pylint: disable=invalid-name
 def __getattr__(name: str):

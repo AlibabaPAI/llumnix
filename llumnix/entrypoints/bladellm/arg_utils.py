@@ -47,10 +47,10 @@ def detect_unsupported_engine_feature(engine_args) -> None:
         unsupported_feature = "automatic prompt caching"
     elif engine_args.use_sps:
         unsupported_feature = "speculative decoding"
-    elif engine_args.enable_remote_worker:
-        unsupported_feature = "enable_remote_worker"
-    elif engine_args.enable_hybrid_dp:
-        unsupported_feature = "hybrid data parallel"
+    # elif engine_args.enable_remote_worker:
+    #     unsupported_feature = "enable_remote_worker"
+    # elif engine_args.enable_hybrid_dp:
+    #     unsupported_feature = "hybrid data parallel"
     elif engine_args.elastic_attn_cluster:
         unsupported_feature = "elastic attention"
 

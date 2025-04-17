@@ -48,7 +48,13 @@ class MigrationWorker(Worker):
         self.migrating_out_seq_group_metadata: Dict[str, Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]] = {}
         self.migrating_in_seq_group_metadata: Dict[str, Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]] = {}
 
+        self.instance_id = None
+        self.rank = None
+
         super().__init__(*args, **kwargs)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]}, rank={self.rank})"
 
     def load_model(self):
         torch.cuda.set_device(self.device)

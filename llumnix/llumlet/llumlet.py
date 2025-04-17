@@ -25,7 +25,7 @@ import ray.actor
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
 from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
-from llumnix.backends.utils import init_backend_engine, get_engine_world_size
+from llumnix.backends.utils import init_backend_engine
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
@@ -36,6 +36,7 @@ from llumnix.arg_utils import InstanceArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix.utils import get_ip_address
 
 logger = init_logger(__name__)
 
@@ -50,8 +51,10 @@ class Llumlet:
                  engine_args) -> None:
         try:
             # bladellm engine_args is dumped by pickle
-            if hasattr(engine_args, 'engine_args'):
+            if backend_type == BackendType.BLADELLM:
                 engine_args = pickle.loads(engine_args.engine_args)
+                if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
+                    engine_args.host = get_ip_address()
             log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
             if instance_args.engine_disagg_inst_id_env_var:
@@ -102,13 +105,13 @@ class Llumlet:
         try:
             assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
                 f'unimplemented backend {BackendType}'
-            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
             # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
             if backend_type == BackendType.VLLM:
+                # Instance and worker shares the same 1 gpu in the first bundle of PlacementGroup.
                 num_gpus = 0.5
             elif backend_type == BackendType.BLADELLM:
-                # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
-                num_gpus = get_engine_world_size(engine_args, backend_type) - 0.5
+                # Instance, server and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+                num_gpus = 0.33
             else: # backend_type == BackendType.SIM_VLLM
                 num_gpus = 0
             llumlet_class = ray.remote(num_cpus=1,

@@ -33,13 +33,14 @@ from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL
+from llumnix import envs as llumnix_envs
 
 
 logger = init_logger(__name__)
 
 
 def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
-    head_node_ip = os.getenv('HEAD_NODE_IP')
+    head_node_ip = llumnix_envs.HEAD_NODE_IP
     node_ip_address = get_ip_address()
     try:
         # Stop the existing ray processes on the node first.
@@ -52,7 +53,7 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
         logger.error("Environment variable 'HEAD_NODE_IP' should be set for ray cluster launch.")
         sys.exit(1)
     ray_start_command = None
-    if 'HEAD_NODE' in os.environ:
+    if llumnix_envs.HEAD_NODE:
         ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
         try:
             result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)

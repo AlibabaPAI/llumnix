@@ -24,6 +24,7 @@ from typing_extensions import ParamSpec
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
+from llumnix.constants import MODEL_PATH, DATASET_PATH
 
 logger = init_logger(__name__)
 
@@ -182,3 +183,15 @@ def check_free_port(host='0.0.0.0', port=8081):
             return False
         else:
             raise
+
+def as_local(data_path: str) -> str:
+    assert "/" in data_path
+    base_name = data_path.split("/")[-1]
+
+    local_model_path: str = os.path.join(MODEL_PATH, base_name)
+    if os.path.exists(local_model_path):
+        return local_model_path
+    
+    local_dataset_path: str = os.path.join(DATASET_PATH, base_name)
+    if os.path.exists(local_dataset_path):
+        return local_dataset_path

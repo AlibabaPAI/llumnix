@@ -118,6 +118,7 @@ async def run_bladellm(model, enable_pd_disagg):
 
     shutdown_llumnix_service_func()
     await asyncio.sleep(3)
+
     return bladellm_outputs
 
 @pytest.mark.asyncio

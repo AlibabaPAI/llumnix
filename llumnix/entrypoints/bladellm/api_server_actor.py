@@ -6,11 +6,18 @@ from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix.utils import get_ip_address
 
 logger = init_logger(__name__)
 
 
 class APIServerActorBladeLLM(APIServerActor):
+    def _set_host(self, entrypoints_args: EntrypointsArgs, engine_args):
+        engine_args = pickle.loads(engine_args.engine_args)
+        if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
+            engine_args.host = get_ip_address()
+        self.host = engine_args.host
+
     def _run_server(self,
                     entrypoints_args: EntrypointsArgs,
                     engine_args,
@@ -21,7 +28,6 @@ class APIServerActorBladeLLM(APIServerActor):
         from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
         # bladellm engine_args is dumped by pickle
         engine_args = pickle.loads(engine_args.engine_args)
-        engine_args.host = self.host
         loop = asyncio.new_event_loop()
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
         web_app = LlumnixEntrypoint(client=llumnix_client, args=engine_args).create_web_app()

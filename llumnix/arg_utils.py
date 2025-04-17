@@ -371,7 +371,6 @@ class InstanceArgs:
     dispatch_load_metric: str = None
     migration_load_metric: str = None
     enable_defrag: bool = None
-
     request_migration_policy: str = None
 
     migration_backend: str = None
@@ -383,10 +382,10 @@ class InstanceArgs:
     kvtransfer_migration_backend_naming_url: str = None
     migration_last_stage_max_blocks: int = None
     migration_max_stages: int = None
-    engine_disagg_inst_id_env_var: str = None
 
     # init from engine args
     enable_engine_pd_disagg: bool = None
+    engine_disagg_inst_id_env_var: str = None
 
     def __post_init__(self):
         # Check if all fields default to None

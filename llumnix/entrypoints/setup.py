@@ -108,10 +108,10 @@ def setup_ray_cluster(entrypoints_args) -> None:
                            log_to_driver=not entrypoints_args.disable_log_to_driver)
 
 def init_manager(manager_args: ManagerArgs,
-                 instance_args: InstanceArgs = None,
-                 entrypoints_args: EntrypointsArgs = None,
-                 engine_args = None,
-                 launch_args: LaunchArgs = None,
+                 instance_args: InstanceArgs,
+                 entrypoints_args: EntrypointsArgs,
+                 engine_args,
+                 launch_args: LaunchArgs,
                  ) -> Manager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:

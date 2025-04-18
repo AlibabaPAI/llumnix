@@ -198,7 +198,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
-                                                    port=base_port))
+                                                    port=base_port,
+                                                    tensor_parallel_size=tensor_parallel_size))
     else:
         launch_commands.append(generate_serve_command_func(result_filename=str(base_port)+".out",
                                                ip=ip,

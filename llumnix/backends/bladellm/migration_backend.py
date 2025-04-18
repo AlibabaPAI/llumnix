@@ -48,6 +48,8 @@ from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH, NUMPY_SUPPORTED_DTYPES_FO
 logger = init_logger(__name__)
 
 
+# TODO(KuilongCui): Refactor this code, as there is a lot of duplicate code.
+
 class WorkerRequestSyncGroup:
     def __init__(self, request_group: Dict, request_tracker: Dict):
         # TODO(KuilongCui): use rw lock to improve performance

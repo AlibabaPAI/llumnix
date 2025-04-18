@@ -340,8 +340,10 @@ class BackendBladeLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: ServingArgs
     ) -> None:
+        # TODO(KuilongCui): move this to serve.py
         # In llumnix, just keep the engine_client and engine in the same process.
         engine_args.serving_multi_processing_options.disable_frontend_multiprocessing = True
+        engine_args.disable_signal_handler = True
 
         self._config_inner_engine_logger(engine_args)
 

@@ -31,7 +31,6 @@ from blade_llm.generation.statemanagers.disagg_ragged_flash_state_manager import
     DisaggPrefillStateManager, DisaggDecodeStateManager)
 from blade_llm.generation.statemanagers.paged_state_manager import PagedStateManager
 from blade_llm.generation.kvcache.kv_cache_arena import PagedKVCacheArena, RaggedFlashKVCacheArena
-from blade_llm.generation.statemanagers.utils import get_kv_tranfer_context
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.tracing import ReqTracker
 from blade_llm.service.workers.base_worker import BaseWorker
@@ -297,6 +296,18 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 stopping_criterial=StoppingCriteria(max_new_tokens=0),
                 logits_processors_params=LogitsProcessorParams(repetition_penalty=1.0),
                 detoken_params=DetokenParams(cat_prompt=True),)
+
+
+def get_kv_tranfer_context(statemanager: RaggedFlashStateManager):
+    assert isinstance(statemanager, RaggedFlashStateManager)
+    kv_tranfer_unit = (
+        statemanager.model_conf.num_attention_heads // statemanager.attn_head_tp_size
+        if statemanager.model_conf.num_query_group is None
+        else max(1, statemanager.model_conf.num_query_group // statemanager.attn_head_tp_size)
+    )
+    kv_transfer_token_bytes = 2 * statemanager.dtype.itemsize * statemanager.model_conf.head_dim * kv_tranfer_unit
+    kv_transfer_block_bytes = statemanager.block_size * kv_transfer_token_bytes
+    return kv_transfer_token_bytes, kv_transfer_block_bytes
 
 
 class KvTransferMigrationBackend(MigrationBackendBase):

@@ -29,6 +29,7 @@ from blade_llm.service.args import ServingArgs
 from llumnix.backends.bladellm.metrics import BladeLLMMetrics
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.llumlet.request import RequestStatus
+from llumnix.backends.bladellm.llm_engine import AsyncBackQueueWrapper
 from llumnix.server_info import ServerInfo
 
 
@@ -44,7 +45,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
         self.running_filter_request_ids: Set[int] = set()
         # init in engine.start
-        self.request_server_map: Dict[int, ServerInfo] = None
+        self.trans_wrapper: AsyncBackQueueWrapper = None
 
     def pipeline_running_filter(self, batches: Union[List[int], List[GenerationGroupState]]):
         batches = super().pipeline_running_filter(batches)
@@ -81,11 +82,20 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     # happends when add_request
     def add_gen_group(self, gen_group: GenerationGroupState, *args, **kwargs):
-        gen_group_llumnix = GenerationGroupStateLlumnix(gen_group, gen_group.request_group_id,
-                                                        self.request_server_map[gen_group.request_group_id])
+        server_info: ServerInfo = None # just set to None for warm-up requests
+        if gen_group.request_group_id in self.trans_wrapper.request_server_map:
+            server_info = self.trans_wrapper.request_server_map[gen_group.request_group_id]
+        gen_group_llumnix = GenerationGroupStateLlumnix(
+            gen_group, gen_group.request_group_id,
+            server_info)
         gen_group_llumnix._status = RequestStatus.WAITING
         self.id2group[gen_group.request_group_id] = gen_group_llumnix
         super().add_gen_group(gen_group_llumnix, *args, **kwargs)
+
+    def drop_request(self, req_id: int):
+        self.id2group[req_id]._status = RequestStatus.FINISHED
+        self.trans_wrapper.drop_request(req_id)
+        super().drop_request(req_id)
 
     # happends when moving request from waiting to running
     def _add_prefill_to_queue(self, group_to_add: GenerationGroupStateLlumnix):
@@ -166,7 +176,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
                 return []
 
         blocks = []
-        if not self.block_manager._can_allocate_num_blocks(block_num):
+        if not self.block_manager.can_allocate_num_blocks(block_num):
             return blocks
         for _ in range(block_num):
             block = self.block_manager.gpu_allocator.allocate()

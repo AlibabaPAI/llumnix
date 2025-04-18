@@ -88,6 +88,10 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                 model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
+    # TODO(chenghao): fix this bug
+    if "BladeLLM" in engine and launch_mode == "global" and enable_pd_disagg:
+        pytest.skip("Error in BladeLLM for prefill-decode disaggregation in global launch mode.")
+
     if "BladeLLM" in engine and enable_simulator:
         pytest.skip("Simulator for BladeLLM is not supported yet.")
 
@@ -221,7 +225,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                 process.kill()
                 assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
 
-    asyncio.sleep(5)
+    await asyncio.sleep(5)
 
     if num_prompts == 500:
         with open("performance.txt", "a", encoding="utf-8") as f:

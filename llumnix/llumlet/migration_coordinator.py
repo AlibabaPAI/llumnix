@@ -137,10 +137,7 @@ class MigrationCoordinator:
             else:
                 # last stage migration, stop inference, transfer all blocks
                 migration_status = MigrationStatus.FINISHED
-                if self.backend_type == BackendType.BLADELLM:
-                    found = self.backend_engine.remove_running_request(migrate_out_request.request_id)
-                else:
-                    found = await self.backend_engine.remove_running_request(migrate_out_request.request_id)
+                found = await self.backend_engine.remove_running_request(migrate_out_request.request_id)
                 # Request coule be finished by previous or current step.
                 if not found or migrate_out_request.finished:
                     return MigrationStatus.ABORTED_SRC

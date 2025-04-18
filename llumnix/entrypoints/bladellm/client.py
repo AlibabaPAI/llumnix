@@ -21,7 +21,7 @@ from typing import Dict, List, Tuple
 import ray
 
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
-from blade_llm.service.communications.protocol import Stats, GenerateStreamMessage
+from blade_llm.service.communications.protocol import Stats
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
 from blade_llm.protocol import ServerRequest, GenerateStreamResponse
@@ -149,9 +149,8 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             if request_output_jsons is None:
                 continue
             for request_output_json in request_output_jsons:
-                output_message = GenerateStreamMessage(**json.loads(request_output_json))
-                request_id = output_message.req_id
-                request_output = output_message.resp
+                request_output = GenerateStreamResponse(**json.loads(request_output_json))
+                request_id = request_output.req_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
@@ -162,14 +161,12 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     self.request_streams[request_id].put_nowait(req)
                 self.request_streams_last_completion_tokens[request_id] = processed_output[-1].usage.completion_tokens
                 if processed_output[-1].is_finished:
-                    # TODO(KuilongCui): fix logging output error
-                    logger.debug("Client finish request output: {}".format(processed_output[-1]))
+                    logger.debug("Client finish request {}".format(request_id))
                     del self.entrypoint_id2llumnix_id[self.llumnix_id2entrypoint_id[request_id]]
                     del self.llumnix_id2entrypoint_id[request_id]
                     del self.request_streams[request_id]
                     self.request_streams_last_completion_tokens.pop(request_id, None)
                     self.request_streams_output_stash.pop(request_id, None)
-
 
     def process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
         current_completion_tokens = None
@@ -212,7 +209,6 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             return res
 
         return [request_output]
-
 
     def connect(self):
         pass

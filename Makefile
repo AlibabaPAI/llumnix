@@ -29,7 +29,7 @@ lint: check_pylint_installed check_pytest_installed
 
 	@pylint --rcfile=.pylintrc \
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
-			-s n --jobs=128 ./tests
+			-s n --jobs=128 ./tests/e2e_test ./tests/unit_test ./tests/conftest.py
 
 .PHONY: clean
 clean: proto-clean

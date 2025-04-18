@@ -114,7 +114,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         pytest.skip("Error in BladeLLM for tensor parallel size > 1.")
 
     if "BladeLLM" in engine and use_ray_spmd_worker:
-        pytest.skip("use_ray_spmd_worker is Vllm config, just skip it in BladeLLM.")
+        pytest.skip("use_ray_spmd_worker is vLLM config, just skip it in BladeLLM.")
 
     if engine == "BladeLLM" and migration_backend not in ['grpc', 'kvtransfer']:
         pytest.skip(f"BladeLLM does not support migration backend {migration_backend}")

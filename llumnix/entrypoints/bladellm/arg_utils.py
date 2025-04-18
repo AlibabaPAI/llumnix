@@ -63,6 +63,12 @@ def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser
     from blade_llm.service.args import ServingArgs
     assert isinstance(engine_args, ServingArgs)
 
+    # In llumnix, just keep the engine_client and engine in the same process.
+    engine_args.serving_multi_processing_options.disable_frontend_multiprocessing = True
+
+    # Disable signal handler in BladeLLM, as ray actor is not a process with main.
+    engine_args.disable_signal_handler = True
+
     instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)
     instance_args.init_from_engine_args(engine_args, BackendType.BLADELLM)
     manager_args = ManagerArgs.from_llumnix_config(llumnix_cfg)
@@ -81,10 +87,9 @@ def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser
         "Migrating waiting request is not supported for BladeLLM temporarily."
     assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
         "Migration feature is temporarily unavailable for pipeline parallelism in BladeLLM."
-    if engine_args.enable_disagg and manager_args.enable_migration:
-        logger.warning("Migration feature is temporarily unavailable for the engine based pd-disaggregation, "
-                       "set enable_migration to False.")
-        manager_args.enable_migration = False
+    assert not(engine_args.enable_disagg and manager_args.enable_migration), "Migration feature is \
+        temporarily unavailable for the engine based pd-disaggregation in BladeLLM."
+
     detect_unsupported_engine_feature(engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))

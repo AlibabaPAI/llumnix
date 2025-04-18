@@ -86,7 +86,7 @@ class AsyncBackQueueWrapper:
         asyncio.create_task(self._put_request_outputs_loop())
 
     async def _put_request_outputs_loop(self):
-        async def get_single_responce() -> Tuple[GenerateStreamResponse, ServerInfo]:
+        async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
             resp: GenerateStreamResponse = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
@@ -97,14 +97,14 @@ class AsyncBackQueueWrapper:
         while True:
             request_outputs, server_info_outputs = [], []
 
-            resp, server_info = await get_single_responce()
+            resp, server_info = await get_single_response()
             request_outputs.append(resp)
             server_info_outputs.append(server_info)
 
             if self.put_queue_args_queue.qsize() > 0:
                 output_size = self.put_queue_args_queue.qsize()
                 for _ in range(output_size):
-                    resp, server_info = await get_single_responce()
+                    resp, server_info = await get_single_response()
                     request_outputs.append(resp)
                     server_info_outputs.append(server_info)
 
@@ -340,11 +340,6 @@ class BackendBladeLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: ServingArgs
     ) -> None:
-        # TODO(KuilongCui): move this to serve.py
-        # In llumnix, just keep the engine_client and engine in the same process.
-        engine_args.serving_multi_processing_options.disable_frontend_multiprocessing = True
-        engine_args.disable_signal_handler = True
-
         self._config_inner_engine_logger(engine_args)
 
         # add instance_id to avoid path conflict when multi-engine running in a single pod

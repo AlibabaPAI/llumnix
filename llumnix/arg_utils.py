@@ -436,6 +436,7 @@ class LlumnixEngineArgsFactory:
         from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs # pylint: disable=import-outside-toplevel
         if isinstance(current_engine_args, BladellmEngineArgs):
             next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
+            next_engine_args.world_size = current_engine_args.get_engine_world_size()
             if self.enable_port_increment:
                 next_engine_args.override_engine_args.disagg_options_token_port_offset = (
                     self.disagg_options_token_port_offset

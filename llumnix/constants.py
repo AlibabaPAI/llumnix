@@ -14,6 +14,10 @@
 import torch
 
 
+# examples/offline_inference.py, tests/*
+MODEL_PATH: str = '/mnt/model'
+DATASET_PATH: str = '/mnt/dataset'
+
 # llumnix/manager.py
 CLEAR_REQUEST_INSTANCE_INTERVAL: float = 1000.0
 NO_INSTANCE_RETRY_GENERATE_INTERVAL: float = 1.0

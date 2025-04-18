@@ -69,6 +69,7 @@ class RequestBarrier:
 class AsyncBackQueueWrapper:
     def __init__(self, placement_group: PlacementGroup, instance_id: str,
                  request_output_queue_type: QueueType, resp_queue: asyncio.Queue) -> None:
+        self.instance_id = instance_id
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
             placement_group_bundle_index=0,
@@ -90,7 +91,7 @@ class AsyncBackQueueWrapper:
             resp: GenerateStreamResponse = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
-                logger.info("trans_wrapper finish_request {}".format(resp.req_id))
+                logger.info("engine {} finish_request {}".format(self.instance_id, resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
             return resp, server_info
 

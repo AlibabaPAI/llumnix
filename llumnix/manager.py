@@ -385,7 +385,7 @@ class Manager:
         # caused by this scale-up (see rebuild_migration_backend for details). Therefore, we simply return in this case.
         # Specifically, for not group kind migration backend, there is no need to rebuild the group.
         if self.enable_migration and self.is_group_kind_migration_backend \
-            and indeed_update and no_pending_instance:
+            and indeed_update and no_pending_instance and not self.instance_args.simulator_mode:
             asyncio.create_task(self._rebuild_migration_backend())
 
         return self.num_instances
@@ -434,7 +434,7 @@ class Manager:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
                 clear_gloo_backend_ray_resources()
-            elif indeed_update and no_pending_instance and rebuild_migration_backend:
+            elif indeed_update and no_pending_instance and rebuild_migration_backend and not self.instance_args.simulator_mode:
                 asyncio.create_task(self._rebuild_migration_backend())
 
         return self.num_instances

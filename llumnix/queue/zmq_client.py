@@ -111,8 +111,9 @@ class ZmqClient(QueueClientBase):
             socket_connection = self.socket_factory.get_socket(ip, port)
             async with socket_connection as socket:
                 response = await do_rpc_call(socket, request)
-        except (TimeoutError, zmq.ZMQError) as e:
-            logger.error("send one way rpc request failed.  %s", {e})
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.error("Send one way rpc request failed, exception: {}.".format(e))
             response = e
         if not isinstance(response, str) or response != RPC_SUCCESS_STR:
             # close the socket if something wrong

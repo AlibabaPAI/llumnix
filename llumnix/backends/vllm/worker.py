@@ -133,7 +133,7 @@ class MigrationWorker(Worker):
         try:
             self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks, request_id, is_last_stage)
         except ray.exceptions.RayActorError:
-            logger.info("rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+            logger.info("rank: {}, src_worker_handle {} is dead.".format(self.rank, src_worker_handle))
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Unexpected exception: {}".format(e))

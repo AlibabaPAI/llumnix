@@ -14,7 +14,7 @@
 from typing import List, Tuple, Optional, Callable
 
 import torch
-from func_timeout import func_set_timeout, FunctionTimedOut
+from func_timeout import func_set_timeout
 import ray
 import ray.util.collective as col
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -37,14 +37,10 @@ class ProxyActor:
         self.use_ray_spmd_worker = use_ray_spmd_worker
 
     def exec_method(self, handle, *args, **kwargs):
-        try:
-            if self.is_driver_worker and not self.use_ray_spmd_worker:
-                ret = ray.get(handle.execute_engine_method_async.remote("execute_worker_method_async", *args, **kwargs))
-            else:
-                ret = ray.get(handle.execute_method.remote(*args, **kwargs))
-        # pylint: disable=try-except-raise
-        except:
-            raise
+        if self.is_driver_worker and not self.use_ray_spmd_worker:
+            ret = ray.get(handle.execute_engine_method_async.remote("execute_worker_method_async", *args, **kwargs))
+        else:
+            ret = ray.get(handle.execute_method.remote(*args, **kwargs))
 
         return ret
 
@@ -256,16 +252,19 @@ class RayColMigrationBackend(MigrationBackendBase):
 
         try:
             init_group(world_size, rank, self.backend, group_name)
-        except FunctionTimedOut:
-            logger.info("Create migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {})."
-                .format(group_name, world_size, rank, self.backend))
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.error("Create migration backend failed "
+                         "(group_name: {}, world_size: {}, rank: {}, backbend: {}), exception: {}."
+                .format(group_name, world_size, rank, self.backend, e))
             return False
 
         self.group_name = group_name
         self.global_world_size = world_size
         self.global_rank = rank
 
-        logger.info("Create migration backend group successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
+        logger.info("Create migration backend group successfully "
+                    "(group_name: {}, world_size: {}, rank: {}, backbend: {})."
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend))
         return True
 
@@ -281,7 +280,7 @@ class RayColMigrationBackend(MigrationBackendBase):
             err_info = e
 
         if err_info is not None:
-            logger.info("Destory migration backend successfully (group_name: {}, backbend: {}), error: {}."
+            logger.error("Destory migration backend failed (group_name: {}, backbend: {}), error: {}."
                     .format(self.group_name, self.backend, err_info))
         else:
             logger.info("Destory migration backend successfully (group_name: {}, backbend: {})."

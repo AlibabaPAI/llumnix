@@ -18,7 +18,6 @@ from typing_extensions import Never
 
 import zmq
 import zmq.asyncio
-import zmq.error
 import cloudpickle
 
 from llumnix.queue.queue_server_base import QueueServerBase
@@ -68,7 +67,7 @@ class ZmqServer(QueueServerBase):
                 break
             # pylint: disable=broad-except
             except Exception as e:
-                logger.warning("QueueServer's socket bind to {} failed, exception: {}".format(rpc_path, e))
+                logger.warning("QueueServer's socket bind to {} failed, exception: {}.".format(rpc_path, e))
                 if attempt < MAX_BIND_ADDRESS_RETRY_TIMES - 1:
                     logger.warning("{} already in use, sleep {}s, and retry bind to it again.".format(rpc_path, RETRY_BIND_ADDRESS_INTERVAL))
                     time.sleep(RETRY_BIND_ADDRESS_INTERVAL)
@@ -94,13 +93,13 @@ class ZmqServer(QueueServerBase):
 
     async def put(self, item, timeout=None):
         try:
-            await asyncio.wait_for(self.queue.put(item), timeout)
+            await asyncio.wait_for(self.queue.put(item), timeout=timeout)
         except asyncio.TimeoutError as e:
             raise Full from e
 
-    async def get(self):
+    async def get(self, timeout=None):
         try:
-            return await asyncio.wait_for(self.queue.get(), timeout=None)
+            return await asyncio.wait_for(self.queue.get(), timeout=timeout)
         except asyncio.TimeoutError as e:
             raise Empty from e
 
@@ -152,7 +151,11 @@ class ZmqServer(QueueServerBase):
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
         # pylint: disable=W0703
         except Exception as e:
-            await self.socket.send_multipart([identity, cloudpickle.dumps(e)])
+            try:
+                await self.socket.send_multipart([identity, cloudpickle.dumps(e)])
+            # pylint: disable=bare-except
+            except:
+                pass
 
     async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
         try:
@@ -163,7 +166,11 @@ class ZmqServer(QueueServerBase):
                 [identity, cloudpickle.dumps(RPC_SUCCESS_STR)])
         # pylint: disable=W0703
         except Exception as e:
-            await self.socket.send_multipart([identity, cloudpickle.dumps(e)])
+            try:
+                await self.socket.send_multipart([identity, cloudpickle.dumps(e)])
+            # pylint: disable=bare-except
+            except:
+                pass
 
     async def run_server_loop(self):
         running_tasks = set()

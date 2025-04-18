@@ -13,9 +13,10 @@ from ray.experimental.internal_kv import (
     _internal_kv_put,
     _internal_kv_exists
 )
-from ray.util import placement_group_table
 
 from llumnix.logging.logger import init_logger
+from llumnix.utils import exception_wrapper
+from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -47,6 +48,7 @@ def get_instance_name(instance_id: str) -> str:
     return f"{INSTANCE_NAME_PREFIX}{instance_id}"
 
 
+@exception_wrapper
 # pylint: disable=dangerous-default-value
 def initialize_placement_group(
     placement_group_name: str,
@@ -112,22 +114,26 @@ def initialize_placement_group(
     # requested resources are available, and will timeout
     # if they cannot be provisioned.
     if block:
-        ray.get(current_placement_group.ready(), timeout=3.0)
+        try:
+            ray.get(current_placement_group.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
+        except ray.exceptions.GetTimeoutError:
+            logger.warning("Waiting for new placement group {} ready timeout.".format(placement_group_name))
+            return None
 
     return current_placement_group
 
 def get_placement_group_infos_by_state(state: str = None) -> Dict[str, str]:
     if state is None:
-        return placement_group_table().values()
+        return ray.util.placement_group_table().values()
     target_placement_group_infos = []
-    for placement_group_info in placement_group_table().values():
+    for placement_group_info in ray.util.placement_group_table().values():
         if placement_group_info["state"] == state:
             target_placement_group_infos.append(placement_group_info)
     return target_placement_group_infos
 
 def get_placement_group_infos_by_name(name: str) -> Dict[str, str]:
     target_placement_group_infos = []
-    for placement_group_info in placement_group_table().values():
+    for placement_group_info in ray.util.placement_group_table().values():
         if placement_group_info["name"] == name:
             target_placement_group_infos.append(placement_group_info)
     return target_placement_group_infos
@@ -138,6 +144,9 @@ def actor_exists(name: str) -> bool:
         return True
     except ValueError:
         return False
+    except Exception as e: # pylint: disable=broad-except
+        logger.exception("Unexpected exception: {}".format(e))
+        return False
 
 def get_actor_names_by_name_prefix(name_prefix: str) -> List[str]:
     actor_infos = ray.util.list_named_actors(True)
@@ -147,12 +156,12 @@ def get_actor_names_by_name_prefix(name_prefix: str) -> List[str]:
             target_actor_names.append(actor_info["name"])
     return target_actor_names
 
+@exception_wrapper
 def clear_gloo_backend_ray_resources():
     try:
         # clear gloo migrate backend intermediate state
         ray.kill(ray.get_actor("gloo_queue", "llumnix"))
-    # pylint: disable=broad-except
-    except Exception:
+    except ValueError:
         # gloo_queue may not have been created yet; just ignore this error.
         pass
 
@@ -163,8 +172,10 @@ def remove_placement_group(instance_id: str, placement_group: PlacementGroup = N
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
         logger.info("Remove placement group {}.".format(instance_id))
-    # pylint: disable=broad-except
-    except Exception:
+    except ValueError:
+        return False
+    except Exception as e: # pylint: disable=broad-except
+        logger.exception("Unexpected exception: {}".format(e))
         return False
     return True
 
@@ -174,8 +185,10 @@ def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) -> bool:
             server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
         ray.kill(server)
         logger.info("Kill server {}.".format(instance_id))
-    # pylint: disable=broad-except
-    except Exception:
+    except ValueError:
+        return False
+    except Exception as e: # pylint: disable=broad-except
+        logger.exception("Unexpected exception: {}".format(e))
         return False
     return True
 
@@ -185,8 +198,10 @@ def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None) -> b
             instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
         ray.kill(instance)
         logger.info("Kill instance {}.".format(instance_id))
-    # pylint: disable=broad-except
-    except Exception:
+    except ValueError:
+        return False
+    except Exception as e: # pylint: disable=broad-except
+        logger.exception("Unexpected exception: {}".format(e))
         return False
     return True
 
@@ -217,6 +232,7 @@ def get_data_from_ray_internal_kv(data_name: str) -> Union[str, None]:
 
     return value
 
+@exception_wrapper
 def put_data_to_ray_internal_kv(data_name: str, value: Any) -> None:
     if _internal_kv_initialized():
         logger.info("Put data {} to ray internal key-value storage, value: {}.".format(data_name, value))
@@ -229,6 +245,7 @@ def put_data_to_ray_internal_kv(data_name: str, value: Any) -> None:
     else:
         logger.error("Ray internal key-value storage is not initilized, failed to put the given data {}.".format(data_name))
 
+@exception_wrapper
 def log_actor_ray_info(actor_class_name: str) -> None:
     actor_name = ray.get_runtime_context().get_actor_name()
     actor_id = ray.get_runtime_context().get_actor_id()

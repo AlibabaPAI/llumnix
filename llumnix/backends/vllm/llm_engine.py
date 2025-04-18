@@ -363,9 +363,8 @@ class BackendVLLM(BackendInterface):
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.exception("Error in engine loop: {}".format(e))
+                logger.exception("Unexpected exception in engine loop: {}".format(e))
                 self._run_workers("shutdown")
-
                 previous_state = self.state
                 self.state = EngineState.CRASHED
                 logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))

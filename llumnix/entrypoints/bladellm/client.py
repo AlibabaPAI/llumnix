@@ -18,8 +18,6 @@ import copy
 import random
 from typing import Dict, List, Tuple
 
-import ray
-
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
 from blade_llm.service.communications.protocol import Stats, GenerateStreamMessage
 from blade_llm.service.communications.response import LLMResponse
@@ -94,7 +92,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Error in manager generate: {}".format(e))
+            logger.error("Manager is unavailable, exception: {}.".format(e))
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
@@ -116,15 +114,16 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 await self.instances[instance_id].generate.remote(request_id, server_info, -1, request)
-                logger.info("Manager is unavailable, directly pass request {} to instance {}.".format(request_id, instance_id))
+                logger.warning("Manager is unavailable, directly pass request {} to instance {}.".format(request_id, instance_id))
             else:
-                logger.info("Manager is unavailable, but there is no instance behind this api server, "
+                logger.error("Manager is unavailable, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager restarts.".format(WAIT_MANAGER_INTERVAL))
                 await asyncio.sleep(WAIT_MANAGER_INTERVAL)
                 return await asyncio.create_task(self._generate(request_id, request))
-        except (ray.exceptions.RayActorError, KeyError):
+        # pylint: disable=broad-except
+        except Exception as e:
             if instance_id in self.instances:
-                logger.info("Instance {} is dead.".format(instance_id))
+                logger.info("Instance {} is dead, exception: {}.".format(instance_id, e))
                 del self.instances[instance_id]
                 del self.instance_num_requests[instance_id]
                 return await asyncio.create_task(self._generate(request_id, request))
@@ -136,8 +135,9 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 logger.info("Abort request: {}.".format(req_id))
                 self.manager.abort.remote(str(req_id))
                 self.entrypoint_id2llumnix_id.pop(req_id, None)
-            except ray.exceptions.RayActorError:
-                logger.info("Manager is unavailable.")
+            # pylint: disable=broad-except
+            except Exception as e:
+                logger.info("Manager is unavailable, exeption: {}.".format(e))
 
     async def is_ready(self) -> bool:
         ready_status = await self.manager.is_ready.remote()

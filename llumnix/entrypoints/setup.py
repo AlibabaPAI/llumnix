@@ -32,7 +32,7 @@ from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext, retry_mana
 from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendType
 from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL
+from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL, SUBPROCESS_RUN_TIMEOUT
 
 
 logger = init_logger(__name__)
@@ -43,9 +43,12 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     node_ip_address = get_ip_address()
     try:
         # Stop the existing ray processes on the node first.
-        subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True)
+        subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True, timeout=SUBPROCESS_RUN_TIMEOUT)
     except subprocess.CalledProcessError as e:
         logger.error("'ray stop' failed with: \n{}".format(e.stderr))
+        sys.exit(1)
+    except Exception as e: # pylint: disable=broad-except
+        logger.error("'ray stop' failed, exeption: {}.".format(e))
         sys.exit(1)
     # Need to specify the head node ip through environment variable currently.
     if head_node_ip is None:
@@ -55,16 +58,21 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     if 'HEAD_NODE' in os.environ:
         ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
         try:
-            result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
+            result = subprocess.run(['ray', 'start', '--head', f'--port={port}'],
+                                    check=True, text=True, capture_output=True, timeout=SUBPROCESS_RUN_TIMEOUT)
         except subprocess.CalledProcessError as e:
             logger.error("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
+            sys.exit(1)
+        except Exception as e: # pylint: disable=broad-except
+            logger.error("'ray stop' failed, exeption: {}.".format(e))
             sys.exit(1)
     else:
         ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
         for attempt in range(MAX_RAY_RESTART_TIMES):
             try:
                 # wait about 2 mins by default
-                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'], check=True, text=True, capture_output=True)
+                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'],
+                                        check=True, text=True, capture_output=True, timeout=SUBPROCESS_RUN_TIMEOUT)
                 break
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RAY_RESTART_TIMES:
@@ -73,6 +81,9 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
                 else:
                     logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
                     sys.exit(1)
+            except Exception as e: # pylint: disable=broad-except
+                logger.error("'ray stop' failed, exeption: {}.".format(e))
+                sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
     return result
 
@@ -97,10 +108,10 @@ def setup_ray_cluster(entrypoints_args) -> None:
                            log_to_driver=not entrypoints_args.disable_log_to_driver)
 
 def init_manager(manager_args: ManagerArgs,
-                 instance_args: InstanceArgs = None,
-                 entrypoints_args: EntrypointsArgs = None,
-                 engine_args = None,
-                 launch_args: LaunchArgs = None,
+                 instance_args: InstanceArgs,
+                 entrypoints_args: EntrypointsArgs,
+                 engine_args,
+                 launch_args: LaunchArgs,
                  ) -> Manager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:
@@ -114,6 +125,9 @@ def init_manager(manager_args: ManagerArgs,
     except ValueError:
         manager = ray.get_actor(get_manager_name(), namespace='llumnix')
         logger.info("Get existing Manager.")
+    except Exception as e: # pylint: disable=broad-except
+        logger.exception("Failed to initialize manager, exception: {}.".format(e))
+        sys.exit(1)
     return manager
 
 def init_llumnix_components(entrypoints_args: EntrypointsArgs,
@@ -122,7 +136,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
                             engine_args,
                             launch_args: LaunchArgs,
                             ) -> Tuple[Manager, List[str], List[Llumlet], QueueServerBase]:
-    manager = init_manager(manager_args)
+    manager = init_manager(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 
     backend_type: BackendType = launch_args.backend_type
     request_output_queue_type: QueueType = QueueType(entrypoints_args.request_output_queue_type)
@@ -140,8 +154,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
             available_instances.append(instance)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Instance {} is dead.".format(instance_id))
-            logger.exception("Unexpected exception: {}".format(e))
+            logger.info("Instance {} is dead, exception: {}.".format(instance_id, e))
             retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
 
     if len(available_instance_ids) > 0:

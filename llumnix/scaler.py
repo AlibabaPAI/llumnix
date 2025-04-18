@@ -36,7 +36,7 @@ from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get
                                get_placement_group_infos_by_name, get_placement_group_infos_by_state,
                                kill_server, kill_instance, remove_placement_group,
                                get_actor_names_by_name_prefix, SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX,
-                               actor_exists, get_instance_name)
+                               actor_exists, get_instance_name, PLACEMENT_GROUP_NAME_PREFIX)
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
@@ -163,7 +163,11 @@ class Scaler:
                     if len(last_timeout_pg_infos) > 0 and last_timeout_pg_infos[0]["state"] != "REMOVED":
                         new_instance_id = self.last_timeout_instance_id
                         # pending, created(without server and instance) or rescheduling
-                        new_pg = ray.util.get_placement_group(last_timeout_pg_name)
+                        try:
+                            new_pg = ray.util.get_placement_group(last_timeout_pg_name)
+                        except ValueError:
+                            logger.warning("Placement group {} not found.".format(
+                                last_timeout_pg_name[:len(PLACEMENT_GROUP_NAME_PREFIX)]))
                     # reset
                     self.last_timeout_instance_id = None
                 pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
@@ -192,6 +196,10 @@ class Scaler:
                     # After timeout, the new placement group might be pending,
                     # created(without server and instance), rescheduling.
                     self.last_timeout_instance_id = new_instance_id
+                    await asyncio.sleep(interval)
+                    continue
+                except Exception as e: # pylint: disable=broad-except
+                    logger.exception("Failed to initialize placement group {}, exception: {}.".format(new_instance_id, e))
                     await asyncio.sleep(interval)
                     continue
                 if service_name in ["prefill", "decode"]:
@@ -368,7 +376,7 @@ class Scaler:
                     logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
                 self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
-                logger.exception("Unexpected exception: {}".format(e))
+                logger.info("Failed to initialize instance {}, exception: {}.".format(instance_id, e))
                 self.clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
@@ -436,7 +444,7 @@ class Scaler:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
                 self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
-                logger.exception("Unexpected exception: {}".format(e))
+                logger.info("Failed to initialize instance {}, exception: {}.".format(instance_id, e))
                 self.clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []
@@ -467,12 +475,12 @@ class Scaler:
         return instance_ids, instances
 
     def clear_instance_ray_resources(self, instance_id: str):
-        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL and not kill_server(instance_id):
-            logger.warning("Failed to kill server {}.".format(instance_id))
-        if not kill_instance(instance_id):
-            logger.warning("Failed to kill instance {}.".format(instance_id))
-        if not remove_placement_group(instance_id):
-            logger.warning("Failed to remove placement group {}.".format(instance_id))
+        # There could be multiple clear_instance_ray_resources calls for one error instance,
+        # so the kill operations could be failed if it is not the first attempt to kill.
+        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
+            kill_server(instance_id)
+        kill_instance(instance_id)
+        remove_placement_group(instance_id)
 
     async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
         if (

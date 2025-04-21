@@ -192,8 +192,10 @@ def as_local(data_path: str) -> str:
     local_model_path: str = os.path.join(base_model_path, base_data_name)
     if os.path.exists(local_model_path):
         return local_model_path
-    
+
     base_dataset_path: str = llumnix_envs.DATASET_PATH if llumnix_envs.DATASET_PATH else DATASET_PATH
     local_dataset_path: str = os.path.join(base_dataset_path, base_data_name)
     if os.path.exists(local_dataset_path):
         return local_dataset_path
+
+    return data_path

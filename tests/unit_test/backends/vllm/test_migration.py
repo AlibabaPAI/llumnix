@@ -196,7 +196,8 @@ async def test_migration_correctness(migration_backend, migration_request_status
 
     ray.init(namespace="llumnix", ignore_reinit_error=True, runtime_env={"env_vars": get_llumnix_env_vars()})
 
-    engine_args = EngineArgs(model=as_local("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
+    engine_args = EngineArgs(model=as_local("facebook/opt-125m"), download_dir="/mnt/model",
+                             worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
                              enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
     id_rank_map = {"0": 0, "1": 1}
     if migration_request_status == 'running':

@@ -90,7 +90,6 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="prefill",
-            max_gpu_memory_utilization=0.45
         )
         subprocess.run(prefill_launch_command, shell=True, check=True)
         decode_launch_command = generate_bladellm_launch_command(
@@ -100,7 +99,6 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="decode",
-            max_gpu_memory_utilization=0.45
         )
         subprocess.run(decode_launch_command, shell=True, check=True)
 

@@ -145,7 +145,7 @@ def generate_bladellm_launch_command(
     HEAD_NODE_IP: str = "127.0.0.1",
     ip: str = get_ip_address(),
     port: int = 37000,
-    max_num_batched_tokens: int = 16000,
+    max_num_batched_tokens: int = 4096,
     enable_llumnix: bool = True,
     enable_pd_disagg: bool = False,
     enable_migration: bool = True,
@@ -168,6 +168,7 @@ def generate_bladellm_launch_command(
         f"--disable_prompt_cache "
         f"--log_level INFO "
         f"-tp {tensor_parallel_size} "
+        f"--dist_init_addr {ip}:{port+30} "
         f"--attn_cls ragged_flash "
         f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
         f"--disable_frontend_multiprocessing "
@@ -176,7 +177,6 @@ def generate_bladellm_launch_command(
         f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
         f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role={instance_type} "
-        f"--disagg_pd.token_port={port + 10} "
         f"--naming_url={NAMING_URL} "
         f"INSTANCE.GRPC_MIGRATION_BACKEND_SERVER_PORT {port + 20} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
@@ -282,6 +282,7 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
         for ip_port in ip_ports:
             try:
                 response = requests.get(f"http://{ip_port}/is_ready", timeout=5)
+                print(f"Entrypoint {ip_port} is ready.")
                 if 'true' not in response.text.lower():
                     all_ready = False
                     break
@@ -337,7 +338,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.bladellm.serve', shell=True, check=False)
     subprocess.run('pkill -f multiprocess', shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
-    subprocess.run(f'rm -rf {NAMING_URL}', shell=True, check=False)
+    subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
     time.sleep(5.0)
 
 @pytest.fixture

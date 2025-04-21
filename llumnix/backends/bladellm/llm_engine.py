@@ -18,7 +18,6 @@ from functools import partial
 import json
 from typing import List, Optional, Tuple, Union, Iterable, Any
 from collections import defaultdict
-import threading
 import asyncio
 import queue
 
@@ -31,15 +30,13 @@ from loguru import logger as loguru_logger
 from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest
+from blade_llm.protocol import ServerRequest, GenerateStreamResponse
 from blade_llm.service.proto.bladellm_pb2 import WorkerStepResponse
-from blade_llm.service.communications.engine_msg_client import APIWrapper
 from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
-from blade_llm.service.communications.protocol import GenerateStreamResponse, GenerateStreamMessage
 from blade_llm.service.communications.engine_msg_server import EngineMsgServer
 from blade_llm.service.engine_args import CommunicationArgs
-from blade_llm.service.worker import launch_worker
+from blade_llm.service.worker import WorkerProcesses
 
 from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendInterface, EngineState
@@ -69,39 +66,46 @@ class RequestBarrier:
         await self.wait_event.wait()
 
 
-class AsyncBackQueueWrapper(APIWrapper):
-    def __init__(self, placement_group, instance_id, request_output_queue_type) -> None:
-        super().__init__(args=None, resp_queue=None)
+class AsyncBackQueueWrapper:
+    def __init__(self, placement_group: PlacementGroup, instance_id: str,
+                 request_output_queue_type: QueueType, resp_queue: asyncio.Queue) -> None:
+        self.instance_id = instance_id
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
             placement_group_bundle_index=0,
             placement_group_capture_child_tasks=True,
         )
-        self.put_queue_args_queue = queue.Queue()
-        self.put_queue_loop_thread = threading.Thread(
-            target=self._put_request_outputs_loop, args=(), daemon=True, name="put_queue_loop"
-        )
+        self.put_queue_args_queue = resp_queue
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy,
             name="AsyncPutQueueActor_"+instance_id
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
-        self.put_queue_loop_thread.start()
 
         self.request_server_map = {}
+        # asyncio.queue is not thread-safe, just create a asyncio.task
+        asyncio.create_task(self._put_request_outputs_loop())
 
-    def _put_request_outputs_loop(self):
+    async def _put_request_outputs_loop(self):
+        async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
+            resp: GenerateStreamResponse = await self.put_queue_args_queue.get()
+            server_info: ServerInfo = self.request_server_map[resp.req_id]
+            if resp.is_finished:
+                logger.info("engine {} finish_request {}".format(self.instance_id, resp.req_id))
+                self.request_server_map.pop(resp.req_id, None)
+            return resp, server_info
+
         while True:
             request_outputs, server_info_outputs = [], []
 
-            resp, server_info = self.put_queue_args_queue.get()
+            resp, server_info = await get_single_response()
             request_outputs.append(resp)
             server_info_outputs.append(server_info)
 
             if self.put_queue_args_queue.qsize() > 0:
-                request_size = self.put_queue_args_queue.qsize()
-                for _ in range(request_size):
-                    resp, server_info = self.put_queue_args_queue.get()
+                output_size = self.put_queue_args_queue.qsize()
+                for _ in range(output_size):
+                    resp, server_info = await get_single_response()
                     request_outputs.append(resp)
                     server_info_outputs.append(server_info)
 
@@ -119,53 +123,17 @@ class AsyncBackQueueWrapper(APIWrapper):
                 server_info_dict[server_id] = server_info
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
-    # pylint: disable=unused-argument
-    def _do_send(self, dst_instance_id: str, **kwargs):
-        if 'req_id' not in kwargs or 'resp' not in kwargs:
-            raise ValueError("req_id and resp must be provided")
-        req_id = kwargs.get('req_id')
-        resp = kwargs.get('resp')
-
-        if req_id not in self.request_server_map:
-            return
-
-        if req_id <= 0: # warmup request
-            assert isinstance(self.request_server_map[req_id], asyncio.Queue)
-            self.request_server_map[req_id].put_nowait(resp)
-            return
-
-        self.put_queue_args_queue.put_nowait((GenerateStreamMessage(req_id=req_id, resp=resp), self.request_server_map[req_id]))
-        if resp.is_finished:
-            logger.info("trans_wrapper finish_request {}".format(req_id))
-            self.request_server_map.pop(req_id, None)
-
-    # pylint: disable=unused-argument
-    async def send(self, dst_instance_id: str, **kwargs):
-        self._do_send(dst_instance_id, **kwargs)
-
-    def send_nowait(self, dst_instance_id: str, **kwargs):
-        self._do_send(dst_instance_id, **kwargs)
-
-    async def recv(self):
-        return None
-
     def drop_request(self, request_id: int) -> None:
         self.request_server_map.pop(request_id, None)
         logger.debug("trans_wrapper drop_request {}".format(request_id))
 
-    def add_request(self, request_id: int, server_info: ServerInfo, back_queue: asyncio.Queue = None) -> None:
-        if request_id <= 0:
-            self.request_server_map[request_id] = back_queue # warmup request
-        else:
-            self.request_server_map[request_id] = server_info
+    def add_request(self, request_id: int, server_info: ServerInfo) -> None:
+        self.request_server_map[request_id] = server_info
         logger.debug("trans_wrapper add_request {} {}".format(request_id, server_info))
 
     def clear(self):
         self.request_server_map = {}
         logger.info("trans_wrapper reset")
-
-    def stop(self):
-        pass
 
 
 class AsyncLLMEngineLlumnixMixin:
@@ -186,25 +154,25 @@ class AsyncLLMEngineLlumnixMixin:
         self.placement_group = placement_group
         self.request_output_queue_type = request_output_queue_type
 
-        self._worker_processes = launch_worker(self._args, instance_id, migration_config)
+        self._worker_processes = WorkerProcesses(self._args, instance_id, migration_config)
         self.src_worker_ip_address = src_worker_ip_address
 
         self._migration_semaphore = asyncio.Semaphore(0)
         self.request_barriers: queue.Queue = request_barriers
 
         self.migrated_request = set()
+        self.resp_queue = asyncio.Queue()
 
     @property
     def instance_info(self) -> InstanceInfo:
         return self._scheduler.llumnix_metrics.to_instance_info()
 
-    async def start(self, loop: asyncio.AbstractEventLoop):
-        await super().start(loop)
+    async def async_start(self, loop: asyncio.AbstractEventLoop):
+        await super().async_start(loop)
         self._client = self.init_client_from_engine()
-        self.trans_wrapper: AsyncBackQueueWrapper = AsyncBackQueueWrapper(self.placement_group,
-                                                                          self.instance_id,
-                                                                          self.request_output_queue_type)
-        self._scheduler.request_server_map = self.trans_wrapper.request_server_map
+        self.trans_wrapper = AsyncBackQueueWrapper(self.placement_group, self.instance_id,
+                                                   self.request_output_queue_type, self.resp_queue)
+        self._scheduler.trans_wrapper = self.trans_wrapper
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
         self.worker_channels = [grpc.aio.insecure_channel(worker) for worker in self.src_worker_ip_address]
@@ -240,8 +208,8 @@ class AsyncLLMEngineLlumnixMixin:
                 self._scheduler.id2group[request_group_id]._inference_type = \
                     RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
-    async def update_callback(self, resp_list, step_requests, metrics):
-        await super().update_callback(resp_list, step_requests, metrics)
+    async def update_callback(self, resp_list, *args, **kwargs):
+        await super().update_callback(resp_list, *args, **kwargs)
         self._update_request_inference_type(resp_list)
         self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
 
@@ -267,14 +235,6 @@ class AsyncLLMEngineLlumnixMixin:
         for channel in self.worker_channels:
             await channel.close()
 
-    async def _handle_dropped_request(self):
-        if self._dropped_req.qsize() > 0:
-            for _ in range(self._dropped_req.qsize()):
-                req_id = self._dropped_req.get_nowait()
-                self._scheduler.id2group[req_id]._status = RequestStatus.FINISHED
-                self.trans_wrapper.drop_request(req_id)
-        await super()._handle_dropped_request()
-
     async def _handle_abort(self, abort: Optional[List[Tuple[int, int, str]]] = None):
         await super()._handle_abort(abort)
         if abort is not None and len(abort) > 0:
@@ -290,7 +250,7 @@ class AsyncLLMEngineLlumnixMixin:
         logger.debug("engine {} add request {}".format(self.instance_id, server_request))
         self.trans_wrapper.add_request(server_request.id, server_info)
         # pylint: disable=protected-access
-        await self._client._add_request(server_request)
+        await self._client._add_request(server_request, self.resp_queue)
 
     async def drop_request(self, req_id: int):
         logger.debug("engine {} drop request {}".format(self.instance_id, req_id))
@@ -355,11 +315,6 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers)
 
-    def _prepare_dryrun_context(self):
-        reqs, back_queues = super()._prepare_dryrun_context()
-        for req, back_queue in zip(reqs, back_queues):
-            self.trans_wrapper.add_request(req.id, None, back_queue)
-        return reqs, back_queues
 
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
@@ -435,10 +390,10 @@ class BackendBladeLLM(BackendInterface):
                 zmq_timeout=self.engine_args.serving_multi_processing_options.zmq_timeout,
             )
             msg_server = EngineMsgServer(engine=self.engine, args=communication_args)
-            await msg_server.start(asyncio.get_event_loop(), disable_frontend_multiprocessing=True,
+            await msg_server.async_start(asyncio.get_event_loop(), disable_frontend_multiprocessing=True,
                                    enable_disagg_pd=True)
 
-        await self.engine.start(asyncio.get_event_loop())
+        await self.engine.async_start(asyncio.get_event_loop())
         self._engine_ready_event.set()
 
     async def is_ready(self) -> bool:
@@ -586,7 +541,7 @@ class BackendBladeLLM(BackendInterface):
         self.engine.scheduler.add_block_table(pre_alloc_blocks, seq.block_table_id)
 
         backend_request.reset_migration_args_dst()
-        self.engine._back_queue[backend_request.request_id] = None
+        self.engine._back_queue[backend_request.request_id] = self.engine.resp_queue
         self.engine._req_tracker.req_metrics_map[backend_request.request_id] = backend_request.req_metrics
         self.add_running_request(backend_request)
 

@@ -440,12 +440,12 @@ class LlumnixEngineArgsFactory:
             next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
             next_engine_args.world_size = current_engine_args.get_engine_world_size()
             if self.enable_port_increment:
-                next_engine_args.override_engine_args.disagg_options_token_port_offset = (
+                next_engine_args.engine_args_warpped.disagg_options_token_port_offset = (
                     self.disagg_options_token_port_offset
                 )
                 self.disagg_options_token_port_offset += 10
             if self.pdd_config.enable_engine_pd_disagg:
-                next_engine_args.override_engine_args.disagg_options_inst_role = (
+                next_engine_args.engine_args_warpped.disagg_options_inst_role = (
                     instance_type.value
                     if isinstance(instance_type, InstanceType)
                     else instance_type

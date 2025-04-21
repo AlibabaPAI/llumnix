@@ -100,6 +100,7 @@ def generate_vllm_serve_command(
     tensor_parallel_size: int = 1,
     enable_migration: bool = True,
     enforce_eager: bool = True,
+    max_instances: int = 4,
     **kwargs
 ):
     command = (
@@ -126,6 +127,7 @@ def generate_vllm_serve_command(
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
+        f"--max_instances {max_instances} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--config-file {config_path} "
@@ -201,6 +203,7 @@ def generate_bladellm_serve_command(
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
+    max_instances: int = 4,
     **kwargs
 ):
     command = (
@@ -229,6 +232,7 @@ def generate_bladellm_serve_command(
         f"MANAGER.ENABLE_MIGRATION {enable_migration} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"MANAGER.ENABLE_PORT_INCREMENT True "
+        f"MANAGER.MAX_INSTANCES {max_instances} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     return command

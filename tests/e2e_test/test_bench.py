@@ -119,6 +119,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
 
     ip_ports = []
     device_count = min(4, torch.cuda.device_count())
+    num_instances = device_count
 
     if "vLLM" in engine:
         generate_launch_command = generate_vllm_launch_command
@@ -188,7 +189,8 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
                                                enable_pd_disagg=enable_pd_disagg,
                                                enable_simulator=enable_simulator,
                                                request_output_queue_type=request_output_queue_type,
-                                               enable_migration=enable_migration)
+                                               enable_migration=enable_migration,
+                                               max_instances=num_instances)
         subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 

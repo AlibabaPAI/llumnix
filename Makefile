@@ -22,6 +22,7 @@ vllm_install:
 .PHONY: bladellm_install
 bladellm_install:
 	@pip install -e .[bladellm]
+	@make proto
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed

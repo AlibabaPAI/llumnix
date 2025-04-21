@@ -34,7 +34,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, try_convert_to_local_path
 from llumnix.ray_utils import (get_placement_group_name, get_server_name, get_instance_name,
                                remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
                                kill_instance, get_manager_name, get_scaler_name,
@@ -137,7 +137,7 @@ def init_manager_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio=
                                enable_pdd_node_affinity_scheduling=enable_pdd_node_affinity_scheduling)
     instance_args = InstanceArgs(migration_backend="rayrpc")
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000)
-    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     launch_args = LaunchArgs(launch_mode=launch_mode, backend_type=BackendType.VLLM)
 
     # As mock_manager can not be initialized to ray actor, it is initialized as local variable.
@@ -204,7 +204,7 @@ def test_init_llumlet(ray_env, llumlet):
     ray.get(llumlet.is_ready.remote())
 
 def test_init_instances(ray_env, manager):
-    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     node_id = ray.get_runtime_context().get_node_id()
     _, instances = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.VLLM, InstanceArgs(), engine_args,
                                                          node_id))
@@ -216,7 +216,8 @@ def test_init_instances_sim(ray_env, manager):
     # pylint: disable=import-outside-toplevel
     # cannot catch by pytest.raises
     try:
-        engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
+        engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model",
+                                 worker_use_ray=True, enforce_eager=True)
         node_id = ray.get_runtime_context().get_node_id()
         _, _ = ray.get(manager.init_instances.remote(QueueType("rayqueue"), BackendType.SIM_VLLM,
                                                      InstanceArgs(profiling_result_file_path="/"), engine_args, node_id))
@@ -547,7 +548,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_pd_disagg_deployment_states(ray_env):
     manager_args = ManagerArgs(enable_migration=True, enable_pd_disagg=True, pd_ratio="1:2")
-    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     manager = Manager.from_args(entrypoints_args=EntrypointsArgs(), manager_args=manager_args,
                                 instance_args=InstanceArgs(migration_backend="rayrpc"),
                                 engine_args=engine_args, launch_args=LaunchArgs(LaunchMode.LOCAL, BackendType.VLLM))

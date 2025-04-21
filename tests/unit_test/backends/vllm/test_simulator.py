@@ -13,6 +13,7 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
+from llumnix.utils import try_convert_to_local_path
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -31,7 +32,7 @@ class MockBackendSim(BackendSimVLLM):
 
 @pytest.mark.asyncio
 async def test_executor():
-    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True,
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                              enforce_eager=True, disable_async_output_proc=True)
     engine_config = engine_args.create_engine_config()
     latency_mem = LatencyMemData({},{},{})
@@ -75,7 +76,7 @@ async def test_executor():
 async def test_backend(ray_env):
     # TODO(ZeldaHuang): add tests for BackendSimVLLM methods
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
-    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True,
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                              enforce_eager=True, disable_async_output_proc=True)
     migration_config = MigrationConfig("SR", "gloo", 16, 1, 4, 5, 20)
 

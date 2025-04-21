@@ -24,6 +24,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
+from llumnix.utils import try_convert_to_local_path
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -54,7 +55,8 @@ class MockLlumlet(Llumlet):
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Need at least 1 GPU to run the test.")
 def test_engine_step_exception(ray_env):
-    engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", max_model_len=8, worker_use_ray=True, enforce_eager=True)
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model",
+                             max_model_len=8, worker_use_ray=True, enforce_eager=True)
 
     # wait previous test to release the GPU memory
     time.sleep(5.0)

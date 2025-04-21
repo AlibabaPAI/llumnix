@@ -10,7 +10,7 @@ from vllm.sampling_params import SamplingParams
 
 from llumnix import (Manager, launch_ray_cluster, connect_to_ray_cluster, init_manager,
                      ManagerArgs, InstanceArgs, Llumlet, ServerInfo, QueueType, BackendType)
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, try_convert_to_local_path
 from llumnix.queue.ray_queue_server import RayQueueServer
 
 from tests.conftest import cleanup_ray_env_func
@@ -38,7 +38,7 @@ connect_to_ray_cluster(port=ray_cluster_port)
 # Set manager args and engine args.
 manager_args = ManagerArgs()
 instance_args = InstanceArgs()
-engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True,
+engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370, enforce_eager=True)
 node_id = ray.get_runtime_context().get_node_id()
 

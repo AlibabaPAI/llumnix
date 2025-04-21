@@ -118,7 +118,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
     base_port = 20000 + test_times * 100
 
     ip_ports = []
-    device_count = torch.cuda.device_count()
+    device_count = min(4, torch.cuda.device_count())
 
     if "vLLM" in engine:
         generate_launch_command = generate_vllm_launch_command
@@ -229,8 +229,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
 
     if num_prompts == 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
-            f.write(f"Run Test: {request.node.name}")
-            f.write(parse_log_file(title=request_output_queue_type))
+            f.write(parse_log_file(title=request.node.name))
 
     await asyncio.sleep(3)
 

@@ -151,8 +151,9 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
     base_port = 30000 + test_times * 100
     ip_ports = []
     instance_output_logs = []
-    device_count = torch.cuda.device_count()
+    device_count = min(4, torch.cuda.device_count())
     num_instances = device_count // tensor_parallel_size
+
     if engine == "vLLM":
         for i in range(num_instances):
             ip_ports.append(f"{ip}:{base_port+i}")

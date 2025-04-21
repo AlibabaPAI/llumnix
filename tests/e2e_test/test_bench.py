@@ -21,7 +21,7 @@ import pytest
 import torch
 import numpy as np
 
-from llumnix.utils import get_ip_address, as_local
+from llumnix.utils import get_ip_address, try_convert_to_local_path
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -78,7 +78,7 @@ def parse_log_file(title: str):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
-@pytest.mark.parametrize("model", [as_local('Qwen/Qwen-7B')])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])

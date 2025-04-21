@@ -18,7 +18,7 @@ import uuid
 import pytest
 import requests
 
-from llumnix.utils import get_ip_address, as_local
+from llumnix.utils import get_ip_address, try_convert_to_local_path
 
 
 def generate_vllm_launch_command(
@@ -30,7 +30,7 @@ def generate_vllm_launch_command(
     instances_num: int = 1,
     dispatch_policy: str = "load",
     migration_backend: str = "gloo",
-    model: str = as_local("facebook/opt-125m"),
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
     max_model_len: int = 4096,
     log_instance_info: bool = False,
     log_request_timestamps: bool = False,
@@ -86,7 +86,7 @@ def generate_vllm_serve_command(
     port: int = 37000,
     dispatch_policy: str = "load",
     migration_backend: str = "gloo",
-    model: str = as_local("facebook/opt-125m"),
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
     max_model_len: int = 4096,
     log_instance_info: bool = False,
     log_request_timestamps: bool = True,
@@ -140,7 +140,7 @@ NAMING_URL = "file:/tmp/llumnix/naming"
 def generate_bladellm_launch_command(
     config_file: str = "configs/bladellm.yml",
     result_filename: str = "",
-    model: str = as_local("facebook/opt-125m"),
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
     HEAD_NODE_IP: str = "127.0.0.1",
     ip: str = get_ip_address(),
     port: int = 37000,
@@ -188,7 +188,7 @@ def generate_bladellm_launch_command(
 def generate_bladellm_serve_command(
     config_file: str = "configs/bladellm.yml",
     result_filename: str = "",
-    model: str = as_local("facebook/opt-125m"),
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
     ip: str = get_ip_address(),
     port: int = 37000,
     max_num_batched_tokens: int = 16000,

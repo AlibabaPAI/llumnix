@@ -184,7 +184,7 @@ def check_free_port(host='0.0.0.0', port=8081):
         else:
             raise
 
-def as_local(data_path: str) -> str:
+def try_convert_to_local_path(data_path: str) -> str:
     if os.path.isabs(data_path):
         return data_path
 

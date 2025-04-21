@@ -30,7 +30,7 @@ from llumnix.backends.utils import BackendType
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import get_llumnix_env_vars, as_local
+from llumnix.utils import get_llumnix_env_vars, try_convert_to_local_path
 from llumnix.ray_utils import (initialize_placement_group, get_placement_group_name,
                                remove_placement_group, kill_instance)
 
@@ -196,7 +196,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
 
     ray.init(namespace="llumnix", ignore_reinit_error=True, runtime_env={"env_vars": get_llumnix_env_vars()})
 
-    engine_args = EngineArgs(model=as_local("facebook/opt-125m"), download_dir="/mnt/model",
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model",
                              worker_use_ray=True, tensor_parallel_size=tensor_parallel_size,
                              enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
     id_rank_map = {"0": 0, "1": 1}
@@ -365,7 +365,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("disable_async_output_proc", [False, True])
 async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_async_output_proc):
-    engine_args = EngineArgs(model=as_local("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
+    engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                              enforce_eager=True, disable_async_output_proc=disable_async_output_proc)
     id_rank_map = {"0":0, "1":1}
 

@@ -37,7 +37,7 @@ class BladellmEngineArgs(LlumnixEngineArgs):
         self.world_size: int = None
         self.instance_id: str = None
 
-    def get_overridden_engine_args(self):
+    def unwrap_engine_args_if_needed(self):
         engine_args = pickle.loads(self.engine_args)
         engine_override_args = self.override_engine_args
         if engine_args.disagg_options:
@@ -102,7 +102,7 @@ def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser
     engine_args.disable_signal_handler = True
 
     instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)
-    instance_args.init_from_engine_args(engine_args, BackendType.BLADELLM)
+    instance_args.init_from_engine_args(engine_args)
     manager_args = ManagerArgs.from_llumnix_config(llumnix_cfg)
     manager_args.init_from_instance_args(instance_args)
     entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_cfg)

@@ -127,7 +127,7 @@ def generate_vllm_serve_command(
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
-        f"--max_instances {max_instances} "
+        f"--max-instances {max_instances} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--config-file {config_path} "

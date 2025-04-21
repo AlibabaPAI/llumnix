@@ -185,8 +185,11 @@ def check_free_port(host='0.0.0.0', port=8081):
             raise
 
 def as_local(data_path: str) -> str:
+    if os.path.isabs(data_path):
+        return data_path
+
     assert "/" in data_path
-    base_data_name = data_path.split("/")[-1]
+    base_data_name = os.path.basename(data_path)
 
     base_model_path: str = llumnix_envs.MODEL_PATH if llumnix_envs.MODEL_PATH else MODEL_PATH
     local_model_path: str = os.path.join(base_model_path, base_data_name)

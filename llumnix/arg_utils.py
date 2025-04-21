@@ -378,7 +378,7 @@ class LlumnixEngineArgs(ABC):
         self.backend_type: BackendType = backend_type
 
     @abstractmethod
-    def get_overridden_engine_args(self):
+    def unwrap_engine_args_if_needed(self):
         # returun the engine args after overriding
         pass
 
@@ -425,7 +425,7 @@ class LlumnixEngineArgsFactory:
                 )
 
     def gen_next_engine_args(
-        self, current_engine_args: LlumnixEngineArgs, instance_type: str | InstanceType
+        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
             return self.engine_args_dict[instance_type]
@@ -500,7 +500,8 @@ class InstanceArgs:
                 if hasattr(_C.INSTANCE, attr.name.upper()):
                     setattr(self, attr.name, getattr(_C.INSTANCE, attr.name.upper()))
 
-    def init_from_engine_args(self, engine_args: LlumnixEngineArgs, backend_type: BackendType):
+    def init_from_engine_args(self, engine_args: LlumnixEngineArgs):
+        backend_type = engine_args.backend_type
         if backend_type == BackendType.BLADELLM:
             self.enable_engine_pd_disagg = engine_args.enable_disagg
             if self.enable_engine_pd_disagg:

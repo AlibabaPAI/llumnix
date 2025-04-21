@@ -27,7 +27,7 @@ class APIServerActorBladeLLM(APIServerActor):
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
         # bladellm engine_args is dumped by pickle
-        engine_args = engine_args.get_overridden_engine_args()
+        engine_args = engine_args.unwrap_engine_args_if_needed()
         engine_args.host = self.host
         loop = asyncio.new_event_loop()
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)

@@ -371,7 +371,7 @@ class LaunchArgs:
 class LlumnixEngineArgs(ABC):
 
     def __init__(
-        self, engine_args, backend_type
+        self, engine_args, backend_type: BackendType
     ) -> None:
         self.engine_args = engine_args
         self.override_engine_args = None
@@ -425,15 +425,17 @@ class LlumnixEngineArgsFactory:
                 )
 
     def gen_next_engine_args(
-        self, current_engine_args: LlumnixEngineArgs, instance_type
-    ):
+        self, current_engine_args: LlumnixEngineArgs, instance_type: str | InstanceType
+    ) -> LlumnixEngineArgs:
         if self.load_registered_service:
             return self.engine_args_dict[instance_type]
 
         engine_args_copied = copy.deepcopy(current_engine_args.engine_args)
 
         # lazy import to void circular import
-        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs # pylint: disable=import-outside-toplevel
+        # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
+
         if isinstance(current_engine_args, BladellmEngineArgs):
             next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
             next_engine_args.world_size = current_engine_args.get_engine_world_size()
@@ -450,7 +452,9 @@ class LlumnixEngineArgsFactory:
                 )
             return next_engine_args
 
-        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs # pylint: disable=import-outside-toplevel
+        # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+
         if isinstance(current_engine_args, VllmEngineArgs):
             return VllmEngineArgs(engine_args=engine_args_copied)
 

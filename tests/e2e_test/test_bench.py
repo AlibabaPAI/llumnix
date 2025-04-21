@@ -84,7 +84,7 @@ def parse_log_file(title: str):
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
+async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enable_simulator,
                                 model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
@@ -229,6 +229,7 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
 
     if num_prompts == 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
+            f.write(f"Run Test: {request.node.name}")
             f.write(parse_log_file(title=request_output_queue_type))
 
     await asyncio.sleep(3)

@@ -105,7 +105,7 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, tensor_parallel_size,
+async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, model, tensor_parallel_size,
                                    migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
@@ -235,6 +235,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
             [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
+            f.write(f"Run Test: {request.node.name}")
             f.write(to_markdown_table(data))
         await asyncio.sleep(10.0)
 

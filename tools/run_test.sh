@@ -17,5 +17,5 @@ else
     exit 1
 fi
 
-nvidia-docker run --rm -t --net host --ipc host -v ${PWD}:/workspace -v /mnt:/mnt -w /workspace \
+nvidia-docker run --rm -t --net host --ipc host -v ${PWD}:/test_workspace -v /mnt:/mnt -w /test_workspace \
   "$image" sh -c "$install_command > /dev/null && make $test_mode"

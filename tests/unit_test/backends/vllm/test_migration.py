@@ -366,7 +366,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
 async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_async_output_proc):
     engine_args = VllmEngineArgs(
         engine_args=EngineArgs(
-            try_convert_to_local_path("facebook/opt-125m")
+            try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
             worker_use_ray=True,
             enforce_eager=True,

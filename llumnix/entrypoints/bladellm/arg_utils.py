@@ -33,27 +33,27 @@ class BladellmEngineArgs(LlumnixEngineArgs):
             engine_args=engine_args,
             backend_type=BackendType.BLADELLM,
         )
-        self.override_engine_args = EngineOverrideArgs()
+        self.engine_args_warpped = EngineArgsWrapped()
         self.world_size: int = None
         self.instance_id: str = None
 
     def unwrap_engine_args_if_needed(self):
         engine_args = pickle.loads(self.engine_args)
-        engine_override_args = self.override_engine_args
+        engine_args_warpped = self.engine_args_warpped
         if engine_args.disagg_options:
-            if engine_override_args.disagg_options_token_port_offset:
-                engine_args.disagg_options.token_port += engine_override_args.disagg_options_token_port_offset
-            if engine_override_args.disagg_options_inst_role:
-                engine_args.disagg_options.inst_role = engine_override_args.disagg_options_inst_role
-            if engine_override_args.engine_disagg_inst_id:
-                engine_args.disagg_options.inst_id = engine_override_args.engine_disagg_inst_id
+            if engine_args_warpped.disagg_options_token_port_offset:
+                engine_args.disagg_options.token_port += engine_args_warpped.disagg_options_token_port_offset
+            if engine_args_warpped.disagg_options_inst_role:
+                engine_args.disagg_options.inst_role = engine_args_warpped.disagg_options_inst_role
+            if engine_args_warpped.engine_disagg_inst_id:
+                engine_args.disagg_options.inst_id = engine_args_warpped.engine_disagg_inst_id
         return engine_args
 
     def get_engine_world_size(self):
         return self.world_size
 
 @dataclass
-class EngineOverrideArgs:
+class EngineArgsWrapped:
     # bladellm engine args need to override
     disagg_options_token_port_offset: int = field(default=None)
     disagg_options_inst_role: str = field(default=None)

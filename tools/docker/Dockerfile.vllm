@@ -1,22 +1,22 @@
 FROM nvcr.io/nvidia/pytorch:23.10-py3
 
 ARG BRANCH="main"
-ARG COMMIT_ID="unknown"
 
 RUN apt-get update && \
     apt-get install -y bc && \
     wget -O /tmp/bazel.deb "https://github.com/bazelbuild/bazel/releases/download/5.1.0/bazel_5.1.0-linux-x86_64.deb" && \
     dpkg -i /tmp/bazel.deb && \
     rm /tmp/bazel.deb && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    apt-get clean
 
-RUN git clone https://github.com/AlibabaPAI/llumnix.git && \
-    cd llumnix && \
+RUN mkdir -p /intall_workspace/llumnix && \
+    cd /intall_workspace/llumnix && \
+    git clone https://github.com/AlibabaPAI/llumnix.git . && \
     git fetch origin ${BRANCH} && \
     git checkout ${BRANCH} && \
-    git checkout ${COMMIT_ID} && \
     make pygloo && \
     make check_pylint_installed && \
     make check_pytest_installed && \
     make vllm_install
+
+RUN rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

@@ -1,6 +1,7 @@
 ray[default]
 pyarrow  # Required for Ray data.
-aiohttp
+aiohttp == 3.8.4
+aiohttp-cors == 0.7.0
 pandas
 matplotlib
 pyyaml

@@ -394,7 +394,7 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
-    manager, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL)
+    manager, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
     await asyncio.sleep(60.0)
 
     num_instances = ray.get(manager.scale_up.remote([], [], [], []))
@@ -418,7 +418,7 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
-    manager, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL)
+    manager, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
     await asyncio.sleep(60.0)
 
     num_instances = ray.get(manager.scale_up.remote([], [], [], []))
@@ -491,7 +491,8 @@ def test_load_registered_service(ray_env, manager, load_registered_service, enab
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env):
-    manager, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, enable_pd_disagg=True, pd_ratio="1:1")
+    manager, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL, max_instances=4,
+                                                                enable_pd_disagg=True, pd_ratio="1:1")
     await asyncio.sleep(60.0)
     num_instances = ray.get(manager.scale_up.remote([], [], [], []))
     assert num_instances == 4
@@ -511,7 +512,6 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
             num_decode_instances += 1
             decode_instance_ids.append(ray.get(instance_handle.get_instance_info.remote()).instance_id)
 
-    assert torch.cuda.device_count() == 4
     assert num_prefill_instances == 2 and num_decode_instances == 2
     assert set(prefill_instance_ids).union(set(decode_instance_ids)) == set(curr_instances.keys())
 

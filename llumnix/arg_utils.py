@@ -500,8 +500,7 @@ class InstanceArgs:
                 if hasattr(_C.INSTANCE, attr.name.upper()):
                     setattr(self, attr.name, getattr(_C.INSTANCE, attr.name.upper()))
 
-    def init_from_engine_args(self, engine_args: LlumnixEngineArgs):
-        backend_type = engine_args.backend_type
+    def init_from_engine_args(self, engine_args, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
             self.enable_engine_pd_disagg = engine_args.enable_disagg
             if self.enable_engine_pd_disagg:

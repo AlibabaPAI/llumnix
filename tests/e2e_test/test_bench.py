@@ -219,6 +219,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
 
         for future in as_completed(future_to_command):
             process = future.result()
+            process.wait()
             assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
 
     await asyncio.sleep(5)

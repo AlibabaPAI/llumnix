@@ -216,6 +216,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
 
         for future in as_completed(future_to_command):
             process = future.result()
+            process.wait()
             assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
 
     wait_for_all_instances_finished()

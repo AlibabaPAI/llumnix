@@ -15,9 +15,10 @@ import os
 import time
 import subprocess
 import uuid
+from typing import Optional
+
 import pytest
 import requests
-from typing import Optional
 
 from llumnix.utils import get_ip_address, try_convert_to_local_path
 
@@ -188,7 +189,6 @@ def generate_bladellm_launch_command(
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
-    print(command)
     return command
 
 def generate_bladellm_serve_command(

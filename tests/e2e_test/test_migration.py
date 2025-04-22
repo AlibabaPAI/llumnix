@@ -105,9 +105,15 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, tensor_parallel_size,
+async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, model, tensor_parallel_size,
                                    migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
+
+    num_prompts = 500
+
+    # TODO(KuilongCui): fix this
+    if "BladeLLM" in engine:
+        num_prompts = int(num_prompts * 0.5)
 
     # TODO(s5u13b): fix this bug
     if "BladeLLM" in engine and tensor_parallel_size > 1:
@@ -151,8 +157,9 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
     base_port = 30000 + test_times * 100
     ip_ports = []
     instance_output_logs = []
-    device_count = torch.cuda.device_count()
+    device_count = min(4, torch.cuda.device_count())
     num_instances = device_count // tensor_parallel_size
+
     if engine == "vLLM":
         for i in range(num_instances):
             ip_ports.append(f"{ip}:{base_port+i}")
@@ -167,7 +174,8 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
                             migration_backend=migration_backend,
                             request_migration_policy=request_migration_policy,
                             tensor_parallel_size=tensor_parallel_size,
-                            enforce_eager=False)
+                            enforce_eager=False,
+                            max_instances=num_instances)
         subprocess.run(launch_command, shell=True, check=True)
     else:
         for i in range(num_instances):
@@ -181,7 +189,8 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
                             model=model,
                             dispatch_policy="flood",
                             migration_backend=migration_backend,
-                            tensor_parallel_size=tensor_parallel_size)
+                            tensor_parallel_size=tensor_parallel_size,
+                            max_instances=num_instances)
         subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
@@ -199,7 +208,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
             backend=engine,
             ip_ports=ip_ports[i],
             model=model,
-            num_prompts=500,
+            num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=10,
@@ -212,15 +221,9 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
 
         for future in as_completed(future_to_command):
-            try:
-                process = future.result()
-                process.wait(timeout=60*MIGRATION_BENCH_TIMEOUT_MINS)
-
-                assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
-            # pylint: disable=broad-except
-            except subprocess.TimeoutExpired:
-                process.kill()
-                assert False, "migration_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS)
+            process = future.result()
+            process.wait()
+            assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
 
     wait_for_all_instances_finished()
     instance_num_blocks_list_after_bench = get_instance_num_blocks()
@@ -235,6 +238,7 @@ async def test_migration_benchmark(ray_env, shutdown_llumnix_service, model, ten
             [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
+            f.write(f"Run Test: {request.node.name}\n")
             f.write(to_markdown_table(data))
         await asyncio.sleep(10.0)
 

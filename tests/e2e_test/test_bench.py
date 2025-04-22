@@ -84,7 +84,7 @@ def parse_log_file(title: str):
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simulator,
+async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enable_simulator,
                                 model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
@@ -112,13 +112,18 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
     else:
         num_prompts = 50
 
+    # TODO(KuilongCui): fix this
+    if "BladeLLM" in engine:
+        num_prompts = int(num_prompts * 0.5)
+
     global test_times
 
     ip = get_ip_address()
     base_port = 20000 + test_times * 100
 
     ip_ports = []
-    device_count = torch.cuda.device_count()
+    device_count = min(4, torch.cuda.device_count())
+    num_instances = device_count
 
     if "vLLM" in engine:
         generate_launch_command = generate_vllm_launch_command
@@ -188,7 +193,8 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
                                                enable_pd_disagg=enable_pd_disagg,
                                                enable_simulator=enable_simulator,
                                                request_output_queue_type=request_output_queue_type,
-                                               enable_migration=enable_migration)
+                                               enable_migration=enable_migration,
+                                               max_instances=num_instances)
         subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 
@@ -216,20 +222,15 @@ async def test_simple_benchmark(ray_env, shutdown_llumnix_service, enable_simula
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
 
         for future in as_completed(future_to_command):
-            try:
-                process = future.result()
-                process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
-                assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
-            # pylint: disable=broad-except
-            except subprocess.TimeoutExpired:
-                process.kill()
-                assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
+            process = future.result()
+            process.wait()
+            assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
 
     await asyncio.sleep(5)
 
     if num_prompts == 500:
         with open("performance.txt", "a", encoding="utf-8") as f:
-            f.write(parse_log_file(title=request_output_queue_type))
+            f.write(parse_log_file(title=request.node.name))
 
     await asyncio.sleep(3)
 

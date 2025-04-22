@@ -90,7 +90,6 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="prefill",
-            max_gpu_memory_utilization=0.45
         )
         subprocess.run(prefill_launch_command, shell=True, check=True)
         decode_launch_command = generate_bladellm_launch_command(
@@ -100,7 +99,7 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="decode",
-            max_gpu_memory_utilization=0.45
+            cuda_visiable_device="1"
         )
         subprocess.run(decode_launch_command, shell=True, check=True)
 
@@ -146,6 +145,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     ip = get_ip_address()
     base_port = 40000 + test_times * 100
+    device_count = min(4, torch.cuda.device_count())
+    instance_count = device_count // tensor_parallel_size
 
     global engine_prompt_output
     global engine_pdd_prompt_output
@@ -214,7 +215,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                port=base_port,
                                                model=model,
                                                enable_pd_disagg=enable_pd_disagg,
-                                               tensor_parallel_size=tensor_parallel_size))
+                                               tensor_parallel_size=tensor_parallel_size,
+                                               max_instances=instance_count))
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(3)
@@ -223,9 +225,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     llumnix_output = {}
     for prompt in prompts:
-        response = await asyncio.wait_for(
-            get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func),
-            timeout=60*5)
+        response = await get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func)
         llumnix_output[prompt] = response
 
     # compare

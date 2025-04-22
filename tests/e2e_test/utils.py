@@ -15,6 +15,8 @@ import os
 import time
 import subprocess
 import uuid
+from typing import Optional
+
 import pytest
 import requests
 
@@ -100,6 +102,7 @@ def generate_vllm_serve_command(
     tensor_parallel_size: int = 1,
     enable_migration: bool = True,
     enforce_eager: bool = True,
+    max_instances: int = 4,
     **kwargs
 ):
     command = (
@@ -126,6 +129,7 @@ def generate_vllm_serve_command(
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
+        f"--max-instances {max_instances} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--config-file {config_path} "
@@ -150,14 +154,16 @@ def generate_bladellm_launch_command(
     enable_migration: bool = True,
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
-    engine_disagg_transfer_type: str = "ipc",
+    engine_disagg_transfer_type: str = "rdma",
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
+    cuda_visiable_device: Optional[str] = None,
     **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+        f"{f'CUDA_VISIBLE_DEVICES={cuda_visiable_device} ' if cuda_visiable_device else ''}"
         f"nohup blade_llm_server "
         f"--host {ip} "
         f"--port {port} "
@@ -201,6 +207,7 @@ def generate_bladellm_serve_command(
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
+    max_instances: int = 4,
     **kwargs
 ):
     command = (
@@ -229,6 +236,7 @@ def generate_bladellm_serve_command(
         f"MANAGER.ENABLE_MIGRATION {enable_migration} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"MANAGER.ENABLE_PORT_INCREMENT True "
+        f"MANAGER.MAX_INSTANCES {max_instances} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     return command
@@ -335,7 +343,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
     subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.bladellm.serve', shell=True, check=False)
-    subprocess.run('pkill -f multiprocess', shell=True, check=False)
+    subprocess.run('pkill -f multiprocessing', shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
     subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
     time.sleep(5.0)
@@ -343,6 +351,7 @@ def shutdown_llumnix_service_func():
 @pytest.fixture
 def shutdown_llumnix_service():
     subprocess.run('rm -rf instance_*.out', shell=True, check=False)
+    subprocess.run('rm -rf nohup.out', shell=True, check=False)
     yield
     shutdown_llumnix_service_func()
 

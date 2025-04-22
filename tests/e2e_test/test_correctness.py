@@ -99,6 +99,7 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="decode",
+            cuda_visiable_device="1"
         )
         subprocess.run(decode_launch_command, shell=True, check=True)
 

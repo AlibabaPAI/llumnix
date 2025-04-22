@@ -11,9 +11,9 @@ if [[ "$test_mode" == *"vllm"* ]]; then
     install_command="make vllm_install"
     docker_options="--net host --ipc host"
 elif [[ "$test_mode" == *"bladellm"* ]]; then
-    image="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-bladellm-base-dev:202504220000_386530_2b436d6"
+    image="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-bladellm-base-dev:202504221111_386530_2b436d6"
     install_command="make bladellm_install"
-    docker_options="--net host --ipc host --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/rdma_cm"
+    docker_options="--net host --ipc host --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1 --device=/dev/infiniband/rdma_cm"
 else
     echo "Error: Invalid test_mode '$test_mode'."
     exit 1

@@ -17,6 +17,7 @@ import subprocess
 import uuid
 import pytest
 import requests
+from typing import Optional
 
 from llumnix.utils import get_ip_address, try_convert_to_local_path
 
@@ -152,14 +153,16 @@ def generate_bladellm_launch_command(
     enable_migration: bool = True,
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
-    engine_disagg_transfer_type: str = "ipc",
+    engine_disagg_transfer_type: str = "rdma",
     max_gpu_memory_utilization: float = 0.85,
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
+    cuda_visiable_device: Optional[str] = None,
     **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
+        f"{f'CUDA_VISIBLE_DEVICES={cuda_visiable_device} ' if cuda_visiable_device else ''}"
         f"nohup blade_llm_server "
         f"--host {ip} "
         f"--port {port} "
@@ -185,6 +188,7 @@ def generate_bladellm_launch_command(
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
+    print(command)
     return command
 
 def generate_bladellm_serve_command(

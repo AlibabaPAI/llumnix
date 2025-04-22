@@ -456,7 +456,9 @@ class LlumnixEngineArgsFactory:
         from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
 
         if isinstance(current_engine_args, VllmEngineArgs):
-            return VllmEngineArgs(engine_args=engine_args_copied)
+            vllm_engine_args = VllmEngineArgs(engine_args=engine_args_copied)
+            vllm_engine_args.backend_type = current_engine_args.backend_type
+            return vllm_engine_args
 
         raise TypeError(
             "Unsupported engine args type when generating next engine args."

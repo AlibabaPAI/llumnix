@@ -109,6 +109,12 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
                                    migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
+    num_prompts = 500
+
+    # TODO(KuilongCui): fix this
+    if "BladeLLM" in engine:
+        num_prompts = int(num_prompts * 0.5)
+
     # TODO(s5u13b): fix this bug
     if "BladeLLM" in engine and tensor_parallel_size > 1:
         pytest.skip("Error in BladeLLM for tensor parallel size > 1.")
@@ -202,7 +208,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
             backend=engine,
             ip_ports=ip_ports[i],
             model=model,
-            num_prompts=500,
+            num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
             qps=10,

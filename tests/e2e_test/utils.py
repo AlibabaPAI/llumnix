@@ -350,7 +350,8 @@ def shutdown_llumnix_service_func():
 
 @pytest.fixture
 def shutdown_llumnix_service():
-    # subprocess.run('rm -rf instance_*.out', shell=True, check=False)
+    subprocess.run('rm -rf instance_*.out', shell=True, check=False)
+    subprocess.run('rm -rf nohup.out', shell=True, check=False)
     yield
     shutdown_llumnix_service_func()
 

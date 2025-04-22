@@ -101,6 +101,10 @@ def backup_error_log(func_name):
             src_file = os.path.join(src_dir, filename)
             shutil.copy(src_file, dst_dir)
 
+        elif filename.startswith("nohup"):
+            src_file = os.path.join(src_dir, filename)
+            shutil.copy(src_file, dst_dir)
+
     file_path = os.path.join(dst_dir, 'test.info')
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(f'{func_name}')

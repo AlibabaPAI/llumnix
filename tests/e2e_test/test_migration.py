@@ -231,7 +231,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
             [f'{migration_backend}_speed(GB/s)'] + [f"{average_speed[key]:.2f}" for key in sorted_keys]
         ]
         with open("performance.txt", "a", encoding="utf-8") as f:
-            f.write(f"Run Test: {request.node.name}")
+            f.write(f"Run Test: {request.node.name}\n")
             f.write(to_markdown_table(data))
         await asyncio.sleep(10.0)
 

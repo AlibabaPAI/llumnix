@@ -73,7 +73,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
         -> Tuple[EntrypointsArgs, ManagerArgs, InstanceArgs, AsyncEngineArgs]:
     engine_args = AsyncEngineArgs.from_cli_args(cli_args)
     instance_args: InstanceArgs = InstanceArgs.from_llumnix_config(llumnix_config)
-    instance_args.init_from_engine_args(engine_args)
+    instance_args.init_from_engine_args(engine_args, BackendType.VLLM)
     manager_args = ManagerArgs.from_llumnix_config(llumnix_config)
     manager_args.init_from_instance_args(instance_args)
     entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_config)

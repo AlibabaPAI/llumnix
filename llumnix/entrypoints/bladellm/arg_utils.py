@@ -102,7 +102,7 @@ def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser
     engine_args.disable_signal_handler = True
 
     instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)
-    instance_args.init_from_engine_args(engine_args)
+    instance_args.init_from_engine_args(engine_args, BackendType.BLADELLM)
     manager_args = ManagerArgs.from_llumnix_config(llumnix_cfg)
     manager_args.init_from_instance_args(instance_args)
     entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_cfg)

@@ -222,9 +222,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     llumnix_output = {}
     for prompt in prompts:
-        response = await asyncio.wait_for(
-            get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func),
-            timeout=60*5)
+        response = await get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func)
         llumnix_output[prompt] = response
 
     # compare

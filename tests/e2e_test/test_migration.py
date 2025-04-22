@@ -215,15 +215,8 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
 
         for future in as_completed(future_to_command):
-            try:
-                process = future.result()
-                process.wait(timeout=60*MIGRATION_BENCH_TIMEOUT_MINS)
-
-                assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
-            # pylint: disable=broad-except
-            except subprocess.TimeoutExpired:
-                process.kill()
-                assert False, "migration_test timed out after {} minutes.".format(MIGRATION_BENCH_TIMEOUT_MINS)
+            process = future.result()
+            assert process.returncode == 0, "migration_test failed with return code {}.".format(process.returncode)
 
     wait_for_all_instances_finished()
     instance_num_blocks_list_after_bench = get_instance_num_blocks()

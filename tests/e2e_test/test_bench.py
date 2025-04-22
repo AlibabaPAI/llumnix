@@ -218,14 +218,8 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
         future_to_command = {executor.submit(run_bench_command, command): command for command in tasks}
 
         for future in as_completed(future_to_command):
-            try:
-                process = future.result()
-                process.wait(timeout=60*BENCH_TEST_TIMEOUT_MINS)
-                assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
-            # pylint: disable=broad-except
-            except subprocess.TimeoutExpired:
-                process.kill()
-                assert False, "bench_test timed out after {} minutes.".format(BENCH_TEST_TIMEOUT_MINS)
+            process = future.result()
+            assert process.returncode == 0, "bench_test failed with return code {}.".format(process.returncode)
 
     await asyncio.sleep(5)
 

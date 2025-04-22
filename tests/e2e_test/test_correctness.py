@@ -145,6 +145,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     ip = get_ip_address()
     base_port = 40000 + test_times * 100
+    device_count = min(4, torch.cuda.device_count())
+    instance_count = device_count // tensor_parallel_size
 
     global engine_prompt_output
     global engine_pdd_prompt_output
@@ -213,7 +215,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                port=base_port,
                                                model=model,
                                                enable_pd_disagg=enable_pd_disagg,
-                                               tensor_parallel_size=tensor_parallel_size))
+                                               tensor_parallel_size=tensor_parallel_size,
+                                               max_instances=instance_count))
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(3)

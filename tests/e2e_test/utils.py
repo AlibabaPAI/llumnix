@@ -343,14 +343,14 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
     subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.bladellm.serve', shell=True, check=False)
-    subprocess.run('pkill -f multiprocess', shell=True, check=False)
+    subprocess.run('pkill -f multiprocessing', shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
     subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
     time.sleep(5.0)
 
 @pytest.fixture
 def shutdown_llumnix_service():
-    subprocess.run('rm -rf instance_*.out', shell=True, check=False)
+    # subprocess.run('rm -rf instance_*.out', shell=True, check=False)
     yield
     shutdown_llumnix_service_func()
 

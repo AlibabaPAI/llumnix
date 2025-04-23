@@ -15,7 +15,7 @@
 
 set -e
 
-BAZEL_CMD="bazel-5.1.0"
+BAZEL_CMD="bazel"
 PYTHON="python"
 PYGLOO_DIR="third_party/pygloo"
 

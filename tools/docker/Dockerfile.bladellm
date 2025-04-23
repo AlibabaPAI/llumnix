@@ -1,4 +1,4 @@
-FROM blade-llm-dev:latest-cu124
+FROM blade-llm:0.11.0.dev119_g2b436d6b
 
 ARG BRANCH="main"
 
@@ -9,14 +9,6 @@ RUN wget -qO - http://mirrors.cloud.aliyuncs.com/erdma/GPGKEY | gpg --dearmour -
     apt update && \
     apt install -y libibverbs1 ibverbs-providers ibverbs-utils librdmacm1 && \
     apt clean
-
-RUN pip uninstall -y cudf torchtext || true
-
-RUN mkdir -p /intall_workspace/LLMOps && \
-    cd /intall_workspace/LLMOps && \
-    git clone https://github.com/pai-disc/LLMOps.git . && \
-    git checkout 2b436d && \
-    python3 ./setup.py develop
 
 RUN mkdir -p /intall_workspace/llumnix && \
     cd /intall_workspace/llumnix && \

@@ -49,7 +49,7 @@ parse_args "$@"
 REPO="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-${ENGINE}-dev"
 DATE=$(date +%Y%m%d%H%M)
 
-COMMIT_ID=$(git ls-remote origin "refs/heads/$BRANCH" | awk '{print $1}')
+COMMIT_ID=$(git ls-remote origin "refs/heads/$BRANCH" | awk '{print $1}' | cut -c 1-7)
 if [[ -z "$COMMIT_ID" ]]; then
     echo "Error: Unable to find commit ID for branch '$BRANCH'."
     exit 1
@@ -63,7 +63,7 @@ if [[ ! -f "$DOCKERFILE" ]]; then
 fi
 
 TAG="${DATE}_${BRANCH}_${COMMIT_ID}"
-echo "Begin to build docker image ${REPO}:${TAG} ..."
+echo "Begin to build docker ${REPO}:${TAG} ..."
 
 docker build . \
     -f "$DOCKERFILE" \

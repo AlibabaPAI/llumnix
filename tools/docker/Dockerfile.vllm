@@ -5,7 +5,8 @@ ARG BRANCH="main"
 RUN curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
     mv bazel-archive-keyring.gpg /usr/share/keyrings && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/bazel-archive-keyring.gpg] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list && \
-    apt update && sudo apt install bazel-5.1.0 -y && \
+    apt update && apt install bazel-5.1.0 -y && \
+    ln -s /usr/bin/bazel-5.1.0 /usr/bin/bazel && \
     apt-get clean
 
 RUN mkdir -p /intall_workspace/llumnix && \

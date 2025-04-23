@@ -374,7 +374,7 @@ class LlumnixEngineArgs(ABC):
         self, engine_args, backend_type: BackendType
     ) -> None:
         self.engine_args = engine_args
-        self.override_engine_args = None
+        self.engine_args_warpped = None
         self.backend_type: BackendType = backend_type
 
     @abstractmethod
@@ -387,8 +387,8 @@ class LlumnixEngineArgs(ABC):
         pass
 
     def update_arg(self, args_key: str, args_value):
-        if self.override_engine_args and hasattr(self.override_engine_args, args_key):
-            setattr(self.override_engine_args, args_key, args_value)
+        if self.engine_args_warpped and hasattr(self.engine_args_warpped, args_key):
+            setattr(self.engine_args_warpped, args_key, args_value)
 
     def update_args(self, **kwargs):
         for args_key, args_value in kwargs.items():

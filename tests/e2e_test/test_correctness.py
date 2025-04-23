@@ -90,6 +90,7 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="prefill",
+            enable_migration=False
         )
         subprocess.run(prefill_launch_command, shell=True, check=True)
         decode_launch_command = generate_bladellm_launch_command(
@@ -99,6 +100,7 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="decode",
+            enable_migration=False,
             cuda_visiable_device="1"
         )
         subprocess.run(decode_launch_command, shell=True, check=True)
@@ -130,13 +132,6 @@ async def run_bladellm(model, enable_pd_disagg):
 async def test_correctness(ray_env, shutdown_llumnix_service,
                            model, launch_mode, enable_pd_disagg, tensor_parallel_size, engine):
     engine = engine.split("_")[1]
-
-    # TODO(chenghao): fix this bug
-    if "BladeLLM" in engine and launch_mode == "global" and enable_pd_disagg:
-        pytest.skip("Error in BladeLLM for prefill-decode disaggregation in global launch mode.")
-
-    if tensor_parallel_size == 2 and launch_mode == "local":
-        pytest.skip("Only test tensor parallelism in global launch mode.")
 
     global test_times
 

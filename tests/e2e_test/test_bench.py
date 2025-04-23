@@ -88,9 +88,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
                                 model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
-    # TODO(chenghao): fix this bug
-    if "BladeLLM" in engine and launch_mode == "global" and enable_pd_disagg:
-        pytest.skip("Error in BladeLLM for prefill-decode disaggregation in global launch mode.")
 
     if "BladeLLM" in engine and enable_simulator:
         pytest.skip("Simulator for BladeLLM is not supported yet.")

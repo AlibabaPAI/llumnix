@@ -38,8 +38,12 @@ class BladellmEngineArgs(LlumnixEngineArgs):
         self.instance_id: str = None
 
     def unwrap_engine_args_if_needed(self):
-        engine_args = pickle.loads(self.engine_args)
-        engine_args_warpped = self.engine_args_warpped
+        # pylint: disable=import-outside-toplevel
+        from blade_llm.service.args import ServingArgs
+        from blade_llm.utils.disagg_utils import DecodeRoutingPolicy
+        engine_args: ServingArgs = pickle.loads(self.engine_args)
+        assert isinstance(engine_args, ServingArgs)
+        engine_args_warpped: EngineArgsWrapped = self.engine_args_warpped
         if engine_args.disagg_options:
             if engine_args_warpped.disagg_options_token_port_offset:
                 engine_args.disagg_options.token_port += engine_args_warpped.disagg_options_token_port_offset
@@ -47,6 +51,7 @@ class BladellmEngineArgs(LlumnixEngineArgs):
                 engine_args.disagg_options.inst_role = engine_args_warpped.disagg_options_inst_role
             if engine_args_warpped.engine_disagg_inst_id:
                 engine_args.disagg_options.inst_id = engine_args_warpped.engine_disagg_inst_id
+            engine_args.disagg_options.select_decode_policy = DecodeRoutingPolicy.EXTERNAL_ROUTE
         return engine_args
 
     def get_engine_world_size(self):

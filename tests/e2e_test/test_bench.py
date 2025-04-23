@@ -112,10 +112,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
     else:
         num_prompts = 50
 
-    # TODO(KuilongCui): fix this
-    if "BladeLLM" in engine:
-        num_prompts = int(num_prompts * 0.5)
-
     global test_times
 
     ip = get_ip_address()

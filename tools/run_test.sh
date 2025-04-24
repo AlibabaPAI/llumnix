@@ -4,7 +4,7 @@ test_mode=$1
 set -ex
 
 if [[ "$test_mode" == *"vllm"* ]]; then
-    image="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-vllm-dev:202504231256_image_a0ca8d7"
+    image="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-vllm-dev:202504241348_image_54729fe"
     install_command="make vllm_install"
     docker_options="--net host --ipc host"
 elif [[ "$test_mode" == *"bladellm"* ]]; then

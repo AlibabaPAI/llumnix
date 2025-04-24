@@ -65,7 +65,7 @@ fi
 TAG="${DATE}_${BRANCH}_${COMMIT_ID}"
 echo "Begin to build docker ${REPO}:${TAG} ..."
 
-docker build . \
+docker build  --no-cache . \
     -f "$DOCKERFILE" \
     --build-arg BRANCH="$BRANCH" \
     --build-arg COMMIT_ID="$COMMIT_ID" \

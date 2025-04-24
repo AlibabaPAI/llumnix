@@ -21,6 +21,7 @@ import pytest
 import requests
 
 from llumnix.utils import get_ip_address, try_convert_to_local_path
+from tests import conftest
 
 
 def generate_vllm_launch_command(
@@ -354,7 +355,8 @@ def shutdown_llumnix_service():
         subprocess.run('rm -rf nohup.out', shell=True, check=False)
         yield
     finally:
-        shutdown_llumnix_service_func()
+        if conftest.SKIP_REASON is None or len(conftest.SKIP_REASON) == 0:
+            shutdown_llumnix_service_func()
 
 def count_tracebacks_in_instances(directory):
     def count_traceback_in_file(file_path):
@@ -374,9 +376,12 @@ def count_tracebacks_in_instances(directory):
             total_count += count
     return total_count
 
+@pytest.fixture
 def check_log_exception():
-    total_traceback = count_tracebacks_in_instances('.')
-    assert total_traceback == 0, f'There are {total_traceback} tracebacks in log files, check the log files.'
+    yield
+    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
+        total_traceback = count_tracebacks_in_instances('.')
+        assert total_traceback == 0, f'There are {total_traceback} tracebacks in log files, check the log files.'
 
 def to_markdown_table(data):
     headers = data[0]

@@ -83,13 +83,19 @@ def pytest_sessionfinish(session):
     ray_stop()
     shutdown_llumnix_service_func()
 
+
+SKIP_REASON: str = None
+
 @pytest.fixture
 def ray_env():
+    global SKIP_REASON
     try:
         ray.init(ignore_reinit_error=True, namespace="llumnix")
+        SKIP_REASON = None
         yield
     finally:
-        cleanup_ray_env_func()
+        if SKIP_REASON is None or len(SKIP_REASON) == 0:
+            cleanup_ray_env_func()
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

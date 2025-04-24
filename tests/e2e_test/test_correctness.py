@@ -70,7 +70,7 @@ def run_vllm(model):
         vllm_output[output.prompt] = output.prompt + output.outputs[0].text
     return vllm_output
 
-async def run_bladellm(model, enable_pd_disagg):
+async def run_bladellm(model, enable_pd_disagg, enable_migration):
     ip = get_ip_address()
     base_port = 50000 + test_times * 100
 
@@ -79,7 +79,8 @@ async def run_bladellm(model, enable_pd_disagg):
             model=model,
             ip=ip,
             port=base_port,
-            enable_llumnix=False
+            enable_llumnix=False,
+            enable_migration=enable_migration
         )
         subprocess.run(launch_command, shell=True, check=True)
     else:
@@ -90,7 +91,7 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="prefill",
-            enable_migration=False
+            enable_migration=enable_migration
         )
         subprocess.run(prefill_launch_command, shell=True, check=True)
         decode_launch_command = generate_bladellm_launch_command(
@@ -100,7 +101,7 @@ async def run_bladellm(model, enable_pd_disagg):
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="decode",
-            enable_migration=False,
+            enable_migration=enable_migration,
             cuda_visiable_device="1"
         )
         subprocess.run(decode_launch_command, shell=True, check=True)
@@ -171,10 +172,10 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
         enable_migration = not enable_pd_disagg
 
         if not enable_pd_disagg and len(engine_prompt_output) == 0:
-            engine_prompt_output = await run_bladellm(model, enable_pd_disagg)
+            engine_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_migration)
 
         if enable_pd_disagg and len(engine_pdd_prompt_output) == 0:
-            engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg)
+            engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_migration)
 
     launch_commands = []
     if launch_mode == "local":
@@ -210,6 +211,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                model=model,
                                                enable_pd_disagg=enable_pd_disagg,
                                                tensor_parallel_size=tensor_parallel_size,
+                                               enable_migration=enable_migration,
                                                max_instances=instance_count))
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)

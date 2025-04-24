@@ -261,10 +261,10 @@ class Manager:
                     task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
                     task.add_done_callback(partial(get_instance_info_done_callback_wrapper, instance_id))
                     tasks.append(task)
-                if self.num_instance_info_updates % 100 == 0:
+                if self.num_instance_info_updates % 1000 == 0:
                     logger.debug("Polling instance infos of {} instances starts.".format(self.num_instances))
                 await asyncio.gather(*tasks, return_exceptions=True)
-                if self.num_instance_info_updates % 100 == 0:
+                if self.num_instance_info_updates % 1000 == 0:
                     logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.

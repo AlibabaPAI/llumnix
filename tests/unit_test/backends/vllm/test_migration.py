@@ -167,7 +167,6 @@ class MockLlumletTestMigrationDoNotSchedule(Llumlet):
         # if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
         return await self.backend_engine._run_workers_async("pop_migrating_out_seq_group_metadata", request_id)
 
-# TODO(s5u13b): Test correctness of inner migration states.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])

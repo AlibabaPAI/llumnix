@@ -111,10 +111,6 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
 
     num_prompts = 500
 
-    # TODO(s5u13b): fix this bug
-    if "BladeLLM" in engine and tensor_parallel_size > 1:
-        pytest.skip("Error in BladeLLM for tensor parallel size > 1.")
-
     if "BladeLLM" in engine and use_ray_spmd_worker:
         pytest.skip("use_ray_spmd_worker is vLLM config, just skip it in BladeLLM.")
 
@@ -151,6 +147,8 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
     base_port = 30000 + test_times * 100
+    if "BladeLLM" in engine:
+        base_port += 5000
     ip_ports = []
     instance_output_logs = []
     device_count = min(4, torch.cuda.device_count())

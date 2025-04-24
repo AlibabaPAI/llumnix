@@ -15,6 +15,8 @@ import os
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 if TYPE_CHECKING:
+    HEAD_NODE: Optional[str] = None
+    HEAD_NODE_IP: Optional[str] = None
     LLUMNIX_CONFIGURE_LOGGING: int = 1
     LLUMNIX_LOGGING_CONFIG_PATH: Optional[str] = None
     LLUMNIX_LOGGING_LEVEL: str = "INFO"
@@ -27,6 +29,10 @@ if TYPE_CHECKING:
 
 environment_variables: Dict[str, Callable[[], Any]] = {
     # ================== Llumnix environment variables ==================
+
+    # Ray cluster setup configuration
+    "HEAD_NODE": lambda: os.getenv("HEAD_NODE"),
+    "HEAD_NODE_IP": lambda: os.getenv("HEAD_NODE_IP"),
 
     # Logging configuration
     # If set to 0, llumnix will not configure logging

@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple, Union, Iterable, Any
 from collections import defaultdict
 import asyncio
 import queue
+import os
 
 import ray
 import grpc
@@ -36,8 +37,10 @@ from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
 from blade_llm.service.communications.engine_msg_server import EngineMsgServer
 from blade_llm.service.engine_args import CommunicationArgs
-from blade_llm.service.worker import WorkerProcesses
 from blade_llm.service.metric import init_metric
+from blade_llm.module.parallel import setup_dist_environ
+from blade_llm.utils.constants import NCCL_PORT
+from blade_llm.module.parallel import is_distributed_inference
 
 from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendInterface, EngineState
@@ -51,6 +54,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
 from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateCacheRequest, WorkerInfo
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
+from llumnix.backends.bladellm.worker import WorkerProcessesRay
 
 logger = init_logger(__name__)
 
@@ -68,20 +72,23 @@ class RequestBarrier:
 
 
 class AsyncBackQueueWrapper:
-    def __init__(self, placement_group: PlacementGroup, instance_id: str,
-                 request_output_queue_type: QueueType, resp_queue: asyncio.Queue) -> None:
-        self.instance_id = instance_id
+    def __init__(self,
+                 placement_group: PlacementGroup,
+                 instance_id: str,
+                 request_output_queue_type: QueueType,
+                 resp_queue: asyncio.Queue) -> None:
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
             placement_group_bundle_index=0,
             placement_group_capture_child_tasks=True,
         )
-        self.put_queue_args_queue = resp_queue
+        self.instance_id = instance_id
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy,
-            name="AsyncPutQueueActor_"+instance_id
+            name=f"AsyncPutQueueActor_{instance_id}"
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
+        self.put_queue_args_queue = resp_queue
 
         self.request_server_map = {}
         # asyncio.queue is not thread-safe, just create a asyncio.task
@@ -145,17 +152,17 @@ class AsyncLLMEngineLlumnixMixin:
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
                  src_worker_ip_address: List[str],
-                 request_barriers: queue.Queue,
+                 request_barriers: queue.Queue
                  ) -> None:
         self.instance_id = instance_id
-
         self.state = EngineState.INIT
         logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
 
         self.placement_group = placement_group
         self.request_output_queue_type = request_output_queue_type
 
-        self._worker_processes = WorkerProcesses(self._args, instance_id, migration_config)
+        self._worker_processes = WorkerProcessesRay(placement_group, self._args, instance_id, migration_config)
+
         self.src_worker_ip_address = src_worker_ip_address
 
         self._migration_semaphore = asyncio.Semaphore(0)
@@ -257,7 +264,7 @@ class AsyncLLMEngineLlumnixMixin:
         logger.debug("engine {} drop request {}".format(self.instance_id, req_id))
         await self._client.drop_request(req_id)
 
-    async def run_workers(self, worker_method, *args, **kwargs):
+    async def run_workers(self, worker_method: str, *args, **kwargs):
         coros = []
         for stub in self.worker_stubs:
             method = getattr(stub, worker_method)
@@ -289,29 +296,45 @@ class AsyncLLMEngineLlumnixMixin:
 
 class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
     def __init__(self,
-                instance_id: str,
-                placement_group: PlacementGroup,
-                request_output_queue_type: QueueType,
-                migration_config: MigrationConfig,
-                src_worker_ip_address: List[str],
-                request_barriers: queue.Queue,
-                *args, **kwargs,
-                ) -> None:
-        AsyncLLMEngine.__init__(self, *args, **kwargs)
+                 instance_id: str,
+                 placement_group: PlacementGroup,
+                 request_output_queue_type: QueueType,
+                 migration_config: MigrationConfig,
+                 src_worker_ip_address: List[str],
+                 request_barriers: queue.Queue,
+                 serving_args: ServingArgs,
+                 *args, **kwargs,
+                 ) -> None:
+        if is_distributed_inference():
+            self._setup_dist_options(serving_args)
+        setup_dist_environ(serving_args.dist_inference_options.nnodes, serving_args.dist_inference_options.node_rank)
+        AsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers)
+
+    def _setup_dist_options(self, serving_args: ServingArgs):
+        # It means that dist_init_addr can be None when enabling distributed inference.
+        if serving_args.dist_inference_options.dist_init_addr is not None:
+            master_port = int(serving_args.dist_inference_options.dist_init_addr.split(":")[1])
+        else:
+            master_port = NCCL_PORT
+        # The IP of engine and worker 0 will be same due to our sorting of workers,
+        # so directly set the dist_init_addr to IP of engine is correct.
+        serving_args.dist_inference_options.dist_init_addr = f"{serving_args.host}:{master_port}"
+        # TODO(s5u13b): New BladeLLM will not use this environment variables, update it after rebase BladeLLM.
+        os.environ["MASTER_ADDR"] = serving_args.host
 
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,
-            instance_id: str,
-            placement_group: PlacementGroup,
-            request_output_queue_type: QueueType,
-            migration_config: MigrationConfig,
-            src_worker_ip_address: List[str],
-            request_barriers: queue.Queue,
-            *args, **kwargs,
-            ) -> None:
+                 instance_id: str,
+                 placement_group: PlacementGroup,
+                 request_output_queue_type: QueueType,
+                 migration_config: MigrationConfig,
+                 src_worker_ip_address: List[str],
+                 request_barriers: queue.Queue,
+                 *args, **kwargs,
+                ) -> None:
         PrefillAsyncLLMEngine.__init__(self, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers)
@@ -320,28 +343,27 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
-            instance_id: str,
-            placement_group: PlacementGroup,
-            request_output_queue_type: QueueType,
-            migration_config: MigrationConfig,
-            src_worker_ip_address: List[str],
-            request_barriers: queue.Queue,
-            *args, **kwargs,
-            ) -> None:
+                 instance_id: str,
+                 placement_group: PlacementGroup,
+                 request_output_queue_type: QueueType,
+                 migration_config: MigrationConfig,
+                 src_worker_ip_address: List[str],
+                 request_barriers: queue.Queue,
+                 *args, **kwargs,
+                ) -> None:
         DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers)
 
 
 class BackendBladeLLM(BackendInterface):
-    def __init__(
-        self,
-        instance_id: str,
-        placement_group: PlacementGroup,
-        request_output_queue_type: QueueType,
-        migration_config: MigrationConfig,
-        engine_args: ServingArgs
-    ) -> None:
+    def __init__(self,
+                 instance_id: str,
+                 placement_group: PlacementGroup,
+                 request_output_queue_type: QueueType,
+                 migration_config: MigrationConfig,
+                 engine_args: ServingArgs
+                ) -> None:
         init_metric(
             engine_args.serving_metric_options.metric_export_interval_sec,
             *engine_args.metric_exporters,
@@ -369,12 +391,12 @@ class BackendBladeLLM(BackendInterface):
             self.kv_transfer_instance_id = engine_args.disagg_options.inst_id
         for index, ip_addr in enumerate(self.src_worker_ip_address):
             self.worker_infos.append(WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id,
-                           kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
+                                                kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
 
         self.request_barriers: queue.Queue = queue.Queue()
         engine_cls = self._get_engine_cls()
         self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, migration_config,
-                                self.src_worker_ip_address, self.request_barriers, engine_args)
+                                 self.src_worker_ip_address, self.request_barriers, engine_args)
 
         self._engine_ready_event = asyncio.Event()
         asyncio.create_task(self._start_engine())

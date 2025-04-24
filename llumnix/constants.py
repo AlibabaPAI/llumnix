@@ -67,3 +67,6 @@ RETRIES_INTERVAL: float = 5.0
 # llumnix.backends/*/migration_backend.py, llumnix/backends/*/migration_worker.py
 GRPC_MAX_MESSAGE_LENGTH = 1 << 31 - 1
 NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION = [torch.float32, torch.float16]
+
+# llumnix/backends/bladellm/worker.py
+RAY_REMOTE_CALL_TIMEOUT: float = 10.0

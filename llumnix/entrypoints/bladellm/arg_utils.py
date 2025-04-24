@@ -48,8 +48,8 @@ def detect_unsupported_engine_feature(engine_args) -> None:
         unsupported_feature = "multi-lora serving"
     elif engine_args.use_sps:
         unsupported_feature = "speculative decoding"
-    elif engine_args.dist_inference_options.nnodes > 1 or engine_args.pipeline_parallel_size > 1:
-        unsupported_feature = "enable_remote_worker"
+    elif engine_args.pipeline_parallel_size > 1:
+        unsupported_feature = "pipeline parallel"
     elif engine_args.dp_attention:
         unsupported_feature = "attention data parallel"
     elif engine_args.elastic_attn_cluster:

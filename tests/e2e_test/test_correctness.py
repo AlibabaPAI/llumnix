@@ -72,13 +72,13 @@ def run_vllm(model):
 
 async def run_bladellm(model, enable_pd_disagg):
     ip = get_ip_address()
-    port = 50000 + test_times * 100
+    base_port = 50000 + test_times * 100
 
     if not enable_pd_disagg:
         launch_command = generate_bladellm_launch_command(
             model=model,
             ip=ip,
-            port=port,
+            port=base_port,
             enable_llumnix=False
         )
         subprocess.run(launch_command, shell=True, check=True)
@@ -86,7 +86,7 @@ async def run_bladellm(model, enable_pd_disagg):
         prefill_launch_command = generate_bladellm_launch_command(
             model=model,
             ip=ip,
-            port=port,
+            port=base_port,
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="prefill",
@@ -95,7 +95,7 @@ async def run_bladellm(model, enable_pd_disagg):
         decode_launch_command = generate_bladellm_launch_command(
             model=model,
             ip=ip,
-            port=port+100,
+            port=base_port+100,
             enable_llumnix=False,
             enable_pd_disagg=True,
             instance_type="decode",
@@ -109,7 +109,7 @@ async def run_bladellm(model, enable_pd_disagg):
     for prompt in prompts:
         req_out = await get_llumnix_response(
             prompt,
-            f"http://{ip}:{port}/v1/chat/completions",
+            f"http://{ip}:{base_port}/v1/chat/completions",
             generate_bladellm_request,
             process_bladellm_api_server_output,
         )
@@ -117,6 +117,7 @@ async def run_bladellm(model, enable_pd_disagg):
 
     shutdown_llumnix_service_func()
     await asyncio.sleep(3)
+
     return bladellm_outputs
 
 @pytest.mark.asyncio
@@ -134,10 +135,6 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
     if "BladeLLM" in engine and launch_mode == "global" and enable_pd_disagg:
         pytest.skip("Error in BladeLLM for prefill-decode disaggregation in global launch mode.")
 
-    # TODO(s5u13b): fix this bug
-    if "BladeLLM" in engine and tensor_parallel_size > 1:
-        pytest.skip("Error in BladeLLM for tensor parallel size > 1.")
-
     if tensor_parallel_size == 2 and launch_mode == "local":
         pytest.skip("Only test tensor parallelism in global launch mode.")
 
@@ -145,6 +142,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     ip = get_ip_address()
     base_port = 40000 + test_times * 100
+    if "BladeLLM" in engine:
+        base_port += 5000
     device_count = min(4, torch.cuda.device_count())
     instance_count = device_count // tensor_parallel_size
 
@@ -193,7 +192,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     instance_type="prefill",
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
-            decode_port = base_port + 100
+            decode_port = base_port + 50
             launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
                                                     launch_ray_cluster=False,
                                                     model=model,

@@ -1,5 +1,4 @@
 from typing import Any, Union, Dict, List
-from enum import Enum
 import glob
 import os
 import pickle
@@ -26,11 +25,6 @@ SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
 
 
-class GPUBundlingStrategy(str, Enum):
-    SPREAD = "spread"
-    PACK = "pack"
-
-
 def get_manager_name() -> str:
     return MANAGER_NAME
 
@@ -52,7 +46,6 @@ def initialize_placement_group(
     placement_group_name: str,
     num_cpus: int,
     num_gpus: int,
-    gpu_bundling_strategy: GPUBundlingStrategy = GPUBundlingStrategy.SPREAD,
     detached: bool = False,
     block: bool = True,
     node_id: str = None,
@@ -87,13 +80,10 @@ def initialize_placement_group(
 
     # Create a new placement group
     # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
-    if gpu_bundling_strategy == GPUBundlingStrategy.SPREAD:
-        if num_gpus >= 1:
-            placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
-        else:
-            placement_group_specs = [{"CPU": num_cpus}]
-    else:  # GPUBundlingStrategy.PACK
-        placement_group_specs = [{"CPU": num_cpus}] if num_gpus == 0 else [{"CPU": num_cpus, "GPU": num_gpus}]
+    if num_gpus >= 1:
+        placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
+    else:
+        placement_group_specs = [{"CPU": num_cpus}]
     if resources:
         placement_group_specs += [resources]
     # pylint: disable=self-assigning-variable
@@ -247,4 +237,4 @@ def log_actor_ray_info(actor_class_name: str) -> None:
     # pylint: disable=protected-access
     session_dir = ray._private.worker._global_node.get_session_dir_path()
     pattern = os.path.join(session_dir, "logs", f"worker-{worker_id}*")
-    logger.info("{}(log_dir={})".format(actor_class_name, glob.glob(pattern)))
+    logger.info("{} log_dir: {}".format(actor_class_name, glob.glob(pattern)))

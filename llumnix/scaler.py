@@ -32,7 +32,7 @@ from llumnix.utils import (load_engine_args, get_service_resouces, random_uuid,
                            get_service_instance_type)
 from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get_server_name,
                                get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
-                               GPUBundlingStrategy, get_scaler_name, get_placement_group_name,
+                               get_scaler_name, get_placement_group_name,
                                get_placement_group_infos_by_name, get_placement_group_infos_by_state,
                                kill_server, kill_instance, remove_placement_group,
                                get_actor_names_by_name_prefix, SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX,
@@ -331,11 +331,10 @@ class Scaler:
         if not BackendType.is_sim_backend(backend_type):
             # num_gpus=world_size, for world_size Workers
             world_size = get_engine_world_size(engine_args, backend_type)
-            gpu_bundling_strategy = GPUBundlingStrategy.SPREAD if backend_type == BackendType.VLLM else GPUBundlingStrategy.PACK
             resources = get_service_resouces(service_name, world_size)
             placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
                                                          num_gpus=world_size, detached=True, block=block, node_id=node_id,
-                                                         gpu_bundling_strategy=gpu_bundling_strategy, resources=resources)
+                                                         resources=resources)
         else:
             placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
                                                          num_gpus=0, detached=True, block=block, node_id=node_id)
@@ -395,7 +394,7 @@ class Scaler:
         if backend_type == BackendType.BLADELLM:
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM # pylint: disable=import-outside-toplevel
             # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
-            api_server = APIServerActorBladeLLM.from_args(0.5, server_name, placement_group, entrypoints_args, engine_args)
+            api_server = APIServerActorBladeLLM.from_args(0.33, server_name, placement_group, entrypoints_args, engine_args)
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
             api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args, engine_args)

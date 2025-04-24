@@ -16,7 +16,7 @@ init:
 	@git submodule update --init --recursive
 
 .PHONY: vllm_install
-vllm_install: cupy-cuda pygloo
+vllm_install:
 	@pip install -e .[vllm]
 
 .PHONY: bladellm_install

@@ -49,21 +49,24 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         self.migration_config = migration_config
         self.rank = rank
         self.state_manager = state_manager
-        self.migration_backend = get_migration_backend(instance_id, rank, rank, migration_config,
-                                                    request_sync_group, base_worker, state_manager, args)
-
-        self.migration_grpc_addr = get_ip_address() + ":" + \
-            str(self.migration_config.grpc_migration_backend_server_port+self.rank)
 
         # ragged_flash_kv_arena
         num_layer = len(self.state_manager.kv_cache_arena.gpu_kv_cache)
         self.single_block_bytes = num_layer * self.state_manager.kv_cache_arena.gpu_kv_cache[0][0].nbytes
 
-        grpc_limit_migration_num_blocks = GRPC_MAX_MESSAGE_LENGTH / self.single_block_bytes
+        # Assume request meta size in worker do not exceed 20MB
+        request_meta_max_size = 1024 * 1024 * 20
+        grpc_limit_migration_num_blocks = int((GRPC_MAX_MESSAGE_LENGTH - request_meta_max_size) / self.single_block_bytes)
         if migration_config.migration_buffer_blocks >= grpc_limit_migration_num_blocks:
             logger.warning("migration_buffer_blocks {} is too large, reset to grpc_limit_migration_num_blocks {}."
                            .format(migration_config.migration_buffer_blocks, grpc_limit_migration_num_blocks))
-            migration_config.migration_buffer_blocks = int(grpc_limit_migration_num_blocks)
+            migration_config.migration_buffer_blocks = grpc_limit_migration_num_blocks
+
+        self.migration_backend = get_migration_backend(instance_id, rank, rank, migration_config,
+                                                    request_sync_group, base_worker, state_manager, args)
+
+        self.migration_grpc_addr = get_ip_address() + ":" + \
+            str(self.migration_config.grpc_migration_backend_server_port+self.rank)
 
         asyncio.create_task(self._launch_grpc_service())
 

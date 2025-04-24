@@ -37,6 +37,7 @@ from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyn
 from blade_llm.service.communications.engine_msg_server import EngineMsgServer
 from blade_llm.service.engine_args import CommunicationArgs
 from blade_llm.service.worker import WorkerProcesses
+from blade_llm.service.metric import init_metric
 
 from llumnix.utils import get_ip_address
 from llumnix.backends.backend_interface import BackendInterface, EngineState
@@ -341,6 +342,11 @@ class BackendBladeLLM(BackendInterface):
         migration_config: MigrationConfig,
         engine_args: ServingArgs
     ) -> None:
+        init_metric(
+            engine_args.serving_metric_options.metric_export_interval_sec,
+            *engine_args.metric_exporters,
+            observability_options=engine_args.serving_observability_options,
+        )
         self._config_inner_engine_logger(engine_args)
 
         # add instance_id to avoid path conflict when multi-engine running in a single pod

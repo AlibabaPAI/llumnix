@@ -593,6 +593,7 @@ async def test_auto_scale_up_loop_enable_pdd_node_affinity_scheduling():
     ray.init(ignore_reinit_error=True, namespace="llumnix")
 
     _, scaler, _, _, _, _ = init_manager_with_launch_mode(LaunchMode.GLOBAL,
+                                                          max_instances=4,
                                                           enable_pd_disagg=True,
                                                           enable_pdd_node_affinity_scheduling=True)
     await asyncio.sleep(60.0)

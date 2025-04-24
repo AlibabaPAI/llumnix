@@ -111,10 +111,6 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
 
     num_prompts = 500
 
-    # TODO(KuilongCui): fix this
-    if "BladeLLM" in engine:
-        num_prompts = int(num_prompts * 0.5)
-
     # TODO(s5u13b): fix this bug
     if "BladeLLM" in engine and tensor_parallel_size > 1:
         pytest.skip("Error in BladeLLM for tensor parallel size > 1.")

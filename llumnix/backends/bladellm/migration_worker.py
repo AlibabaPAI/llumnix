@@ -59,7 +59,9 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         num_layer = len(self.state_manager.kv_cache_arena.gpu_kv_cache)
         self.single_block_bytes = num_layer * self.state_manager.kv_cache_arena.gpu_kv_cache[0][0].nbytes
 
-        grpc_limit_migration_num_blocks = GRPC_MAX_MESSAGE_LENGTH / self.single_block_bytes
+        # Assume request meta size in worker do not exceed 100MB
+        request_meta_max_size = 1024 * 1024 * 100
+        grpc_limit_migration_num_blocks = (GRPC_MAX_MESSAGE_LENGTH - request_meta_max_size) / self.single_block_bytes
         if migration_config.migration_buffer_blocks >= grpc_limit_migration_num_blocks:
             logger.warning("migration_buffer_blocks {} is too large, reset to grpc_limit_migration_num_blocks {}."
                            .format(migration_config.migration_buffer_blocks, grpc_limit_migration_num_blocks))

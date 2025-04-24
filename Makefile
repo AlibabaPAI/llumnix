@@ -13,7 +13,8 @@
 
 .PHONY: init
 init:
-	@git submodule update --init --recursive
+	@git submodule init
+	@git submodule update --remote
 
 .PHONY: vllm_install
 vllm_install:

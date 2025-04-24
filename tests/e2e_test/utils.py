@@ -373,7 +373,9 @@ def count_tracebacks_in_instances(directory):
             total_count += count
     return total_count
 
+@pytest.fixture
 def check_log_exception():
+    yield
     total_traceback = count_tracebacks_in_instances('.')
     assert total_traceback == 0, f'There are {total_traceback} tracebacks in log files, check the log files.'
 

@@ -119,24 +119,44 @@ async def run_bladellm(model, enable_pd_disagg):
     await asyncio.sleep(3)
     return bladellm_outputs
 
+'''
+engine  launch_mode     enable_pd_disagg    enable_simulator    tensor_parallel_size  migration_backend
+
+# local model is not our inteest
+vllm    local           False               False                1                      x
+vllm    local           True                False                1                      x
+
+# test p d
+vllm    gloabl          False               False               1                       x
+vllm    gloabl          True               False               1                       x
+
+# test simulator
+vllm    gloabl          False               True               1                       x
+
+# test migration backend
+vllm    gloabl          True               False               2                       rayqueue
+vllm    gloabl          True               False               2                       gloo
+vllm    gloabl          True               False               2                       zmq
+
+
+bladellm    gloabl          True               False               1                      grpc
+
+'''
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for correctness test")
-@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen-7B')])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
+@pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'grpc', 'kvtransfer'])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_correctness(ray_env, shutdown_llumnix_service,
-                           model, launch_mode, enable_pd_disagg, tensor_parallel_size, engine):
+async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
+                           launch_mode, enable_pd_disagg, enable_simulator, tensor_parallel_size,
+                           engine):
     engine = engine.split("_")[1]
-
-    # TODO(chenghao): fix this bug
-    if "BladeLLM" in engine and launch_mode == "global" and enable_pd_disagg:
-        pytest.skip("Error in BladeLLM for prefill-decode disaggregation in global launch mode.")
-
-    # TODO(s5u13b): fix this bug
-    if "BladeLLM" in engine and tensor_parallel_size > 1:
-        pytest.skip("Error in BladeLLM for tensor parallel size > 1.")
 
     if tensor_parallel_size == 2 and launch_mode == "local":
         pytest.skip("Only test tensor parallelism in global launch mode.")
@@ -215,6 +235,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                port=base_port,
                                                model=model,
                                                enable_pd_disagg=enable_pd_disagg,
+                                               enable_simulator=enable_simulator,
                                                tensor_parallel_size=tensor_parallel_size,
                                                max_instances=instance_count))
     for launch_command in launch_commands:
@@ -230,11 +251,10 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     # compare
     raw_output = engine_prompt_output if not enable_pd_disagg else engine_pdd_prompt_output
-    for prompt in prompts:
-        assert llumnix_output[prompt] == raw_output[prompt]
+    if not enable_simulator:
+        for prompt in prompts:
+            assert llumnix_output[prompt] == raw_output[prompt]
 
     await asyncio.sleep(3)
-
-    check_log_exception()
 
     test_times += 1

@@ -99,13 +99,11 @@ def get_instance_num_blocks():
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
-@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen-7B')])
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'grpc', 'kvtransfer'])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
-@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, model, tensor_parallel_size,
+async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model, tensor_parallel_size,
                                    migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
@@ -239,7 +237,5 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, m
         await asyncio.sleep(10.0)
 
     await asyncio.sleep(3)
-
-    check_log_exception()
 
     test_times += 1

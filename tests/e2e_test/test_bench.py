@@ -24,7 +24,8 @@ import numpy as np
 from llumnix.utils import get_ip_address, try_convert_to_local_path
 
 # pylint: disable=unused-import
-from tests.conftest import ray_env, SKIP_REASON
+from tests import conftest
+from tests.conftest import ray_env
 from .utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service,
                     generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
@@ -89,10 +90,10 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     num_prompts = 500
 
     if "vLLM" in engine and enable_pd_disagg:
-        SKIP_REASON = "vLLM pd_disagg only performs correctness tests."
+        conftest.SKIP_REASON = "vLLM pd_disagg only performs correctness tests."
 
-    if SKIP_REASON is not None and len(SKIP_REASON) > 0:
-        pytest.skip(SKIP_REASON)
+    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
+        pytest.skip(conftest.SKIP_REASON)
 
     global test_times
 

@@ -24,7 +24,8 @@ import torch
 from llumnix.utils import get_ip_address, try_convert_to_local_path
 
 # pylint: disable=unused-import
-from tests.conftest import ray_env, cleanup_ray_env_func, SKIP_REASON
+from tests import conftest
+from tests.conftest import ray_env, cleanup_ray_env_func
 from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
                     wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                     shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
@@ -136,39 +137,39 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     if "BladeLLM" in engine:
         # TODO(KuilongCui): add bladellm migration correctness test for grpc and kvtransfer
         if migration_backend not in ['grpc', 'kvtransfer']:
-            SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
+            conftest.SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
 
         if launch_mode == "local" and tensor_parallel_size == 2:
-            SKIP_REASON = "Only test tensor parallelism in global launch mode."
+            conftest.SKIP_REASON = "Only test tensor parallelism in global launch mode."
 
         if enable_simulator:
-            SKIP_REASON = "Simulator for BladeLLM is not supported yet."
+            conftest.SKIP_REASON = "Simulator for BladeLLM is not supported yet."
 
     if "vLLM" in engine:
         if migration_backend not in ['rayrpc', 'gloo', 'nccl']:
-            SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
+            conftest.SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
 
         if tensor_parallel_size == 2 and migration_backend == 'nccl':
-            SKIP_REASON = "When the migration backend is nccl, tensor parallelism is not supported."
+            conftest.SKIP_REASON = "When the migration backend is nccl, tensor parallelism is not supported."
 
         if launch_mode == "local":
             if enable_simulator:
-                SKIP_REASON = "Simulator in TP = 2 will not be tested."
+                conftest.SKIP_REASON = "Simulator in TP = 2 will not be tested."
 
             if tensor_parallel_size == 2:
-                SKIP_REASON = "Only test tensor parallelism in global launch mode."
+                conftest.SKIP_REASON = "Only test tensor parallelism in global launch mode."
 
             if migration_backend != "gloo":
-                SKIP_REASON = "Only test gloo in local launch mode for vLLM."
+                conftest.SKIP_REASON = "Only test gloo in local launch mode for vLLM."
 
         if enable_pd_disagg and enable_simulator:
-            SKIP_REASON = "Only test simulator for vLLM in non-pd-disagg."
+            conftest.SKIP_REASON = "Only test simulator for vLLM in non-pd-disagg."
 
         if enable_simulator and migration_backend != "gloo":
-            SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
+            conftest.SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
 
-    if SKIP_REASON is not None and len(SKIP_REASON) > 0:
-        pytest.skip(SKIP_REASON)
+    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
+        pytest.skip(conftest.SKIP_REASON)
 
     global test_times
 

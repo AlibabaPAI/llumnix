@@ -25,6 +25,7 @@ import ray
 from llumnix.utils import get_ip_address, try_convert_to_local_path
 
 # pylint: disable=unused-import
+from tests import conftest
 from tests.conftest import ray_env
 from tests.e2e_test.utils import (generate_bench_command, to_markdown_table, wait_for_llumnix_service_ready,
                                   shutdown_llumnix_service, generate_bladellm_serve_command,
@@ -117,19 +118,19 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
         num_prompts = int(num_prompts/10)
 
     if "BladeLLM" in engine and use_ray_spmd_worker:
-        pytest.skip("use_ray_spmd_worker is vLLM config, just skip it in BladeLLM.")
+        conftest.SKIP_REASON = "use_ray_spmd_worker is vLLM config, just skip it in BladeLLM."
 
     if "BladeLLM" in engine and migration_request_status == 'waiting':
-        pytest.skip("BladeLLM does not support migrating waiting request temporarily.")
+        conftest.SKIP_REASON = "BladeLLM does not support migrating waiting request temporarily."
 
     if "BladeLLM" in engine and migration_backend not in ['grpc', 'kvtransfer']:
-        pytest.skip(f"BladeLLM does not support migration backend {migration_backend}")
+        conftest.SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
 
     if "vLLM" in engine and tensor_parallel_size == 2:
-        pytest.skip("vLLM tensor_parallel_size=2 has already been tested in the correctness test.")
+        conftest.SKIP_REASON = "vLLM tensor_parallel_size=2 has already been tested in the correctness test."
 
     if "vLLM" in engine and migration_backend != 'gloo':
-        pytest.skip(f"vLLM does not support migration backend {migration_backend}.")
+        conftest.SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
 
     if use_ray_spmd_worker:
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"

@@ -84,9 +84,13 @@ SKIP_REASON: str = None
 
 @pytest.fixture
 def ray_env():
-    SKIP_REASON = None
+    global SKIP_REASON
+
     ray.init(ignore_reinit_error=True, namespace="llumnix")
+    SKIP_REASON = None
+
     yield
+
     if SKIP_REASON is None or len(SKIP_REASON) == 0:
         cleanup_ray_env_func()
 

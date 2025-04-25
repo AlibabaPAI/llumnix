@@ -139,7 +139,16 @@ vllm    gloabl          True               False               2                
 vllm    gloabl          True               False               2                       zmq
 
 
+bladellm    local       False           False                   1                       x
+bladellm    local       True           False                   1                        x
+
+bladellm    global       True           False                   1                        x
+bladellm    global       True           False                   2                        x
+
+# bladellm迁移正确性？？？
 bladellm    gloabl          True               False               1                      grpc
+bladellm    gloabl          True               False               1                      kvt
+
 
 '''
 

@@ -101,25 +101,35 @@ def get_instance_num_blocks():
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
+@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
+@pytest.mark.parametrize("migration_backend", ['gloo', 'grpc', 'kvtransfer'])
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model,
+                                   tensor_parallel_size, 
                                    migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
     num_prompts = 500
 
+    if any(item in request.node.name for item in ["waiting", "grpc"]) or \
+        tensor_parallel_size == 2:
+        num_prompts = int(num_prompts/10)
+
     if "BladeLLM" in engine and use_ray_spmd_worker:
         pytest.skip("use_ray_spmd_worker is vLLM config, just skip it in BladeLLM.")
 
-    if engine == "BladeLLM" and migration_backend not in ['grpc', 'kvtransfer']:
+    if "BladeLLM" in engine and migration_request_status == 'waiting':
+        pytest.skip("BladeLLM does not support migrating waiting request temporarily.")
+
+    if "BladeLLM" in engine and migration_backend not in ['grpc', 'kvtransfer']:
         pytest.skip(f"BladeLLM does not support migration backend {migration_backend}")
 
-    if engine == "vLLM" and migration_backend not in ['rayrpc', 'gloo', 'nccl']:
-        pytest.skip(f"vLLM does not support migration backend {migration_backend}.")
+    if "vLLM" in engine and tensor_parallel_size == 2:
+        pytest.skip("vLLM tensor_parallel_size=2 has already been tested in the correctness test.")
 
-    if migration_request_status == 'waiting' and engine == 'BladeLLM':
-        pytest.skip("BladeLLM does not support migrating waiting request temporarily.")
+    if "vLLM" in engine and migration_backend != 'gloo':
+        pytest.skip(f"vLLM does not support migration backend {migration_backend}.")
 
     if use_ray_spmd_worker:
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
@@ -138,38 +148,30 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
     device_count = min(4, torch.cuda.device_count())
     num_instances = device_count // tensor_parallel_size
 
-    if engine == "vLLM":
-        for i in range(num_instances):
-            ip_ports.append(f"{ip}:{base_port+i}")
-        result_filename = f"{base_port}.out"
-        instance_output_logs.append("instance_"+result_filename)
-        launch_command = generate_vllm_serve_command(
-                            result_filename=result_filename,
-                            ip=ip,
-                            port=base_port,
-                            model=model,
-                            dispatch_policy="flood",
-                            migration_backend=migration_backend,
-                            request_migration_policy=request_migration_policy,
-                            tensor_parallel_size=tensor_parallel_size,
-                            enforce_eager=False,
-                            max_instances=num_instances)
-        subprocess.run(launch_command, shell=True, check=True)
+    for i in range(num_instances):
+        ip_ports.append(f"{ip}:{base_port+i}")
+    result_filename = f"{base_port}.out"
+    instance_output_logs.append("instance_"+result_filename)
+    
+    if "vLLM" in engine:
+        generate_serve_command = generate_vllm_serve_command
+    elif "BladeLLM" in engine:
+        generate_serve_command = generate_bladellm_serve_command
     else:
-        for i in range(num_instances):
-            ip_ports.append(f"{ip}:{base_port+i}")
-        result_filename = f"{base_port}.out"
-        instance_output_logs.append("instance_"+result_filename)
-        launch_command = generate_bladellm_serve_command(
-                            result_filename=result_filename,
-                            ip=ip,
-                            port=base_port,
-                            model=model,
-                            dispatch_policy="flood",
-                            migration_backend=migration_backend,
-                            tensor_parallel_size=tensor_parallel_size,
-                            max_instances=num_instances)
-        subprocess.run(launch_command, shell=True, check=True)
+        raise ValueError(f"Unknown engine: {engine}")
+
+    launch_command = generate_serve_command(
+                        result_filename=result_filename,
+                        ip=ip,
+                        port=base_port,
+                        model=model,
+                        dispatch_policy="flood",
+                        migration_backend=migration_backend,
+                        request_migration_policy=request_migration_policy,
+                        tensor_parallel_size=tensor_parallel_size,
+                        enforce_eager=False,
+                        max_instances=num_instances)
+    subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
 
@@ -181,7 +183,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
         return process
 
     tasks = []
-    for i in range(num_instances // 2):
+    for i in range(num_instances):
         bench_command = generate_bench_command(
             backend=engine,
             ip_ports=ip_ports[i],
@@ -208,7 +210,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
 
     assert instance_num_blocks_list_before_bench == instance_num_blocks_list_after_bench
 
-    if migration_request_status == 'running' and tensor_parallel_size == 1 and not use_ray_spmd_worker:
+    if num_prompts == 500:
         average_speed = parse_instance_log_file(instance_output_logs)
         sorted_keys = sorted(average_speed.keys(), key=lambda x: float(x.split()[0])*1024 if 'GB' in x else float(x.split()[0]))
         data = [

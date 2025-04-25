@@ -24,7 +24,7 @@ import numpy as np
 from llumnix.utils import get_ip_address, try_convert_to_local_path
 
 # pylint: disable=unused-import
-from tests.conftest import ray_env
+from tests.conftest import ray_env, SKIP_REASON
 from .utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service,
                     generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
@@ -80,12 +80,19 @@ def parse_log_file(title: str):
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
+@pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception,
-                                model, request_output_queue_type, engine):
+                                enable_pd_disagg, model, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
     num_prompts = 500
+    
+    if "vLLM" in engine and enable_pd_disagg:
+        SKIP_REASON = "vLLM pd_disagg only performs correctness tests."
+    
+    if SKIP_REASON is not None and len(SKIP_REASON) > 0:
+        pytest.skip(SKIP_REASON)
 
     global test_times
 

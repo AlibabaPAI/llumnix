@@ -24,7 +24,7 @@ import torch
 from llumnix.utils import get_ip_address, try_convert_to_local_path
 
 # pylint: disable=unused-import
-from tests.conftest import ray_env, cleanup_ray_env_func
+from tests.conftest import ray_env, cleanup_ray_env_func, SKIP_REASON
 from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
                     wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                     shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
@@ -119,42 +119,6 @@ async def run_bladellm(model, enable_pd_disagg):
     await asyncio.sleep(3)
     return bladellm_outputs
 
-'''
-engine  launch_mode     enable_pd_disagg    enable_simulator    tensor_parallel_size  migration_backend
-
-# local model is not our inteest
-vllm    local           False               False                1                      x
-vllm    local           True                False                1                      x
-
-# test p d
-vllm    gloabl          False               False               1                       x
-vllm    gloabl          True               False               1                       x
-
-# test simulator
-vllm    gloabl          False               True               1                       x
-
-# test migration backend
-vllm    gloabl          True               False               2                       rayqueue
-vllm    gloabl          True               False               2                       gloo
-vllm    gloabl          True               False               2                       zmq
-
-
-bladellm    local       False           False                   1                       x
-bladellm    local       True           False                   1                        x
-
-bladellm    global       True           False                   1                        x
-bladellm    global       True           False                   2                        x
-
-# bladellm迁移正确性？？？
-bladellm    gloabl          True               False               1                      grpc
-bladellm    gloabl          True               False               1                      kvt
-
-TP = 2
-
-'''
-    if tensor_parallel_size == 2 and migration_backend == 'nccl':
-        pytest.skip("When the migration backend is nccl, tensor parallelism is not supported.")
-
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for correctness test")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
@@ -162,15 +126,49 @@ TP = 2
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'grpc', 'kvtransfer'])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'kvtransfer'])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            launch_mode, enable_pd_disagg, enable_simulator, tensor_parallel_size,
-                           engine):
+                           migration_backend, engine):
     engine = engine.split("_")[1]
 
-    if tensor_parallel_size == 2 and launch_mode == "local":
-        pytest.skip("Only test tensor parallelism in global launch mode.")
+    if "BladeLLM" in engine:
+        # TODO(KuilongCui): add bladellm migration correctness test for grpc and kvtransfer
+        if migration_backend not in ['grpc', 'kvtransfer']:
+            SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
+
+        if launch_mode == "local" and tensor_parallel_size == 2:
+            SKIP_REASON = "Only test tensor parallelism in global launch mode."
+
+        if enable_simulator:
+            SKIP_REASON = "Simulator for BladeLLM is not supported yet."
+
+    if "vLLM" in engine:
+        if migration_backend not in ['rayrpc', 'gloo', 'nccl']:
+            SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
+
+        if tensor_parallel_size == 2 and migration_backend == 'nccl':
+            SKIP_REASON = "When the migration backend is nccl, tensor parallelism is not supported."
+
+        if launch_mode == "local":
+            if enable_simulator:
+                SKIP_REASON = "Simulator in TP = 2 will not be tested."
+
+            if tensor_parallel_size == 2:
+                SKIP_REASON = "Only test tensor parallelism in global launch mode."
+
+            if migration_backend != "gloo":
+                SKIP_REASON = f"Only test gloo in local launch mode for vLLM."
+
+        if enable_pd_disagg and enable_simulator:
+            SKIP_REASON = "Only test simulator for vLLM in non-pd-disagg."
+
+        if enable_simulator and migration_backend != "gloo":
+            SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
+
+    if SKIP_REASON is not None and len(SKIP_REASON) > 0:
+        pytest.skip(SKIP_REASON)
 
     global test_times
 

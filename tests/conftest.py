@@ -79,11 +79,16 @@ def pytest_sessionstart(session):
 def pytest_sessionfinish(session):
     ray_stop()
 
+
+SKIP_REASON: str = None
+
 @pytest.fixture
 def ray_env():
+    SKIP_REASON = None
     ray.init(ignore_reinit_error=True, namespace="llumnix")
     yield
-    cleanup_ray_env_func()
+    if SKIP_REASON is not None and len(SKIP_REASON) > 0: 
+        cleanup_ray_env_func()
 
 def backup_error_log(func_name):
     curr_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')

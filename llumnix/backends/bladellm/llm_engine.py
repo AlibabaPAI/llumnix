@@ -383,8 +383,8 @@ class BackendBladeLLM(BackendInterface):
         ip_addr = get_ip_address()
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         src_worker_start_port = self.migration_config.grpc_migration_backend_server_port
-        src_ports = range(src_worker_start_port, src_worker_start_port+world_size)
-        self.src_worker_ip_address = [ip_addr+":"+str(port) for port in src_ports]
+        src_ports = range(src_worker_start_port, src_worker_start_port + world_size)
+        self.src_worker_ip_address = [ip_addr + ":" + str(port) for port in src_ports]
         self.worker_infos = []
         self.kv_transfer_instance_id = self.instance_id
         if engine_args.enable_disagg and engine_args.disagg_options is not None:

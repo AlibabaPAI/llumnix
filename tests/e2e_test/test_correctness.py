@@ -149,9 +149,11 @@ bladellm    global       True           False                   2               
 bladellm    gloabl          True               False               1                      grpc
 bladellm    gloabl          True               False               1                      kvt
 
+TP = 2
 
 '''
-
+    if tensor_parallel_size == 2 and migration_backend == 'nccl':
+        pytest.skip("When the migration backend is nccl, tensor parallelism is not supported.")
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for correctness test")

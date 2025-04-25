@@ -103,15 +103,11 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model, tensor_parallel_size,
+async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model,
                                    migration_backend, migration_request_status, use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
     num_prompts = 500
-
-    # TODO(s5u13b): fix this bug
-    if "BladeLLM" in engine and tensor_parallel_size > 1:
-        pytest.skip("Error in BladeLLM for tensor parallel size > 1.")
 
     if "BladeLLM" in engine and use_ray_spmd_worker:
         pytest.skip("use_ray_spmd_worker is vLLM config, just skip it in BladeLLM.")
@@ -124,18 +120,6 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
 
     if migration_request_status == 'waiting' and engine == 'BladeLLM':
         pytest.skip("BladeLLM does not support migrating waiting request temporarily.")
-
-    if migration_request_status == 'waiting' and migration_backend != 'rayrpc':
-        pytest.skip("When the migrated request status is waiting, only test the rayrpc migration backend.")
-
-    if tensor_parallel_size == 2 and migration_backend == 'nccl':
-        pytest.skip("When the migration backend is nccl, tensor parallelism is not supported.")
-    if use_ray_spmd_worker and migration_backend != 'gloo':
-        pytest.skip("When use_ray_spmd_worker is True, only test the gloo migration backend.")
-    if use_ray_spmd_worker and tensor_parallel_size == 2:
-        pytest.skip("When using ray spmd worker, ray will raise RayCgraphCapacityExceeded exeception when tensor parallelism is enabled.")
-    if use_ray_spmd_worker and migration_request_status == 'waiting':
-        pytest.skip("When using ray spmd worker, only migrating running request will have different migration process.")
 
     if use_ray_spmd_worker:
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"

@@ -147,9 +147,8 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
 
     await asyncio.sleep(5)
 
-    if num_prompts == 500:
-        with open("performance.txt", "a", encoding="utf-8") as f:
-            f.write(parse_log_file(title=request.node.name))
+    with open("performance.txt", "a", encoding="utf-8") as f:
+        f.write(parse_log_file(title=request.node.name))
 
     await asyncio.sleep(3)
 

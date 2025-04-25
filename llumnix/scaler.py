@@ -374,7 +374,8 @@ class Scaler:
                 self.inflight_num_decode_instances -= 1 if instance_type == InstanceType.DECODE else 0
 
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
-        next_instance_args = await self._get_next_instance_args(instance_args, instance_type)
+        world_size = get_engine_world_size(engine_args, backend_type)
+        next_instance_args = await self._get_next_instance_args(instance_args, instance_type, world_size)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         next_engine_args = self._get_next_engine_args(engine_args, next_instance_args.instance_type)
         instance = self._init_instance(instance_id, next_instance_args, placement_group,
@@ -473,7 +474,7 @@ class Scaler:
         if not remove_placement_group(instance_id):
             logger.warning("Failed to remove placement group {}.".format(instance_id))
 
-    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
+    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType, world_size: int) -> InstanceArgs:
         if (
             not self.enable_port_increment
             and not self.pdd_config.enable_pd_disagg
@@ -485,7 +486,7 @@ class Scaler:
 
         if self.enable_port_increment:
             # self.port_offset will be incremented by 1 in the next _get_next_entrypoints_args call.
-            next_instance_args.grpc_migration_backend_server_port += self.port_offset
+            next_instance_args.grpc_migration_backend_server_port += self.port_offset * world_size
 
         if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg:
             # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.

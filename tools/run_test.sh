@@ -8,7 +8,7 @@ if [[ "$test_mode" == *"vllm"* ]]; then
     install_command="make vllm_install"
     docker_options="--net host --ipc host"
 elif [[ "$test_mode" == *"bladellm"* ]]; then
-    image="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-bladellm-dev:202504231413_image_a0ca8d7"
+    image="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-bladellm-dev:202504251100_image_aa90d23"
     install_command="make bladellm_install"
     docker_options="--net host --ipc host --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1 --device=/dev/infiniband/rdma_cm --ulimit memlock=-1"
 else

@@ -18,5 +18,3 @@ RUN mkdir -p /intall_workspace/llumnix && \
     make check_pylint_installed && \
     make check_pytest_installed && \
     make vllm_install
-
-RUN rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

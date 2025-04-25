@@ -20,5 +20,3 @@ RUN mkdir -p /intall_workspace/llumnix && \
     make bladellm_install
 
 RUN mkdir -p /tmp/llumnix/naming
-
-RUN rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

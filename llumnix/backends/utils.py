@@ -105,7 +105,7 @@ def init_backend_engine(instance_id: str,
     return backend_engine
 
 def get_engine_world_size(engine_args, backend_type: BackendType):
-    if backend_type == BackendType.VLLM:
+    if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
         engine_config = engine_args.create_engine_config()
         # world_size = tp_size * pp_size
         world_size = engine_config.parallel_config.world_size

@@ -106,8 +106,8 @@ def get_instance_num_blocks():
 @pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model,
-                                   tensor_parallel_size, 
-                                   migration_backend, migration_request_status, use_ray_spmd_worker, engine):
+                                   migration_request_status, tensor_parallel_size, migration_backend,
+                                   use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
     num_prompts = 500
@@ -152,7 +152,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
         ip_ports.append(f"{ip}:{base_port+i}")
     result_filename = f"{base_port}.out"
     instance_output_logs.append("instance_"+result_filename)
-    
+
     if "vLLM" in engine:
         generate_serve_command = generate_vllm_serve_command
     elif "BladeLLM" in engine:

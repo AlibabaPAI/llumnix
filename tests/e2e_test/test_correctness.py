@@ -159,7 +159,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                 SKIP_REASON = "Only test tensor parallelism in global launch mode."
 
             if migration_backend != "gloo":
-                SKIP_REASON = f"Only test gloo in local launch mode for vLLM."
+                SKIP_REASON = "Only test gloo in local launch mode for vLLM."
 
         if enable_pd_disagg and enable_simulator:
             SKIP_REASON = "Only test simulator for vLLM in non-pd-disagg."

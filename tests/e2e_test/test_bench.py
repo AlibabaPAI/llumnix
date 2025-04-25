@@ -87,10 +87,10 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     engine = engine.split("_")[1]
 
     num_prompts = 500
-    
+
     if "vLLM" in engine and enable_pd_disagg:
         SKIP_REASON = "vLLM pd_disagg only performs correctness tests."
-    
+
     if SKIP_REASON is not None and len(SKIP_REASON) > 0:
         pytest.skip(SKIP_REASON)
 

@@ -87,7 +87,7 @@ def ray_env():
     SKIP_REASON = None
     ray.init(ignore_reinit_error=True, namespace="llumnix")
     yield
-    if SKIP_REASON is not None and len(SKIP_REASON) > 0: 
+    if SKIP_REASON is not None and len(SKIP_REASON) > 0:
         cleanup_ray_env_func()
 
 def backup_error_log(func_name):

@@ -81,6 +81,7 @@ def pytest_sessionfinish(session):
 
 @pytest.fixture
 def ray_env():
+    cleanup_ray_env_func()
     ray.init(ignore_reinit_error=True, namespace="llumnix")
     yield
     cleanup_ray_env_func()

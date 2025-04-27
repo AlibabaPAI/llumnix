@@ -514,6 +514,7 @@ class BackendBladeLLM(BackendInterface):
 
     def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.engine.trans_wrapper.add_request(backend_request.request_id, backend_request.server_info)
+        self.engine._req_tracker.req_metrics_map[backend_request.request_id] = backend_request.req_metrics
         return self.engine.scheduler.add_running_request(backend_request)
 
     def free_dst_pre_alloc_cache(self, *args, **kwargs) -> None:

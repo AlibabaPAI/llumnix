@@ -157,12 +157,16 @@ class Manager:
                            "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
         prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
+        logger.info(f'self.manager_args.enable_engine_pd_disagg:{self.manager_args.enable_engine_pd_disagg}')
         if self.manager_args.enable_engine_pd_disagg:
             # Only used in bladellm now
             decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
+            logger.info(f'decode_instance_id:{decode_instance_id}')
             kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
                 decode_instance_id, None
             )
+            logger.info(f'self.instance_id_2_engine_disagg_inst_id:{self.instance_id_2_engine_disagg_inst_id}')
+            logger.info(f'kwargs["decode_instance_id"]:{kwargs["decode_instance_id"]}')
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         self.instances[prefill_instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
         if self.log_requests:

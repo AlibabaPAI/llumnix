@@ -41,14 +41,6 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
 
     def _init_workers_ray(self, placement_group: PlacementGroup,
                           **ray_remote_kwargs):
-        if (self.parallel_config.tensor_parallel_size == 1
-                and self.parallel_config.pipeline_parallel_size == 1):
-            # For single GPU case, we use a ray worker with constrained memory.
-            num_gpus = self.cache_config.gpu_memory_utilization
-        else:
-            # Otherwise, the ray workers are allocated with a full GPU.
-            num_gpus = 1
-
         # The driver dummy worker does not actually use any resources.
         # It holds the resource for the driver worker.
         self.driver_dummy_worker: Optional[RayWorkerWrapper] = None
@@ -74,9 +66,8 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 continue
             if not bundle.get("GPU", 0):
                 raise Exception("GPU resource cannot be 0.")
-            # The Llumlet and worker shares the same 1 gpu in the first bundle of PlacementGroup.
-            if bundle_id == 0:
-                num_gpus = 0.5
+            # Instance and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            num_gpus = 0.5 if bundle_id == 0 else 1
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
                 placement_group_capture_child_tasks=True,
@@ -88,7 +79,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                 num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
                 max_concurrency=2,
-                name=f"RayWorkerWrapper_{self.instance_id}_"+random_uuid(),
+                name=f"worker_{self.instance_id}_"+random_uuid(),
                 **ray_remote_kwargs,
             )(RayWorkerWrapper).remote(**worker_wrapper_kwargs)
 

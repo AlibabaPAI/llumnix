@@ -6,7 +6,6 @@ from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from llumnix.arg_utils import EntrypointsArgs
-from llumnix.utils import get_ip_address
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
@@ -23,10 +22,7 @@ class APIServerActor(ABC):
         logger.info("APIServerActor(instance_id={})".format(self.instance_id))
         self.entrypoints_args = entrypoints_args
         self.engine_args = engine_args
-        if entrypoints_args.host in ("127.0.0.1", "0.0.0.0"):
-            self.host = entrypoints_args.host
-        else:
-            self.host = get_ip_address()
+        self._set_host(entrypoints_args, engine_args)
         self.request_output_queue_port = self.entrypoints_args.request_output_queue_port
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         self.request_output_queue = init_request_output_queue_server(
@@ -44,6 +40,10 @@ class APIServerActor(ABC):
         from llumnix.entrypoints.setup import setup_entrypoints_context
         self.entrypoints_context = setup_entrypoints_context(
                                         self.entrypoints_args, manager, [instance_id], [instance], self.request_output_queue)
+
+    @abstractmethod
+    def _set_host(self, entrypoints_args: EntrypointsArgs, engine_args):
+        raise NotImplementedError
 
     @abstractmethod
     def _run_server(self,

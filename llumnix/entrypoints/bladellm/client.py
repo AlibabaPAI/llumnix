@@ -82,7 +82,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         return resp_stream
 
     async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
-        logger.info("Client add request: {}:{}".format(request_id, request))
+        logger.info("Client add request: {}".format(request_id))
         results_queue = asyncio.Queue()
         self.request_streams[request_id] = results_queue
         server_info_copy = copy.deepcopy(self.server_info)

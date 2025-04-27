@@ -78,10 +78,10 @@ def init_backend_engine(instance_id: str,
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.llm_engine import BackendVLLM
         backend_engine = BackendVLLM(instance_id,
-                                        placement_group,
-                                        request_output_queue_type,
-                                        migration_config,
-                                        engine_args)
+                                     placement_group,
+                                     request_output_queue_type,
+                                     migration_config,
+                                     engine_args)
     elif backend_type == BackendType.BLADELLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.bladellm.llm_engine import BackendBladeLLM
@@ -105,9 +105,11 @@ def init_backend_engine(instance_id: str,
     return backend_engine
 
 def get_engine_world_size(engine_args, backend_type: BackendType):
-    if backend_type == BackendType.VLLM:
+    if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
         engine_config = engine_args.create_engine_config()
+        # world_size = tp_size * pp_size
         world_size = engine_config.parallel_config.world_size
     else: # BLADE_LLM
+        # world_size = tp_size * pp_size
         world_size = engine_args.world_size
     return world_size

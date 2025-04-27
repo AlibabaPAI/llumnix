@@ -19,6 +19,7 @@ from typing import Any, Callable, Awaitable, TypeVar, Coroutine, Dict, Optional
 import socket
 from functools import partial
 import pickle
+import warnings
 
 from typing_extensions import ParamSpec
 
@@ -144,9 +145,40 @@ def get_service_instance_type(service_name: str) -> "InstanceType":
     return instance_type
 
 def get_ip_address():
-    hostname = socket.gethostname()
-    ip_address = socket.gethostbyname(hostname)
-    return ip_address
+    # try ipv4
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))  # Doesn't need to be reachable
+        return s.getsockname()[0]
+    # pylint: disable=broad-except
+    except Exception:
+        pass
+
+    # try ipv6
+    try:
+        s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        # Google's public DNS server, see
+        # https://developers.google.com/speed/public-dns/docs/using#addresses
+        s.connect(("2001:4860:4860::8888", 80))  # Doesn't need to be reachable
+        return s.getsockname()[0]
+    # pylint: disable=broad-except
+    except Exception:
+        pass
+
+    try:
+        hostname = socket.gethostname()
+        ip_address = socket.gethostbyname(hostname)
+        return ip_address
+    # pylint: disable=broad-except
+    except Exception:
+        pass
+
+    warnings.warn(
+        "Failed to get the IP address, using 0.0.0.0 by default."
+        "The value can be set by the environment variable"
+        " VLLM_HOST_IP or HOST_IP.",
+        stacklevel=2)
+    return "0.0.0.0"
 
 def _bind_and_close_port(port: Optional[int] = None, host: str = '0.0.0.0') -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -202,3 +234,10 @@ def try_convert_to_local_path(data_path: str) -> str:
         return local_dataset_path
 
     return data_path
+def update_environment_variables(envs: Dict[str, str]):
+    for k, v in envs.items():
+        if k in os.environ and os.environ[k] != v:
+            logger.warning(
+                "Overwriting environment variable %s "
+                "from '%s' to '%s'", k, os.environ[k], v)
+        os.environ[k] = v

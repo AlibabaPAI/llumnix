@@ -117,7 +117,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
         base_port += 5000
 
     ip_ports = []
-    device_count = min(2, torch.cuda.device_count())
+    device_count = min(4, torch.cuda.device_count())
     num_instances = device_count
 
     if "vLLM" in engine:

@@ -125,7 +125,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for correctness test")
-@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen-7B')])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])

@@ -25,6 +25,7 @@ from ray._private.utils import hex_to_binary
 import pytest
 
 from llumnix.utils import random_uuid
+from tests.e2e_test.utils import shutdown_llumnix_service_func
 
 
 def ray_start():
@@ -78,6 +79,7 @@ def pytest_sessionstart(session):
 
 def pytest_sessionfinish(session):
     ray_stop()
+    shutdown_llumnix_service_func()
 
 @pytest.fixture
 def ray_env():

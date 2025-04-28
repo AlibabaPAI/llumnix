@@ -380,8 +380,8 @@ class Scaler:
 
         backend_type = engine_args.backend_type
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
-        world_size = get_engine_world_size(engine_args, backend_type)
-        next_instance_args = await self._get_next_instance_args(instance_args, instance_type, world_size)
+        next_instance_args = await self._get_next_instance_args(instance_args, instance_type,
+                                                                engine_args.get_engine_world_size())
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
             current_engine_args=engine_args,

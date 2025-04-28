@@ -35,7 +35,6 @@ from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import get_ip_address
 
 logger = init_logger(__name__)
 

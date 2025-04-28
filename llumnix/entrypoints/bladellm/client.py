@@ -16,7 +16,7 @@ import time
 import asyncio
 import copy
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import ray
 
@@ -145,11 +145,12 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
 
     async def get_request_outputs_loop(self):
         while True:
-            request_output_jsons = await self.request_output_queue.get()
-            if request_output_jsons is None:
+            request_output_from_engine = await self.request_output_queue.get()
+            if request_output_from_engine is None:
                 continue
-            for request_output_json in request_output_jsons:
+            for request_output_json, request_timestamp in request_output_from_engine:
                 request_output = GenerateStreamResponse(**json.loads(request_output_json))
+                set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
                 request_id = request_output.req_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
@@ -157,8 +158,14 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 processed_output: List[GenerateStreamResponse] = self.process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
-                for req in processed_output:
-                    self.request_streams[request_id].put_nowait(req)
+
+                for single_output in processed_output:
+                    single_output, timestamps = single_output
+                    if self.log_request_timestamps:
+                        self.request_streams[request_id].put_nowait(single_output, timestamps)
+                    else:
+                        self.request_streams[request_id].put_nowait(single_output)
+
                 self.request_streams_last_completion_tokens[request_id] = processed_output[-1].usage.completion_tokens
                 if processed_output[-1].is_finished:
                     logger.debug("Client finish request {}".format(request_id))
@@ -168,14 +175,15 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     self.request_streams_last_completion_tokens.pop(request_id, None)
                     self.request_streams_output_stash.pop(request_id, None)
 
-    def process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
+    def process_output_order(self, request_id: int, request_output: GenerateStreamResponse,
+                             request_timestamp: Optional[RequestTimestamps] = None) -> List[GenerateStreamResponse]:
         current_completion_tokens = None
         if hasattr(request_output, 'usage'):
             current_completion_tokens = request_output.usage.completion_tokens
 
         if not current_completion_tokens:
             # No usage info, return the request_output directly.
-            return [request_output]
+            return [request_output, request_timestamp]
 
         last_completion_tokens = self.request_streams_last_completion_tokens.get(request_id, 0)
         support_completion_tokens = last_completion_tokens + len(request_output.tokens)
@@ -185,13 +193,13 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                         ", current completion tokens is {}, current tokens is {}, stash current output..."
                         .format(request_id,last_completion_tokens,current_completion_tokens,len(request_output.tokens)))
 
-            self.request_streams_output_stash.setdefault(request_id, []).append(request_output)
+            self.request_streams_output_stash.setdefault(request_id, []).append((request_output, request_timestamp))
             return []
 
         if current_completion_tokens == support_completion_tokens:
             if not self.request_streams_output_stash.get(request_id, None):
                 # no history output in stash
-                return [request_output]
+                return [request_output, request_timestamp]
 
             # process the history output in buffer
             output_stash: List[GenerateStreamResponse] = self.request_streams_output_stash[request_id]
@@ -203,12 +211,12 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 last_correct_output_index += 1
                 current_completion_tokens = output.usage.completion_tokens
             if last_correct_output_index == 0:
-                return [request_output]
-            res = [request_output] + output_stash[:last_correct_output_index]
+                return [request_output, request_timestamp]
+            res = [request_output, request_timestamp] + output_stash[:last_correct_output_index]
             self.request_streams_output_stash[request_id] = output_stash[last_correct_output_index:]
             return res
 
-        return [request_output]
+        return [request_output, request_timestamp]
 
     def connect(self):
         pass

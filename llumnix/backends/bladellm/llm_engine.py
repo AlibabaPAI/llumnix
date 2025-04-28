@@ -14,6 +14,7 @@
 # pylint: disable=protected-access
 
 import sys
+import time
 from functools import partial
 import json
 from typing import List, Optional, Tuple, Union, Iterable, Any
@@ -51,6 +52,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
 from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateCacheRequest, WorkerInfo
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -91,6 +93,9 @@ class AsyncBackQueueWrapper:
         async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
             resp: GenerateStreamResponse = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
+            logger.info(f"resp {resp} server_info {server_info}")
+            set_timestamp(server_info, 'engine_process_model_outputs_timestamp_end', time.time())
+
             if resp.is_finished:
                 logger.info("engine {} finish_request {}".format(self.instance_id, resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
@@ -119,9 +124,14 @@ class AsyncBackQueueWrapper:
         # Reorganize data in order to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            server_request_outputs[server_id].append(request_output.model_dump_json())
+            set_timestamp(server_info, 'engine_put_queue_timestamp', time.time())
+            request_timestamps = None
+            if hasattr(server_info, "request_timestamps"):
+                request_timestamps = server_info.request_timestamps
+            server_request_outputs[server_id].append((request_output.model_dump_json(), request_timestamps))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
+
         self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
 
     def drop_request(self, request_id: int) -> None:
@@ -163,6 +173,8 @@ class AsyncLLMEngineLlumnixMixin:
 
         self.migrated_request = set()
         self.resp_queue = asyncio.Queue()
+
+        self.log_request_timestamps: bool = False
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -210,6 +222,17 @@ class AsyncLLMEngineLlumnixMixin:
                     RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
     async def update_callback(self, resp_list, *args, **kwargs):
+        if self.log_request_timestamps:
+            request_groups = resp_list[0].generation_groups.generation_group
+            for gen_group in request_groups:
+                request_group_id = gen_group.request_group_id
+                server_info: ServerInfo = self.trans_wrapper.request_server_map[request_group_id]
+                worker_metrics = resp_list[0].worker_step_metrics
+                wroker_forward_time = worker_metrics.worker_bubble_time_us + worker_metrics.prepare_step_ms + \
+                    worker_metrics.model_forward_ms + worker_metrics.post_step_ms
+                set_timestamp(server_info, 'engine_step_timestamp_end', wroker_forward_time)
+                set_timestamp(server_info, 'engine_process_model_outputs_timestamp_begin', time.time())
+
         await super().update_callback(resp_list, *args, **kwargs)
         self._update_request_inference_type(resp_list)
         self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
@@ -249,7 +272,9 @@ class AsyncLLMEngineLlumnixMixin:
 
     async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
         logger.debug("engine {} add request {}".format(self.instance_id, server_request))
+        set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
         self.trans_wrapper.add_request(server_request.id, server_info)
+        self.log_request_timestamps = self.log_request_timestamps or hasattr(server_info, "request_timestamps")
         # pylint: disable=protected-access
         await self._client._add_request(server_request, self.resp_queue)
 

@@ -30,6 +30,7 @@ from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.utils import LaunchMode, is_gpu_available, EntrypointsContext
 from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_llumnix_cli_args, get_args
 from llumnix.logging.logger import init_logger
+from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -45,13 +46,23 @@ class LlumnixEntrypoint(Entrypoint):
         # Non-streaming case
         tokens = []
         per_token_latency = []
+        per_token_latency_breakdown_list = []
         streamer = results_generator.async_stream()
         async for r in streamer:
+            timestamps = None
+            if isinstance(r, tuple):
+                r, timestamps = r
+
             now = time.time()
             per_token_latency.append([now, (now - start)*1000])
             start = now
             tokens.extend(r.tokens)
             assert r.error_info is None, f"Some errors occur, benchmark is stopping: {r.error_info}."
+
+            set_timestamp(timestamps, 'api_server_generate_timestamp_end', now)
+            set_timestamp(timestamps, 'api_server_get_queue_timestamp', time.time())
+            if timestamps:
+                per_token_latency_breakdown_list.append(timestamps.to_latency_breakdown_dict())
 
         output_text = "".join([tok.text for tok in tokens])
         num_output_tokens = len(tokens)
@@ -66,6 +77,8 @@ class LlumnixEntrypoint(Entrypoint):
             'num_output_tokens_cf': num_output_tokens,
             'per_token_latency': per_token_latency,
         }
+        if per_token_latency_breakdown_list:
+            ret['per_token_latency_breakdown_list'] = per_token_latency_breakdown_list
         return web.json_response(data=ret)
 
     # pylint: disable=unused-argument

@@ -76,7 +76,7 @@ def generate_vllm_launch_command(
         f"--instance-type {instance_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'--simulator-mode ' if enable_simulator else ''}"
-        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl ' if enable_simulator else ''}"
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -133,7 +133,7 @@ def generate_vllm_serve_command(
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--config-file {config_path} "
-        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl ' if enable_simulator else ''}"
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -189,7 +189,6 @@ def generate_bladellm_launch_command(
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
-    print(command)
     return command
 
 def generate_bladellm_serve_command(

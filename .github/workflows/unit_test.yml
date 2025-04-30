@@ -26,6 +26,6 @@ jobs:
       uses: actions/checkout@v4
     - name: Kill Running Containers
       run: |
-        [[ -n $(docker ps -q) ]] && docker kill $(docker ps -q) || echo "No running containers to kill."
+        [[ -n $(docker ps -q) ]] && (docker stop -t 10 $(docker ps -q) || docker kill $(docker ps -q)) || echo "No running containers"
     - name: Build And Test
       run: ./tools/run_test.sh vllm_unit_test

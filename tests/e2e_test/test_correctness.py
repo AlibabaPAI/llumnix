@@ -218,7 +218,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
     await asyncio.sleep(3)
 
     wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
-
+    await asyncio.sleep(30)
     llumnix_output = {}
     for prompt in prompts:
         response = await get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func)

@@ -78,7 +78,7 @@ def parse_log_file(title: str):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
-@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen-7B')])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
@@ -208,7 +208,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
             num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
-            qps=5,
+            qps=1,
             results_filename=f"{port}.out"
         )
         tasks.append(bench_command)

@@ -302,18 +302,13 @@ async def test_migration_correctness(migration_backend, migration_request_status
             llumlets = [llumlet_0, llumlet_1]
             for llumlet in llumlets:
                 assert_commit = None
-                assert_pop = None
                 try:
                     ray.get(llumlet.commit_seq_group_metadata_worker.remote(request_id1))
                     assert_commit = False
                 except AssertionError:
                     assert_commit = True
-                try:
-                    ray.get(llumlet.pop_migrating_out_seq_group_metadata_worker.remote(request_id1))
-                    assert_pop = False
-                except AssertionError:
-                    assert_pop = True
-                assert assert_commit and assert_pop
+                popped = ray.get(llumlet.pop_migrating_out_seq_group_metadata_worker.remote(request_id1))
+                assert assert_commit and popped
 
     for prompt in TEST_PROMPTS:
         await gen_origin_outputs(prompt)

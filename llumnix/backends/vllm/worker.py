@@ -181,10 +181,11 @@ class MigrationWorker(Worker):
             seq_group_metadata: Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]) -> None:
         self.migrating_out_seq_group_metadata[request_id] = seq_group_metadata
 
-    def pop_migrating_out_seq_group_metadata(self, request_id: str) -> None:
+    def pop_migrating_out_seq_group_metadata(self, request_id: str) -> bool:
         # If pop during last stage pre_alloc, the request id does not exist in the self.migrating_out_seq_group_metadata.
         # If pop after migration finished, the request id does exist in the self.migrating_out_seq_group_metadata.
-        self.migrating_out_seq_group_metadata.pop(request_id, None)
+        seq_group_metadata = self.migrating_out_seq_group_metadata.pop(request_id, None)
+        return (seq_group_metadata != None)
 
     def free_migrating_in_seq_group_metadata(self) -> None:
         self.migrating_in_seq_group_metadata.clear()

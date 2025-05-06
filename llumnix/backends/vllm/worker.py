@@ -162,7 +162,7 @@ class MigrationWorker(Worker):
 
     def _get_seq_group_metadata(self, request_id: str) -> Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]:
         assert request_id in self._seq_group_metadata_cache, \
-            "the request id of running request that migrating out should exist in sequence group metadata cache"
+            f"the request id {request_id} of running request that migrating out should exist in sequence group metadata cache"
         src_seq_group_metadata = self._seq_group_metadata_cache.pop(request_id)
         self._add_migrating_out_seq_group_metadata(request_id, src_seq_group_metadata)
         return src_seq_group_metadata
@@ -173,7 +173,7 @@ class MigrationWorker(Worker):
 
     def commit_seq_group_metadata(self, request_id: str) -> None:
         assert request_id in self.migrating_in_seq_group_metadata, \
-            "the request id of running request that migrating in should exist in migrating in sequence group metadata"
+            f"the request id {request_id} of running request that migrating in should exist in migrating in sequence group metadata"
         self._seq_group_metadata_cache[request_id] = self.migrating_in_seq_group_metadata.pop(request_id)
 
     def _add_migrating_out_seq_group_metadata(self, request_id: str,
@@ -182,7 +182,7 @@ class MigrationWorker(Worker):
 
     def pop_migrating_out_seq_group_metadata(self, request_id: str) -> None:
         assert request_id in self.migrating_out_seq_group_metadata, \
-            "the request id of request that migrating out should exist in migrating out sequence group metadata"
+            f"the request id {request_id} of request that migrating out should exist in migrating out sequence group metadata"
         self.migrating_out_seq_group_metadata.pop(request_id)
 
     def free_migrating_in_seq_group_metadata(self) -> None:

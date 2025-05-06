@@ -133,7 +133,7 @@ class SchedulerLlumnix(Scheduler):
 
     def pop_migrating_out_request_last_stage(self, request_id: str) -> None:
         assert request_id in self.migrating_out_request_last_stage, \
-            "the request id of migrating out request in last stage should exist in migrating out request last stage"
+            f"the request id {request_id} of migrating out request in last stage should exist in migrating out request last stage"
         self.migrating_out_request_last_stage.pop(request_id)
 
     def free_migrating_out_requests_last_stage(self) -> List[SequenceGroupLlumnix]:

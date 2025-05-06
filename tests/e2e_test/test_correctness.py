@@ -26,10 +26,10 @@ from llumnix.utils import get_ip_address, try_convert_to_local_path
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func
 from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
-                    wait_for_llumnix_service_ready, generate_bladellm_launch_command,
-                    shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
-                    generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
-                    check_log_exception, generate_bladellm_serve_command)
+                                  wait_for_llumnix_service_ready, generate_bladellm_launch_command,
+                                  shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
+                                  generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
+                                  check_log_exception, generate_bladellm_serve_command)
 
 
 async def get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func):

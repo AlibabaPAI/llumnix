@@ -185,7 +185,7 @@ class MigrationWorker(Worker):
         # If pop during last stage pre_alloc, the request id does not exist in the self.migrating_out_seq_group_metadata.
         # If pop after migration finished, the request id does exist in the self.migrating_out_seq_group_metadata.
         seq_group_metadata = self.migrating_out_seq_group_metadata.pop(request_id, None)
-        return (seq_group_metadata != None)
+        return seq_group_metadata is not None
 
     def free_migrating_in_seq_group_metadata(self) -> None:
         self.migrating_in_seq_group_metadata.clear()

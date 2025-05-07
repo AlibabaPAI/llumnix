@@ -159,7 +159,7 @@ def generate_bladellm_launch_command(
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     cuda_visiable_device: Optional[str] = None,
-    **kwargs
+    request_output_queue_type: str = "zmq"
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -184,6 +184,7 @@ def generate_bladellm_launch_command(
         f"--disagg_pd.inst_role={instance_type} "
         f"--naming_url={NAMING_URL} "
         f"INSTANCE.GRPC_MIGRATION_BACKEND_SERVER_PORT {port + 20} "
+        f"SERVER.REQUEST_OUTPUT_QUEUE_TYPE {request_output_queue_type} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
@@ -208,7 +209,7 @@ def generate_bladellm_serve_command(
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     max_instances: int = 4,
-    **kwargs
+    request_output_queue_type: str = "zmq"
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 "
@@ -235,6 +236,7 @@ def generate_bladellm_serve_command(
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
+        f"SERVER.REQUEST_OUTPUT_QUEUE_TYPE {request_output_queue_type} "
         f"MANAGER.ENABLE_PORT_INCREMENT True "
         f"MANAGER.MAX_INSTANCES {max_instances} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"

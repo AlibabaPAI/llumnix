@@ -159,7 +159,8 @@ def generate_bladellm_launch_command(
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     cuda_visiable_device: Optional[str] = None,
-    request_output_queue_type: str = "zmq"
+    request_output_queue_type: str = "zmq",
+    **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -209,7 +210,8 @@ def generate_bladellm_serve_command(
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     max_instances: int = 4,
-    request_output_queue_type: str = "zmq"
+    request_output_queue_type: str = "zmq",
+    **kwargs
 ):
     command = (
         f"RAY_DEDUP_LOGS=0 "

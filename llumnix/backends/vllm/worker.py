@@ -161,8 +161,9 @@ class MigrationWorker(Worker):
         return self.migration_backend.do_send(*args, **kwargs), self._get_seq_group_metadata(request_id)
 
     def _get_seq_group_metadata(self, request_id: str) -> Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]:
+        # Only send sequence group metadata in last stage (blocking migration), so the request id must exist.
         assert request_id in self._seq_group_metadata_cache, \
-            "the request id of running request that migrating out should exist in sequence group metadata cache"
+            f"the request id {request_id} of running request that migrating out should exist in sequence group metadata cache"
         src_seq_group_metadata = self._seq_group_metadata_cache.pop(request_id)
         self._add_migrating_out_seq_group_metadata(request_id, src_seq_group_metadata)
         return src_seq_group_metadata
@@ -173,17 +174,18 @@ class MigrationWorker(Worker):
 
     def commit_seq_group_metadata(self, request_id: str) -> None:
         assert request_id in self.migrating_in_seq_group_metadata, \
-            "the request id of running request that migrating in should exist in migrating in sequence group metadata"
+            f"the request id {request_id} of running request that migrating in should exist in migrating in sequence group metadata"
         self._seq_group_metadata_cache[request_id] = self.migrating_in_seq_group_metadata.pop(request_id)
 
     def _add_migrating_out_seq_group_metadata(self, request_id: str,
             seq_group_metadata: Union[SequenceGroupMetadata, SequenceGroupMetadataDelta]) -> None:
         self.migrating_out_seq_group_metadata[request_id] = seq_group_metadata
 
-    def pop_migrating_out_seq_group_metadata(self, request_id: str) -> None:
-        assert request_id in self.migrating_out_seq_group_metadata, \
-            "the request id of request that migrating out should exist in migrating out sequence group metadata"
-        self.migrating_out_seq_group_metadata.pop(request_id)
+    def pop_migrating_out_seq_group_metadata(self, request_id: str) -> bool:
+        # If pop during last stage pre_alloc, the request id does not exist in the self.migrating_out_seq_group_metadata.
+        # If pop after migration finished, the request id does exist in the self.migrating_out_seq_group_metadata.
+        seq_group_metadata = self.migrating_out_seq_group_metadata.pop(request_id, None)
+        return seq_group_metadata is not None
 
     def free_migrating_in_seq_group_metadata(self) -> None:
         self.migrating_in_seq_group_metadata.clear()

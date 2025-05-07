@@ -39,6 +39,7 @@ def main():
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=BackendType.BLADELLM)
 
     # magic actor to avoid fast api server actor initialization error
+    # pylint: disable=unused-variable
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})
 

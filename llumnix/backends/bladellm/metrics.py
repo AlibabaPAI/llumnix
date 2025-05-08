@@ -52,8 +52,6 @@ class BladeLLMMetrics(LlumnixMetrics):
         self.num_blocks_first_waiting_request.observe(scheduler.get_num_blocks_first_waiting_request())
         self.num_blocks_last_running_request.observe(scheduler.get_num_blocks_last_running_request())
         self.all_request_ids.observe(scheduler.get_all_request_ids())
-        if self.dump_step % 100 == 0:
-            self.dump()
 
     def engine_step_metrics(self, scheduler):
         block_manager: BlockSpaceManager = scheduler.block_manager

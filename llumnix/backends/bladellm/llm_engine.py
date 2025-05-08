@@ -16,7 +16,7 @@
 import sys
 from functools import partial
 import json
-from typing import List, Optional, Tuple, Union, Iterable, Any
+from typing import List, Optional, Tuple, Union, Iterable, Dict, Any
 from collections import defaultdict
 import asyncio
 import queue
@@ -93,15 +93,40 @@ class AsyncBackQueueWrapper:
             scheduling_strategy=scheduling_strategy,
             name=f"AsyncPutQueueActor_{instance_id}"
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type, backend_type)
-        self.put_queue_args_queue = resp_queue
+        self.put_queue_args_queue: asyncio.Queue = resp_queue
 
         self.request_server_map = {}
         # asyncio.queue is not thread-safe, just create a asyncio.task
         asyncio.create_task(self._put_request_outputs_loop())
 
+        self.daling_request_server_info: Dict[int, int] = {} # req_id, expired_step
+        self.backup_daling_request_server_info: Dict[int, int] = None
+        self.get_current_step_counter_queue: asyncio.Queue = asyncio.Queue()
+        asyncio.create_task(self._clear_request_server_info_loop())
+
+    async def _clear_request_server_info_loop(self):
+        MAX_ITEMS_PER_PROCEDURE: int = 1000
+
+        while True:
+            cur_step_idx: int = self.get_current_step_counter_queue.get()
+            self.backup_daling_request_server_info = self.daling_request_server_info
+            self.daling_request_server_info = {}
+
+            for loop_idx, req_info in enumerate(self.backup_daling_request_server_info.items()):
+                req_id, expired_step_idx = req_info
+                if cur_step_idx >= expired_step_idx:
+                    self.request_server_map.pop(req_id, None)
+
+                if loop_idx % MAX_ITEMS_PER_PROCEDURE == 0:
+                    await asyncio.sleep(0)
+            
+
     async def _put_request_outputs_loop(self):
         async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
-            resp: GenerateStreamResponse = await self.put_queue_args_queue.get()
+            resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
+            while isinstance(resp, int):
+                self.get_current_step_counter_queue.put_nowait(resp)
+                resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
                 logger.info("engine {} finish_request {}".format(self.instance_id, resp.req_id))
@@ -143,9 +168,9 @@ class AsyncBackQueueWrapper:
                 )
             )
 
-    def drop_request(self, request_id: int) -> None:
-        self.request_server_map.pop(request_id, None)
-        logger.debug("trans_wrapper drop_request {}".format(request_id))
+    def remove_request_server_info(self, request_id: int, expired_step: int) -> None:
+        self.daling_request_server_info[request_id] = expired_step
+        logger.debug("trans_wrapper is going to remove request {} at step {}".format(request_id, expired_step))
 
     def add_request(self, request_id: int, server_info: ServerInfo) -> None:
         self.request_server_map[request_id] = server_info
@@ -200,10 +225,20 @@ class AsyncLLMEngineLlumnixMixin:
         self.resp_queue = asyncio.Queue()
 
         self.backend_type = backend_type
+        self.step_counter: int = 0
 
     @property
     def instance_info(self) -> InstanceInfo:
         return self._scheduler.llumnix_metrics.to_instance_info()
+
+    async def _init(self):
+        await super()._init()
+        self.max_async_step: int = self.semaphore._bound_value
+        self._scheduler.set_max_async_step(self.max_async_step)
+
+    async def step(self):
+        self.step_counter += 1
+        await super().step()
 
     async def async_start(self, loop: asyncio.AbstractEventLoop):
         await super().async_start(loop)
@@ -248,6 +283,7 @@ class AsyncLLMEngineLlumnixMixin:
                     RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
     async def update_callback(self, resp_list, *args, **kwargs):
+        self.resp_queue.put_nowait(self.step_counter)
         await super().update_callback(resp_list, *args, **kwargs)
         self._update_request_inference_type(resp_list)
         self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
@@ -278,7 +314,7 @@ class AsyncLLMEngineLlumnixMixin:
         if abort is not None and len(abort) > 0:
             for req_id, _, _ in abort:
                 self._scheduler.id2group[req_id]._status = RequestStatus.FINISHED
-                self.trans_wrapper.drop_request(req_id)
+                self.trans_wrapper.remove_request_server_info(req_id, self.step_counter + self.max_async_step)
 
     async def _handle_reset(self):
         await super()._handle_reset()

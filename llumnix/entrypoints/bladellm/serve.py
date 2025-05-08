@@ -85,9 +85,12 @@ if __name__ == "__main__":
         logger.info("Launch on current node.")
         main()
     elif num_cpus == 0 and num_gpus == 0:
-        # current node has no CPU resources and no GPU resources, it is highly likely that the current node is the head node
-        # bladellm can only run on GPU nodes, so use a ray task to launch bladellm on other nodes
-        logger.info("No gpu on current node, launch on another node.")
+        # In some Ray clusters, there may exist a master node that has no CPU resources and no GPU resources (num_cpus=0, num_gpus=0),
+        # which is used solely for submitting tasks.
+        # Since importing bladellm requires GPU resources, server.py cannot be run on the master node.
+        # In this case, use a Ray task with num_cpus=1 to launch bladellm on other worker nodes.
+        logger.info("No GPU available on the current node. Launching on another node with GPU resources.")
+
         # get args
         original_argv = sys.argv[1:]
         ray.get(remote_launch_task.remote(original_argv))

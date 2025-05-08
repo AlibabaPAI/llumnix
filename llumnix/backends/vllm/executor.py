@@ -30,7 +30,7 @@ from vllm.model_executor.layers.sampler import SamplerOutput
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, ray_get_with_timeout
-from llumnix.constants import INSTANCE_READY_TIMEOUT
+from llumnix.constants import INSTANCE_READY_TIMEOUT, NUM_GPUS_VLLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 

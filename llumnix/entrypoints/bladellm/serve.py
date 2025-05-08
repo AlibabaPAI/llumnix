@@ -82,16 +82,16 @@ if __name__ == "__main__":
 
     if gpu_num > 0:
         # current node has GPU resources
-        logger.info("launch on current node.")
+        logger.info("Launch on current node.")
         main()
     elif cpu_num == 0 and gpu_num == 0:
-        # currnet node has no CPU resources and no GPU resources, it is highly likely that the current node is the head node
+        # current node has no CPU resources and no GPU resources, it is highly likely that the current node is the head node
         # bladellm can only run on GPU nodes, so use a ray task to launch bladellm on other nodes
-        logger.info("no gpu on current node, launch on another node.")
+        logger.info("No gpu on current node, launch on another node.")
         # get args
         original_argv = sys.argv[1:]
         ray.get(remote_launch_task.remote(original_argv))
     else:
         logger.info(
-            "currnet node has CPU resources but no GPU resources, not support now."
+            "Current node has CPU resources but no GPU resources, not support now."
         )

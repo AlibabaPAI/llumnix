@@ -33,7 +33,7 @@ from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 
-entrypoints_context: EntrypointsContext = None
+llumnix_client: LlumnixClientBladeLLM = None
 
 
 class LlumnixEntrypoint(Entrypoint):
@@ -84,12 +84,7 @@ class LlumnixEntrypoint(Entrypoint):
 
 # pylint: disable=unused-argument
 async def clean_up_llumnix_components(app):
-    for instance in entrypoints_context.instances.values():
-        try:
-            ray.kill(instance)
-        # pylint: disable=bare-except
-        except:
-            pass
+    llumnix_client.cleanup()
 
 def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     # generate llumnix_parser for checking parameters with choices
@@ -102,7 +97,6 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
 
     setup_ray_cluster(entrypoints_args)
 
-    llumnix_client = None
     # If gpu is not available, it means that this node is head pod without any llumnix components.
     if is_gpu_available():
         # Since importing the bladellm engine arguments requires available GPU,
@@ -113,7 +107,7 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
         if engine_args.disagg_options is not None:
             engine_args_llumnix.instance_id = engine_args.disagg_options.inst_id
 
-        global entrypoints_context
+        global llumnix_client
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
 

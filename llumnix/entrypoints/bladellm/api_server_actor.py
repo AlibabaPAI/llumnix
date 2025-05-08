@@ -1,5 +1,6 @@
 import asyncio
 from aiohttp import web
+from aiohttp.web_runner import _raise_graceful_exit
 
 from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
@@ -32,8 +33,16 @@ class APIServerActorBladeLLM(APIServerActor):
         # bladellm engine_args is dumped by pickle
         engine_args: ServingArgs = engine_args.unwrap_engine_args_if_needed()
         engine_args.host = self.host
-        loop = asyncio.new_event_loop()
-        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
+
+        self.loop = asyncio.new_event_loop()
+        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, self.loop)
+        import llumnix.entrypoints.bladellm.api_server
+        llumnix.entrypoints.bladellm.api_server.llumnix_client = llumnix_client
         web_app = LlumnixEntrypoint(client=llumnix_client, args=engine_args).create_web_app()
-        logger.info("Start api server on '{}:{}'.".format(self.host, entrypoints_args.port))
-        web.run_app(web_app, host=self.host, port=entrypoints_args.port, loop=loop, handle_signals=False)
+        self._server_started_event.set()
+        # Loop is setted and closed inside.
+        web.run_app(web_app, host=self.host, port=self.entrypoints_args.port, loop=self.loop, handle_signals=False)
+
+    def _stop_server(self):
+        if self.loop.is_running():
+            self.loop.call_soon_threadsafe(_raise_graceful_exit)

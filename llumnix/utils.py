@@ -24,12 +24,15 @@ import ray
 
 from llumnix import envs as llumnix_envs
 from llumnix.constants import MODEL_PATH, DATASET_PATH, RAY_REMOTE_CALL_TIMEOUT
+from llumnix.logging.logger import init_logger
 
 
 _MAX_PORT = 65536
 
 P = ParamSpec('P')
 T = TypeVar("T")
+
+logger = init_logger(__name__)
 
 
 def random_uuid() -> str:
@@ -204,6 +207,7 @@ def try_convert_to_local_path(data_path: str) -> str:
         return local_dataset_path
 
     return data_path
+
 def update_environment_variables(envs: Dict[str, str]):
     for k, v in envs.items():
         if k in os.environ and os.environ[k] != v:
@@ -217,3 +221,6 @@ def ray_get_with_timeout(object_refs, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **
 
 def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
     return asyncio.wait_for(fut, *args, timeout=timeout, **kwargs)
+
+async def async_wrapper(ray_call, *args, **kwargs):
+    return await ray_call(*args, **kwargs)

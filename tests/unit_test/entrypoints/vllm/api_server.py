@@ -68,6 +68,7 @@ def setup_entrypoints_context(request_output_queue_type: QueueType):
     entrypoints_context = EntrypointsContext(manager,
                                              {'0': None},
                                              request_output_queue,
+                                             None,
                                              server_info,
                                              None,
                                              None)

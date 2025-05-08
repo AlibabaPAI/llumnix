@@ -33,7 +33,7 @@ class MockManagerServer(MockManager):
         self.request_output_queue = init_request_output_queue_client(
                                         QueueType(entrypoints_args.request_output_queue_type))
         self.server = self.init_server(entrypoints_args)
-        ray.get(self.server.run.remote())
+        ray.get(self.server.is_ready.remote())
 
     def init_server(self, entrypoints_args):
         server = APIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME,

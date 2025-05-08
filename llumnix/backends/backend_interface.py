@@ -38,7 +38,13 @@ class BackendType(str, Enum):
 
 class BackendInterface(ABC):
     @abstractmethod
+    def stop(self):
+        """ Stop backend engine."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def is_ready(self):
+        """ Get if backend engine ready."""
         raise NotImplementedError
 
     # Methods for inference

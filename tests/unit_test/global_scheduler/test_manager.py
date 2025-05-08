@@ -461,8 +461,8 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
                     if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
     assert len(instance_ids) == 4
     remove_placement_group(instance_ids[0])
-    kill_server(instance_ids[1])
-    kill_instance(instance_ids[2])
+    await kill_server(instance_ids[1])
+    await kill_instance(instance_ids[2])
     # Wait for check deployment states, scale down instance and auto scale up.
     await asyncio.sleep(90.0)
 
@@ -544,13 +544,13 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
     assert num_prefill_instances == 2 and num_decode_instances == 2
     assert set(prefill_instance_ids).union(set(decode_instance_ids)) == set(curr_instances.keys())
 
-    kill_instance(prefill_instance_ids[0])
+    await kill_instance(prefill_instance_ids[0])
     await asyncio.sleep(10.0)
 
-    kill_instance(prefill_instance_ids[1])
+    await kill_instance(prefill_instance_ids[1])
     await asyncio.sleep(10.0)
 
-    kill_instance(decode_instance_ids[1])
+    await kill_instance(decode_instance_ids[1])
     await asyncio.sleep(90.0)
     alive_decode_instance_id = decode_instance_ids[0]
 

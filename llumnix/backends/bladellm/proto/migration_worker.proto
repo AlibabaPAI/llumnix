@@ -75,4 +75,5 @@ service MigrationWorker {
   rpc warmup (google.protobuf.Empty) returns (WarmupResponse) {}
   rpc migrate_cache (MigrateCacheRequest) returns (MigrateCacheResponse) {}
   rpc do_send (SendKvCacheRequest) returns (SendKvCacheResponse) {}
+  rpc close_migration (google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }

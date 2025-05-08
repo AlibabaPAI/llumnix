@@ -38,6 +38,7 @@ from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
 from llumnix.ray_utils import execute_actor_method_async_with_retries
 from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.entrypoints.api_server_actor import APIServerActor
 
 logger = init_logger(__name__)
 
@@ -54,6 +55,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.manager: Manager = entrypoints_context.manager
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
+        self.server: APIServerActor = entrypoints_context.server
         self.server_info: ServerInfo = entrypoints_context.server_info
         self.log_requests: bool = entrypoints_context.log_requests
         self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
@@ -184,7 +186,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
-                processed_output: List[GenerateStreamResponse] = self.process_output_order(request_id, request_output)
+                processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
                 for req in processed_output:
@@ -198,7 +200,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                     self.request_streams_last_completion_tokens.pop(request_id, None)
                     self.request_streams_output_stash.pop(request_id, None)
 
-    def process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
+    def _process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
         current_completion_tokens = None
         if hasattr(request_output, 'usage'):
             current_completion_tokens = request_output.usage.completion_tokens
@@ -239,6 +241,23 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             return res
 
         return [request_output]
+
+    def cleanup(self):
+        self.request_output_queue.cleanup()
+        instance_ids = list(self.instances.keys())
+        try:
+            # Not call manager scale down to reduce manager overhead.
+            for instance in self.instances.values():
+                # Instance might die before.
+                try:
+                    ray.kill(instance)
+                # pylint: disable=bare-except
+                except:
+                    pass
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.exception("Server cleanup failed (instance_ids: {}): {}".format(instance_ids, e))
+        logger.info("Server stops (instance_ids: {}).".format(instance_ids))
 
     def connect(self):
         pass

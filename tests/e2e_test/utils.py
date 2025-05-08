@@ -357,6 +357,8 @@ def shutdown_llumnix_service():
     try:
         subprocess.run('rm -rf instance_*.out', shell=True, check=False)
         subprocess.run('rm -rf nohup.out', shell=True, check=False)
+        subprocess.run('rm -rf core.*', shell=True, check=False)
+        subprocess.run('rm -rf nfs*', shell=True, check=False)
         yield
     finally:
         shutdown_llumnix_service_func()

@@ -108,7 +108,7 @@ class AsyncBackQueueWrapper:
         MAX_ITEMS_PER_PROCEDURE: int = 1000 # pylint: disable=invalid-name
 
         while True:
-            cur_step_idx: int = self.get_current_step_counter_queue.get()
+            cur_step_idx: int = await self.get_current_step_counter_queue.get()
             self.backup_dangling_request_server_info.update(self.dangling_request_server_info)
             self.dangling_request_server_info = {}
 

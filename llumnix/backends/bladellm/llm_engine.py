@@ -99,8 +99,8 @@ class AsyncBackQueueWrapper:
         # asyncio.queue is not thread-safe, just create a asyncio.task
         asyncio.create_task(self._put_request_outputs_loop())
 
-        self.daling_request_server_info: Dict[int, int] = {} # req_id, expired_step
-        self.backup_daling_request_server_info: Dict[int, int] = None
+        self.dangling_request_server_info: Dict[int, int] = {} # req_id, expired_step
+        self.backup_dangling_request_server_info: Dict[int, int] = {}
         self.get_current_step_counter_queue: asyncio.Queue = asyncio.Queue()
         asyncio.create_task(self._clear_request_server_info_loop())
 
@@ -109,10 +109,10 @@ class AsyncBackQueueWrapper:
 
         while True:
             cur_step_idx: int = self.get_current_step_counter_queue.get()
-            self.backup_daling_request_server_info = self.daling_request_server_info
-            self.daling_request_server_info = {}
+            self.backup_dangling_request_server_info.update(self.dangling_request_server_info)
+            self.dangling_request_server_info = {}
 
-            for loop_idx, req_info in enumerate(self.backup_daling_request_server_info.items()):
+            for loop_idx, req_info in enumerate(self.backup_dangling_request_server_info.items()):
                 req_id, expired_step_idx = req_info
                 if cur_step_idx >= expired_step_idx:
                     self.request_server_map.pop(req_id, None)
@@ -169,7 +169,7 @@ class AsyncBackQueueWrapper:
             )
 
     def remove_request_server_info(self, request_id: int, expired_step: int) -> None:
-        self.daling_request_server_info[request_id] = expired_step
+        self.dangling_request_server_info[request_id] = expired_step
         logger.debug("trans_wrapper is going to remove request {} at step {}".format(request_id, expired_step))
 
     def add_request(self, request_id: int, server_info: ServerInfo) -> None:
@@ -603,7 +603,8 @@ class BackendBladeLLM(BackendInterface):
         return self.engine.scheduler.free_dst_pre_alloc_cache(*args, **kwargs)
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
-        self.engine.trans_wrapper.drop_request(backend_request.request_id)
+        expired_step = self.engine.step_counter + self.engine.max_async_step
+        self.engine.trans_wrapper.remove_request_server_info(backend_request.request_id, expired_step)
         return self.engine.scheduler.free_src_request(backend_request)
 
     async def send_blocks(self,

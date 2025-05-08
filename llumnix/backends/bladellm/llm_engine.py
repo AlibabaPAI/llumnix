@@ -602,7 +602,7 @@ class BackendBladeLLM(BackendInterface):
         return self.engine.scheduler.free_dst_pre_alloc_cache(*args, **kwargs)
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
-        expired_step = self.engine.step_counter + self.engine.max_async_step
+        expired_step = self.engine.step_counter + self.engine.max_async_step + 1
         self.engine.trans_wrapper.remove_request_server_info(backend_request.request_id, expired_step)
         return self.engine.scheduler.free_src_request(backend_request)
 

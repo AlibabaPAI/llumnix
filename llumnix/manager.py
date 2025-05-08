@@ -22,6 +22,7 @@ from functools import partial
 import ray
 import ray.actor
 from ray.util.placement_group import PlacementGroup
+import ray.exceptions
 
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
@@ -32,9 +33,9 @@ from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs, LlumnixEngineArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import random_uuid, run_coroutine_in_new_thread
+from llumnix.utils import random_uuid, run_coroutine_in_new_thread, ray_get_with_timeout, asyncio_wait_for_with_timeout
 from llumnix.ray_utils import (clear_gloo_backend_ray_resources, get_manager_name, INSTANCE_NAME_PREFIX,
-                               get_placement_group_name, log_actor_ray_info)
+                               get_placement_group_name, log_actor_ray_info, execute_actor_method_async_with_retries)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_server_base import QueueServerBase
@@ -101,17 +102,17 @@ class Manager:
 
         pdd_config = manager_args.create_pdd_config()
         node_id = ray.get_runtime_context().get_node_id()
-        self.scaler: ray.actor.ActorHandle = Scaler.from_args(entrypoints_args,
-                                                              manager_args,
-                                                              instance_args,
-                                                              engine_args,
-                                                              launch_args,
-                                                              manager_args.enable_port_increment,
-                                                              manager_args.enable_port_offset_store,
-                                                              manager_args.load_registered_service,
-                                                              manager_args.load_registered_service_path,
-                                                              pdd_config,
-                                                              node_id)
+        self.scaler: Scaler = Scaler.from_args(entrypoints_args,
+                                               manager_args,
+                                               instance_args,
+                                               engine_args,
+                                               launch_args,
+                                               manager_args.enable_port_increment,
+                                               manager_args.enable_port_offset_store,
+                                               manager_args.load_registered_service,
+                                               manager_args.load_registered_service_path,
+                                               pdd_config,
+                                               node_id)
 
         # log args
         self.log_requests = not manager_args.disable_log_requests_manager
@@ -164,12 +165,19 @@ class Manager:
                 decode_instance_id, None
             )
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
-        self.instances[prefill_instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
+        # TODO(s5u13b): Still contains serialization cost, optimize it.
+        try:
+            self.instances[prefill_instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.exception("Failed to generate request {} by instance {}, unexcepted exception: {}".format(
+                request_id, prefill_instance_id, e))
+            self.scale_down(prefill_instance_id)
         if self.log_requests:
             logger.info("manager receive request {}".format(request_id))
             logger.info("dispath request {} to instance {}".format(request_id, prefill_instance_id))
             if self.manager_args.enable_engine_pd_disagg:
-                logger.info("request {} specified decode instance {}".format(request_id, decode_instance_id))
+                logger.info("dispatch request {} to decode instance {}".format(request_id, decode_instance_id))
                 self.request_instance[request_id] = decode_instance_id
             else:
                 self.request_instance[request_id] = prefill_instance_id
@@ -184,9 +192,15 @@ class Manager:
             if req_id in self.request_instance:
                 instance_id = self.request_instance[req_id]
                 instance_requests[instance_id].append(req_id)
-        tasks = []
         for instance_id, request_ids in instance_requests.items():
-            self.instances[instance_id].abort.remote(request_ids)
+            # TODO(s5u13b): Still contains serialization cost, optimize it.
+            try:
+                self.instances[instance_id].abort.remote(request_ids)
+            # pylint: disable=broad-except
+            except Exception as e:
+                logger.exception("Failed to abort request {} by instance {}, unexcepted exception: {}".format(
+                    request_id, instance_id, e))
+                self.scale_down(instance_id)
             if self.log_requests:
                 logger.info("Abort requests: {}.".format(request_ids))
             for req_id in request_ids:
@@ -194,7 +208,6 @@ class Manager:
                     del self.request_instance[req_id]
                 else:
                     logger.warning("request {} is not in request_instance".format(req_id))
-        await asyncio.gather(*tasks, return_exceptions=True)
 
     @classmethod
     def from_args(cls,
@@ -223,25 +236,40 @@ class Manager:
                              engine_args: LlumnixEngineArgs,
                              node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
-        return await self.scaler.init_instances.remote(request_output_queue_type, instance_args, engine_args, node_id)
+        # If Scaler dies, manager also dies.
+        return await execute_actor_method_async_with_retries(
+                self.scaler.init_instances.remote, "Scaler", "init_instances",
+                request_output_queue_type, instance_args, engine_args, node_id
+            )
 
     def init_request_output_queue_server(self, ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
         return init_request_output_queue_server(ip, port, queue_type)
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""
-        tasks = [instance.is_ready.remote() for instance in self.instances.values()]
+        tasks = [
+            asyncio_wait_for_with_timeout(instance.is_ready.remote())
+            for instance in self.instances.values()
+        ]
+        # Note that llumnix run server and scale up instance in manager after instance is ready,
+        # so the waiting time here will not include the initialization time of instance.
         is_ready_list = await asyncio.gather(*tasks, return_exceptions=True)
         return all(is_ready_list)
 
     async def _poll_instance_info_loop(self, interval: float) -> None:
         async def get_instance_info_done_callback(ret, instance_id: str):
-            if not isinstance(ret, ray.exceptions.RayActorError):
+            if not isinstance(ret, Exception):
                 if ret is not None:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
             else:
-                logger.info("Instance {} is dead.".format(instance_id))
+                if isinstance(ret, ray.exceptions.RayActorError):
+                    logger.info("Instance {} is dead.".format(instance_id))
+                elif isinstance(ret, asyncio.TimeoutError):
+                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
+                else:
+                    logger.exception("Failed to poll instance info of instance {}, "
+                                     "unexpected exception: {}".format(instance_id, ret))
                 await self.scale_down(instance_id)
 
         def get_instance_info_done_callback_wrapper(instance_id: str, fut) -> None:
@@ -250,30 +278,29 @@ class Manager:
             loop.create_task(get_instance_info_done_callback(ret, instance_id))
 
         while True:
-            try:
-                await asyncio.sleep(interval)
-                tasks = []
-                instance_infos = []
-                for instance_id, instance in self.instances.items():
-                    # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
-                    task = asyncio.gather(instance.get_instance_info.remote(), return_exceptions=True)
-                    task.add_done_callback(partial(get_instance_info_done_callback_wrapper, instance_id))
-                    tasks.append(task)
-                if self.num_instance_info_updates % 1000 == 0:
-                    logger.debug("Polling instance infos of {} instances starts.".format(self.num_instances))
-                await asyncio.gather(*tasks, return_exceptions=True)
-                if self.num_instance_info_updates % 1000 == 0:
-                    logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
-                self.num_instance_info_updates += 1
-                # Push migrate when the instance_info have updated a certain number of times.
-                if self.enable_migration and self.num_instance_info_updates != 0 \
-                    and self.num_instance_info_updates % self.pair_migration_frequency == 0:
-                    asyncio.create_task(self._push_migrations())
-                if self.log_instance_info:
-                    self._log_instance_infos_to_csv(instance_infos)
-            # pylint: disable=W0703
-            except Exception as e:
-                logger.exception("Unexpected exception: {}".format(e))
+            await asyncio.sleep(interval)
+            tasks = []
+            instance_infos = []
+            for instance_id, instance in self.instances.items():
+                # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
+                task = asyncio.gather(
+                    asyncio_wait_for_with_timeout(instance.get_instance_info.remote()),
+                    return_exceptions=True
+                )
+                task.add_done_callback(partial(get_instance_info_done_callback_wrapper, instance_id))
+                tasks.append(task)
+            if self.num_instance_info_updates % 1000 == 0:
+                logger.debug("Polling instance infos of {} instances starts.".format(self.num_instances))
+            await asyncio.gather(*tasks, return_exceptions=True)
+            if self.num_instance_info_updates % 1000 == 0:
+                logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
+            self.num_instance_info_updates += 1
+            # Push migrate when the instance_info have updated a certain number of times.
+            if self.enable_migration and self.num_instance_info_updates != 0 \
+                and self.num_instance_info_updates % self.pair_migration_frequency == 0:
+                asyncio.create_task(self._push_migrations())
+            if self.log_instance_info:
+                self._log_instance_infos_to_csv(instance_infos)
 
     async def _push_migrations(self) -> None:
         if self.enable_pd_disagg:
@@ -289,20 +316,29 @@ class Manager:
                 self.instance_migrating[migrate_instance_pair[0]] = False
             if migrate_instance_pair[1] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[1]] = False
-            if isinstance(ret, (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError)):
+            if isinstance(ret, Exception):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):
                     # Instance without error should clear migration states.
-                    # TODO(s5u13b): Fix the clear_migration_states to adapt to the many-to-many migration.
+                    instance_id = migrate_instance_pair[i]
                     if not has_error:
                         try:
-                            await self.instances[migrate_instance_pair[i]].clear_migration_states.remote(is_migrate_in=bool(i))
-                        except (ray.exceptions.RayActorError, ray.exceptions.RayTaskError, KeyError):
+                            # TODO(s5u13b): Fix the clear_migration_states to adapt to the many-to-many migration.
+                            await asyncio_wait_for_with_timeout(
+                                self.instances[instance_id].clear_migration_states.remote(is_migrate_in=bool(i))
+                            )
+                        except Exception as e: # pylint: disable=broad-except
+                            if isinstance(e, ray.exceptions.RayActorError):
+                                logger.info("Instance {} is dead.".format(instance_id))
+                            elif isinstance(ret, asyncio.TimeoutError):
+                                logger.error("Instance {} is hang, please check the cause.".format(instance_id))
+                            else:
+                                logger.exception("Failed to clear migration states of instance {}, "
+                                                 "unexpected exception: {}".format(instance_id, e))
                             has_error = True
                 for i, has_error in enumerate(has_error_pair):
                     if has_error:
                         instance_id = migrate_instance_pair[i]
-                        logger.info("Instance {} is dead.".format(instance_id))
                         await self.scale_down(instance_id)
             else:
                 migrate_out_request_ids = ret
@@ -318,6 +354,7 @@ class Manager:
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
 
+        # If encounter error during migration, to make manager keep running, we do not raise exception.
         try:
             migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
             migration_tasks = []
@@ -328,8 +365,14 @@ class Manager:
                 self.instance_migrating[src_instance_id] = True
                 self.instance_migrating[dst_instance_id] = True
                 dst_instance_actor_handle = self.instances[dst_instance_id]
-                task = asyncio.gather(self.instances[src_instance_id].migrate_out.remote(
-                                        dst_instance_id, dst_instance_actor_handle), return_exceptions=True)
+                task = asyncio.gather(
+                    asyncio_wait_for_with_timeout(
+                        self.instances[src_instance_id].migrate_out.remote(
+                            dst_instance_id, dst_instance_actor_handle
+                        )
+                    ),
+                    return_exceptions=True
+                )
                 task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
                 migration_tasks.append(task)
             if len(migration_tasks) > 0 and not self.enable_pd_disagg:
@@ -339,7 +382,9 @@ class Manager:
                 logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception as e:
-            logger.exception("Unexpected exception: {}".format(e))
+            logger.exception("Error during migrate, unexpected exception: {}".format(e))
+            logger.critical("Manager encouters error during migrate, manager keeps running, "
+                            "please check the cause as soon as possible!")
 
     def scale_up(self,
                  instance_id: Union[str, Iterable[str]],
@@ -355,7 +400,7 @@ class Manager:
             server = [server,] if server is not None else None
 
         instance_ids = list(instance_id)
-        instance_actor_handles = list(instance_actor_handle)
+        instance_actor_handles: List[Llumlet] = list(instance_actor_handle)
         instance_types = list(instance_type)
         placement_groups = list(placement_group)
         servers = list(server) if server is not None else None
@@ -365,11 +410,25 @@ class Manager:
 
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
-                indeed_update = True
                 instance_actor = instance_actor_handles[idx]
+                try:
+                    self.instance_id_2_engine_disagg_inst_id[ins_id] = \
+                        ray_get_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())
+                # pylint: disable=broad-except
+                except Exception as e:
+                    if isinstance(e, ray.exceptions.RayActorError):
+                        logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
+                    elif isinstance(e, ray.exceptions.GetTimeoutError):
+                        logger.error("Failed to scale up instance {}, instance is hang, "
+                                     "please check the cause.".format(ins_id))
+                    else:
+                        logger.exception("Error during scale up instance {}, "
+                                         "unexpected exception: {}".format(ins_id, e))
+                    continue
+                logger.info("Bind instance id {} with engine instance id {}.".format(
+                    ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))
+                indeed_update = True
                 self.instances[ins_id] = instance_actor
-                self.instance_id_2_engine_disagg_inst_id[ins_id] = ray.get(instance_actor.get_engine_disagg_inst_id.remote())
-                logger.info("bind instnance id {} with engine instance id {}".format(ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))
                 self.pgs[ins_id] = placement_groups[idx]
                 if self.servers is not None and servers is not None:
                     self.servers[ins_id] = servers[idx]
@@ -377,15 +436,17 @@ class Manager:
                 if self.log_instance_info:
                     self.instance_last_logged_empty[ins_id] = False
                 self.pending_rebuild_migration_instances += 1
-        self.global_scheduler.scale_up(instance_ids, instance_types)
-        self.num_instances = len(self.instances)
+
+        if indeed_update:
+            self.global_scheduler.scale_up(instance_ids, instance_types)
+            self.num_instances = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
         # a coroutine is already handling the changes in the number of instances in the cluster and it will account for the changes
         # caused by this scale-up (see rebuild_migration_backend for details). Therefore, we simply return in this case.
         # Specifically, for not group kind migration backend, there is no need to rebuild the group.
         if self.enable_migration and self.is_group_kind_migration_backend \
-            and indeed_update and no_pending_instance:
+            and indeed_update and no_pending_instance and not self.instance_args.simulator_mode:
             asyncio.create_task(self._rebuild_migration_backend())
 
         return self.num_instances
@@ -399,7 +460,9 @@ class Manager:
         no_pending_instance = self.pending_rebuild_migration_instances == 0
 
         for ins_id in instance_ids:
-            await self.scaler.clear_instance_ray_resources.remote(ins_id)
+            await execute_actor_method_async_with_retries(
+                self.scaler.clear_instance_ray_resources.remote, 'Scaler', 'clear_instance_ray_resources', ins_id
+            )
             if ins_id in self.instances:
                 indeed_update = True
                 if ins_id in self.instances:
@@ -434,7 +497,7 @@ class Manager:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
                 clear_gloo_backend_ray_resources()
-            elif indeed_update and no_pending_instance and rebuild_migration_backend:
+            elif indeed_update and no_pending_instance and rebuild_migration_backend and not self.instance_args.simulator_mode:
                 asyncio.create_task(self._rebuild_migration_backend())
 
         return self.num_instances
@@ -465,11 +528,23 @@ class Manager:
             tasks = []
             for instance_name in alive_instances:
                 llumlet_handle = self.instances[instance_name]
-                tasks.append(llumlet_handle.execute_engine_method.remote("_run_workers", task_name, *args, **kwargs))
+                tasks.append(
+                    asyncio_wait_for_with_timeout(
+                        llumlet_handle.execute_engine_method.remote("_run_workers", task_name, *args, **kwargs),
+                    )
+                )
             rets = await asyncio.gather(*tasks, return_exceptions=True)
             dead_instances = set()
             for instance_name, ret in zip(alive_instances, rets):
-                if isinstance(ret, ray.exceptions.RayActorError):
+                if isinstance(ret, Exception):
+                    instance_id = instance_name[:len(INSTANCE_NAME_PREFIX)]
+                    if isinstance(ret, ray.exceptions.RayActorError):
+                        logger.info("Instance {} is dead.".format(instance_id))
+                    elif isinstance(ret, asyncio.TimeoutError):
+                        logger.error("Instance {} is hang, please check the cause.".format(instance_id))
+                    else:
+                        logger.exception("Failed to run task {} for instance {}, "
+                                         "unexpected exception: {}".format(task_name, instance_id, ret))
                     dead_instances.add(instance_name)
             if len(dead_instances) > 0:
                 await self.scale_down(dead_instances, rebuild_migration_backend=False)
@@ -520,26 +595,55 @@ class Manager:
                     instances.append(instance_actor_handle)
                     instance_types.append(ret)
                     logger.info("Connect to instance {}".format(instance_id))
-                except ValueError:
-                    logger.warning("Connect to instance {} failed, placement group not found.".format(instance_id))
+                except Exception as e: # pylint: disable=broad-except
+                    if isinstance(e, ValueError):
+                        logger.warning("Failed to connect to instance {}, placement group not found.".format(instance_id))
+                    else:
+                        logger.exception("Error during connect to instance {}, "
+                                         "unexpected exception: {}".format(instance_id, e))
             else:
-                logger.warning("Connect to instance {} failed, exception: {}".format(instance_id, ret))
+                if isinstance(ret, ray.exceptions.RayActorError):
+                    logger.warning("Failed to connect to instance {}, instance is dead.".format(instance_id))
+                elif isinstance(ret, asyncio.TimeoutError):
+                    logger.error("Failed to connect to instance {}, instance is hang, "
+                                 "please check the cause.".format(instance_id))
+                else:
+                    logger.exception("Error during connect to instance {}, "
+                                     "unexpected exception: {}".format(instance_id, ret))
 
         # Must set True despite set namespance to llumnix.
         actor_infos = ray.util.list_named_actors(all_namespaces=True)
         instance_actor_names = [actor_info['name'] for actor_info in actor_infos
                                 if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
-        instance_actor_handles = [ray.get_actor(actor_name, namespace='llumnix') for actor_name in instance_actor_names]
+        available_instance_actor_names = []
+        available_instance_actor_handles: List[Llumlet] = []
+        for actor_name in instance_actor_names:
+            try:
+                instance_actor_handle = ray.get_actor(actor_name, namespace='llumnix')
+                available_instance_actor_names.append(actor_name)
+                available_instance_actor_handles.append(instance_actor_handle)
+            except Exception as e: # pylint: disable=broad-except
+                instance_id = actor_name[len(INSTANCE_NAME_PREFIX):]
+                if isinstance(e, ValueError):
+                    logger.warning("Failed to connect to instance {}, actor not found.".format(instance_id))
+                else:
+                    logger.exception("Error during connect to instance {}, "
+                                     "unexpected exception: {}".format(instance_id, e))
         instance_ids = []
         instances = []
         instance_types = []
         placement_groups = []
         tasks = []
-        for instance_actor_name, instance_actor_handle in zip(instance_actor_names, instance_actor_handles):
-            instance_id = instance_actor_name[len('instance_'):]
+        for instance_actor_name, instance_actor_handle in \
+            zip(available_instance_actor_names,available_instance_actor_handles):
+            instance_id = instance_actor_name[len(INSTANCE_NAME_PREFIX):]
             if instance_id not in self.instances:
-                task = asyncio.gather(instance_actor_handle.get_instance_type.remote(), return_exceptions=True)
-                task.add_done_callback(partial(connect_to_instance_done_callback, instance_id, instance_actor_handle))
+                task = asyncio.gather(
+                    asyncio_wait_for_with_timeout(instance_actor_handle.get_instance_type.remote()),
+                    return_exceptions=True
+                )
+                task.add_done_callback(
+                    partial(connect_to_instance_done_callback, instance_id, instance_actor_handle))
                 tasks.append(task)
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
@@ -548,17 +652,26 @@ class Manager:
     async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
         def check_instance_error_done_callback(idx: int, instance_id: str, fut):
             ret = fut.result()[0]
-            if not isinstance(ret, (ray.exceptions.RayActorError, KeyError)):
+            if not isinstance(ret, Exception):
                 logger.info("Instance {} is alive.".format(instance_id))
                 results[idx] = False
             else:
-                logger.info("Instance {} is dead.".format(instance_id))
+                if isinstance(ret, ray.exceptions.RayActorError):
+                    logger.info("Instance {} is dead.".format(instance_id))
+                elif isinstance(ret, asyncio.TimeoutError):
+                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
+                else:
+                    logger.exception("Failed to check instance {} error, "
+                                     "unexpected exception: {}".format(instance_id, ret))
                 results[idx] = True
 
         results = [None, None]
         tasks = []
         for idx, instance_id in enumerate(migrate_instance_pairs):
-            task = asyncio.gather(self.instances[instance_id].is_ready.remote(), return_exceptions=True)
+            task = asyncio.gather(
+                asyncio_wait_for_with_timeout(self.instances[instance_id].is_ready.remote()),
+                return_exceptions=True
+            )
             task.add_done_callback(partial(check_instance_error_done_callback, idx, instance_id))
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -568,18 +681,27 @@ class Manager:
     async def _get_request_instance(self) -> None:
         async def get_request_instance_done_callback(instance_id: str, fut):
             ret = fut.result()[0]
-            if not isinstance(ret, ray.exceptions.RayActorError):
+            if not isinstance(ret, Exception):
                 instance_requests.append(ret)
                 instance_ids.append(instance_id)
             else:
-                logger.info("Instance {} is dead.".format(instance_id))
+                if isinstance(ret, ray.exceptions.RayActorError):
+                    logger.info("Instance {} is dead.".format(instance_id))
+                if isinstance(ret, asyncio.TimeoutError):
+                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
+                else:
+                    logger.exception("Failed to get request_instance of instance {}, "
+                                     "unexpected exception: {}".format(instance_id, ret))
                 await self.scale_down(instance_id)
 
         instance_requests = []
         instance_ids = []
         tasks = []
         for instance_id, instance_actor_handle in self.instances.items():
-            task = asyncio.gather(instance_actor_handle.get_all_request_ids.remote(), return_exceptions=True)
+            task = asyncio.gather(
+                asyncio_wait_for_with_timeout(instance_actor_handle.get_all_request_ids.remote()),
+                return_exceptions=True
+            )
             task.add_done_callback(partial(get_request_instance_done_callback, instance_id))
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)

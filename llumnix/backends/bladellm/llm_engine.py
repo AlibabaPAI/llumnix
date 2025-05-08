@@ -42,7 +42,7 @@ from blade_llm.module.parallel import setup_dist_environ
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, ray_get_with_timeout, asyncio_wait_for_with_timeout
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
@@ -55,6 +55,7 @@ from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
 from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateCacheRequest, WorkerInfo
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
+from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -129,7 +130,14 @@ class AsyncBackQueueWrapper:
             server_request_outputs[server_id].append(request_output.model_dump_json())
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-        self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+        if server_info_dict:
+            # Step-by-step request outputs forwarding, and sub thread should die together with the AsyncPutQueueActor,
+            # so just ray.get here.
+            ray_get_with_timeout(
+                self.async_put_queue_actor.put_nowait_to_servers.remote(
+                    server_request_outputs, server_info_dict
+                )
+            )
 
     def drop_request(self, request_id: int) -> None:
         self.request_server_map.pop(request_id, None)
@@ -230,8 +238,7 @@ class AsyncLLMEngineLlumnixMixin:
             await super()._loop()
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Exception in engine loop: {}".format(e))
-
+            logger.exception("Error in engine loop, unexpected exception: {}".format(e))
             previous_state = self.state
             self.state = EngineState.CRASHED
             logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
@@ -471,8 +478,8 @@ class BackendBladeLLM(BackendInterface):
 
     # -------------- migration related method --------------
 
-    async def _run_workers(self, *args, **kwargs):
-        return await self.engine.run_workers(*args, **kwargs)
+    async def _run_workers(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
+        return await self.engine.run_workers(*args, timeout=timeout, **kwargs)
 
     def get_running_queue(self):
         return self.engine.scheduler.get_running_queue()
@@ -561,7 +568,11 @@ class BackendBladeLLM(BackendInterface):
             src_blocks=src_blocks,
             dst_blocks=dst_blocks,
         )
-        await dst_ray_actor.execute_engine_method_async.remote("_run_workers", "migrate_cache", request)
+        await asyncio_wait_for_with_timeout(
+            dst_ray_actor.execute_engine_method_async.remote(
+                "_run_workers", "migrate_cache", request
+            )
+        )
 
     async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         assert len(backend_request.paged_reqs) == 1, "currently llumnix doesn't support multi-paged-req migration."

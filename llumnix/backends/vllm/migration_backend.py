@@ -14,7 +14,7 @@
 from typing import List, Tuple, Optional, Callable
 
 import torch
-from func_timeout import func_set_timeout, FunctionTimedOut
+from func_timeout import func_set_timeout
 import ray
 import ray.util.collective as col
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -25,26 +25,29 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logging.logger import init_logger
 from llumnix.constants import NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, ray_get_with_timeout
 
 logger = init_logger(__name__)
 
 
-@ray.remote(num_cpus=0, max_concurrency=2)
+# Once worker died, proxy actor will not restart.
+@ray.remote(num_cpus=0, max_concurrency=2, max_restarts=-1)
 class ProxyActor:
     def __init__(self, is_driver_worker: bool, use_ray_spmd_worker: bool):
         self.is_driver_worker = is_driver_worker
         self.use_ray_spmd_worker = use_ray_spmd_worker
 
     def exec_method(self, handle, *args, **kwargs):
-        try:
-            if self.is_driver_worker and not self.use_ray_spmd_worker:
-                ret = ray.get(handle.execute_engine_method_async.remote("execute_worker_method_async", *args, **kwargs))
-            else:
-                ret = ray.get(handle.execute_method.remote(*args, **kwargs))
-        # pylint: disable=try-except-raise
-        except:
-            raise
+        if self.is_driver_worker and not self.use_ray_spmd_worker:
+            ret = ray_get_with_timeout(
+                handle.execute_engine_method_async.remote(
+                    "execute_worker_method_async", *args, **kwargs
+                )
+            )
+        else:
+            ret = ray_get_with_timeout(
+                handle.execute_method.remote(*args, **kwargs)
+            )
 
         return ret
 
@@ -72,8 +75,11 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
-                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote(is_driver_worker, use_ray_spmd_worker)
+        self.actor = ProxyActor.options(
+            scheduling_strategy=scheduling_strategy,
+            name=f"ProxyActor_{self.instance_id}_{random_uuid()}").remote(
+                is_driver_worker, use_ray_spmd_worker
+            )
 
         if self.cache_engine[0].dtype in NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION:
             self.rpc_dtype = self.cache_engine[0].dtype
@@ -108,7 +114,11 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         pass
 
     def warmup(self) -> bool:
-        self.actor.exec_method.remote(self.worker_handle_list[self.worker_rank], "do_send", None, [0])
+        ray_get_with_timeout(
+            self.actor.exec_method.remote(
+                self.worker_handle_list[self.worker_rank], "do_send", None, [0]
+            )
+        )
         logger.info("Rayrpc migration backend warmup successfully.")
         return True
 
@@ -130,15 +140,16 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             send_blocks = src_blocks[start_idx:start_idx+offset]
             send_worker_metadata = self.use_ray_spmd_worker and is_last_stage and is_last_comm
             ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
-                                                    None, send_blocks, request_id=request_id, send_worker_metadata=send_worker_metadata)
+                                                    None, send_blocks, request_id=request_id,
+                                                    send_worker_metadata=send_worker_metadata)
             if rpc_numpy_cache is not None:
                 self.do_recv(rpc_numpy_cache, recv_blocks)
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
 
             if send_worker_metadata:
-                rpc_numpy_cache, src_seq_group_metadata = ray.get(ray_obj)
+                rpc_numpy_cache, src_seq_group_metadata = ray_get_with_timeout(ray_obj)
             else:
-                rpc_numpy_cache = ray.get(ray_obj)
+                rpc_numpy_cache = ray_get_with_timeout(ray_obj)
 
         self.do_recv(rpc_numpy_cache, recv_blocks)
         if src_seq_group_metadata:
@@ -226,7 +237,8 @@ class RayColMigrationBackend(MigrationBackendBase):
 
         self.local_rank = local_rank
         self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
-                                        name=f"ProxyActor_{self.instance_id}_"+random_uuid()).remote(is_driver_worker, use_ray_spmd_worker)
+                                        name=f"ProxyActor_{self.instance_id}_{random_uuid()}").remote(
+                                            is_driver_worker, use_ray_spmd_worker)
         self.gpu_cache = gpu_cache
         self.use_ray_spmd_worker = use_ray_spmd_worker
         self.worker_stage_seq_group_metadata_callback = worker_stage_seq_group_metadata_callback
@@ -256,16 +268,19 @@ class RayColMigrationBackend(MigrationBackendBase):
 
         try:
             init_group(world_size, rank, self.backend, group_name)
-        except FunctionTimedOut:
-            logger.info("Create migration backend failed (group_name: {}, world_size: {}, rank: {}, backbend: {})."
-                .format(group_name, world_size, rank, self.backend))
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.exception("Failed to create migration backend "
+                             "(group_name: {}, world_size: {}, rank: {}, backbend: {}), "
+                             "unexpected exception: {}".format(group_name, world_size, rank, self.backend, e))
             return False
 
         self.group_name = group_name
         self.global_world_size = world_size
         self.global_rank = rank
 
-        logger.info("Create migration backend group successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
+        logger.info("Create migration backend group successfully "
+                    "(group_name: {}, world_size: {}, rank: {}, backbend: {})."
                     .format(self.group_name, self.global_world_size, self.global_rank, self.backend))
         return True
 
@@ -281,11 +296,11 @@ class RayColMigrationBackend(MigrationBackendBase):
             err_info = e
 
         if err_info is not None:
-            logger.info("Destory migration backend successfully (group_name: {}, backbend: {}), error: {}."
-                    .format(self.group_name, self.backend, err_info))
+            logger.exception("Failed to destory migration backend (group_name: {}, backbend: {}), "
+                             "unexpected exception: {}".format(self.group_name, self.backend, err_info))
         else:
-            logger.info("Destory migration backend successfully (group_name: {}, backbend: {})."
-                    .format(self.group_name, self.backend))
+            logger.info("Destory migration backend successfully "
+                        "(group_name: {}, backbend: {}).".format(self.group_name, self.backend))
 
         self.group_name = None
 
@@ -295,8 +310,10 @@ class RayColMigrationBackend(MigrationBackendBase):
                 col.allreduce(self.dummy_cache[0], self.group_name)
             # pylint: disable=W0703
             except Exception as e:
-                logger.error("Migration backend warmup failed (group_name: {}, world_size: {}, rank: {}, backbend: {}), err: {}."
-                    .format(self.group_name, self.global_world_size, self.global_rank, self.backend, e))
+                logger.exception("Failed to warmup migration backend "
+                                 "(group_name: {}, world_size: {}, rank: {}, backbend: {}), "
+                                 "unexpected exception: {}".format(
+                                     self.group_name, self.global_world_size, self.global_rank, self.backend, e))
                 return False
 
         logger.info("Migration backend warmup successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
@@ -312,7 +329,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                       request_id: str,
                       is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
-        src_rank = ray.get(self.actor.exec_method.remote(src_handle, "get_global_rank"))
+        src_rank = ray_get_with_timeout(self.actor.exec_method.remote(src_handle, "get_global_rank"))
 
         src_seq_group_metadata = None
         for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
@@ -322,10 +339,11 @@ class RayColMigrationBackend(MigrationBackendBase):
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
             send_worker_metadata = self.use_ray_spmd_worker and is_last_stage and is_last_comm
             ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
-                                                    self.global_rank, send_blocks, request_id=request_id, send_worker_metadata=send_worker_metadata)
+                                                    self.global_rank, send_blocks, request_id=request_id,
+                                                    send_worker_metadata=send_worker_metadata)
             self.do_recv(src_rank, recv_blocks)
             if send_worker_metadata:
-                _, src_seq_group_metadata = ray.get(ray_obj)
+                _, src_seq_group_metadata = ray_get_with_timeout(ray_obj)
         if src_seq_group_metadata:
             self.worker_stage_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 

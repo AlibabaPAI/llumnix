@@ -9,7 +9,8 @@ from vllm.engine.arg_utils import EngineArgs
 from vllm.sampling_params import SamplingParams
 
 from llumnix import (Manager, launch_ray_cluster, connect_to_ray_cluster, init_manager,
-                     ManagerArgs, InstanceArgs, Llumlet, ServerInfo, QueueType)
+                     ManagerArgs, InstanceArgs, Llumlet, ServerInfo, QueueType, BackendType,
+                     LaunchArgs, EntrypointsArgs, LaunchMode)
 from llumnix.utils import random_uuid, try_convert_to_local_path
 from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
@@ -38,13 +39,16 @@ connect_to_ray_cluster(port=ray_cluster_port)
 
 # Set manager args and engine args.
 manager_args = ManagerArgs()
+entrypoints_args = EntrypointsArgs()
 instance_args = InstanceArgs()
 engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370, enforce_eager=True)
 node_id = ray.get_runtime_context().get_node_id()
 llumnix_engine_args = VllmEngineArgs(engine_args=engine_args)
+launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.VLLM)
+
 # Create a manager. If the manager is created first, and then the instances are created.
-manager: Manager = init_manager(manager_args)
+manager: Manager = init_manager(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 ray.get(manager.is_ready.remote())
 
 # Create instances and register to manager.
@@ -85,7 +89,7 @@ async def main():
         await manager.generate.remote(request_id=request_id,
                                       server_info=server_info,
                                       prompt=request,
-                                      params=sampling_params,)
+                                      params=sampling_params)
 
     await output_task
 

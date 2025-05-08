@@ -18,20 +18,22 @@ import time
 from typing import Dict, Optional, List, Tuple
 
 import ray
+import ray.exceptions
 
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, get_llumnix_env_vars
-from llumnix.ray_utils import get_manager_name
+from llumnix.ray_utils import get_manager_name, execute_actor_method_sync_with_retries
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, InstanceArgs, LlumnixEngineArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext, retry_manager_method_sync
+from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext
 from llumnix.utils import get_ip_address
 from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL
+from llumnix.constants import (MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL,
+                               SUBPROCESS_RUN_TIMEOUT, INSTANCE_READY_TIMEOUT)
 from llumnix import envs as llumnix_envs
 
 
@@ -43,9 +45,12 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     node_ip_address = get_ip_address()
     try:
         # Stop the existing ray processes on the node first.
-        subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        logger.error("'ray stop' failed with: \n{}".format(e.stderr))
+        subprocess.run(['ray', 'stop'], check=True, text=True, capture_output=True, timeout=SUBPROCESS_RUN_TIMEOUT)
+    except Exception as e: # pylint: disable=broad-except
+        if isinstance(e, subprocess.CalledProcessError):
+            logger.error("'ray stop' failed with: \n{}".format(e.stderr))
+        else:
+            logger.error("'ray stop' failed, unexpected exeption: {}.".format(e))
         sys.exit(1)
     # Need to specify the head node ip through environment variable currently.
     if head_node_ip is None:
@@ -55,24 +60,33 @@ def launch_ray_cluster(port: int) -> subprocess.CompletedProcess:
     if llumnix_envs.HEAD_NODE:
         ray_start_command = f"ray start --head --node-ip-address={node_ip_address} --port={port}"
         try:
-            result = subprocess.run(['ray', 'start', '--head', f'--port={port}'], check=True, text=True, capture_output=True)
-        except subprocess.CalledProcessError as e:
-            logger.error("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
+            result = subprocess.run(['ray', 'start', '--head', f'--port={port}'],
+                                    check=True, text=True, capture_output=True, timeout=SUBPROCESS_RUN_TIMEOUT)
+        except Exception as e: # pylint: disable=broad-except
+            if isinstance(e, subprocess.CalledProcessError):
+                logger.error("'{}' failed with: \n{}".format(ray_start_command, e.stderr))
+            else:
+                logger.error("'ray stop' failed, unexpected exeption: {}.".format(e))
             sys.exit(1)
     else:
         ray_start_command = f"ray start --address={head_node_ip}:{port} --node-ip-address={node_ip_address}"
         for attempt in range(MAX_RAY_RESTART_TIMES):
             try:
                 # wait about 2 mins by default
-                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'], check=True, text=True, capture_output=True)
+                result = subprocess.run(['ray', 'start', f'--address={head_node_ip}:{port}'],
+                                        check=True, text=True, capture_output=True, timeout=SUBPROCESS_RUN_TIMEOUT)
                 break
-            except subprocess.CalledProcessError as e:
-                if attempt < MAX_RAY_RESTART_TIMES:
-                    logger.warning("Execute '{}' repeatedly until the head node starts.".format(ray_start_command))
-                    time.sleep(RAY_RESTART_INTERVAL)
+            except Exception as e: # pylint: disable=broad-except
+                if isinstance(e, subprocess.CalledProcessError):
+                    if attempt < MAX_RAY_RESTART_TIMES:
+                        logger.warning("Execute '{}' repeatedly until the head node starts.".format(ray_start_command))
+                        time.sleep(RAY_RESTART_INTERVAL)
+                    else:
+                        logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
+                        sys.exit(1)
                 else:
-                    logger.error("'{}' failed after {} attempts with: \n{}".format(ray_start_command, attempt, e.stderr))
-                    sys.exit(1)
+                    logger.error("'ray stop' failed, unexpected exeption: {}.".format(e))
+                sys.exit(1)
     logger.info("'{}' succeeed with: \n{}".format(ray_start_command, result.stdout))
     return result
 
@@ -97,10 +111,10 @@ def setup_ray_cluster(entrypoints_args) -> None:
                            log_to_driver=not entrypoints_args.disable_log_to_driver)
 
 def init_manager(manager_args: ManagerArgs,
-                 instance_args: InstanceArgs = None,
-                 entrypoints_args: EntrypointsArgs = None,
-                 engine_args: LlumnixEngineArgs = None,
-                 launch_args: LaunchArgs = None,
+                 instance_args: InstanceArgs,
+                 entrypoints_args: EntrypointsArgs,
+                 engine_args: LlumnixEngineArgs,
+                 launch_args: LaunchArgs,
                  ) -> Manager:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:
@@ -120,26 +134,36 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
                             manager_args: ManagerArgs,
                             instance_args: InstanceArgs,
                             engine_args: LlumnixEngineArgs,
-                            ) -> Tuple[Manager, List[str], List[Llumlet], QueueServerBase]:
-    manager = init_manager(manager_args)
+                            launch_args: LaunchArgs) -> Tuple[Manager, List[str], List[Llumlet], QueueServerBase]:
+    manager = init_manager(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 
     request_output_queue_type: QueueType = QueueType(entrypoints_args.request_output_queue_type)
     node_id = ray.get_runtime_context().get_node_id()
-    instance_ids, instances = retry_manager_method_sync(
-        manager.init_instances.remote, 'init_instances', request_output_queue_type, instance_args, engine_args, node_id)
+    instance_ids, instances = execute_actor_method_sync_with_retries(
+        manager.init_instances.remote, 'Manager', 'init_instances',
+        request_output_queue_type, instance_args, engine_args, node_id
+    )
 
     available_instance_ids = []
     available_instances = []
     for instance_id, instance in zip(instance_ids, instances):
         try:
-            ray.get(instance.is_ready.remote())
+            ray.get(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
             available_instance_ids.append(instance_id)
             available_instances.append(instance)
         # pylint: disable=broad-except
         except Exception as e:
-            logger.error("Instance {} is dead.".format(instance_id))
-            logger.exception("Unexpected exception: {}".format(e))
-            retry_manager_method_sync(manager.scale_down.remote, 'scale_down', instance_id)
+            if isinstance(e, ray.exceptions.RayActorError):
+                logger.info("Failed to initialize instance {}, instance is dead.".format(instance_id))
+            elif isinstance(e, ray.exceptions.GetTimeoutError):
+                logger.error("Failed to initialize instance {}, instance is hang, "
+                             "please check the cause.".format(instance_id))
+            else:
+                logger.exception("Failed to initialize instance {}, "
+                                 "unexpected exception: {}".format(instance_id, e))
+            execute_actor_method_sync_with_retries(
+                manager.scale_down.remote, 'Manager', 'scale_down', instance_id
+            )
 
     if len(available_instance_ids) > 0:
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
@@ -150,9 +174,10 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
     if request_output_queue_type == QueueType.RAYQUEUE:
         # Init rayqueue in manager to ensure the job id of all actors are the same as manager.
         # We found that when the job id of rayqueue is inherited from driver process, it may raise job id unequal error sometimes.
-        request_output_queue = retry_manager_method_sync(
-            manager.init_request_output_queue_server.remote, 'init_request_output_queue_server', ip, request_output_queue_port,
-            request_output_queue_type)
+        request_output_queue = execute_actor_method_sync_with_retries(
+            manager.init_request_output_queue_server.remote, 'Manager', 'init_request_output_queue_server',
+            ip, request_output_queue_port, request_output_queue_type
+        )
     else:
         # zmq context cannot be serialized, so init zmq queue server in driver.
         request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
@@ -182,17 +207,17 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
                                              log_request_timestamps)
     return entrypoints_context
 
-def _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args: LlumnixEngineArgs) -> EntrypointsContext:
+def _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> EntrypointsContext:
     manager, instance_ids, instances, request_output_queue = \
-        init_llumnix_components(entrypoints_args, manager_args, instance_args, engine_args)
+        init_llumnix_components(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 
     return setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue)
 
-def _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args: LlumnixEngineArgs, launch_args) -> None:
+def _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> None:
     _ = init_manager(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 
-def setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args: LlumnixEngineArgs, launch_args) -> Optional[EntrypointsContext]:
+def setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> Optional[EntrypointsContext]:
     if launch_args.launch_mode == LaunchMode.LOCAL:
-        return _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args)
+        return _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 
     return _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args)

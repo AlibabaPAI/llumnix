@@ -16,10 +16,11 @@ from llumnix.server_info import ServerInfo
 from llumnix.entrypoints.setup import (launch_ray_cluster,
                                        connect_to_ray_cluster,
                                        init_manager)
-from llumnix.arg_utils import ManagerArgs, InstanceArgs
+from llumnix.arg_utils import ManagerArgs, InstanceArgs, LaunchArgs, EntrypointsArgs
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
+from llumnix.entrypoints.utils import LaunchMode
 from llumnix.version import __version__
 
 __all__ = [
@@ -34,6 +35,9 @@ __all__ = [
     "Llumlet",
     "QueueType",
     "BackendType",
+    "LaunchArgs",
+    "EntrypointsArgs",
+    "LaunchMode"
 ]
 
 try:

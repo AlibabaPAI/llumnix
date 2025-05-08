@@ -97,13 +97,13 @@ def get_args(llumnix_cfg: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser
     assert isinstance(engine_args, ServingArgs)
 
     if not engine_args.serving_multi_processing_options.disable_frontend_multiprocessing:
-        logger.warning("In llumnix, the api server and engine are in different ray actors, \
-                       just set disable_frontend_multiprocessing to True.")
+        logger.warning("In llumnix, the api server and engine are in different ray actors, "
+                       "just set disable_frontend_multiprocessing to True.")
     engine_args.serving_multi_processing_options.disable_frontend_multiprocessing = True
 
     if not engine_args.disable_signal_handler:
-        logger.warning("Disable the signal handler in BladeLLM, as the llumlet actor is not \
-                       a process with a main function.")
+        logger.warning("Disable the signal handler in BladeLLM, as the llumlet actor is not "
+                       "a process with a main function.")
     engine_args.disable_signal_handler = True
 
     instance_args = InstanceArgs.from_llumnix_config(llumnix_cfg)

@@ -14,6 +14,8 @@
 import torch
 
 
+RAY_REMOTE_CALL_TIMEOUT: float = 10.0
+
 # examples/offline_inference.py, tests/*
 MODEL_PATH: str = '/mnt/model'
 DATASET_PATH: str = '/mnt/dataset'
@@ -35,6 +37,7 @@ DISPATCH_LOG_FREQUENCY = 100
 # llumnix/entrypoints/setup.py
 MAX_RAY_RESTART_TIMES: int = 10
 RAY_RESTART_INTERVAL: float = 10.0
+SUBPROCESS_RUN_TIMEOUT: float = 60.0
 
 # llumnix/entrypoints/vllm/client.py, llumnix/entrypoints/bladellm/client.py
 WAIT_MANAGER_INTERVAL: float = 1.0
@@ -48,8 +51,11 @@ CHECK_ENGINE_STATE_INTERVAL: float = 1.0
 # llumnix/backends/vllm/llm_engine.py
 NO_OUTPUTS_STEP_INTERVAL: float = 0.01
 
-# llumnix/queue/zmq_client.py
-RPC_GET_DATA_TIMEOUT_MS: int = 5000
+# llumnix/queue/ray_queue_client.py, llumnix/queue/ray_queue_server.py
+RAY_QUEUE_RPC_TIMEOUT: int = 5000
+
+# llumnix/queue/zmq_client.py, llumnix/queue/zmq_server.py
+ZMQ_RPC_TIMEOUT: int = 5000
 
 # llumnix/queue/zmq_server.py
 RPC_SOCKET_LIMIT_CUTOFF: int = 2000
@@ -57,10 +63,11 @@ RPC_ZMQ_HWM: int = 0
 RETRY_BIND_ADDRESS_INTERVAL: float = 10.0
 MAX_BIND_ADDRESS_RETRY_TIMES: int = 10
 ZMQ_IO_THREADS: int = 8
+SERVER_QUEUE_TIMEOUT: float = 10.0
 
 # llumnix/entrypoints/utils.py
-MAX_MANAGER_RETRY_TIMES: int = 10
-RETRY_MANAGER_INTERVAL: float = 5.0
+MAX_ACTOR_METHOD_RETRY_TIMES: int = 10
+RETRY_ACTOR_METHOD_INTERVAL: float = 5.0
 MAX_TASK_RETRIES: int = 10
 RETRIES_INTERVAL: float = 5.0
 

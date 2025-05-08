@@ -19,6 +19,7 @@ from typing import List, Tuple, Dict
 import ray
 from ray.util.placement_group import PlacementGroup
 import ray.actor
+import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceType
@@ -35,7 +36,8 @@ from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get
                                get_placement_group_infos_by_name, get_placement_group_infos_by_state,
                                kill_server, kill_instance, remove_placement_group,
                                get_actor_names_by_name_prefix, SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX,
-                               actor_exists, get_instance_name)
+                               actor_exists, get_instance_name, PLACEMENT_GROUP_NAME_PREFIX,
+                               execute_actor_method_async_with_retries)
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
@@ -130,7 +132,7 @@ class Scaler:
                                   name=get_scaler_name(),
                                   namespace="llumnix",
                                   lifetime="detached")(cls).options(
-                                      scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
+                                    scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
                                         node_id=node_id,
                                         soft=False,
                                     )
@@ -145,74 +147,63 @@ class Scaler:
                                      load_registered_service,
                                      load_registered_service_path,
                                      pdd_config)
-
         return scaler
 
     async def _auto_scale_up_loop(self, service_name: str, max_instances: int, interval: float) -> None:
         logger.info("Auto scale up loop starts, service name: {}".format(service_name))
         while True:
-            try:
-                new_pg = None
-                if self.last_timeout_instance_id is not None:
-                    last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
-                    last_timeout_pg_infos = get_placement_group_infos_by_name(name=last_timeout_pg_name)
-                    if len(last_timeout_pg_infos) > 0 and last_timeout_pg_infos[0]["state"] != "REMOVED":
-                        new_instance_id = self.last_timeout_instance_id
-                        # pending, created(without server and instance) or rescheduling
+            new_pg = None
+            if self.last_timeout_instance_id is not None:
+                last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
+                last_timeout_pg_infos = get_placement_group_infos_by_name(name=last_timeout_pg_name)
+                if len(last_timeout_pg_infos) > 0 and last_timeout_pg_infos[0]["state"] != "REMOVED":
+                    new_instance_id = self.last_timeout_instance_id
+                    # pending, created(without server and instance) or rescheduling
+                    try:
                         new_pg = ray.util.get_placement_group(last_timeout_pg_name)
-                    # reset
-                    self.last_timeout_instance_id = None
-                pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
-                pending_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
-                for pending_pg_info in pending_pg_infos:
-                    instance_id = pending_pg_info["name"].split("_")[-1]
-                    if new_pg is not None and instance_id == new_instance_id:
-                        continue
-                    self.clear_instance_ray_resources(instance_id)
-                alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
-                alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
-                alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
-                if max_instances != -1 and len(alive_pg_infos) >= max_instances:
-                    logger.debug("The number of alive placement groups has reached the max_instances.")
-                    await asyncio.sleep(interval)
+                    except ValueError:
+                        logger.warning("Placement group {} not found.".format(
+                            last_timeout_pg_name[:len(PLACEMENT_GROUP_NAME_PREFIX)]))
+                # reset
+                self.last_timeout_instance_id = None
+            pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
+            pending_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
+            for pending_pg_info in pending_pg_infos:
+                instance_id = pending_pg_info["name"].split("_")[-1]
+                if new_pg is not None and instance_id == new_instance_id:
                     continue
-                if new_pg is None:
-                    new_instance_id = random_uuid()
-                    new_pg = self._init_placement_group(get_placement_group_name(new_instance_id), self.engine_args,
-                                                        init_server=True, block=False,
-                                                        service_name=service_name)
-                try:
-                    await asyncio.wait_for(new_pg.ready(), WAIT_PLACEMENT_GROUP_TIMEOUT)
-                except asyncio.TimeoutError:
-                    logger.debug("Waiting for new placement group {} ready timeout.".format(new_instance_id))
-                    # After timeout, the new placement group might be pending,
-                    # created(without server and instance), rescheduling.
-                    self.last_timeout_instance_id = new_instance_id
-                    await asyncio.sleep(interval)
-                    continue
-                if service_name in ["prefill", "decode"]:
-                    await self._init_server_and_instance(
-                        new_instance_id,
-                        self.entrypoints_args,
-                        self.instance_args,
-                        self.engine_args,
-                        new_pg,
-                        instance_type=get_service_instance_type(service_name),
-                    )
-                else:
-                    await self._init_server_and_instance(
-                        new_instance_id,
-                        self.entrypoints_args,
-                        self.instance_args,
-                        self.engine_args,
-                        new_pg,
-                    )
-                logger.info("Deploy server and instance to new placement group done, "
-                            "instance_id: {}.".format(new_instance_id))
-            # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Unexpected exception: {}".format(e))
+                self.clear_instance_ray_resources(instance_id)
+            alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
+            alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
+            alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
+            if max_instances != -1 and len(alive_pg_infos) >= max_instances:
+                logger.debug("The number of alive placement groups has reached the max_instances.")
                 await asyncio.sleep(interval)
+                continue
+            if new_pg is None:
+                new_instance_id = random_uuid()
+                new_pg = self._init_placement_group(get_placement_group_name(new_instance_id), self.engine_args,
+                                                    init_server=True, block=False, service_name=service_name)
+            try:
+                await asyncio.wait_for(new_pg.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
+            except asyncio.TimeoutError:
+                logger.debug("Waiting for new placement group {} ready timeout.".format(new_instance_id))
+                # After timeout, the new placement group might be pending,
+                # created(without server and instance), rescheduling.
+                self.last_timeout_instance_id = new_instance_id
+                await asyncio.sleep(interval)
+                continue
+            if service_name in ["prefill", "decode"]:
+                await self._init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
+                                                     self.engine_args, new_pg,
+                                                     instance_type=get_service_instance_type(service_name))
+            else:
+                # If not prefill/decode service, we do not specify the instance type,
+                # and the instance type is decided by _get_next_instance_type.
+                await self._init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
+                                                     self.engine_args, new_pg)
+            logger.info("Deploy server and instance to new placement group done, "
+                        "instance_id: {}.".format(new_instance_id))
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_instance_deployment_states(instance_id: str):
@@ -222,8 +213,11 @@ class Scaler:
             if pg_created and (not server_exists or not instance_exists):
                 logger.warning("Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
                                .format(instance_id, pg_created, server_exists, instance_exists))
-                await self.manager.scale_down.remote(instance_id)
+                await execute_actor_method_async_with_retries(
+                    self.manager.scale_down.remote, 'Manager', 'scale_down', instance_id
+                )
 
+        # If encounter error during check loop, to make scaler keep running, we do not raise exception.
         while True:
             try:
                 curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
@@ -236,13 +230,17 @@ class Scaler:
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.exception("Unexpected exception: {}".format(e))
+                logger.exception("Error during check deployment states loop, "
+                                 "unexpected exception: {}".format(e))
+                logger.critical("Scaler encouters error during check deployment states loop, "
+                                "scaler keeps running, please check the cause as soon as possible!")
 
     # TODO(KuilongCui): Deploy prefill and decode instances strictly according to the pd_ratio.
     # Currently, only one naive prefill-decode disaggregation deployment states check policy is implemented,
     # which prevents all instances in the cluster are prefill instances or decode instances.
     async def _check_pd_deployment_states_loop(self, interval: float) -> None:
         previous_penging_pg_names = None
+        # If encounter error during check loop, to make scaler keep running, we do not raise exception.
         while True:
             try:
                 pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
@@ -260,13 +258,18 @@ class Scaler:
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.exception("Unexpected exception: {}".format(e))
+                logger.exception("Error during check pd deployment states loop, "
+                                 "unexpected exception: {}".format(e))
+                logger.critical("Scaler encouters error during check pd deployment states loop, "
+                                "scaler keeps running, please check the cause as soon as possible!")
 
     async def _check_pd_deployment_states(self) -> str:
-        prefill_instance_id_set, decode_instance_id_set = await self.manager.get_prefill_decode_instance_id_set.remote()
+        prefill_instance_id_set, decode_instance_id_set = \
+            await execute_actor_method_async_with_retries(
+                self.manager.get_prefill_decode_instance_id_set.remote, 'Manager', 'get_prefill_decode_instance_id_set'
+            )
         cur_num_prefill_instances = len(prefill_instance_id_set)
         cur_num_decode_instances = len(decode_instance_id_set)
-
         scale_down_instance_id = None
         if cur_num_prefill_instances == 0 and cur_num_decode_instances > 0:
             scale_down_instance_id = random.choice(list(decode_instance_id_set))
@@ -281,7 +284,9 @@ class Scaler:
                         self.pdd_config.pd_ratio, cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
 
         if scale_down_instance_id:
-            await self.manager.scale_down.remote(scale_down_instance_id)
+            await execute_actor_method_async_with_retries(
+                self.manager.scale_down.remote, 'Manager', 'scale_down', scale_down_instance_id
+            )
 
         return scale_down_instance_id
 
@@ -354,7 +359,7 @@ class Scaler:
                                         engine_args: LlumnixEngineArgs,
                                         placement_group: PlacementGroup,
                                         instance_type: InstanceType = None):
-        async def done_scale_up(instance_id: str, instance: ray.actor.ActorHandle,
+        async def done_scale_up(instance_id: str, instance: Llumlet,
                                 instance_type: InstanceType, placement_group: PlacementGroup,
                                 server: ray.actor.ActorHandle):
             try:
@@ -363,16 +368,21 @@ class Scaler:
                 instance_ready = True
                 # Run server until instance is ready.
                 await asyncio.wait_for(server.run.remote(self.manager, instance_id, instance), timeout=SERVER_READY_TIMEOUT)
-                await self.manager.scale_up.remote(instance_id, instance, instance_type, placement_group, server)
+                await execute_actor_method_async_with_retries(
+                    self.manager.scale_up.remote, 'Manager', 'scale_up',
+                    instance_id, instance, instance_type, placement_group, server
+                )
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
-            except asyncio.TimeoutError:
-                if not instance_ready:
-                    logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
-                else:
-                    logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
-                self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
-                logger.exception("Unexpected exception: {}".format(e))
+                if isinstance(e, ray.exceptions.RayActorError):
+                    logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
+                elif isinstance(e, asyncio.TimeoutError):
+                    if not instance_ready:
+                        logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                    else:
+                        logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
+                else:
+                    logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
                 self.clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
@@ -438,16 +448,25 @@ class Scaler:
                              engine_args: LlumnixEngineArgs,
                              node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
-        async def instance_ready_scale_up(instance_id: str, instance: ray.actor.ActorHandle,
+        async def instance_ready_scale_up(instance_id: str, instance: Llumlet,
                                           instance_type: InstanceType, placement_group: PlacementGroup):
             try:
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
-                await self.manager.scale_up.remote(instance_id, instance, instance_type, placement_group)
+                await execute_actor_method_async_with_retries(
+                    self.manager.scale_up.remote, 'Manager', 'scale_up',
+                    instance_id, instance, instance_type, placement_group
+                )
             except asyncio.TimeoutError:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
                 self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
-                logger.exception("Unexpected exception: {}".format(e))
+                if isinstance(e, ray.exceptions.RayActorError):
+                    logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
+                elif isinstance(e, asyncio.TimeoutError):
+                    logger.error("Failed to scale up instance {}, "
+                                 "instance is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                else:
+                    logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
                 self.clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []
@@ -484,12 +503,12 @@ class Scaler:
         return instance_ids, instances
 
     def clear_instance_ray_resources(self, instance_id: str):
-        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL and not kill_server(instance_id):
-            logger.warning("Failed to kill server {}.".format(instance_id))
-        if not kill_instance(instance_id):
-            logger.warning("Failed to kill instance {}.".format(instance_id))
-        if not remove_placement_group(instance_id):
-            logger.warning("Failed to remove placement group {}.".format(instance_id))
+        # There could be multiple clear_instance_ray_resources calls for one error instance,
+        # so the kill operations could be failed if it is not the first attempt to kill.
+        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
+            kill_server(instance_id)
+        kill_instance(instance_id)
+        remove_placement_group(instance_id)
 
     async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType, world_size: int) -> InstanceArgs:
         if (
@@ -507,7 +526,11 @@ class Scaler:
 
         if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg:
             # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
-            cur_num_prefill_instances, cur_num_decode_instances = await self.manager.get_num_prefill_decode_instances.remote()
+            cur_num_prefill_instances, cur_num_decode_instances = \
+                await execute_actor_method_async_with_retries(
+                    self.manager.get_num_prefill_decode_instances.remote,
+                    'Manager', 'get_num_prefill_decode_instances'
+                )
             next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill_instances, cur_num_decode_instances,
                                                                             self.pdd_config.pd_ratio, instance_type,)
 

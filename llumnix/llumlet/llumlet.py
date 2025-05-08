@@ -17,6 +17,7 @@ import time
 import os
 
 import ray
+import ray.exceptions
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 import ray.actor
@@ -35,6 +36,7 @@ from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix.utils import asyncio_wait_for_with_timeout
 
 logger = init_logger(__name__)
 
@@ -46,47 +48,42 @@ class Llumlet:
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  engine_args: LlumnixEngineArgs) -> None:
-        try:
-            log_actor_ray_info(actor_class_name=self.__class__.__name__)
-            self.instance_id = instance_id
+        log_actor_ray_info(actor_class_name=self.__class__.__name__)
+        self.instance_id = instance_id
+        backend_type: BackendType = engine_args.backend_type
+        logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
+        # update disagg_options.inst_id for baldellm PDD
+        if backend_type == BackendType.BLADELLM:
             self.engine_disagg_inst_id: str = (
                 os.environ.get(instance_args.engine_disagg_inst_id_env_var)
                 if instance_args.engine_disagg_inst_id_env_var
                 else instance_id
             )
-            backend_type: BackendType = engine_args.backend_type
-            logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
-            # update disagg_options.inst_id for baldellm PDD
             engine_args.update_arg(
                 args_key="engine_disagg_inst_id", args_value=self.engine_disagg_inst_id
             )
-
-            self.instance_args: InstanceArgs = instance_args
-            self.actor_name = get_instance_name(instance_id)
-            self.instance_load_calculator = InstanceLoadCalculator(
-                dispatch_load_metric=instance_args.dispatch_load_metric,
-                migration_load_metric=instance_args.migration_load_metric,
-                enable_defrag=instance_args.enable_defrag
-            )
-            migration_config: MigrationConfig = instance_args.create_migration_config()
-            self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
-                                                                        placement_group,
-                                                                        request_output_queue_type,
-                                                                        migration_config,
-                                                                        backend_type,
-                                                                        engine_args,
-                                                                        instance_args.profiling_result_file_path)
-            self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                              backend_type,
-                                                              migration_config.migration_last_stage_max_blocks,
-                                                              migration_config.migration_max_stages)
-            self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
+        self.instance_args: InstanceArgs = instance_args
+        self.actor_name = get_instance_name(instance_id)
+        self.instance_load_calculator = InstanceLoadCalculator(
+            dispatch_load_metric=instance_args.dispatch_load_metric,
+            migration_load_metric=instance_args.migration_load_metric,
+            enable_defrag=instance_args.enable_defrag
+        )
+        migration_config: MigrationConfig = instance_args.create_migration_config()
+        self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
+                                                                    placement_group,
+                                                                    request_output_queue_type,
+                                                                    migration_config,
+                                                                    backend_type,
+                                                                    engine_args,
+                                                                    instance_args.profiling_result_file_path)
+        self.migration_coordinator = MigrationCoordinator(self.backend_engine,
+                                                            backend_type,
+                                                            migration_config.migration_last_stage_max_blocks,
+                                                            migration_config.migration_max_stages)
+        self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
                                                             self.backend_engine)
-            asyncio.create_task(self._check_engine_state_loop())
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to initialize Llumlet: {}".format(e))
-            raise
+        asyncio.create_task(self._check_engine_state_loop())
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -98,39 +95,34 @@ class Llumlet:
                   placement_group: PlacementGroup,
                   request_output_queue_type: QueueType,
                   engine_args: LlumnixEngineArgs):
-        try:
-            backend_type = engine_args.backend_type
-            assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
-                f'unimplemented backend {BackendType}'
-            # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
-            if backend_type == BackendType.VLLM:
-                # Instance and worker shares the same 1 gpu in the first bundle of PlacementGroup.
-                num_gpus = 0.5
-            elif backend_type == BackendType.BLADELLM:
-                # Instance, server and worker shares the same 1 gpu in the first bundle of PlacementGroup.
-                num_gpus = 0.33
-            else: # backend_type == BackendType.SIM_VLLM
-                num_gpus = 0
-            llumlet_class = ray.remote(num_cpus=1,
-                                       num_gpus=num_gpus,
-                                       name=get_instance_name(instance_id),
-                                       namespace='llumnix',
-                                       lifetime="detached")(cls).options(
-                                            scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                                placement_group=placement_group,
-                                                placement_group_bundle_index=0,
-                                                placement_group_capture_child_tasks=True
-                                            )
+        backend_type = engine_args.backend_type
+        assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
+            f'unimplemented backend {BackendType}'
+        # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
+        if backend_type == BackendType.VLLM:
+            # Instance and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            num_gpus = 0.5
+        elif backend_type == BackendType.BLADELLM:
+            # Instance, server and worker shares the same 1 gpu in the first bundle of PlacementGroup.
+            num_gpus = 0.33
+        else: # backend_type == BackendType.SIM_VLLM
+            num_gpus = 0
+        llumlet_class = ray.remote(num_cpus=1,
+                                   num_gpus=num_gpus,
+                                   name=get_instance_name(instance_id),
+                                   namespace='llumnix',
+                                   lifetime="detached")(cls).options(
+                                        scheduling_strategy=PlacementGroupSchedulingStrategy(
+                                            placement_group=placement_group,
+                                            placement_group_bundle_index=0,
+                                            placement_group_capture_child_tasks=True
                                         )
-            llumlet = llumlet_class.remote(instance_id,
-                                           instance_args,
-                                           placement_group,
-                                           request_output_queue_type,
-                                           engine_args)
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to initialize Llumlet: {}".format(e))
-            raise
+                                    )
+        llumlet = llumlet_class.remote(instance_id,
+                                       instance_args,
+                                       placement_group,
+                                       request_output_queue_type,
+                                       engine_args)
 
         return llumlet
 
@@ -146,20 +138,32 @@ class Llumlet:
                 ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[str]:
-        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+        # TODO(Failover): Currently, llumnix directly return if meeting exception during migration,
+        # and handle migration exception through manager. In future, this should be handled by instance.
+        try:
+            migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
 
-        if len(migrate_out_requests) == 0:
-            return []
+            if len(migrate_out_requests) == 0:
+                return []
 
-        for migrate_out_request in migrate_out_requests:
-            migrate_out_request.is_migrating = True
+            for migrate_out_request in migrate_out_requests:
+                migrate_out_request.is_migrating = True
 
-        migrated_request_list = []
-        for migrate_out_request in migrate_out_requests:
-            migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_id, dst_instance_actor_handle)
-            migrated_request_list.extend(migrated_request)
-            if len(migrated_request) == 0 and migrate_out_request.eom:
-                break
+            migrated_request_list = []
+            for migrate_out_request in migrate_out_requests:
+                migrated_request = await self._migrate_out_one_request(migrate_out_request, dst_instance_id, dst_instance_actor_handle)
+                migrated_request_list.extend(migrated_request)
+                if len(migrated_request) == 0 and migrate_out_request.eom:
+                    break
+        except ray.exceptions.RayActorError:
+            # Not raise exception to ensure src instance won't die due to the death of dst instance.
+            logger.info("Instance {} is dead.".format(dst_instance_id))
+        except (asyncio.TimeoutError, ray.exceptions.GetTimeoutError):
+            logger.error("Instance {} is hang, please check the cause.".format(dst_instance_id))
+        # pylint: disable=W0703
+        except Exception as e:
+            logger.exception("Failed to migrate out, unexpected exception: {}".format(e))
+            raise
 
         return migrated_request_list
 
@@ -167,42 +171,44 @@ class Llumlet:
                                        migrate_out_request: LlumnixRequest,
                                        dst_instance_id: str,
                                        dst_instance_actor_handle: ray.actor.ActorHandle) -> List[LlumnixRequest]:
-        try:
-            t0 = time.time()
-            logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
-            migrated_request = []
+        t0 = time.time()
+        logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
+        migrated_request = []
 
-            if migrate_out_request.status == RequestStatus.RUNNING:
-                migrate_out_request.migration_start_time = time.time()
-                status = await self.migration_coordinator.migrate_out_running_request(dst_instance_actor_handle, migrate_out_request)
-            elif migrate_out_request.status == RequestStatus.WAITING:
-                migrate_out_request.migration_start_time = time.time()
-                status = await self.migration_coordinator.migrate_out_waiting_request(dst_instance_actor_handle, migrate_out_request)
-            else:
-                return migrated_request
+        if migrate_out_request.status == RequestStatus.RUNNING:
+            migrate_out_request.migration_start_time = time.time()
+            status = await self.migration_coordinator.migrate_out_running_request(dst_instance_actor_handle, migrate_out_request)
+        elif migrate_out_request.status == RequestStatus.WAITING:
+            migrate_out_request.migration_start_time = time.time()
+            status = await self.migration_coordinator.migrate_out_waiting_request(dst_instance_actor_handle, migrate_out_request)
+        else:
+            return migrated_request
 
-            if status == MigrationStatus.FINISHED:
-                await dst_instance_actor_handle.execute_engine_method_async.remote("commit_dst_request", migrate_out_request)
-                self.backend_engine.free_src_request(migrate_out_request)
-                self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
-                migrated_request.append(migrate_out_request.request_id)
-            else: # ABORTED_SRC or ABORTED_DST
-                migrate_out_request.reset_migration_args_src()
-                migrate_out_request.reset_status()
-                # If dst aborts itself, dst proactively frees the pre allocated cache in migrate_in_pre_alloc.
-                if status == MigrationStatus.ABORTED_SRC:
-                    await dst_instance_actor_handle.execute_migration_method.remote("free_dst_pre_alloc_cache", migrate_out_request.request_id)
-            t1 = time.time()
-            logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
-                        .format(self.instance_id, dst_instance_id, migrated_request, status, \
-                                sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
-        except ray.exceptions.RayActorError:
-            logger.info("Instance {} is dead.".format(dst_instance_id))
-            raise
-        # pylint: disable=W0703
-        except Exception as e:
-            logger.exception("Unexpected exception: {}".format(e))
-            raise
+        if status == MigrationStatus.FINISHED:
+            await asyncio_wait_for_with_timeout(
+                dst_instance_actor_handle.execute_engine_method_async.remote(
+                    "commit_dst_request", migrate_out_request
+                )
+            )
+            self.backend_engine.free_src_request(migrate_out_request)
+            self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
+            migrated_request.append(migrate_out_request.request_id)
+        else: # ABORTED_SRC or ABORTED_DST
+            migrate_out_request.reset_migration_args_src()
+            migrate_out_request.reset_status()
+            # If dst aborts itself, dst proactively frees the pre allocated cache in migrate_in_pre_alloc.
+            if status == MigrationStatus.ABORTED_SRC:
+                await asyncio_wait_for_with_timeout(
+                    dst_instance_actor_handle.execute_migration_method.remote(
+                        "free_dst_pre_alloc_cache", migrate_out_request.request_id
+                    )
+                )
+
+        t1 = time.time()
+        logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
+                    .format(self.instance_id, dst_instance_id, migrated_request, status, \
+                            sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
+
         return migrated_request
 
     # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager

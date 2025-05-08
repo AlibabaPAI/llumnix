@@ -98,9 +98,10 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             speed = total_kv_cache_size / GB_bytes / (end_time - start_time)
             logger.info("Migrate kv cache done, blocks_num: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
                         .format(len(request.src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to migrate cache, request {}, error: {}".format(request, e))
+        except Exception as e: # pylint: disable=broad-except
+            logger.warning("Failed to migrate cache, request {}, exception: {}.".format(request, e))
+            raise
+
         return empty_pb2.Empty()
 
     def do_send(self, request, context):
@@ -117,24 +118,19 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         # pylint: disable=broad-except
         except Exception as e:
             resp.is_ok = False
-            resp.error_msg = f"warmup failed: {e}"
+            resp.error_msg = f"Warmup failed, unexpected exception: {e}"
         return resp
 
 
 class MigrationLocalWorker(LocalWorker, MigrationWorker):
     def __init__(self, rank: int, serving_args: ServingArgs,
                  instance_id: str, migration_config: MigrationConfig,) -> None:
-        try:
-            LocalWorker.__init__(self, rank, serving_args)
+        LocalWorker.__init__(self, rank, serving_args)
 
-            self.request_sync_group = WorkerRequestSyncGroup(self._engine._state_manager._request_groups,
-                                                             self._req_tracker)
-            MigrationWorker.__init__(self, self._engine._state_manager, instance_id, migration_config,
-                                     self.request_sync_group, self, rank, serving_args)
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to initialize MigrationLocalWorker: {}".format(e))
-            raise
+        self.request_sync_group = WorkerRequestSyncGroup(self._engine._state_manager._request_groups,
+                                                            self._req_tracker)
+        MigrationWorker.__init__(self, self._engine._state_manager, instance_id, migration_config,
+                                    self.request_sync_group, self, rank, serving_args)
 
     # used for wait_worker_ready
     async def info(self, req: empty_pb2.Empty) -> str:

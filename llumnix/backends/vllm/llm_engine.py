@@ -41,15 +41,13 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
-from llumnix.utils import make_async
+from llumnix.utils import make_async, ray_get_with_timeout
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
-from llumnix import constants
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_REMOTE_CALL_TIMEOUT
 
 logger = init_logger(__name__)
-
-NO_OUTPUTS_STEP_INTERVAL = constants.NO_OUTPUTS_STEP_INTERVAL
 
 
 class LlumnixRequestOutputFactory(RequestOutputFactory):
@@ -84,6 +82,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             placement_group_capture_child_tasks=True,
         )
         self.put_queue_args_queue = queue.Queue()
+        # TODO(Failover): Add mechanism to ensure the parent thread and sub thread can die together.
         self.put_queue_loop_thread = threading.Thread(
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
         )
@@ -288,7 +287,13 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
         if server_info_dict:
-            self.async_put_queue_actor.put_nowait_to_servers.remote(server_request_outputs, server_info_dict)
+            # Step-by-step request outputs forwarding, and sub thread should die together with the AsyncPutQueueActor,
+            # so just ray.get here.
+            ray_get_with_timeout(
+                self.async_put_queue_actor.put_nowait_to_servers.remote(
+                    server_request_outputs, server_info_dict
+                )
+            )
 
 
 class BackendVLLM(BackendInterface):
@@ -363,9 +368,8 @@ class BackendVLLM(BackendInterface):
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.exception("Error in engine loop: {}".format(e))
+                logger.exception("Error in engine loop, unexpected exception: {}".format(e))
                 self._run_workers("shutdown")
-
                 previous_state = self.state
                 self.state = EngineState.CRASHED
                 logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
@@ -415,9 +419,9 @@ class BackendVLLM(BackendInterface):
                                                                request_id=request_id,
                                                                is_last_stage=is_last_stage)
 
-    def _run_workers(self, *args, **kwargs):
+    def _run_workers(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
         # pylint: disable=protected-access
-        return self.engine.model_executor._run_workers(*args, **kwargs)
+        return self.engine.model_executor._run_workers(*args, timeout=timeout, **kwargs)
 
     async def _run_workers_async(self, *args, **kwargs):
         # pylint: disable=protected-access

@@ -25,6 +25,8 @@ from ray._private.utils import hex_to_binary
 import pytest
 
 from llumnix.utils import random_uuid
+from llumnix.utils import get_ip_address
+
 from tests.e2e_test.utils import shutdown_llumnix_service_func
 
 
@@ -36,7 +38,7 @@ def ray_start():
         result = subprocess.run(["ray", "status"], check=False, capture_output=True, text=True)
         if result.returncode == 0:
             return
-        print("Ray start failed, exception: {}".format(result.stderr.strip()))
+        print("Ray start failed, exception: {}.".format(result.stderr.strip()))
         time.sleep(3.0)
     raise Exception("Ray start failed after 5 attempts.")
 
@@ -70,7 +72,7 @@ def cleanup_ray_env_func():
         ray.shutdown()
     # pylint: disable=broad-except
     except Exception as e:
-        print("ray shutdown error: ", e)
+        print("Ray shutdown error: {}".format(e))
 
     time.sleep(5.0)
 
@@ -113,7 +115,7 @@ def backup_error_log(func_name):
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(f'{func_name}')
 
-    print(f"Backup error instance log to directory {dst_dir}")
+    print(f"Backup error instance log to directory {dst_dir}, host: {get_ip_address()}")
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):

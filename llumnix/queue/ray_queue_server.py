@@ -21,6 +21,7 @@ from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import random_uuid
 
+
 class RayQueueServer(QueueServerBase):
     def __init__(self) -> None:
         self.queue = RayQueue(
@@ -34,8 +35,9 @@ class RayQueueServer(QueueServerBase):
             }
         )
 
-    async def get(self):
-        item = await self.queue.actor.get.remote()
+    async def get(self, timeout=None):
+        # Server call blocking get to wait for request output tokens.
+        item = await self.queue.actor.get.remote(timeout=timeout)
         set_timestamp(item, 'queue_server_receive_timestamp', time.time())
         return item
 
@@ -51,6 +53,6 @@ class RayQueueServer(QueueServerBase):
     def cleanup(self):
         try:
             ray.kill(self.queue)
-        # pylint: disable=broad-except, unused-variable
-        except Exception as e:
+        # pylint: disable=bare-except
+        except:
             pass

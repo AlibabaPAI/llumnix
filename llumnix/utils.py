@@ -20,9 +20,10 @@ import socket
 from functools import partial
 
 from typing_extensions import ParamSpec
+import ray
 
 from llumnix import envs as llumnix_envs
-from llumnix.constants import MODEL_PATH, DATASET_PATH
+from llumnix.constants import MODEL_PATH, DATASET_PATH, RAY_REMOTE_CALL_TIMEOUT
 
 
 _MAX_PORT = 65536
@@ -89,15 +90,15 @@ def get_service_resouces(service_name: str, num_gpus: int) -> Dict[str, float]:
 def get_llumnix_env_vars():
     llumnix_env_vars = {}
     env_vars = dict(os.environ)
-    llumnix_keys = list(llumnix_envs.environment_variables.keys())
+    llumnix_env_vars_keys = list(llumnix_envs.environment_variables.keys())
     try:
         # pylint: disable=import-outside-toplevel
         from vllm import envs as vllm_envs
-        llumnix_keys.extend(list(vllm_envs.environment_variables.keys()))
+        llumnix_env_vars_keys.extend(list(vllm_envs.environment_variables.keys()))
     except ImportError:
         pass
     for key, value in env_vars.items():
-        if key in llumnix_keys:
+        if key in llumnix_env_vars_keys:
             llumnix_env_vars[key] = value
 
     return llumnix_env_vars
@@ -210,3 +211,9 @@ def update_environment_variables(envs: Dict[str, str]):
                 "Overwriting environment variable %s "
                 "from '%s' to '%s'", k, os.environ[k], v)
         os.environ[k] = v
+
+def ray_get_with_timeout(object_refs, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
+    return ray.get(object_refs, *args, timeout=timeout, **kwargs)
+
+def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
+    return asyncio.wait_for(fut, *args, timeout=timeout, **kwargs)

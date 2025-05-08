@@ -14,19 +14,27 @@
 from typing import Any
 from collections.abc import Iterable
 import time
+import asyncio
 
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix.constants import RAY_QUEUE_RPC_TIMEOUT
 
 
 class RayQueueClient(QueueClientBase):
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
         set_timestamp(item, 'queue_client_send_timestamp', time.time())
-        return await output_queue.actor.put_nowait.remote(item)
+        return await asyncio.wait_for(
+            output_queue.actor.put_nowait.remote(item),
+            timeout=RAY_QUEUE_RPC_TIMEOUT
+        )
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
         set_timestamp(items, 'queue_client_send_timestamp', time.time())
-        return await output_queue.actor.put_nowait_batch.remote(items)
+        return await asyncio.wait_for(
+            output_queue.actor.put_nowait_batch.remote(items),
+            timeout=RAY_QUEUE_RPC_TIMEOUT
+        )

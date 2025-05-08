@@ -15,7 +15,8 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.service.worker import worker_main, WorkerProcesses
 
 from llumnix.logging.logger import init_logger
-from llumnix.utils import get_ip_address, update_environment_variables
+from llumnix.utils import (get_ip_address, update_environment_variables,
+                           ray_get_with_timeout)
 from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 from llumnix.utils import random_uuid
 from llumnix.ray_utils import log_actor_ray_info
@@ -131,7 +132,7 @@ class WorkerProcessesRay(WorkerProcesses):
             has_dead = False
             for rank, worker in enumerate(self.workers):
                 try:
-                    has_dead = not ray.get(worker.is_alive.remote(), timeout=RAY_REMOTE_CALL_TIMEOUT)
+                    has_dead = not ray_get_with_timeout(worker.is_alive.remote())
                 except: # pylint: disable=bare-except
                     has_dead = True
                 if has_dead:
@@ -147,11 +148,11 @@ class WorkerProcessesRay(WorkerProcesses):
     def _exit_server(self):
         for rank, worker in enumerate(self.workers):
             try:
-                if ray.get(worker.is_alive.remote(), timeout=RAY_REMOTE_CALL_TIMEOUT):
+                if ray_get_with_timeout(worker.is_alive.remote()):
                     logger.critical("Kill alive worker {} (pid {}, node_id: {}, gpu_ids: {}).".format(
                         rank, self.worker_pids[rank],
                         self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]))
-                    ray.get(worker.kill_worker_process.remote(), timeout=RAY_REMOTE_CALL_TIMEOUT)
+                    ray_get_with_timeout(worker.kill_worker_process.remote())
             except: # pylint: disable=bare-except
                 pass
             ray.kill(worker)
@@ -292,8 +293,10 @@ class WorkerProcessesRay(WorkerProcesses):
 
     def _spawn_workers_ray(self, serving_args: ServingArgs, args, kwargs):
         # Initialize the worker process inside worker process actor.
-        ray.get([worker.init_worker_process.remote(rank, serving_args, args, kwargs)
-                for rank, worker in enumerate(self.workers)], timeout=RAY_REMOTE_CALL_TIMEOUT)
+        ray_get_with_timeout(
+            [worker.init_worker_process.remote(rank, serving_args, args, kwargs)
+                for rank, worker in enumerate(self.workers)]
+        )
         self.worker_pids = self._run_workers("get_worker_process_pid")
 
     def _run_workers(
@@ -326,11 +329,19 @@ class WorkerProcessesRay(WorkerProcesses):
         # self._watchdog.join()
         for rank, worker in enumerate(self.workers):
             try:
-                ray.get(worker.stop_worker_process.remote())
+                ray_get_with_timeout(worker.stop_worker_process.remote())
+            # pylint: disable=broad-except
+            except Exception as e:
+                if isinstance(e, TimeoutError):
+                    logger.error("Worker is hang (instance_id: {}, rank: {}), please check the cause.")
+                else:
+                    logger.exception("Failed to stop worker process (instance_id: {}, rank: {}), "
+                                     "unexpected exception: {}.".format(self.instance_id, rank, e))
+            try:
                 ray.kill(worker)
             # pylint: disable=broad-except
             except Exception as e:
-                logger.warning("Failed to kill worker (instance_id: {}, rank: {}), "
-                               "exception: {}.".format(self.instance_id, rank, e))
+                logger.exception("Failed to kill worker (instance_id: {}, rank: {}), "
+                                 "unexpected exception: {}.".format(self.instance_id, rank, e))
         if self.remote_watch_dog:
             self.remote_watch_dog.stop()

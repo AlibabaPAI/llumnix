@@ -70,23 +70,18 @@ class APIServerActor(ABC):
                   placement_group: PlacementGroup,
                   entrypoints_args: EntrypointsArgs,
                   engine_args):
-        try:
-            api_server_class = ray.remote(num_cpus=1,
-                                          num_gpus=num_gpus,
-                                          name=server_name,
-                                          namespace="llumnix",
-                                          lifetime="detached")(cls).options(
-                                                scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                                    placement_group=placement_group,
-                                                    placement_group_bundle_index=0,
-                                                    placement_group_capture_child_tasks=True
-                                                )
-                                             )
-            api_server = api_server_class.remote(server_name, entrypoints_args, engine_args)
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to initialize APIServer: {}".format(e))
-            raise
+        api_server_class = ray.remote(num_cpus=1,
+                                      num_gpus=num_gpus,
+                                      name=server_name,
+                                      namespace="llumnix",
+                                      lifetime="detached")(cls).options(
+                                            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                                                placement_group=placement_group,
+                                                placement_group_bundle_index=0,
+                                                placement_group_capture_child_tasks=True
+                                            )
+                                        )
+        api_server = api_server_class.remote(server_name, entrypoints_args, engine_args)
 
         return api_server
 

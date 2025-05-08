@@ -51,7 +51,7 @@ class MockMigrationWorker(MigrationWorker):
 def create_worker(rank: int, local_rank: int, engine_config: EngineConfig,
                   worker_module_name="llumnix.backends.vllm.worker",
                   worker_class_name="MigrationWorker",
-                  max_concurrency=1):
+                  max_concurrency=2):
     worker = ray.remote(
         num_cpus=0,
         num_gpus=1,

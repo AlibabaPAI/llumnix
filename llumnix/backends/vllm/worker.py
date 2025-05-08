@@ -19,6 +19,7 @@ import ray
 import torch
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
+import ray.exceptions
 
 from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
@@ -138,17 +139,18 @@ class MigrationWorker(Worker):
         start_time = time.time()
         try:
             self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks, request_id, is_last_stage)
+        # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
         except ray.exceptions.RayActorError:
-            logger.info("rank: {}, src_worker_handle {} is dead".format(self.rank, src_worker_handle))
+            logger.info("Failed to migrate cache, rank: {}, src worker {} is dead.".format(self.rank, src_worker_handle))
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Unexpected exception: {}".format(e))
+            logger.exception("Failed to migrate cache, unexpected exception: {}".format(e))
             raise
         end_time = time.time()
 
         total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
             self.cache_config, self.model_config, self.parallel_config)
-        speed = total_kv_cache_size/GiB_bytes/(end_time - start_time)
+        speed = total_kv_cache_size / GiB_bytes / (end_time - start_time)
         logger.info("Migrate kv cache done, blocks_num: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
                     .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
 

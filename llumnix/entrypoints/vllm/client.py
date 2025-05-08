@@ -4,7 +4,7 @@ import time
 import asyncio
 from typing import Dict
 
-import ray
+import ray.exceptions
 
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
@@ -18,6 +18,8 @@ from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.constants import WAIT_MANAGER_INTERVAL
+from llumnix.ray_utils import execute_actor_method_async_with_retries
+from llumnix.utils import asyncio_wait_for_with_timeout
 
 logger = init_logger(__name__)
 
@@ -57,7 +59,16 @@ class LlumnixClientVLLM:
         try:
             await self._generate_by_manager(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
             self.manager_available = True
-        except ray.exceptions.RayActorError:
+        # pylint: disable=broad-except
+        except Exception as e:
+            if isinstance(e, ray.exceptions.RayActorError):
+                logger.error("Manager is unavailable.")
+            elif isinstance(e, asyncio.TimeoutError):
+                logger.error("Failed to generate request {} by manager, manager is hang, "
+                             "please check the cause.".format(request_id))
+            else:
+                logger.exception("Failed to generate request {} by manager, "
+                                 "unexpected exception: {}".format(request_id, e))
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
@@ -91,41 +102,54 @@ class LlumnixClientVLLM:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
-                await self.instances[instance_id].generate.remote(request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs)
+                await asyncio_wait_for_with_timeout(
+                    self.instances[instance_id].generate.remote(
+                        request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
+                    )
+                )
                 logger.warning("Manager is unavailable temporarily, dispatch request {} to instance {}".format(
                     request_id, instance_id))
             else:
-                logger.warning("Manager is unavailable temporarily, but there is no instance behind this api server, "
+                logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
                 await asyncio.sleep(WAIT_MANAGER_INTERVAL)
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
-        except (ray.exceptions.RayActorError, KeyError):
+        # pylint: disable=broad-except
+        except Exception as e:
             if instance_id in self.instances:
-                logger.info("Instance {} is dead.".format(instance_id))
+                if isinstance(e, ray.exceptions.RayActorError):
+                    logger.info("Failed to generate request {} by instance {}, instance is dead.".format(
+                        request_id, instance_id))
+                elif isinstance(e, asyncio.TimeoutError):
+                    logger.error("Failed to generate request {} by instance {}, instance is hang, "
+                                 "please check the cause.".format(request_id, instance_id))
+                else:
+                    logger.exception("Failed to generate request {} by instance {}, "
+                                     "unexpected exception: {}".format(request_id, instance_id, e))
                 if instance_id in self.instances:
                     del self.instances[instance_id]
                 else:
-                    logger.warning("instance {} is not in self.instances".format(instance_id))
+                    logger.warning("Instance {} is not in self.instances.".format(instance_id))
                 if instance_id in self.instance_num_requests:
                     del self.instance_num_requests[instance_id]
                 else:
-                    logger.warning("instance {} is not in self.instance_num_requests".format(instance_id))
+                    logger.warning("Instance {} is not in self.instance_num_requests.".format(instance_id))
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
 
     async def abort(self, request_id: str) -> None:
-        try:
-            logger.info("Abort request: {}.".format(request_id))
-            await self.manager.abort.remote(request_id)
-        except ray.exceptions.RayActorError:
-            logger.warning("Manager is unavailable.")
+        logger.info("Abort request: {}.".format(request_id))
+        return await execute_actor_method_async_with_retries(
+            self.manager.abort.remote, "Manager", "abort", request_id
+        )
 
     def abort_request(self, request_id: str) -> None:
         logger.info("Abort request: {}.".format(request_id))
         self.manager.abort.remote(request_id)
 
     async def is_ready(self) -> bool:
-        ready_status = await self.manager.is_ready.remote()
-        return ready_status
+        return await execute_actor_method_async_with_retries(
+            self.manager.is_ready.remote, "Manager", "is_ready"
+        )
 
     async def get_request_outputs_loop(self):
         while True:

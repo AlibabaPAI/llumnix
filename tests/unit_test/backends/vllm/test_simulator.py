@@ -14,6 +14,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 from llumnix.utils import try_convert_to_local_path
+from llumnix.backends.backend_interface import BackendType
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -95,6 +96,7 @@ async def test_backend(ray_env):
                                  request_output_queue_type=request_output_queue_type,
                                  migration_config=migration_config,
                                  placement_group=placement_group,
+                                 backend_type=BackendType.SIM_VLLM,
                                  profiling_result_file_path="",
                                  engine_args=engine_args)
 

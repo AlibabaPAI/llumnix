@@ -46,6 +46,7 @@ from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_REMOTE_CALL_TIMEOUT
+from llumnix.backends.backend_interface import BackendType
 
 logger = init_logger(__name__)
 
@@ -67,6 +68,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  disable_async_output_proc: bool,
+                 backend_type: BackendType,
                  *arg, **kwargs) -> None:
         # pylint: disable=import-outside-toplevel
         import vllm.outputs
@@ -90,7 +92,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             num_cpus=1,
             scheduling_strategy=scheduling_strategy,
             name=f"AsyncPutQueueActor_{instance_id}"
-        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
+        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type, backend_type)
         self.put_queue_loop_thread.start()
 
         self.disable_async_output_proc = disable_async_output_proc
@@ -104,6 +106,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
+        backend_type: BackendType,
         latency_mem: Optional[LatencyMemData] = None,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT
     ) -> "LLMEngineLlumnix":
@@ -131,6 +134,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
             disable_async_output_proc=engine_args.disable_async_output_proc,
+            backend_type=backend_type,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -304,12 +308,14 @@ class BackendVLLM(BackendInterface):
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
+        backend_type: BackendType,
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
-                                                                          placement_group=placement_group)
+                                                                          placement_group=placement_group,
+                                                                          backend_type=backend_type)
         # In order to call the verify_async_output_proc implicitly.
         engine_config = engine_args.create_engine_config()
         if not engine_config.model_config.use_async_output_proc:
@@ -502,7 +508,7 @@ class BackendVLLM(BackendInterface):
 
     def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
         # request is None when free_dst_pre_alloc_cache is called by clear_migration_states.
-        # TODO(s5u13b): Only needed when running waiting request.
+        # TODO(s5u13b): Only needed when migrating running request.
         if request_id is None and self.use_ray_spmd_worker:
             # pylint: disable=protected-access
             asyncio.create_task(self._run_workers_async("free_migrating_in_seq_group_metadata"))

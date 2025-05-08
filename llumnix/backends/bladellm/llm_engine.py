@@ -56,6 +56,8 @@ from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateCacheReq
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
+from llumnix.backends.backend_interface import BackendType
+from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -77,7 +79,8 @@ class AsyncBackQueueWrapper:
                  placement_group: PlacementGroup,
                  instance_id: str,
                  request_output_queue_type: QueueType,
-                 resp_queue: asyncio.Queue) -> None:
+                 resp_queue: asyncio.Queue,
+                 backend_type: BackendType) -> None:
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
             placement_group_bundle_index=0,
@@ -86,9 +89,10 @@ class AsyncBackQueueWrapper:
         self.instance_id = instance_id
         self.async_put_queue_actor = ray.remote(
             num_cpus=1,
+            num_gpus=NUM_GPUS_BLADELLM_GPU_ACTOR,
             scheduling_strategy=scheduling_strategy,
             name=f"AsyncPutQueueActor_{instance_id}"
-        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type)
+        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type, backend_type)
         self.put_queue_args_queue = resp_queue
 
         self.request_server_map = {}
@@ -160,7 +164,8 @@ class AsyncLLMEngineLlumnixMixin:
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
                  src_worker_ip_address: List[str],
-                 request_barriers: queue.Queue
+                 request_barriers: queue.Queue,
+                 backend_type: BackendType,
                  ) -> None:
         self.instance_id = instance_id
         self.state = EngineState.INIT
@@ -168,16 +173,15 @@ class AsyncLLMEngineLlumnixMixin:
 
         self.placement_group = placement_group
         self.request_output_queue_type = request_output_queue_type
-
         self._worker_processes = WorkerProcessesRay(placement_group, self._args, instance_id, migration_config)
-
         self.src_worker_ip_address = src_worker_ip_address
 
         self._migration_semaphore = asyncio.Semaphore(0)
         self.request_barriers: queue.Queue = request_barriers
-
         self.migrated_request = set()
         self.resp_queue = asyncio.Queue()
+
+        self.backend_type = backend_type
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -187,7 +191,8 @@ class AsyncLLMEngineLlumnixMixin:
         await super().async_start(loop)
         self._client = self.init_client_from_engine()
         self.trans_wrapper = AsyncBackQueueWrapper(self.placement_group, self.instance_id,
-                                                   self.request_output_queue_type, self.resp_queue)
+                                                   self.request_output_queue_type, self.resp_queue,
+                                                   self.backend_type)
         self._scheduler.trans_wrapper = self.trans_wrapper
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
@@ -309,6 +314,7 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                  migration_config: MigrationConfig,
                  src_worker_ip_address: List[str],
                  request_barriers: queue.Queue,
+                 backend_type: BackendType,
                  serving_args: ServingArgs,
                  *args, **kwargs,
                  ) -> None:
@@ -317,7 +323,7 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
         setup_dist_environ(serving_args.dist_inference_options.nnodes, serving_args.dist_inference_options.node_rank)
         AsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
-                                            migration_config, src_worker_ip_address, request_barriers)
+                                            migration_config, src_worker_ip_address, request_barriers, backend_type)
 
     def _setup_dist_options(self, serving_args: ServingArgs):
         # It means that dist_init_addr can be None when enabling distributed inference.
@@ -340,11 +346,12 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
                  migration_config: MigrationConfig,
                  src_worker_ip_address: List[str],
                  request_barriers: queue.Queue,
+                 backend_type: BackendType,
                  *args, **kwargs,
                 ) -> None:
         PrefillAsyncLLMEngine.__init__(self, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
-                                            migration_config, src_worker_ip_address, request_barriers)
+                                            migration_config, src_worker_ip_address, request_barriers, backend_type)
 
 
 
@@ -356,11 +363,12 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
                  migration_config: MigrationConfig,
                  src_worker_ip_address: List[str],
                  request_barriers: queue.Queue,
+                 backend_type: BackendType,
                  *args, **kwargs,
                 ) -> None:
         DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
-                                            migration_config, src_worker_ip_address, request_barriers)
+                                            migration_config, src_worker_ip_address, request_barriers, backend_type)
 
 
 class BackendBladeLLM(BackendInterface):
@@ -369,7 +377,8 @@ class BackendBladeLLM(BackendInterface):
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 engine_args: ServingArgs
+                 engine_args: ServingArgs,
+                 backend_type: BackendType,
                 ) -> None:
         init_metric(
             engine_args.serving_metric_options.metric_export_interval_sec,
@@ -386,8 +395,8 @@ class BackendBladeLLM(BackendInterface):
         engine_args.worker_socket_path = engine_args.worker_socket_path + "_" + str(instance_id)[:5]
         self.instance_id = instance_id
         self.engine_args = engine_args
-        engine_cls = self._get_engine_cls()
         self.migration_config: MigrationConfig = migration_config
+        self.backend_type = backend_type
 
         ip_addr = get_ip_address()
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
@@ -405,7 +414,7 @@ class BackendBladeLLM(BackendInterface):
         self.request_barriers: queue.Queue = queue.Queue()
         engine_cls = self._get_engine_cls()
         self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, migration_config,
-                                 self.src_worker_ip_address, self.request_barriers, engine_args)
+                                 self.src_worker_ip_address, self.request_barriers, backend_type, engine_args)
 
         self._engine_ready_event = asyncio.Event()
         asyncio.create_task(self._start_engine())

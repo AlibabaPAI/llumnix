@@ -15,6 +15,7 @@ from typing import Dict, List
 import asyncio
 import time
 import os
+import json
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -35,12 +36,13 @@ logger = init_logger(__name__)
 
 
 class AsyncPutQueueActor:
-    def __init__(self, instance_id: str, request_output_queue_type: QueueType):
+    def __init__(self, instance_id: str, request_output_queue_type: QueueType, backend_type: BackendType):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None
+        self.backend_type = backend_type
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -56,7 +58,7 @@ class AsyncPutQueueActor:
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
             set_timestamp(req_outputs, 'engine_actor_put_queue_timestamp', time.time())
-            tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
+            tasks.append(self.request_output_queue_client.put_nowait(req_outputs, server_info))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         request_ids = []
         for idx, ret in enumerate(rets):
@@ -70,9 +72,15 @@ class AsyncPutQueueActor:
                     logger.debug("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
                                                                                 server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
-                request_ids.extend([req_output.request_id for req_output in req_outputs])
-        if request_ids:
-            await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(request_ids))
+                if self.backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
+                    request_ids = [req_output.request_id for req_output in req_outputs]
+                else: # BackendType.BLADE_LLM
+                    from blade_llm.protocol import GenerateStreamResponse # pylint: disable=import-outside-toplevel
+                    request_ids = []
+                    for req_output_json in req_outputs:
+                        reque_output = GenerateStreamResponse(**json.loads(req_output_json))
+                        request_ids.append(reque_output.req_id)
+                self.engine_actor_handle.abort.remote(request_ids)
 
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,
@@ -89,7 +97,8 @@ def init_backend_engine(instance_id: str,
                                      placement_group,
                                      request_output_queue_type,
                                      migration_config,
-                                     engine_args)
+                                     engine_args,
+                                     backend_type)
     elif backend_type == BackendType.BLADELLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.bladellm.llm_engine import BackendBladeLLM
@@ -97,7 +106,8 @@ def init_backend_engine(instance_id: str,
                                          placement_group,
                                          request_output_queue_type,
                                          migration_config,
-                                         engine_args)
+                                         engine_args,
+                                         backend_type)
     elif backend_type == BackendType.SIM_VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
@@ -107,6 +117,7 @@ def init_backend_engine(instance_id: str,
                                         request_output_queue_type,
                                         migration_config,
                                         engine_args,
+                                        backend_type,
                                         profiling_result_file_path)
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')

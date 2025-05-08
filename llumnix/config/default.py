@@ -33,7 +33,7 @@ _C.SERVER.SSL_CERTFILE = None
 # Log level for the server
 _C.SERVER.LOG_LEVEL = "info"
 # Queue type for request output queue
-_C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "rayqueue"
+_C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "zmq"
 # Port number for the zmq request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Disable logging requests in server

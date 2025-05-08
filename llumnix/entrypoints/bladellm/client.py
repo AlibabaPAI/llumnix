@@ -211,10 +211,12 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         support_completion_tokens = last_completion_tokens + len(request_output.tokens)
         if current_completion_tokens > support_completion_tokens:
             # process the out-of-order output
-            logger.info("request[{}] out-of-order output,last completion tokens is {}"
+            logger.info("request {} out-of-order output, last completion tokens is {}"
                         ", current completion tokens is {}, current tokens is {}, stash current output..."
                         .format(request_id,last_completion_tokens,current_completion_tokens,len(request_output.tokens)))
-
+            if hasattr(request_output, 'request_timestamps'):
+                logger.info("out-of-order request({}) output timestamps: {}".format(
+                    request_id, request_output.request_timestamps.to_latency_breakdown_dict()))
             self.request_streams_output_stash.setdefault(request_id, []).append(request_output)
             return []
 

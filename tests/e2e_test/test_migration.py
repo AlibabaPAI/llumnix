@@ -38,8 +38,6 @@ MIGRATION_BENCH_TIMEOUT_MINS = 30
 # Used to caculate port to avoid port conficts between tests.
 test_times = 0
 
-# TODO(s5u13b): Refine e2e tests for two backend engines.
-
 
 def parse_instance_log_file(log_files):
     speed_dict = defaultdict(list)

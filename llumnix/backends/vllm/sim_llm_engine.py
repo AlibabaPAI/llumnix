@@ -28,6 +28,7 @@ from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM, EngineState
 from llumnix.backends.profiling import ProfilingDatabase, LatencyMemData, ProfilingResult, SimParallelConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.backends.backend_interface import BackendType
 
 logger = init_logger(__name__)
 
@@ -41,6 +42,7 @@ class BackendSimVLLM(BackendVLLM):
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
+        backend_type: BackendType,
         profiling_result_file_path: str
     ) -> None:
         # multi-instance args
@@ -51,6 +53,7 @@ class BackendSimVLLM(BackendVLLM):
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
+                                                                          backend_type=backend_type,
                                                                           latency_mem=latency_mem)
         self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
                                  for _ in range(engine_args.pipeline_parallel_size)]

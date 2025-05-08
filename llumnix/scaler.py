@@ -43,6 +43,7 @@ from llumnix.constants import (INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT,
                                WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
                                CHECK_DEPLOYMENT_STATES_INTERVAL, WATCH_DEPLOYMENT_INTERVAL)
 from llumnix.entrypoints.utils import LaunchMode
+from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -225,7 +226,7 @@ class Scaler:
                 tasks = []
                 for instance_id in curr_pgs:
                     if instance_id not in curr_servers or instance_id not in curr_instances:
-                        tasks.append(asyncio.create_task(watch_instance_deployment_states(instance_id)))
+                        tasks.append(watch_instance_deployment_states(instance_id))
                 await asyncio.gather(*tasks, return_exceptions=True)
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
@@ -343,7 +344,7 @@ class Scaler:
             # num_gpus=world_size, for world_size Workers
             world_size = engine_args.get_engine_world_size()
             resources = get_service_resouces(service_name, world_size)
-            placement_group = initialize_placement_group(placement_group_name, num_cpus=3+int(init_server),
+            placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
                                                          num_gpus=world_size, detached=True, block=block, node_id=node_id,
                                                          resources=resources)
         else:
@@ -418,8 +419,7 @@ class Scaler:
                      engine_args) -> APIServerActor:
         if backend_type == BackendType.BLADELLM:
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM # pylint: disable=import-outside-toplevel
-            # Reserve 0.5 gpu for ApiServerActor, because APIServerActor imports blade module and blade module needs cuda environments.
-            api_server = APIServerActorBladeLLM.from_args(0.33, server_name, placement_group, entrypoints_args, engine_args)
+            api_server = APIServerActorBladeLLM.from_args(NUM_GPUS_BLADELLM_GPU_ACTOR, server_name, placement_group, entrypoints_args, engine_args)
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
             api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args, engine_args)

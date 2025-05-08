@@ -19,6 +19,7 @@ import os
 import ray
 from ray.util.placement_group import PlacementGroup
 
+from llumnix.arg_utils import LlumnixEngineArgs
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
@@ -72,8 +73,9 @@ def init_backend_engine(instance_id: str,
                         request_output_queue_type: QueueType,
                         migration_config: MigrationConfig,
                         backend_type: BackendType,
-                        engine_args,
+                        engine_args: LlumnixEngineArgs,
                         profiling_result_file_path: str = None) -> BackendInterface:
+    engine_args = engine_args.unwrap_engine_args_if_needed()
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.llm_engine import BackendVLLM
@@ -103,13 +105,3 @@ def init_backend_engine(instance_id: str,
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine
-
-def get_engine_world_size(engine_args, backend_type: BackendType):
-    if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
-        engine_config = engine_args.create_engine_config()
-        # world_size = tp_size * pp_size
-        world_size = engine_config.parallel_config.world_size
-    else: # BLADE_LLM
-        # world_size = tp_size * pp_size
-        world_size = engine_args.world_size
-    return world_size

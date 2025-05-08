@@ -15,19 +15,15 @@ import os
 import uuid
 import asyncio
 import threading
-from typing import Any, Callable, Awaitable, TypeVar, Coroutine, Dict, Optional
+from typing import Callable, Awaitable, TypeVar, Coroutine, Dict, Optional
 import socket
 from functools import partial
-import pickle
-import warnings
 
 from typing_extensions import ParamSpec
 
-from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
 from llumnix.constants import MODEL_PATH, DATASET_PATH
 
-logger = init_logger(__name__)
 
 _MAX_PORT = 65536
 
@@ -63,33 +59,6 @@ def run_coroutine_in_new_thread(coro: Coroutine, blocking: bool):
     thread.start()
     if blocking:
         thread.join()
-
-def _get_engine_args_filename(engine_type: str) -> str:
-    return f"engine_args_{engine_type}.pkl"
-
-def _get_engine_args_filepath(save_path: str, save_key: str = None) -> str:
-    if save_key is not None:
-        save_filepath = os.path.join(save_path, save_key)
-    else:
-        save_filepath = save_path
-    return save_filepath
-
-def save_engine_args(engine_type: str, save_path: str, engine_args: Any, save_key: str = None) -> None:
-    engine_args_filename = _get_engine_args_filename(engine_type)
-    save_filepath = _get_engine_args_filepath(save_path, save_key)
-    save_filename = os.path.join(save_filepath, engine_args_filename)
-    os.makedirs(save_filepath, exist_ok=True)
-    with open(save_filename, 'wb') as file:
-        pickle.dump(engine_args, file)
-    logger.info("Save engine arguments of {} engine type as file: {}".format(engine_type, save_filename))
-
-def load_engine_args(engine_type: str, load_path: str) -> Any:
-    engine_args_filename = _get_engine_args_filename(engine_type)
-    load_filename = os.path.join(load_path, engine_args_filename)
-    with open(load_filename, 'rb') as file:
-        engine_args =  pickle.load(file)
-    logger.info("Load engine arguments of {} engine type from path: {}".format(engine_type, load_path))
-    return engine_args
 
 def make_async(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
     """Take a blocking function, and run it on in an executor thread.

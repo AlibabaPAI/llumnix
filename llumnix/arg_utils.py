@@ -14,15 +14,23 @@
 # limitations under the License.
 
 import argparse
+import copy
 import dataclasses
 from dataclasses import dataclass
+import os
+import pickle
 from typing import List, Tuple, Union
+from abc import ABC, abstractmethod
 
+from llumnix.instance_info import InstanceType
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 # All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None for default.
@@ -360,6 +368,102 @@ class LaunchArgs:
     launch_mode: LaunchMode = None
     backend_type: BackendType = None
 
+class LlumnixEngineArgs(ABC):
+
+    def __init__(
+        self, engine_args, backend_type: BackendType
+    ) -> None:
+        self.engine_args = engine_args
+        self.engine_args_warpped = None
+        self.backend_type: BackendType = backend_type
+
+    @abstractmethod
+    def unwrap_engine_args_if_needed(self):
+        # returun the engine args after overriding
+        pass
+
+    @abstractmethod
+    def get_engine_world_size(self):
+        pass
+
+    def update_arg(self, args_key: str, args_value):
+        if self.engine_args_warpped and hasattr(self.engine_args_warpped, args_key):
+            setattr(self.engine_args_warpped, args_key, args_value)
+
+    def update_args(self, **kwargs):
+        for args_key, args_value in kwargs.items():
+            self.update_arg(args_key, args_value)
+
+
+class LlumnixEngineArgsFactory:
+
+    def __init__(
+        self,
+        load_registered_service: bool,
+        enable_port_increment: bool,
+        load_registered_service_path: str,
+        pdd_config: PDDConfig,
+    ) -> None:
+        self.load_registered_service: bool = load_registered_service
+        self.load_registered_service_path: str = load_registered_service_path
+        self.pdd_config: PDDConfig = pdd_config
+        self.engine_args_dict: dict[str, LlumnixEngineArgs] = {}
+        self.enable_port_increment: bool = enable_port_increment
+        self.disagg_options_token_port_offset = 0  # used in bladellm
+
+        if self.load_registered_service:
+            if (
+                not self.pdd_config.enable_pd_disagg
+                and not self.pdd_config.enable_engine_pd_disagg
+            ):
+                instance_type_list = ["no_constraints"]
+            else:
+                instance_type_list = ["prefill", "decode"]
+            for instance_type in instance_type_list:
+                self.engine_args_dict[instance_type] = load_engine_args(
+                    instance_type, self.load_registered_service_path
+                )
+
+    def gen_next_engine_args(
+        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
+    ) -> LlumnixEngineArgs:
+        if self.load_registered_service:
+            return self.engine_args_dict[instance_type]
+
+        engine_args_copied = copy.deepcopy(current_engine_args.engine_args)
+
+        # lazy import to void circular import
+        # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
+
+        if isinstance(current_engine_args, BladellmEngineArgs):
+            next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
+            next_engine_args.world_size = current_engine_args.get_engine_world_size()
+            if self.enable_port_increment:
+                next_engine_args.engine_args_warpped.disagg_options_token_port_offset = (
+                    self.disagg_options_token_port_offset
+                )
+                self.disagg_options_token_port_offset += 10
+            if self.pdd_config.enable_engine_pd_disagg:
+                next_engine_args.engine_args_warpped.disagg_options_inst_role = (
+                    instance_type.value
+                    if isinstance(instance_type, InstanceType)
+                    else instance_type
+                )
+            return next_engine_args
+
+        # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+
+        if isinstance(current_engine_args, VllmEngineArgs):
+            vllm_engine_args = VllmEngineArgs(engine_args=engine_args_copied)
+            vllm_engine_args.backend_type = current_engine_args.backend_type
+            return vllm_engine_args
+
+        raise TypeError(
+            "Unsupported engine args type when generating next engine args."
+        )
+
 
 @dataclass
 class InstanceArgs:
@@ -526,3 +630,34 @@ class InstanceArgs:
                             type=str,
                             help='environment variable used as engine instance id')
         return parser
+
+
+def _get_engine_args_filename(engine_type: str) -> str:
+    return f"engine_args_{engine_type}.pkl"
+
+
+def _get_engine_args_filepath(save_path: str, save_key: str = None) -> str:
+    if save_key is not None:
+        save_filepath = os.path.join(save_path, save_key)
+    else:
+        save_filepath = save_path
+    return save_filepath
+
+
+def save_engine_args(engine_type: str, save_path: str, engine_args: LlumnixEngineArgs, save_key: str = None) -> None:
+    engine_args_filename = _get_engine_args_filename(engine_type)
+    save_filepath = _get_engine_args_filepath(save_path, save_key)
+    save_filename = os.path.join(save_filepath, engine_args_filename)
+    os.makedirs(save_filepath, exist_ok=True)
+    with open(save_filename, 'wb') as file:
+        pickle.dump(engine_args, file)
+    logger.info("Save engine arguments of {} engine type as file: {}".format(engine_type, save_filename))
+
+
+def load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
+    engine_args_filename = _get_engine_args_filename(engine_type)
+    load_filename = os.path.join(load_path, engine_args_filename)
+    with open(load_filename, 'rb') as file:
+        engine_args =  pickle.load(file)
+    logger.info("Load engine arguments of {} engine type from path: {}".format(engine_type, load_path))
+    return engine_args

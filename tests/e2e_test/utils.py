@@ -76,7 +76,7 @@ def generate_vllm_launch_command(
         f"--instance-type {instance_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'--simulator-mode ' if enable_simulator else ''}"
-        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl ' if enable_simulator else ''}"
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -133,7 +133,7 @@ def generate_vllm_serve_command(
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--config-file {config_path} "
-        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen-7B.pkl ' if enable_simulator else ''}"
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -185,7 +185,7 @@ def generate_bladellm_launch_command(
         f"--naming_url={NAMING_URL} "
         f"INSTANCE.GRPC_MIGRATION_BACKEND_SERVER_PORT {port + 20} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
-        f"MANAGER.ENABLE_MIGRATION {enable_migration} "
+        f"MANAGER.ENABLE_MIGRATION {enable_migration and not enable_pd_disagg} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
@@ -346,7 +346,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f multiprocessing', shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
     subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
-    time.sleep(5.0)
+    time.sleep(1.0)
 
 @pytest.fixture
 def shutdown_llumnix_service():

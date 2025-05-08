@@ -78,7 +78,7 @@ def parse_log_file(title: str):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
-@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen-7B')])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
@@ -88,9 +88,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
                                 model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
-    # TODO(chenghao): fix this bug
-    if "BladeLLM" in engine and launch_mode == "global" and enable_pd_disagg:
-        pytest.skip("Error in BladeLLM for prefill-decode disaggregation in global launch mode.")
 
     if "BladeLLM" in engine and enable_simulator:
         pytest.skip("Simulator for BladeLLM is not supported yet.")

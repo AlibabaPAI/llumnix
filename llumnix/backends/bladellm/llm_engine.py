@@ -369,6 +369,8 @@ class BackendBladeLLM(BackendInterface):
             *engine_args.metric_exporters,
             observability_options=engine_args.serving_observability_options,
         )
+        if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
+            engine_args.host = get_ip_address()
         self._config_inner_engine_logger(engine_args)
 
         # add instance_id to avoid path conflict when multi-engine running in a single pod

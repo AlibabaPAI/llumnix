@@ -14,7 +14,6 @@
 import asyncio
 from typing import List, Union, Iterable
 import time
-import pickle
 import os
 
 import ray
@@ -32,11 +31,10 @@ from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-from llumnix.arg_utils import InstanceArgs
+from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import get_ip_address
 
 logger = init_logger(__name__)
 
@@ -47,23 +45,22 @@ class Llumlet:
                  instance_args: InstanceArgs,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 backend_type: BackendType,
-                 engine_args) -> None:
+                 engine_args: LlumnixEngineArgs) -> None:
         try:
-            # bladellm engine_args is dumped by pickle
-            if backend_type == BackendType.BLADELLM:
-                engine_args = pickle.loads(engine_args.engine_args)
-                if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
-                    engine_args.host = get_ip_address()
             log_actor_ray_info(actor_class_name=self.__class__.__name__)
             self.instance_id = instance_id
-            if instance_args.engine_disagg_inst_id_env_var:
-                self.engine_disagg_inst_id = os.environ.get(instance_args.engine_disagg_inst_id_env_var, instance_id)
-            elif getattr(engine_args, 'disagg_options', None) and getattr(engine_args.disagg_options, 'inst_id', None):
-                self.engine_disagg_inst_id = engine_args.disagg_options.inst_id
-            else:
-                self.engine_disagg_inst_id =  instance_id
+            self.engine_disagg_inst_id: str = (
+                os.environ.get(instance_args.engine_disagg_inst_id_env_var)
+                if instance_args.engine_disagg_inst_id_env_var
+                else instance_id
+            )
+            backend_type: BackendType = engine_args.backend_type
             logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
+            # update disagg_options.inst_id for baldellm PDD
+            engine_args.update_arg(
+                args_key="engine_disagg_inst_id", args_value=self.engine_disagg_inst_id
+            )
+
             self.instance_args: InstanceArgs = instance_args
             self.actor_name = get_instance_name(instance_id)
             self.instance_load_calculator = InstanceLoadCalculator(
@@ -100,9 +97,9 @@ class Llumlet:
                   instance_args: InstanceArgs,
                   placement_group: PlacementGroup,
                   request_output_queue_type: QueueType,
-                  backend_type: BackendType,
-                  engine_args):
+                  engine_args: LlumnixEngineArgs):
         try:
+            backend_type = engine_args.backend_type
             assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
                 f'unimplemented backend {BackendType}'
             # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
@@ -129,7 +126,6 @@ class Llumlet:
                                            instance_args,
                                            placement_group,
                                            request_output_queue_type,
-                                           backend_type,
                                            engine_args)
         # pylint: disable=broad-except
         except Exception as e:

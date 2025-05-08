@@ -11,12 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-
+from dataclasses import dataclass, field
+import pickle
 # When importing ServingArgs, it will raise no available gpu error.
 
+
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
-                               InstanceArgs)
+                               InstanceArgs, LlumnixEngineArgs)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.logging.logger import init_logger
@@ -25,11 +26,43 @@ from llumnix.config import LlumnixConfig
 logger = init_logger(__name__)
 
 
+class BladellmEngineArgs(LlumnixEngineArgs):
+
+    def __init__(self, engine_args=None):
+        super().__init__(
+            engine_args=engine_args,
+            backend_type=BackendType.BLADELLM,
+        )
+        self.engine_args_warpped = EngineArgsWrapped()
+        self.world_size: int = None
+        self.instance_id: str = None
+
+    def unwrap_engine_args_if_needed(self):
+        # pylint: disable=import-outside-toplevel
+        from blade_llm.service.args import ServingArgs
+        from blade_llm.utils.disagg_utils import DecodeRoutingPolicy
+        engine_args: ServingArgs = pickle.loads(self.engine_args)
+        assert isinstance(engine_args, ServingArgs)
+        engine_args_warpped: EngineArgsWrapped = self.engine_args_warpped
+        if engine_args.disagg_options:
+            if engine_args_warpped.disagg_options_token_port_offset:
+                engine_args.disagg_options.token_port += engine_args_warpped.disagg_options_token_port_offset
+            if engine_args_warpped.disagg_options_inst_role:
+                engine_args.disagg_options.inst_role = engine_args_warpped.disagg_options_inst_role
+            if engine_args_warpped.engine_disagg_inst_id:
+                engine_args.disagg_options.inst_id = engine_args_warpped.engine_disagg_inst_id
+            engine_args.disagg_options.select_decode_policy = DecodeRoutingPolicy.EXTERNAL_ROUTE
+        return engine_args
+
+    def get_engine_world_size(self):
+        return self.world_size
+
 @dataclass
-class BladellmEngineArgs:
-    engine_args: bytes = None
-    world_size: int = None
-    instance_id: str = None
+class EngineArgsWrapped:
+    # bladellm engine args need to override
+    disagg_options_token_port_offset: int = field(default=None)
+    disagg_options_inst_role: str = field(default=None)
+    engine_disagg_inst_id: str = field(default=None)
 
 
 def add_llumnix_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:

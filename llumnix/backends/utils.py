@@ -80,7 +80,7 @@ class AsyncPutQueueActor:
                     for req_output_json in req_outputs:
                         reque_output = GenerateStreamResponse(**json.loads(req_output_json))
                         request_ids.append(reque_output.req_id)
-                self.engine_actor_handle.abort.remote(request_ids)
+                await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(request_ids))
 
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,

@@ -156,6 +156,24 @@ class AsyncBackQueueWrapper:
         logger.info("trans_wrapper reset")
 
 
+def setup_dist_options(serving_args: ServingArgs):
+    # It means that dist_init_addr can be None when enabling distributed inference.
+    if serving_args.dist_inference_options.dist_init_addr is not None:
+        master_port = int(serving_args.dist_inference_options.dist_init_addr.split(":")[1])
+    else:
+        master_port = NCCL_PORT
+    # The IP of engine and worker 0 will be same due to our sorting of workers,
+    # so directly set the dist_init_addr to IP of engine is correct.
+    serving_args.dist_inference_options.dist_init_addr = f"{serving_args.host}:{master_port}"
+    # TODO(s5u13b): New BladeLLM will not use this environment variables, update it after rebase BladeLLM.
+    os.environ["MASTER_ADDR"] = serving_args.host
+
+def setup_dist(serving_args: ServingArgs):
+    if is_distributed_inference():
+        setup_dist_options(serving_args)
+    setup_dist_environ(serving_args.dist_inference_options.nnodes, serving_args.dist_inference_options.node_rank)
+
+
 class AsyncLLMEngineLlumnixMixin:
     # pylint: disable=unused-argument
     def __init__(self,
@@ -318,24 +336,10 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                  serving_args: ServingArgs,
                  *args, **kwargs,
                  ) -> None:
-        if is_distributed_inference():
-            self._setup_dist_options(serving_args)
-        setup_dist_environ(serving_args.dist_inference_options.nnodes, serving_args.dist_inference_options.node_rank)
+        setup_dist(serving_args)
         AsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers, backend_type)
-
-    def _setup_dist_options(self, serving_args: ServingArgs):
-        # It means that dist_init_addr can be None when enabling distributed inference.
-        if serving_args.dist_inference_options.dist_init_addr is not None:
-            master_port = int(serving_args.dist_inference_options.dist_init_addr.split(":")[1])
-        else:
-            master_port = NCCL_PORT
-        # The IP of engine and worker 0 will be same due to our sorting of workers,
-        # so directly set the dist_init_addr to IP of engine is correct.
-        serving_args.dist_inference_options.dist_init_addr = f"{serving_args.host}:{master_port}"
-        # TODO(s5u13b): New BladeLLM will not use this environment variables, update it after rebase BladeLLM.
-        os.environ["MASTER_ADDR"] = serving_args.host
 
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
@@ -347,9 +351,11 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
                  src_worker_ip_address: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
+                 serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
-        PrefillAsyncLLMEngine.__init__(self, *args, **kwargs)
+        setup_dist(serving_args)
+        PrefillAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers, backend_type)
 
@@ -364,9 +370,11 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
                  src_worker_ip_address: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
+                 serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
-        DecodeAsyncLLMEngine.__init__(self, *args, **kwargs)
+        setup_dist(serving_args)
+        DecodeAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
                                             migration_config, src_worker_ip_address, request_barriers, backend_type)
 

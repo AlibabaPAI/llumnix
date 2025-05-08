@@ -15,9 +15,6 @@ from llumnix.entrypoints.setup import connect_to_ray_cluster, setup_llumnix
 
 logger = init_logger('llumnix.entrypoints.bladellm.server')
 
-# Assume that there is an existing ray cluster when using centralized deployment.
-connect_to_ray_cluster()
-
 def main():
     # pylint: disable=import-outside-toplevel
     from blade_llm.service.args import ServingArgs, add_args
@@ -78,13 +75,16 @@ def get_current_node_resources():
 
 if __name__ == "__main__":
 
-    gpu_num, cpu_num = get_current_node_resources()
+    # Assume that there is an existing ray cluster when using centralized deployment.
+    connect_to_ray_cluster()
 
-    if gpu_num > 0:
+    num_gpus, num_cpus = get_current_node_resources()
+
+    if num_gpus > 0:
         # current node has GPU resources
         logger.info("Launch on current node.")
         main()
-    elif cpu_num == 0 and gpu_num == 0:
+    elif num_cpus == 0 and num_gpus == 0:
         # current node has no CPU resources and no GPU resources, it is highly likely that the current node is the head node
         # bladellm can only run on GPU nodes, so use a ray task to launch bladellm on other nodes
         logger.info("No gpu on current node, launch on another node.")

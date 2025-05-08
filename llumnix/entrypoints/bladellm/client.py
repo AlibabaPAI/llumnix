@@ -66,6 +66,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.manager_available = True
 
         loop.create_task(self.get_request_outputs_loop())
+        loop.create_task(self.request_output_queue.run_server_loop())
 
     async def _add_request(self, request: ServerRequest) -> LLMResponse:
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:

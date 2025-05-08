@@ -53,15 +53,14 @@ class Llumlet:
         backend_type: BackendType = engine_args.backend_type
         logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
         # update disagg_options.inst_id for baldellm PDD
-        if backend_type == BackendType.BLADELLM:
-            self.engine_disagg_inst_id: str = (
-                os.environ.get(instance_args.engine_disagg_inst_id_env_var)
-                if instance_args.engine_disagg_inst_id_env_var
-                else instance_id
-            )
-            engine_args.update_arg(
-                args_key="engine_disagg_inst_id", args_value=self.engine_disagg_inst_id
-            )
+        self.engine_disagg_inst_id: str = (
+            os.environ.get(instance_args.engine_disagg_inst_id_env_var)
+            if instance_args.engine_disagg_inst_id_env_var
+            else instance_id
+        )
+        engine_args.update_arg(
+            args_key="engine_disagg_inst_id", args_value=self.engine_disagg_inst_id
+        )
         self.instance_args: InstanceArgs = instance_args
         self.actor_name = get_instance_name(instance_id)
         self.instance_load_calculator = InstanceLoadCalculator(

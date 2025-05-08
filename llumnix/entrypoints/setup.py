@@ -207,17 +207,17 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
                                              log_request_timestamps)
     return entrypoints_context
 
-def _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args: LlumnixEngineArgs) -> EntrypointsContext:
+def _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> EntrypointsContext:
     manager, instance_ids, instances, request_output_queue = \
-        init_llumnix_components(entrypoints_args, manager_args, instance_args, engine_args)
+        init_llumnix_components(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 
     return setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue)
 
-def _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args: LlumnixEngineArgs, launch_args) -> None:
+def _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> None:
     _ = init_manager(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 
-def setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args: LlumnixEngineArgs, launch_args) -> Optional[EntrypointsContext]:
+def setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> Optional[EntrypointsContext]:
     if launch_args.launch_mode == LaunchMode.LOCAL:
-        return _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args)
+        return _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 
     return _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args)

@@ -101,7 +101,7 @@ class AsyncBackQueueWrapper:
         asyncio.create_task(self._clear_request_server_info_loop())
 
     async def _clear_request_server_info_loop(self):
-        MAX_ITEMS_PER_PROCEDURE: int = 1000
+        MAX_ITEMS_PER_PROCEDURE: int = 1000 # pylint: disable=invalid-name
 
         while True:
             cur_step_idx: int = self.get_current_step_counter_queue.get()
@@ -115,7 +115,6 @@ class AsyncBackQueueWrapper:
 
                 if loop_idx % MAX_ITEMS_PER_PROCEDURE == 0:
                     await asyncio.sleep(0)
-            
 
     async def _put_request_outputs_loop(self):
         async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:

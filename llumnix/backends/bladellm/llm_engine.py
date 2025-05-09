@@ -385,8 +385,7 @@ class BackendBladeLLM(BackendInterface):
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 engine_args: ServingArgs,
-                 backend_type: BackendType,
+                 engine_args: ServingArgs
                 ) -> None:
         init_metric(
             engine_args.serving_metric_options.metric_export_interval_sec,
@@ -404,7 +403,6 @@ class BackendBladeLLM(BackendInterface):
         self.instance_id = instance_id
         self.engine_args = engine_args
         self.migration_config: MigrationConfig = migration_config
-        self.backend_type = backend_type
 
         ip_addr = get_ip_address()
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
@@ -422,7 +420,7 @@ class BackendBladeLLM(BackendInterface):
         self.request_barriers: queue.Queue = queue.Queue()
         engine_cls = self._get_engine_cls()
         self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, migration_config,
-                                 self.src_worker_ip_address, self.request_barriers, backend_type, engine_args)
+                                 self.src_worker_ip_address, self.request_barriers, BackendType.BLADELLM, engine_args)
 
         self._engine_ready_event = asyncio.Event()
         asyncio.create_task(self._start_engine())

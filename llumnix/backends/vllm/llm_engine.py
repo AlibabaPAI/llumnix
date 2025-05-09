@@ -307,15 +307,14 @@ class BackendVLLM(BackendInterface):
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        engine_args: EngineArgs,
-        backend_type: BackendType,
+        engine_args: EngineArgs
     ) -> None:
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
                                                                           migration_config=migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
-                                                                          backend_type=backend_type)
+                                                                          backend_type=BackendType.VLLM)
         # In order to call the verify_async_output_proc implicitly.
         engine_config = engine_args.create_engine_config()
         if not engine_config.model_config.use_async_output_proc:

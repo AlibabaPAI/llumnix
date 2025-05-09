@@ -64,7 +64,6 @@ class EntrypointsArgs:
     ray_cluster_port: int = None
     disable_log_to_driver: bool = None
     request_output_queue_type: str = None
-    request_output_queue_port: int = None
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
     config_file: str = None

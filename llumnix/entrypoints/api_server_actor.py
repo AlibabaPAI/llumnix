@@ -11,6 +11,7 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.logging.logger import init_logger
 from llumnix.ray_utils import log_actor_ray_info
+from llumnix.utils import get_free_port
 
 logger = init_logger(__name__)
 
@@ -23,7 +24,7 @@ class APIServerActor(ABC):
         self.entrypoints_args = entrypoints_args
         self.engine_args = engine_args
         self._set_host(entrypoints_args, engine_args)
-        self.request_output_queue_port = self.entrypoints_args.request_output_queue_port
+        self.request_output_queue_port = get_free_port()
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         self.request_output_queue = init_request_output_queue_server(
                                         self.host, self.request_output_queue_port, self.request_output_queue_type)

@@ -372,8 +372,8 @@ class Scaler:
                                         placement_group: PlacementGroup,
                                         instance_type: InstanceType = None):
         async def done_scale_up(instance_id: str, instance: Llumlet,
-                                instance_type: InstanceType, placement_group: PlacementGroup,
-                                server: ray.actor.ActorHandle):
+                                instance_type: InstanceType, next_entrypoints_args: EntrypointsArgs,
+                                next_engine_args: LlumnixEngineArgs):
             try:
                 instance_ready = False
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)

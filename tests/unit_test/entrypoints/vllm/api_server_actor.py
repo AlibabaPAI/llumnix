@@ -72,6 +72,9 @@ class APIServerActor:
         )
         self.run_uvicorn_server_thread.start()
 
+    def is_ready(self) -> bool:
+        return True
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

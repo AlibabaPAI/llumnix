@@ -102,16 +102,16 @@ class APIServerActor(ABC):
                   manager: ray.actor.ActorHandle,
                   instance: ray.actor.ActorHandle):
         api_server_class = ray.remote(num_cpus=1,
-                                        num_gpus=num_gpus,
-                                        name=get_server_name(instance_id),
-                                        namespace="llumnix",
-                                        lifetime="detached")(cls).options(
+                                      num_gpus=num_gpus,
+                                      name=get_server_name(instance_id),
+                                      namespace="llumnix",
+                                      lifetime="detached")(cls).options(
                                             scheduling_strategy=PlacementGroupSchedulingStrategy(
                                                 placement_group=placement_group,
                                                 placement_group_bundle_index=0,
                                                 placement_group_capture_child_tasks=True
                                             )
-                                            )
+                                        )
         api_server = api_server_class.remote(instance_id, entrypoints_args, engine_args,
                                              manager, instance)
 

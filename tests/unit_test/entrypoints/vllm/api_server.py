@@ -68,12 +68,13 @@ def setup_entrypoints_context(request_output_queue_type: QueueType):
     entrypoints_context = EntrypointsContext(manager,
                                              {'0': None},
                                              request_output_queue,
+                                             None,
                                              server_info,
                                              None,
                                              None)
     return entrypoints_context
 
-def run_uvicorn_server(host: str, port: int, entrypoints_context: EntrypointsContext):
+def run_server(host: str, port: int, entrypoints_context: EntrypointsContext):
     llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(entrypoints_context)
     app = tests.unit_test.entrypoints.vllm.api.app
 
@@ -96,4 +97,4 @@ if __name__ == "__main__":
     manager = MockManager.from_args(request_output_queue_type)
     entrypoints_context = setup_entrypoints_context(request_output_queue_type)
 
-    run_uvicorn_server(entrypoints_args.host, entrypoints_args.port, entrypoints_context)
+    run_server(entrypoints_args.host, entrypoints_args.port, entrypoints_context)

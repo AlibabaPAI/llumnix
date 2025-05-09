@@ -63,6 +63,7 @@ def api_server(request):
     ]
     # pylint: disable=consider-using-with
     uvicorn_process = subprocess.Popen(commands)
+    print("ccccc")
     yield
     uvicorn_process.terminate()
     # Waiting for api server subprocess to terminate.
@@ -83,6 +84,8 @@ def test_api_server(ray_env, api_server, interface: str):
         _query_server = _query_server_generate
     elif interface == 'generate_benchmark':
         _query_server = _query_server_generate_benchmark
+
+    print("ddddd")
 
     with Pool(32) as pool:
         # Wait until the server is ready

@@ -45,18 +45,41 @@ llumnix_client: LlumnixClientVLLM = None
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
-    asyncio.create_task(llumnix_client.request_output_queue.run_server_loop())
-    asyncio.create_task(llumnix_client.get_request_outputs_loop())
-    yield
-    llumnix_client.request_output_queue.cleanup()
-    for instance in llumnix_client.instances.values():
-        try:
-            ray.kill(instance)
-        # pylint: disable=bare-except
-        except:
-            pass
+    try:
+        asyncio.create_task(llumnix_client.request_output_queue.run_server_loop())
+        asyncio.create_task(llumnix_client.get_request_outputs_loop())
+        yield
+    finally:
+        llumnix_client.cleanup()
+
 
 app = FastAPI(lifespan=lifespan)
+
+
+# pylint: disable=unused-argument
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    server_id = llumnix_client.server_info.server_id
+    logger.exception("Server {} caught exception: {}".format(server_id, type(exc).__name__))
+    try:
+        llumnix_client.request_output_queue.cleanup()
+        for instance in llumnix_client.instances.values():
+            try:
+                ray.kill(instance)
+            # pylint: disable=bare-except
+            except:
+                pass
+    # pylint: disable=broad-except
+    except Exception as e:
+        logger.exception("Server {} cleanup failed: {}".format(server_id, e))
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error_type": type(exc).__name__,
+            "error": str(exc)
+        }
+    )
 
 
 @app.get("/health")

@@ -110,7 +110,7 @@ def test_correct_order_output(max_outputs_len):
         for request_output in get_correct_order_output(
             request_id=request_id, length=output_length, max_outputs_len=max_outputs_len
         ):
-            res.append(client.process_output_order(request_id, request_output))
+            res.append(client._process_output_order(request_id, request_output))
 
         check_processed_output(res, output_length)
 
@@ -132,7 +132,7 @@ def test_out_of_order_output(max_outputs_len, is_finished_flag_at_last_output):
             max_outputs_len=max_outputs_len,
             is_finished_flag_at_last_output=True,
         ):
-            processed_output: RequestOutput = client.process_output_order(request_id, request_output)
+            processed_output: RequestOutput = client._process_output_order(request_id, request_output)
             if processed_output:
                 res.append(processed_output)
         check_processed_output(res, output_length)

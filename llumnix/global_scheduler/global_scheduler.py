@@ -101,7 +101,7 @@ class GlobalScheduler:
         instance_ids = list(instance_id)
         for ins_id, ins_type in zip(instance_ids, instance_type):
             if ins_id not in self.instance_id_set:
-                logger.info("Scale up instance: {}.".format(ins_id))
+                logger.info("Scale up instance {}.".format(ins_id))
                 new_intance_info = self._get_empty_instance_info()
                 new_intance_info.instance_id = ins_id
                 self._add_instance(ins_id, ins_type)
@@ -114,12 +114,12 @@ class GlobalScheduler:
         instance_ids = list(instance_id)
         for ins_id in instance_ids:
             if ins_id in self.instance_id_set:
+                logger.info("Scale down instance {}".format(ins_id))
                 self._remove_instance(ins_id)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
     def _add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
-        logger.info("Scale up instance: {}.".format(instance_id))
         new_intance_info = self._get_empty_instance_info()
         new_intance_info.instance_id = instance_id
         new_intance_info.instance_type = instance_type
@@ -134,7 +134,6 @@ class GlobalScheduler:
             self.decode_instance_num_requests[instance_id] = 0
 
     def _remove_instance(self, instance_id: str) -> None:
-        logger.info("Scale down instance: {}.".format(instance_id))
         if instance_id not in self.instance_id_set:
             logger.warning("instance {} is not in instance_id_set".format(instance_id))
         if instance_id not in self.instance_info:

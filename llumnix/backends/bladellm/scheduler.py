@@ -48,9 +48,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self.trans_wrapper: AsyncBackQueueWrapper = None
         self.step_counter: int = 0
 
-    def set_max_async_step(self, max_async_step: int):
-        self.max_async_step = max_async_step
-
     def pipeline_running_filter(self, batches: Union[List[int], List[GenerationGroupState]]):
         batches = super().pipeline_running_filter(batches)
         if not batches:
@@ -99,7 +96,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     def drop_request(self, req_id: int):
         self.id2group[req_id]._status = RequestStatus.FINISHED
-        self.trans_wrapper.remove_request_server_info(req_id, self.step_counter + self.max_async_step)
+        self.trans_wrapper.remove_request_server_info(req_id, self.step_counter)
         super().drop_request(req_id)
 
     # happends when moving request from waiting to running

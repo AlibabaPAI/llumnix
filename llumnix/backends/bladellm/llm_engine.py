@@ -230,11 +230,6 @@ class AsyncLLMEngineLlumnixMixin:
     def instance_info(self) -> InstanceInfo:
         return self._scheduler.llumnix_metrics.to_instance_info()
 
-    async def _init(self):
-        await super()._init()
-        self.max_async_step: int = self.semaphore._bound_value
-        self._scheduler.set_max_async_step(self.max_async_step)
-
     async def step(self):
         self.step_counter += 1
         await super().step()
@@ -313,7 +308,7 @@ class AsyncLLMEngineLlumnixMixin:
         if abort is not None and len(abort) > 0:
             for req_id, _, _ in abort:
                 self._scheduler.id2group[req_id]._status = RequestStatus.FINISHED
-                self.trans_wrapper.remove_request_server_info(req_id, self.step_counter + self.max_async_step)
+                self.trans_wrapper.remove_request_server_info(req_id, self.step_counter)
 
     async def _handle_reset(self):
         await super()._handle_reset()
@@ -602,7 +597,7 @@ class BackendBladeLLM(BackendInterface):
         return self.engine.scheduler.free_dst_pre_alloc_cache(*args, **kwargs)
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
-        expired_step = self.engine.step_counter + self.engine.max_async_step + 1
+        expired_step = self.engine.step_counter + 1
         self.engine.trans_wrapper.remove_request_server_info(backend_request.request_id, expired_step)
         return self.engine.scheduler.free_src_request(backend_request)
 

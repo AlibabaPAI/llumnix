@@ -99,7 +99,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--request-output-queue-type`
 - Queue type for request output queue.
 - Possible choices: rayqueue, zmq
-- Default: "rayqueue"
+- Default: "zmq"
 
 `--request-output-queue-port`
 - Port number for the zmq request output queue.

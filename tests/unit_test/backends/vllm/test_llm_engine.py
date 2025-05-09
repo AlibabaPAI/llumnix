@@ -32,6 +32,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 from llumnix.utils import try_convert_to_local_path
+from llumnix.backends.backend_interface import BackendType
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -61,7 +62,8 @@ def test_llm_engine_from_engine_args(ray_env):
     engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=3, num_gpus=1, detached=True)
     llm_engine = MockEngine.from_engine_args(engine_args=engine_args, request_output_queue_type=QueueType.RAYQUEUE,
-                                             instance_id="0", migration_config=None, placement_group=placement_group)
+                                             instance_id="0", migration_config=None, placement_group=placement_group,
+                                             backend_type=BackendType.VLLM)
     assert llm_engine.executor_class == LlumnixRayGPUExecutor
 
 def test_llm_engine_from_engine_args_sim(ray_env):
@@ -70,7 +72,7 @@ def test_llm_engine_from_engine_args_sim(ray_env):
     placement_group = initialize_placement_group(get_placement_group_name("0"), num_cpus=2, num_gpus=1, detached=True)
     llm_engine = MockEngine.from_engine_args(engine_args=engine_args, request_output_queue_type=QueueType.RAYQUEUE,
                                              instance_id="0", migration_config=None, latency_mem=latency_data,
-                                             placement_group=placement_group)
+                                             placement_group=placement_group, backend_type=BackendType.VLLM)
     assert llm_engine.executor_class == SimGPUExecutor
 
 @pytest.mark.asyncio
@@ -82,6 +84,7 @@ async def test_llm_engine_add_requset(ray_env):
                                                    request_output_queue_type=QueueType.RAYQUEUE,
                                                    instance_id="0",
                                                    placement_group=placement_group,
+                                                   backend_type=BackendType.VLLM,
                                                    latency_mem = latency_data,
                                                    migration_config=None)
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)

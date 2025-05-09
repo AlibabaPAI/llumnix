@@ -34,8 +34,6 @@ BENCH_TEST_TIMEOUT_MINS = 60
 # Used to caculate port to avoid port conficts between tests.
 test_times = 0
 
-# TODO(s5u13b): Reorganize the bench test to make codes cleaner.
-
 
 def parse_log_file(title: str):
     json_files = [f for f in os.listdir('.') if f.endswith('_latency_info.json')]

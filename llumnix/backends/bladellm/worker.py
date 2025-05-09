@@ -20,6 +20,7 @@ from llumnix.utils import (get_ip_address, update_environment_variables,
 from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 from llumnix.utils import random_uuid
 from llumnix.ray_utils import log_actor_ray_info
+from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -177,8 +178,7 @@ class WorkerProcessesRay(WorkerProcesses):
                 placement_group_capture_child_tasks=True,
                 placement_group_bundle_index=bundle_id,
             )
-            # The instance, server and worker shares the same 1 gpu in the first bundle of PlacementGroup.
-            num_gpus = 0.33 if bundle_id == 0 else 1
+            num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR if bundle_id == 0 else 1
             worker = ray.remote(
                 num_cpus=0,
                 num_gpus=num_gpus,

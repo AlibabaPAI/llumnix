@@ -186,11 +186,14 @@ class LlumnixClientVLLM:
         if current_completion_tokens <= last_completion_tokens:
             # process the out-of-order output
             logger.info(
-                "request[{}] out-of-order output,last completion tokens is {}"
-                ", current completion tokens is {}, skip current output...".format(
+                "request {} out-of-order output, last num completion tokens is {}"
+                ", num current completion tokens is {}, skip current output...".format(
                     request_id, last_completion_tokens, current_completion_tokens
                 )
             )
+            if hasattr(request_output, 'request_timestamps'):
+                logger.info("out-of-order request({}) output timestamps: {}".format(
+                    request_id, request_output.request_timestamps.to_latency_breakdown_dict()))
             return None
         self.request_streams_last_completion_tokens[request_id] = (
             current_completion_tokens

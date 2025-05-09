@@ -37,6 +37,7 @@ from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -99,18 +100,16 @@ class Llumlet:
             f'unimplemented backend {BackendType}'
         # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
         if backend_type == BackendType.VLLM:
-            # Instance and worker shares the same 1 gpu in the first bundle of PlacementGroup.
-            num_gpus = 0.5
+            num_gpus = NUM_GPUS_VLLM_GPU_ACTOR
         elif backend_type == BackendType.BLADELLM:
-            # Instance, server and worker shares the same 1 gpu in the first bundle of PlacementGroup.
-            num_gpus = 0.33
+            num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR
         else: # backend_type == BackendType.SIM_VLLM
             num_gpus = 0
         llumlet_class = ray.remote(num_cpus=1,
-                                   num_gpus=num_gpus,
-                                   name=get_instance_name(instance_id),
-                                   namespace='llumnix',
-                                   lifetime="detached")(cls).options(
+                                    num_gpus=num_gpus,
+                                    name=get_instance_name(instance_id),
+                                    namespace='llumnix',
+                                    lifetime="detached")(cls).options(
                                         scheduling_strategy=PlacementGroupSchedulingStrategy(
                                             placement_group=placement_group,
                                             placement_group_bundle_index=0,

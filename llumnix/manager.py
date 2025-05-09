@@ -513,8 +513,6 @@ class Manager:
         decode_instance_id_set = set(self.global_scheduler.decode_instance_info.keys())
         return prefill_instance_id_set, decode_instance_id_set
 
-
-    # TODO(KuilongCui): Add comments for this function.
     async def _rebuild_migration_backend(self) -> None:
         # Wait for all instances to finish migration
         while any(self.instance_migrating.values()):

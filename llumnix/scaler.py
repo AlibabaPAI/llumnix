@@ -208,7 +208,7 @@ class Scaler:
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_instance_deployment_states(instance_id: str, server_exists: bool, instance_exists: bool):
-            # Waiting for _init_server_and_instance scheduled. 
+            # Waiting for _init_server_and_instance scheduled.
             if not server_exists and not instance_exists:
                 await asyncio.sleep(1.0)
             # Server is initialized after instance is ready, so waiting for instance ready first.

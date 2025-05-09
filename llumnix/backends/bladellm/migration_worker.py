@@ -82,6 +82,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         # TODO(KuilongCui): clear server state
         await self.migration_server.wait_for_termination()
 
+    # pylint: disable=unused-argument
     def close_migration(self, request, context):
         del self.migration_server
         gc.collect()

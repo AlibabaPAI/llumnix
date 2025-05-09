@@ -16,7 +16,6 @@ import asyncio
 
 import pickle
 from aiohttp import web
-import ray
 
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.server import Entrypoint
@@ -27,7 +26,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
-from llumnix.entrypoints.utils import LaunchMode, is_gpu_available, EntrypointsContext
+from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
 from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_llumnix_cli_args, get_args
 from llumnix.logging.logger import init_logger
 

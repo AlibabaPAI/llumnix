@@ -42,6 +42,7 @@ class Full(Exception):
 
 class ZmqServer(QueueServerBase):
     def __init__(self, ip: str, port: int, maxsize=0):
+        self.port = port
         rpc_path = get_open_zmq_ipc_path(ip, port)
 
         self.context: zmq.asyncio.Context = zmq.asyncio.Context(ZMQ_IO_THREADS)

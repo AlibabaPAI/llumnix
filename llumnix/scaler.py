@@ -542,13 +542,12 @@ class Scaler:
 
         next_entrypoints_args = copy.deepcopy(entrypoints_args)
         next_entrypoints_args.port += self.port_offset
-        next_entrypoints_args.request_output_queue_port += self.port_offset
         self.port_offset += 1
         if self.enable_port_offset_store:
             put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)
 
         return next_entrypoints_args
-
+    
     def _get_next_instance_type(self,
                                 cur_num_prefill_instances: int,
                                 cur_num_decode_instances: int,

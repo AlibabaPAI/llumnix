@@ -15,7 +15,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--ray-cluster-port RAY_CLUSTER_PORT]
             [--disable-log-to-driver]
             [--request-output-queue-type {rayqueue,zmq}]
-            [--request-output-queue-port REQUEST_OUTPUT_QUEUE_PORT]
             [--disable-log-requests-server]
             [--log-request-timestamps]
             [--config-file CONFIG_FILE]
@@ -100,10 +99,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Queue type for request output queue.
 - Possible choices: rayqueue, zmq
 - Default: "zmq"
-
-`--request-output-queue-port`
-- Port number for the zmq request output queue.
-- Default: 1234
 
 `--disable-log-requests-server`
 - Disable logging requests in server.

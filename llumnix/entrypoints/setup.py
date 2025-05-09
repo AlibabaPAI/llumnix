@@ -30,7 +30,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, get_free_port
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.constants import (MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL,
                                SUBPROCESS_RUN_TIMEOUT, INSTANCE_READY_TIMEOUT)
@@ -170,7 +170,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
                     .format(len(available_instance_ids), available_instance_ids))
 
     ip = get_ip_address()
-    request_output_queue_port = entrypoints_args.request_output_queue_port
+    request_output_queue_port = None
     if request_output_queue_type == QueueType.RAYQUEUE:
         # Init rayqueue in manager to ensure the job id of all actors are the same as manager.
         # We found that when the job id of rayqueue is inherited from driver process, it may raise job id unequal error sometimes.
@@ -179,6 +179,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
             ip, request_output_queue_port, request_output_queue_type
         )
     else:
+        request_output_queue_port = get_free_port()
         # zmq context cannot be serialized, so init zmq queue server in driver.
         request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
 
@@ -191,11 +192,12 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
 
     server_id = random_uuid()
     ip = get_ip_address()
+    port = None if not hasattr(request_output_queue, "port") else request_output_queue.port
     server_info = ServerInfo(server_id,
                              QueueType(entrypoints_args.request_output_queue_type),
                              request_output_queue,
                              ip,
-                             entrypoints_args.request_output_queue_port)
+                             port)
 
     log_requests = not entrypoints_args.disable_log_requests_server
     log_request_timestamps = entrypoints_args.log_request_timestamps

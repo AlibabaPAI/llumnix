@@ -103,7 +103,7 @@ async def benchmark_queue(qps, ip=None, port=None):
     async_request_outputs = async_request_output_gen(iter(request_outputs), qps=qps)
     tasks = []
     async for request_output in async_request_outputs:
-        tasks.append(put_queue(request_output_queue, request_output, server_info))
+        tasks.append(asyncio.create_task(put_queue(request_output_queue, request_output, server_info)))
     _ = await asyncio.gather(*tasks)
 
     signal.signal(signal.SIGALRM, timeout_handler)

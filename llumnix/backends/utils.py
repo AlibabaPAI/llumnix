@@ -58,7 +58,7 @@ class AsyncPutQueueActor:
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
             set_timestamp(req_outputs, 'engine_actor_put_queue_timestamp', time.time())
-            tasks.append(self.request_output_queue_client.put_nowait(req_outputs, server_info))
+            tasks.append(asyncio.create_task(self.request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         request_ids = []
         for idx, ret in enumerate(rets):

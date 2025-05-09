@@ -226,7 +226,7 @@ class Scaler:
                 tasks = []
                 for instance_id in curr_pgs:
                     if instance_id not in curr_servers or instance_id not in curr_instances:
-                        tasks.append(watch_instance_deployment_states(instance_id))
+                        tasks.append(asyncio.create_task(watch_instance_deployment_states(instance_id)))
                 await asyncio.gather(*tasks, return_exceptions=True)
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except

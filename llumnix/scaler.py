@@ -547,7 +547,7 @@ class Scaler:
             put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)
 
         return next_entrypoints_args
-    
+
     def _get_next_instance_type(self,
                                 cur_num_prefill_instances: int,
                                 cur_num_decode_instances: int,

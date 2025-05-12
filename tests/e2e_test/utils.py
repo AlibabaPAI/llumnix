@@ -408,14 +408,15 @@ def wait_port_free(port: int, max_retries: int = 5):
             return
 
         for conn in psutil.net_connections():
-            print(f"Port {port} connection detail: {conn}")
             if conn.laddr.port == port:
-                try:
-                    proc = psutil.Process(conn.pid)
-                    print(f"Port {port} is in use by process {conn.pid}, status {proc.status()}: {' '.join(proc.cmdline())}.\
-                          Retrying in 3 seconds...")
-                except psutil.NoSuchProcess:
-                    continue
+                print(f"Port {port} connection detail: {conn}")
+                if conn.pid:
+                    try:
+                        proc = psutil.Process(conn.pid)
+                        print(f"Port {port} is in use by process {conn.pid}, status {proc.status()}: {' '.join(proc.cmdline())}.\
+                            Retrying in 3 seconds...")
+                    except psutil.NoSuchProcess:
+                        continue
 
         time.sleep(3)
         retries += 1

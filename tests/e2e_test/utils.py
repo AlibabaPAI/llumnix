@@ -17,6 +17,7 @@ import subprocess
 import uuid
 from typing import Optional
 
+import psutil
 import pytest
 import requests
 
@@ -406,7 +407,16 @@ def wait_port_free(port: int, max_retries: int = 5):
         if check_free_port(port=port):
             return
 
-        print(f"Port {port} is still in use. Retrying in 3 seconds...")
+        for conn in psutil.net_connections():
+            print(f"Port {port} connection detail: {conn}")
+            if conn.laddr.port == port:
+                try:
+                    proc = psutil.Process(conn.pid)
+                    print(f"Port {port} is in use by process {conn.pid}, status {proc.status()}: {' '.join(proc.cmdline())}.\
+                          Retrying in 3 seconds...")
+                except psutil.NoSuchProcess:
+                    continue
+
         time.sleep(3)
         retries += 1
 

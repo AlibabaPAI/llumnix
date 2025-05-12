@@ -49,7 +49,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--kvtransfer-migration-backend-transfer-type {ipc,rdma}]
-            [--grpc-migration-backend-server-port GRPC_MIGRATION_BACKEND_SERVER_PORT]
             [--kvtransfer-migration-backend-naming-url KVTRANSFER_MIGRATION_BACKEND_NAMING_URL]
             [--migration-max-stages MIGRATION_MAX_STAGES]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
@@ -232,10 +231,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Transfer type for migration backend kvTransfer.
 - Possible choices: ipc, rdma
 - Default: "rdma"
-
-`--grpc-migration-backend-server-port`
-- Port of grpc server for migration backend
-- Default: 50051
 
 `--kvtransfer-migration-backend-naming-url`
 - URL of naming server for kvtransfer migration backend

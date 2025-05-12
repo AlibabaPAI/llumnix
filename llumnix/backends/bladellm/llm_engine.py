@@ -42,7 +42,7 @@ from blade_llm.module.parallel import setup_dist_environ
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
-from llumnix.utils import get_ip_address, ray_get_with_timeout, asyncio_wait_for_with_timeout
+from llumnix.utils import get_ip_address, ray_get_with_timeout, asyncio_wait_for_with_timeout, get_free_port
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
@@ -439,9 +439,17 @@ class BackendBladeLLM(BackendInterface):
 
         ip_addr = get_ip_address()
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-        src_worker_start_port = self.migration_config.grpc_migration_backend_server_port
-        src_ports = range(src_worker_start_port, src_worker_start_port + world_size)
-        self.src_worker_ip_address = [ip_addr + ":" + str(port) for port in src_ports]
+
+        assert self.migration_config.grpc_migration_backend_server_port is None \
+            or len(self.migration_config.grpc_migration_backend_server_port) == 0
+        self.migration_config.grpc_migration_backend_server_port = []
+        for _ in range(world_size):
+            self.migration_config.grpc_migration_backend_server_port.append(get_free_port())
+        grpc_ports = self.migration_config.grpc_migration_backend_server_port
+        self.src_worker_ip_address = [ip_addr + ":" + str(port) for port in grpc_ports]
+        logger.info("Engine {} set grpc migration server address for all worker: {}".format(
+                    self.instance_id, self.src_worker_ip_address))
+
         self.worker_infos = []
         self.kv_transfer_instance_id = self.instance_id
         if engine_args.enable_disagg and engine_args.disagg_options is not None:

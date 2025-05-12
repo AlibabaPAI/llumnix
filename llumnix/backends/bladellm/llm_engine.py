@@ -440,14 +440,13 @@ class BackendBladeLLM(BackendInterface):
         ip_addr = get_ip_address()
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
 
-        assert self.migration_config.grpc_migration_backend_server_port is None \
-            or len(self.migration_config.grpc_migration_backend_server_port) == 0
+        assert self.migration_config.grpc_migration_backend_server_port is None
         self.migration_config.grpc_migration_backend_server_port = []
         for _ in range(world_size):
             self.migration_config.grpc_migration_backend_server_port.append(get_free_port())
         grpc_ports = self.migration_config.grpc_migration_backend_server_port
         self.src_worker_ip_address = [ip_addr + ":" + str(port) for port in grpc_ports]
-        logger.info("Engine {} set grpc migration server address for all worker: {}".format(
+        logger.info("Engine {} set grpc migration server address for all workers: {}".format(
                     self.instance_id, self.src_worker_ip_address))
 
         self.worker_infos = []

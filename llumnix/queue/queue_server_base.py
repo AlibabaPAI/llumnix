@@ -15,6 +15,9 @@ from abc import ABC, abstractmethod
 
 
 class QueueServerBase(ABC):
+    def __init__(self):
+        self.port: int = None
+
     @abstractmethod
     async def get(self, timeout):
         raise NotImplementedError

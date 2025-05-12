@@ -152,7 +152,7 @@ class Manager:
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
         asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
-    async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs,) -> None:
+    async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs) -> None:
         while self.num_instances == 0:
             logger.warning("No instance available now, sleep {}s, "
                            "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
@@ -242,8 +242,8 @@ class Manager:
                 request_output_queue_type, instance_args, engine_args, node_id
             )
 
-    def init_request_output_queue_server(self, ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
-        return init_request_output_queue_server(ip, port, queue_type)
+    def init_request_output_queue_server(self, ip: str, queue_type: QueueType) -> QueueServerBase:
+        return init_request_output_queue_server(ip, queue_type)
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""

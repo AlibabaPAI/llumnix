@@ -28,7 +28,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import (RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RETRY_BIND_ADDRESS_INTERVAL,
                                MAX_BIND_ADDRESS_RETRY_TIMES, ZMQ_IO_THREADS, ZMQ_RPC_TIMEOUT)
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, get_free_port
 
 logger = init_logger(__name__)
 
@@ -41,8 +41,10 @@ class Full(Exception):
 
 
 class ZmqServer(QueueServerBase):
-    def __init__(self, ip: str, port: int, maxsize=0):
-        rpc_path = get_open_zmq_ipc_path(ip, port)
+    def __init__(self, ip: str, port: int = None, maxsize: int =0):
+        super().__init__()
+        self.port = port or get_free_port()
+        rpc_path = get_open_zmq_ipc_path(ip, self.port)
 
         self.context: zmq.asyncio.Context = zmq.asyncio.Context(ZMQ_IO_THREADS)
 

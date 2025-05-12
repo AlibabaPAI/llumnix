@@ -48,8 +48,7 @@ def test_init_manager(ray_env, manager):
 
 def test_init_zmq(ray_env):
     ip = '127.0.0.1'
-    port = 1234
-    request_output_queue = init_request_output_queue_server(ip, port, 'zmq')
+    request_output_queue = init_request_output_queue_server(ip, 'zmq')
     assert request_output_queue is not None
 
 def test_retry_manager_method_sync(ray_env, manager):

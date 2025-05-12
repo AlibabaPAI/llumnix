@@ -391,8 +391,7 @@ class Scaler:
 
         backend_type = engine_args.backend_type
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
-        next_instance_args = await self._get_next_instance_args(instance_args, instance_type,
-                                                                engine_args.get_engine_world_size())
+        next_instance_args = await self._get_next_instance_args(instance_args, instance_type)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
             current_engine_args=engine_args,
@@ -510,7 +509,7 @@ class Scaler:
         kill_instance(instance_id)
         remove_placement_group(instance_id)
 
-    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType, world_size: int) -> InstanceArgs:
+    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
         if (
             not self.enable_port_increment
             and not self.pdd_config.enable_pd_disagg
@@ -519,10 +518,6 @@ class Scaler:
             return instance_args
 
         next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
-
-        if self.enable_port_increment:
-            # self.port_offset will be incremented by 1 in the next _get_next_entrypoints_args call.
-            next_instance_args.grpc_migration_backend_server_port += self.port_offset * world_size
 
         if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg:
             # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
@@ -542,7 +537,6 @@ class Scaler:
 
         next_entrypoints_args = copy.deepcopy(entrypoints_args)
         next_entrypoints_args.port += self.port_offset
-        next_entrypoints_args.request_output_queue_port += self.port_offset
         self.port_offset += 1
         if self.enable_port_offset_store:
             put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)

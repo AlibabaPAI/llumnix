@@ -15,7 +15,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--ray-cluster-port RAY_CLUSTER_PORT]
             [--disable-log-to-driver]
             [--request-output-queue-type {rayqueue,zmq}]
-            [--request-output-queue-port REQUEST_OUTPUT_QUEUE_PORT]
             [--disable-log-requests-server]
             [--log-request-timestamps]
             [--config-file CONFIG_FILE]
@@ -50,7 +49,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-num-layers MIGRATION_NUM_LAYERS]
             [--migration-backend-init-timeout MIGRATION_BACKEND_INIT_TIMEOUT]
             [--kvtransfer-migration-backend-transfer-type {ipc,rdma}]
-            [--grpc-migration-backend-server-port GRPC_MIGRATION_BACKEND_SERVER_PORT]
             [--kvtransfer-migration-backend-naming-url KVTRANSFER_MIGRATION_BACKEND_NAMING_URL]
             [--migration-max-stages MIGRATION_MAX_STAGES]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
@@ -100,10 +98,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Queue type for request output queue.
 - Possible choices: rayqueue, zmq
 - Default: "zmq"
-
-`--request-output-queue-port`
-- Port number for the zmq request output queue.
-- Default: 1234
 
 `--disable-log-requests-server`
 - Disable logging requests in server.
@@ -237,10 +231,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Transfer type for migration backend kvTransfer.
 - Possible choices: ipc, rdma
 - Default: "rdma"
-
-`--grpc-migration-backend-server-port`
-- Port of grpc server for migration backend
-- Default: 50051
 
 `--kvtransfer-migration-backend-naming-url`
 - URL of naming server for kvtransfer migration backend

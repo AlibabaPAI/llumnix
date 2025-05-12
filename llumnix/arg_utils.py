@@ -64,7 +64,6 @@ class EntrypointsArgs:
     ray_cluster_port: int = None
     disable_log_to_driver: bool = None
     request_output_queue_type: str = None
-    request_output_queue_port: int = None
     disable_log_requests_server: bool = None
     log_request_timestamps: bool = None
     config_file: str = None
@@ -482,7 +481,6 @@ class InstanceArgs:
     migration_num_layers: int = None
     migration_backend_init_timeout: float = None
     kvtransfer_migration_backend_transfer_type: str = None
-    grpc_migration_backend_server_port: int = None
     kvtransfer_migration_backend_naming_url: str = None
     migration_last_stage_max_blocks: int = None
     migration_max_stages: int = None
@@ -549,7 +547,6 @@ class InstanceArgs:
                                            self.migration_max_stages,
                                            self.migration_backend_init_timeout,
                                            self.kvtransfer_migration_backend_transfer_type,
-                                           self.grpc_migration_backend_server_port,
                                            self.kvtransfer_migration_backend_naming_url)
         return migration_config
 

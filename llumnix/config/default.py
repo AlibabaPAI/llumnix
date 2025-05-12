@@ -34,8 +34,6 @@ _C.SERVER.SSL_CERTFILE = None
 _C.SERVER.LOG_LEVEL = "info"
 # Queue type for request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "zmq"
-# Port number for the zmq request output queue
-_C.SERVER.REQUEST_OUTPUT_QUEUE_PORT = 1234
 # Disable logging requests in server
 _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
 # Enable logging request timestamp
@@ -154,7 +152,5 @@ _C.INSTANCE.MIGRATION_NUM_LAYERS = 1
 _C.INSTANCE.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 # Transfer type for migration backend kvTransfer
 _C.INSTANCE.KVTRANSFER_MIGRATION_BACKEND_TRANSFER_TYPE = "rdma"
-# Address of grpc server for migration backend
-_C.INSTANCE.GRPC_MIGRATION_BACKEND_SERVER_PORT = 50051
 # URL of naming server for kvtransfer migration backend
 _C.INSTANCE.KVTRANSFER_MIGRATION_BACKEND_NAMING_URL = "file:/tmp/llumnix/naming/"

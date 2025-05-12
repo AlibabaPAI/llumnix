@@ -66,7 +66,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
                                                     request_sync_group, base_worker, state_manager, args)
 
         self.migration_grpc_addr = get_ip_address() + ":" + \
-            str(self.migration_config.grpc_migration_backend_server_port+self.rank)
+            str(self.migration_config.grpc_migration_backend_server_port[self.rank])
 
         asyncio.create_task(self._launch_grpc_service())
 

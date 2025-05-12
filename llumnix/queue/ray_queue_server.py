@@ -24,6 +24,7 @@ from llumnix.utils import random_uuid
 
 class RayQueueServer(QueueServerBase):
     def __init__(self) -> None:
+        super().__init__()
         self.queue = RayQueue(
             actor_options={
                 "name": random_uuid(),

@@ -23,10 +23,10 @@ from llumnix.logging.logger import init_logger
 logger = init_logger(__name__)
 
 
-def init_request_output_queue_server(ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
+def init_request_output_queue_server(ip: str, queue_type: QueueType) -> QueueServerBase:
     output_queue_server: QueueServerBase = None
     if queue_type == QueueType.ZMQ:
-        output_queue_server = ZmqServer(ip, port)
+        output_queue_server = ZmqServer(ip)
     else:
         output_queue_server = RayQueueServer()
     return output_queue_server

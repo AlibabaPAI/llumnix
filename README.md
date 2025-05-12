@@ -5,6 +5,9 @@ Llumnix
 <h3 align="center">
 Efficient and easy <i>multi-instance</i> LLM serving
 </h3>
+<p align="center">
+| <a href="https://github.com/AlibabaPAI/llumnix/blob/main/docs"><b>Documentation</b></a> | <a href="https://arxiv.org/abs/2406.03243"><b>Paper</b></a> | <a href="llumnix.slack.com"><b>Developer Slack</b></a> |
+</p>
 
 ---
 

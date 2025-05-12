@@ -402,13 +402,12 @@ def to_markdown_table(data):
 
 def wait_port_free(port: int, max_retries: int = 5):
     retries = 0
-    while True:
+    while retries < max_retries:
         if check_free_port(port=port):
-            return True
-        else:
-            print(f"Port {port} is still in use. Retrying in 3 seconds...")
-            time.sleep(3)
-            retries += 1
-            if max_retries != -1 and retries >= max_retries:
-                print(f"Reached maximum retry count {max_retries}. Port {port} may still be in use.")
-                return False
+            return
+
+        print(f"Port {port} is still in use. Retrying in 3 seconds...")
+        time.sleep(3)
+        retries += 1
+
+    raise RuntimeError(f"Port {port} is still in use after {max_retries} retries.")

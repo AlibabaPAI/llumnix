@@ -170,18 +170,17 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
                     .format(len(available_instance_ids), available_instance_ids))
 
     ip = get_ip_address()
-    request_output_queue_port = None
     if request_output_queue_type == QueueType.RAYQUEUE:
         # Init rayqueue in manager to ensure the job id of all actors are the same as manager.
         # We found that when the job id of rayqueue is inherited from driver process, it may raise job id unequal error sometimes.
         request_output_queue = execute_actor_method_sync_with_retries(
             manager.init_request_output_queue_server.remote, 'Manager', 'init_request_output_queue_server',
-            ip, request_output_queue_port, request_output_queue_type
+            ip, request_output_queue_type
         )
     else:
         request_output_queue_port = get_free_port()
         # zmq context cannot be serialized, so init zmq queue server in driver.
-        request_output_queue = init_request_output_queue_server(ip, request_output_queue_port, request_output_queue_type)
+        request_output_queue = init_request_output_queue_server(ip, request_output_queue_type)
 
     return manager, available_instance_ids, available_instances, request_output_queue
 

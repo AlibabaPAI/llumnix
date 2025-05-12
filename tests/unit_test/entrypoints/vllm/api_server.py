@@ -62,9 +62,9 @@ def setup_entrypoints_context(request_output_queue_type: QueueType):
     manager = ray.get_actor(get_manager_name(), namespace="llumnix")
     tests.unit_test.entrypoints.vllm.api.manager = manager
     ip = '127.0.0.1'
-    port = 1234
-    request_output_queue = init_request_output_queue_server(ip, port, request_output_queue_type)
-    server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue, ip, port)
+    request_output_queue = init_request_output_queue_server(ip, request_output_queue_type)
+    server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue,
+                             ip, request_output_queue.port)
     entrypoints_context = EntrypointsContext(manager,
                                              {'0': None},
                                              request_output_queue,

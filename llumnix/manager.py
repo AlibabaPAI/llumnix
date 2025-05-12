@@ -242,8 +242,8 @@ class Manager:
                 request_output_queue_type, instance_args, engine_args, node_id
             )
 
-    def init_request_output_queue_server(self, ip: str, port: int, queue_type: QueueType) -> QueueServerBase:
-        return init_request_output_queue_server(ip, port, queue_type)
+    def init_request_output_queue_server(self, ip: str, queue_type: QueueType) -> QueueServerBase:
+        return init_request_output_queue_server(ip, queue_type)
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""

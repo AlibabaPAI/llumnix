@@ -15,6 +15,7 @@ from typing import Dict, List
 import asyncio
 import time
 import os
+import json
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -35,12 +36,13 @@ logger = init_logger(__name__)
 
 
 class AsyncPutQueueActor:
-    def __init__(self, instance_id: str, request_output_queue_type: QueueType):
+    def __init__(self, instance_id: str, request_output_queue_type: QueueType, backend_type: BackendType):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None
+        self.backend_type = backend_type
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -70,9 +72,15 @@ class AsyncPutQueueActor:
                     logger.debug("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
                                                                                 server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
-                request_ids.extend([req_output.request_id for req_output in req_outputs])
-        if request_ids:
-            await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(request_ids))
+                if self.backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
+                    request_ids = [req_output.request_id for req_output in req_outputs]
+                else: # BackendType.BLADE_LLM
+                    from blade_llm.protocol import GenerateStreamResponse # pylint: disable=import-outside-toplevel
+                    request_ids = []
+                    for req_output_json in req_outputs:
+                        reque_output = GenerateStreamResponse(**json.loads(req_output_json))
+                        request_ids.append(reque_output.req_id)
+                await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(request_ids))
 
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,

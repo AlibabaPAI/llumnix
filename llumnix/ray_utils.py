@@ -87,7 +87,7 @@ def initialize_placement_group(
 
     try:
         # Create a new placement group
-        # bundle_0: Llumlet + AsyncPutQueueActor + Worker0, bundle_1-N-1: Worker1...WorkerN-1
+        # bundle_0: All GPU Actors + Worker_0, bundle_1-N-1: Worker_1...Worker_N-1
         if num_gpus >= 1:
             placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
         else:

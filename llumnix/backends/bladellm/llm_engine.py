@@ -104,21 +104,24 @@ class AsyncBackQueueWrapper:
         self.get_current_step_counter_queue: asyncio.Queue = asyncio.Queue()
         asyncio.create_task(self._clear_request_server_info_loop())
 
+    # Due to Bladellm returning tokens to Llumnix asynchronously, Llumnix cannot directly delete the
+    # server-related information for a request in the request_server_map during handle_abort, handle_drop,
+    # or migration free_src_request. Instead, the related information can only be safely removed after
+    # the corresponding step's output token has been actually processed in the AsyncBackQueueWrapper.
     async def _clear_request_server_info_loop(self):
-        MAX_ITEMS_PER_PROCEDURE: int = 1000 # pylint: disable=invalid-name
-
         while True:
             cur_step_idx: int = await self.get_current_step_counter_queue.get()
             self.backup_dangling_request_server_info.update(self.dangling_request_server_info)
             self.dangling_request_server_info = {}
 
-            for loop_idx, req_info in enumerate(self.backup_dangling_request_server_info.items()):
-                req_id, expired_step_idx = req_info
+            expired_req_ids = []
+            for req_id, expired_step_idx in self.backup_dangling_request_server_info.items():
                 if cur_step_idx >= expired_step_idx:
+                    expired_req_ids.append(req_id)
                     self.request_server_map.pop(req_id, None)
 
-                if loop_idx % MAX_ITEMS_PER_PROCEDURE == 0:
-                    await asyncio.sleep(0)
+            for req_id in expired_req_ids:
+                self.backup_dangling_request_server_info.pop(req_id, None)
 
     async def _put_request_outputs_loop(self):
         async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:

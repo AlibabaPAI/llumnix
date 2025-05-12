@@ -413,8 +413,8 @@ def wait_port_free(port: int, max_retries: int = 5):
                 if conn.pid:
                     try:
                         proc = psutil.Process(conn.pid)
-                        print(f"Port {port} is in use by process {conn.pid}, status {proc.status()}: {' '.join(proc.cmdline())}.\
-                            Retrying in 3 seconds...")
+                        print(f"Port {port} is in use by process {conn.pid}, status {proc.status()}: \
+                              {' '.join(proc.cmdline())}. Retrying in 3 seconds...")
                     except psutil.NoSuchProcess:
                         continue
 

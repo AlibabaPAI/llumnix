@@ -26,8 +26,8 @@ from llumnix.utils import get_ip_address, try_convert_to_local_path
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env
-from .utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
-                    wait_for_llumnix_service_ready, shutdown_llumnix_service,
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
+                    wait_for_llumnix_service_ready, shutdown_llumnix_service, wait_port_free,
                     generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
                     generate_bladellm_serve_command)
 
@@ -88,12 +88,16 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     num_prompts = 500
 
     if "vLLM" in engine and enable_pd_disagg:
+        conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
+
     if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
+        pytest.skip(conftest.SKIP_REASON)
 
     global test_times
 
     ip = get_ip_address()
     base_port = 20000 + test_times * 100
+    wait_port_free(base_port)
     if "BladeLLM" in engine:
         base_port += 5000
 

@@ -20,7 +20,7 @@ from typing import Optional
 import pytest
 import requests
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path
+from llumnix.utils import get_ip_address, try_convert_to_local_path, check_free_port
 from tests import conftest
 
 
@@ -399,3 +399,16 @@ def to_markdown_table(data):
 
     table = f"{header_row}\n{separator_row}\n" + "\n".join(data_rows) + "\n\n"
     return table
+
+def wait_port_free(port: int, max_retries: int = 5):
+    retries = 0
+    while True:
+        if check_free_port(port=port):
+            return True
+        else:
+            print(f"Port {port} is still in use. Retrying in 3 seconds...")
+            time.sleep(3)
+            retries += 1
+            if max_retries != -1 and retries >= max_retries:
+                print(f"Reached maximum retry count {max_retries}. Port {port} may still be in use.")
+                return False

@@ -131,6 +131,9 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
     if "vLLM" in engine and migration_backend != 'gloo':
         conftest.SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
 
+    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
+        pytest.skip(conftest.SKIP_REASON)
+
     if use_ray_spmd_worker:
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"
         os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "1"

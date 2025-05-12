@@ -26,7 +26,7 @@ from llumnix.utils import get_ip_address, try_convert_to_local_path
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env, cleanup_ray_env_func
-from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command, wait_port_free,
                                   wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                                   shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
                                   generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
@@ -179,6 +179,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
     ip = get_ip_address()
     base_port = 40000 + test_times * 100
+    wait_port_free(base_port)
     if "BladeLLM" in engine:
         base_port += 5000
     device_count = min(4, torch.cuda.device_count())

@@ -155,7 +155,6 @@ def _bind_and_close_port(port: Optional[int] = None, host: str = '0.0.0.0') -> i
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # the SO_REUSEADDR flag tells the kernel to reuse a local socket in TIME_WAIT state,
         # without waiting for its natural timeout to expire. see https://docs.python.org/3/library/socket.html#example
-        # NOTE(qzhong): Is it a risk to reuse old port before closing it?
         # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((host, port or 0))
         return s.getsockname()[1]

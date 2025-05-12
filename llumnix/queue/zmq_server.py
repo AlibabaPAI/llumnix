@@ -41,9 +41,9 @@ class Full(Exception):
 
 
 class ZmqServer(QueueServerBase):
-    def __init__(self, ip: str, maxsize=0):
+    def __init__(self, ip: str, port: int = None, maxsize: int =0):
         super().__init__()
-        self.port = get_free_port()
+        self.port = port or get_free_port()
         rpc_path = get_open_zmq_ipc_path(ip, self.port)
 
         self.context: zmq.asyncio.Context = zmq.asyncio.Context(ZMQ_IO_THREADS)
@@ -82,8 +82,6 @@ class ZmqServer(QueueServerBase):
 
         self.maxsize = maxsize
         self.queue = asyncio.Queue(maxsize)
-
-        logger.info("ZmqServer is ready on {}:{}".format(ip, self.port))
 
     def cleanup(self):
         self.socket.close()

@@ -183,14 +183,15 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
 
     return manager, available_instance_ids, available_instances, request_output_queue
 
-def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances, request_output_queue) -> EntrypointsContext:
+def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances,
+                              request_output_queue: QueueServerBase) -> EntrypointsContext:
     instances_dict: Dict[str, Llumlet] = {}
     for idx, ins_id in enumerate(instance_ids):
         instances_dict[ins_id] = instances[idx]
 
     server_id = random_uuid()
     ip = get_ip_address()
-    port = None if not hasattr(request_output_queue, "port") else request_output_queue.port
+    port = request_output_queue.port
     server_info = ServerInfo(server_id,
                              QueueType(entrypoints_args.request_output_queue_type),
                              request_output_queue,

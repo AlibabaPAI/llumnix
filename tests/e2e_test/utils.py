@@ -231,7 +231,6 @@ def generate_bladellm_serve_command(
         f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
         f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role={instance_type} "
-        f"--disagg_pd.token_port={port + 30} "
         f"--naming_url={NAMING_URL} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration} "

@@ -97,7 +97,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
 
     ip = get_ip_address()
     base_port = 20000 + test_times * 100
-    wait_port_free(base_port)
     if "BladeLLM" in engine:
         base_port += 5000
 
@@ -114,6 +113,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
 
     for i in range(device_count):
         port = base_port + i
+        wait_port_free(port)
         ip_port = f"{ip}:{port}"
         ip_ports.append(ip_port)
 

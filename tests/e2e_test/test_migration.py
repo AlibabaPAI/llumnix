@@ -27,7 +27,7 @@ from llumnix.utils import get_ip_address, try_convert_to_local_path
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env
-from tests.e2e_test.utils import (generate_bench_command, to_markdown_table,
+from tests.e2e_test.utils import (generate_bench_command, to_markdown_table, wait_port_free,
                                   wait_for_llumnix_service_ready, shutdown_llumnix_service,
                                   generate_bladellm_serve_command, check_log_exception,
                                   generate_vllm_serve_command)
@@ -110,7 +110,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
                                    use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
-    num_prompts = 500
+    num_prompts = 800
 
     if any(item in request.node.name for item in ["waiting", "grpc"]) or \
         tensor_parallel_size == 2:
@@ -154,7 +154,9 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
     num_instances = device_count // tensor_parallel_size
 
     for i in range(num_instances):
-        ip_ports.append(f"{ip}:{base_port+i}")
+        port = base_port + i
+        wait_port_free(port)
+        ip_ports.append(f"{ip}:{port}")
     result_filename = f"{base_port}.out"
     instance_output_logs.append("instance_"+result_filename)
 
@@ -196,7 +198,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
             num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
-            qps=10,
+            qps=15,
             results_filename=f"{base_port+i}.out"
         )
         tasks.append(bench_command)

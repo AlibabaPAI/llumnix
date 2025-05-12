@@ -176,9 +176,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
     ip = get_ip_address()
     base_port = 40000 + test_times * 100
-    wait_port_free(base_port)
     if "BladeLLM" in engine:
         base_port += 5000
+    wait_port_free(base_port)
     device_count = min(4, torch.cuda.device_count())
     instance_count = device_count // tensor_parallel_size
 

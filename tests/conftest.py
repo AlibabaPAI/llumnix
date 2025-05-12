@@ -74,12 +74,13 @@ def cleanup_ray_env_func():
     except Exception as e:
         print("Ray shutdown error: {}".format(e))
 
-    time.sleep(5.0)
+    time.sleep(3.0)
 
 def pytest_sessionstart(session):
     ray_start()
 
 def pytest_sessionfinish(session):
+    cleanup_ray_env_func()
     ray_stop()
     shutdown_llumnix_service_func()
 

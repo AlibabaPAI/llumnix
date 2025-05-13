@@ -15,6 +15,7 @@ import os
 import time
 import subprocess
 import uuid
+import gc
 from typing import Optional
 
 import psutil
@@ -417,7 +418,8 @@ def wait_port_free(port: int, max_retries: int = 5):
                               {' '.join(proc.cmdline())}. Retrying in 3 seconds...")
                     except psutil.NoSuchProcess:
                         continue
-
+        
+        gc.collect()
         time.sleep(3)
         retries += 1
 

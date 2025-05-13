@@ -31,7 +31,7 @@ _C.SERVER.SSL_KEYFILE = None
 # Path to SSL certificate file
 _C.SERVER.SSL_CERTFILE = None
 # Log level for the server
-_C.SERVER.LOG_LEVEL = "info"
+_C.SERVER.SERVER_LOG_LEVEL = "info"
 # Queue type for request output queue
 _C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "zmq"
 # Disable logging requests in server

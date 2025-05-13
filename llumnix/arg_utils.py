@@ -53,13 +53,163 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
         super().add_argument(*args, **kwargs)
 
 
+class LlumnixEngineArgs(ABC):
+
+    def __init__(
+        self, engine_args, backend_type: BackendType
+    ) -> None:
+        self.engine_args = engine_args
+        self.engine_args_wrapped = None
+        self.backend_type: BackendType = backend_type
+
+    @abstractmethod
+    def unwrap_engine_args_if_needed(self):
+        # returun the engine args after overriding
+        pass
+
+    @abstractmethod
+    def get_engine_world_size(self):
+        pass
+
+    def update_arg(self, args_key: str, args_value):
+        if self.engine_args_wrapped and hasattr(self.engine_args_wrapped, args_key):
+            setattr(self.engine_args_wrapped, args_key, args_value)
+
+    def update_args(self, **kwargs):
+        for args_key, args_value in kwargs.items():
+            self.update_arg(args_key, args_value)
+
+
+class LlumnixEngineArgsFactory:
+
+    def __init__(
+        self,
+        load_registered_service: bool,
+        enable_port_increment: bool,
+        load_registered_service_path: str,
+        pdd_config: PDDConfig,
+    ) -> None:
+        self.load_registered_service: bool = load_registered_service
+        self.load_registered_service_path: str = load_registered_service_path
+        self.pdd_config: PDDConfig = pdd_config
+        self.engine_args_dict: dict[str, LlumnixEngineArgs] = {}
+        self.enable_port_increment: bool = enable_port_increment
+        self.disagg_options_token_port_offset = 0  # used in bladellm
+
+        if self.load_registered_service:
+            if (
+                not self.pdd_config.enable_pd_disagg
+                and not self.pdd_config.enable_engine_pd_disagg
+            ):
+                instance_type_list = ["no_constraints"]
+            else:
+                instance_type_list = ["prefill", "decode"]
+            for instance_type in instance_type_list:
+                self.engine_args_dict[instance_type] = load_engine_args(
+                    instance_type, self.load_registered_service_path
+                )
+
+    def gen_next_engine_args(
+        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
+    ) -> LlumnixEngineArgs:
+        if self.load_registered_service:
+            return self.engine_args_dict[instance_type]
+
+        engine_args_copied = copy.deepcopy(current_engine_args.engine_args)
+
+        # lazy import to void circular import
+        # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
+
+        if isinstance(current_engine_args, BladellmEngineArgs):
+            next_engine_args = BladellmEngineArgs(engine_args_copied)
+            next_engine_args.world_size = current_engine_args.get_engine_world_size()
+            if self.enable_port_increment:
+                next_engine_args.engine_args_wrapped.disagg_options_token_port_offset = \
+                    self.disagg_options_token_port_offset
+                self.disagg_options_token_port_offset += 10
+            if self.pdd_config.enable_engine_pd_disagg:
+                next_engine_args.engine_args_wrapped.disagg_options_inst_role = (
+                    instance_type.value
+                    if isinstance(instance_type, InstanceType)
+                    else instance_type
+                )
+            return next_engine_args
+
+        # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+
+        if isinstance(current_engine_args, VllmEngineArgs):
+            vllm_engine_args = VllmEngineArgs(engine_args_copied, current_engine_args.backend_type)
+            return vllm_engine_args
+
+        raise TypeError(
+            "Unsupported engine args type when generating next engine args."
+        )
+
+
+def ensure_args_default_none(args):
+    # Check if all fields default to None
+    for field_info in dataclasses.fields(args):
+        if field_info.default is not None:
+            raise ValueError(f"The default value of '{field_info.name}' should be None")
+
+def init_from_default_args_config(args, args_config):
+    for attr in dataclasses.fields(args):
+        if getattr(args, attr.name) is None:
+            if hasattr(args_config, attr.name.upper()):
+                setattr(args, attr.name, getattr(args_config, attr.name.upper()))
+
+def from_llumnix_args_config(cls, args_config):
+    # Get the list of attributes of this dataclass.
+    attrs = [attr.name for attr in dataclasses.fields(cls)]
+    cfg_attrs = [attr for attr in attrs if hasattr(args_config, attr.upper())]
+    # Set the attributes from the parsed arguments.
+    # The defalut values of attributes are defined in default.py.
+    args = cls(**{attr: getattr(args_config, attr.upper()) for attr in cfg_attrs})
+
+    return args
+
+def check_args_choices(args, parser):
+    # pylint: disable=protected-access
+    for action in parser._optionals._actions:
+        if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
+            cur_arg = getattr(args, action.dest)
+            assert cur_arg in action.choices, f"{action.dest} should be one of {action.choices}, but {cur_arg} is set."
+
+def get_llumnix_args(engine_args, backend_type, launch_mode, parser, llumnix_config):
+    instance_args = InstanceArgs.from_llumnix_config(llumnix_config)
+    instance_args.init_from_engine_args(engine_args, backend_type)
+    manager_args = ManagerArgs.from_llumnix_config(llumnix_config)
+    manager_args.init_from_instance_args(instance_args)
+    entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_config)
+    entrypoints_args.init_from_engine_args(engine_args, backend_type)
+
+    EntrypointsArgs.check_args(entrypoints_args, parser)
+    ManagerArgs.check_args(manager_args, launch_mode, parser)
+    InstanceArgs.check_args(instance_args, manager_args, launch_mode, parser)
+
+    return entrypoints_args, manager_args, instance_args
+
+def load_registered_service_if_needed(manager_args, engine_args):
+    if manager_args.load_registered_service:
+        if not manager_args.enable_pd_disagg and not manager_args.enable_engine_pd_disagg:
+            instance_type_list = ['no_constraints']
+        else:
+            instance_type_list = ['prefill', 'decode']
+        for instance_type in instance_type_list:
+            engine_args_registered = load_engine_args(instance_type, manager_args.load_registered_service_path)
+            engine_args = engine_args_registered.engine_args
+    return engine_args
+
+
 @dataclass
 class EntrypointsArgs:
     host: str = None
     port: int = None
     ssl_keyfile: str = None
     ssl_certfile: str = None
-    log_level: str = None
+    server_log_level: str = None
     launch_ray_cluster: bool = None
     ray_cluster_port: int = None
     disable_log_to_driver: bool = None
@@ -70,36 +220,22 @@ class EntrypointsArgs:
     disable_keep_serve_process_alive: bool = None
 
     def __post_init__(self):
-        # Check if all fields default to None
-        for field_info in dataclasses.fields(self):
-            if field_info.default is not None:
-                raise ValueError(f"The default value of '{field_info.name}' should be None")
-
-        for attr in dataclasses.fields(self):
-            if getattr(self, attr.name) is None:
-                setattr(self, attr.name, getattr(_C.SERVER, attr.name.upper()))
+        ensure_args_default_none(self)
+        init_from_default_args_config(self, _C.SERVER)
 
     @classmethod
     def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'EntrypointsArgs':
-        # Get the list of attributes of this dataclass.
-        attrs = [attr.name for attr in dataclasses.fields(cls)]
-        cfg_attrs = [attr for attr in attrs if hasattr(cfg.SERVER, attr.upper())]
-        # Set the attributes from the parsed arguments.
-        # The defalut values of attributes are defined in default.py.
-        entrypoints_args = cls(**{attr: getattr(cfg.SERVER, attr.upper()) for attr in cfg_attrs})
-        return entrypoints_args
+        entrypoint_args = from_llumnix_args_config(cls, cfg.SERVER)
+        return entrypoint_args
+
+    @classmethod
+    def check_args(cls, args: 'EntrypointsArgs', parser: argparse.ArgumentParser) -> None:
+        check_args_choices(args, parser)
 
     def init_from_engine_args(self, engine_args, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
             self.host = engine_args.host
             self.port = engine_args.port
-
-    @classmethod
-    def check_args(cls, args: 'EntrypointsArgs', parser: argparse.ArgumentParser) -> None:
-        # pylint: disable=protected-access
-        for action in parser._optionals._actions:
-            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
-                assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -172,15 +308,8 @@ class ManagerArgs:
     enable_engine_pd_disagg: bool = None
 
     def __post_init__(self):
-        # Check if all fields default to None
-        for field_info in dataclasses.fields(self):
-            if field_info.default is not None:
-                raise ValueError(f"The default value of '{field_info.name}' should be None")
-
-        for attr in dataclasses.fields(self):
-            if getattr(self, attr.name) is None:
-                if hasattr(_C.MANAGER, attr.name.upper()):
-                    setattr(self, attr.name, getattr(_C.MANAGER, attr.name.upper()))
+        ensure_args_default_none(self)
+        init_from_default_args_config(self, _C.MANAGER)
 
         def parse_ratio(ratio_str):
             parts = ratio_str.split(':')
@@ -189,7 +318,32 @@ class ManagerArgs:
             num_prefill_instances, num_decode_instances = int(parts[0].strip()), int(parts[1].strip())
             assert num_prefill_instances > 0 and num_decode_instances > 0, "Both parts of --pd-ratio must be non-negative."
             return [num_prefill_instances, num_decode_instances]
+
         self.pd_ratio = parse_ratio(self.pd_ratio)
+
+    @classmethod
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'ManagerArgs':
+        return from_llumnix_args_config(cls, cfg.MANAGER)
+
+    @classmethod
+    def check_args(cls, args: 'ManagerArgs', launch_mode: LaunchMode, parser: argparse.ArgumentParser) -> None:
+        check_args_choices(args, parser)
+
+        assert not args.enable_port_offset_store or args.enable_port_increment, \
+            "Set enable_port_increment when enable_port_offset_store"
+
+        assert not args.enable_scaling, "Proactive auto-scaling is deprecated now, " \
+            "all auto-scaling related args will not take effects."
+
+        if args.load_registered_service:
+            assert args.load_registered_service_path and launch_mode == LaunchMode.GLOBAL, \
+            "Only load registered service when enabling pd-disaggregation in global launch mode, " \
+            "and the path of loading registered service is required to be specified when loading registered service from path."
+
+        if args.enable_pdd_node_affinity_scheduling:
+            assert (args.enable_pd_disagg or args.enable_engine_pd_disagg) and launch_mode == LaunchMode.GLOBAL, \
+                "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
+                "in global launch mode."
 
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
         self.enable_engine_pd_disagg = instance_args.enable_engine_pd_disagg
@@ -216,40 +370,6 @@ class ManagerArgs:
                                self.pd_ratio,
                                self.enable_pdd_node_affinity_scheduling)
         return pdd_config
-
-    @classmethod
-    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'ManagerArgs':
-        # Get the list of attributes of this dataclass.
-        attrs = [attr.name for attr in dataclasses.fields(cls)]
-        cfg_attrs = [attr for attr in attrs if hasattr(cfg.MANAGER, attr.upper())]
-        # Set the attributes from the parsed arguments.
-        # The defalut values of attributes are defined in default.py.
-        manager_args = cls(**{attr: getattr(cfg.MANAGER, attr.upper()) for attr in cfg_attrs})
-        return manager_args
-
-    @classmethod
-    def check_args(cls, args: 'ManagerArgs', launch_mode: LaunchMode, parser: argparse.ArgumentParser) -> None:
-        # pylint: disable=protected-access
-        for action in parser._optionals._actions:
-            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
-                cur_arg = getattr(args, action.dest)
-                assert cur_arg in action.choices, f"{action.dest} should be one of {action.choices}, but {cur_arg} is set."
-
-        assert not args.enable_port_offset_store or args.enable_port_increment, \
-            "Set enable_port_increment when enable_port_offset_store"
-
-        assert not args.enable_scaling, "Proactive auto-scaling is deprecated now, " \
-            "all auto-scaling related args will not take effects."
-
-        if args.load_registered_service:
-            assert args.load_registered_service_path and launch_mode == LaunchMode.GLOBAL, \
-            "Only load registered service when enabling pd-disaggregation in global launch mode, " \
-            "and the path of loading registered service is required to be specified when loading registered service from path."
-
-        if args.enable_pdd_node_affinity_scheduling:
-            assert (args.enable_pd_disagg or args.enable_engine_pd_disagg) and launch_mode == LaunchMode.GLOBAL, \
-                "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
-                "in global launch mode."
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -367,102 +487,6 @@ class LaunchArgs:
     launch_mode: LaunchMode = None
     backend_type: BackendType = None
 
-class LlumnixEngineArgs(ABC):
-
-    def __init__(
-        self, engine_args, backend_type: BackendType
-    ) -> None:
-        self.engine_args = engine_args
-        self.engine_args_warpped = None
-        self.backend_type: BackendType = backend_type
-
-    @abstractmethod
-    def unwrap_engine_args_if_needed(self):
-        # returun the engine args after overriding
-        pass
-
-    @abstractmethod
-    def get_engine_world_size(self):
-        pass
-
-    def update_arg(self, args_key: str, args_value):
-        if self.engine_args_warpped and hasattr(self.engine_args_warpped, args_key):
-            setattr(self.engine_args_warpped, args_key, args_value)
-
-    def update_args(self, **kwargs):
-        for args_key, args_value in kwargs.items():
-            self.update_arg(args_key, args_value)
-
-
-class LlumnixEngineArgsFactory:
-
-    def __init__(
-        self,
-        load_registered_service: bool,
-        enable_port_increment: bool,
-        load_registered_service_path: str,
-        pdd_config: PDDConfig,
-    ) -> None:
-        self.load_registered_service: bool = load_registered_service
-        self.load_registered_service_path: str = load_registered_service_path
-        self.pdd_config: PDDConfig = pdd_config
-        self.engine_args_dict: dict[str, LlumnixEngineArgs] = {}
-        self.enable_port_increment: bool = enable_port_increment
-        self.disagg_options_token_port_offset = 0  # used in bladellm
-
-        if self.load_registered_service:
-            if (
-                not self.pdd_config.enable_pd_disagg
-                and not self.pdd_config.enable_engine_pd_disagg
-            ):
-                instance_type_list = ["no_constraints"]
-            else:
-                instance_type_list = ["prefill", "decode"]
-            for instance_type in instance_type_list:
-                self.engine_args_dict[instance_type] = load_engine_args(
-                    instance_type, self.load_registered_service_path
-                )
-
-    def gen_next_engine_args(
-        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
-    ) -> LlumnixEngineArgs:
-        if self.load_registered_service:
-            return self.engine_args_dict[instance_type]
-
-        engine_args_copied = copy.deepcopy(current_engine_args.engine_args)
-
-        # lazy import to void circular import
-        # pylint: disable=import-outside-toplevel
-        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
-
-        if isinstance(current_engine_args, BladellmEngineArgs):
-            next_engine_args = BladellmEngineArgs(engine_args=engine_args_copied)
-            next_engine_args.world_size = current_engine_args.get_engine_world_size()
-            if self.enable_port_increment:
-                next_engine_args.engine_args_warpped.disagg_options_token_port_offset = (
-                    self.disagg_options_token_port_offset
-                )
-                self.disagg_options_token_port_offset += 10
-            if self.pdd_config.enable_engine_pd_disagg:
-                next_engine_args.engine_args_warpped.disagg_options_inst_role = (
-                    instance_type.value
-                    if isinstance(instance_type, InstanceType)
-                    else instance_type
-                )
-            return next_engine_args
-
-        # pylint: disable=import-outside-toplevel
-        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
-
-        if isinstance(current_engine_args, VllmEngineArgs):
-            vllm_engine_args = VllmEngineArgs(engine_args=engine_args_copied)
-            vllm_engine_args.backend_type = current_engine_args.backend_type
-            return vllm_engine_args
-
-        raise TypeError(
-            "Unsupported engine args type when generating next engine args."
-        )
-
 
 @dataclass
 class InstanceArgs:
@@ -490,15 +514,25 @@ class InstanceArgs:
     engine_disagg_inst_id_env_var: str = None
 
     def __post_init__(self):
-        # Check if all fields default to None
-        for field_info in dataclasses.fields(self):
-            if field_info.default is not None:
-                raise ValueError(f"The default value of '{field_info.name}' should be None")
+        ensure_args_default_none(self)
+        init_from_default_args_config(self, _C.INSTANCE)
 
-        for attr in dataclasses.fields(self):
-            if getattr(self, attr.name) is None:
-                if hasattr(_C.INSTANCE, attr.name.upper()):
-                    setattr(self, attr.name, getattr(_C.INSTANCE, attr.name.upper()))
+    @classmethod
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'InstanceArgs':
+        return from_llumnix_args_config(cls, cfg.INSTANCE)
+
+    @classmethod
+    def check_args(cls, args: 'InstanceArgs', manager_args: ManagerArgs,
+                   launch_mode: LaunchMode, parser: argparse.ArgumentParser) -> None:
+        check_args_choices(args, parser)
+
+        assert not args.simulator_mode or args.profiling_result_file_path is not None, \
+            "Set profiling_result_file_path args when enable simulator mode"
+
+        # instance_type check
+        if manager_args.enable_pd_disagg and launch_mode == LaunchMode.LOCAL:
+            assert args.instance_type in ['prefill', 'decode'], \
+                "instance_type should be prefill or decode if enable_pd_disagg is set."
 
     def init_from_engine_args(self, engine_args, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
@@ -511,32 +545,6 @@ class InstanceArgs:
             self.enable_engine_pd_disagg = False
         else:
             raise ValueError(f"Unsupported backend type: {backend_type}")
-
-    @classmethod
-    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'InstanceArgs':
-        # Get the list of attributes of this dataclass.
-        attrs = [attr.name for attr in dataclasses.fields(cls)]
-        cfg_attrs = [attr for attr in attrs if hasattr(cfg.INSTANCE, attr.upper())]
-        # Set the attributes from the parsed arguments.
-        # The defalut values of attributes are defined in default.py.
-        instance_args = cls(**{attr: getattr(cfg.INSTANCE, attr.upper()) for attr in cfg_attrs})
-        return instance_args
-
-    @classmethod
-    def check_args(cls, args: 'InstanceArgs', manager_args: ManagerArgs,
-                   launch_mode: LaunchMode, parser: argparse.ArgumentParser) -> None:
-        # pylint: disable=protected-access
-        for action in parser._optionals._actions:
-            if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
-                assert getattr(args, action.dest) in action.choices, f"{action.dest} should be one of {action.choices}."
-
-        assert not args.simulator_mode or args.profiling_result_file_path is not None, \
-            "Set profiling_result_file_path args when enable simulator mode"
-
-        # instance_type check
-        if manager_args.enable_pd_disagg and launch_mode == LaunchMode.LOCAL:
-            assert args.instance_type in ['prefill', 'decode'], \
-                "instance_type should be prefill or decode if enable_pd_disagg is set."
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
@@ -632,14 +640,12 @@ class InstanceArgs:
 def _get_engine_args_filename(engine_type: str) -> str:
     return f"engine_args_{engine_type}.pkl"
 
-
 def _get_engine_args_filepath(save_path: str, save_key: str = None) -> str:
     if save_key is not None:
         save_filepath = os.path.join(save_path, save_key)
     else:
         save_filepath = save_path
     return save_filepath
-
 
 def save_engine_args(engine_type: str, save_path: str, engine_args: LlumnixEngineArgs, save_key: str = None) -> None:
     engine_args_filename = _get_engine_args_filename(engine_type)
@@ -649,7 +655,6 @@ def save_engine_args(engine_type: str, save_path: str, engine_args: LlumnixEngin
     with open(save_filename, 'wb') as file:
         pickle.dump(engine_args, file)
     logger.info("Save engine arguments of {} engine type as file: {}".format(engine_type, save_filename))
-
 
 def load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
     engine_args_filename = _get_engine_args_filename(engine_type)

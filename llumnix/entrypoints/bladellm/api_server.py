@@ -13,8 +13,8 @@
 
 import time
 import asyncio
-
 import pickle
+
 from aiohttp import web
 import ray
 
@@ -28,7 +28,7 @@ from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.utils import LaunchMode, is_gpu_available, EntrypointsContext
-from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_llumnix_cli_args, get_args
+from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_cli_args, get_args
 from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
@@ -94,10 +94,11 @@ async def clean_up_llumnix_components(app):
 def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEventLoop):
     # generate llumnix_parser for checking parameters with choices
     parser = LlumnixArgumentParser()
-    parser = add_llumnix_cli_args(parser)
-    llumnix_config = get_llumnix_config(engine_args.llumnix_config, cli_args=engine_args.llumnix_opts)
+    parser = add_cli_args(parser, add_engine_args=False)
+    # llumnix_opts is used to receive config options
+    llumnix_config = get_llumnix_config(engine_args.llumnix_config, opts=engine_args.llumnix_opts)
 
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, engine_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, engine_args=engine_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
 
     setup_ray_cluster(entrypoints_args)
@@ -107,14 +108,13 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
     if is_gpu_available():
         # Since importing the bladellm engine arguments requires available GPU,
         # serialize the engine parameters before passing them to the manager.
-        engine_args_llumnix = BladellmEngineArgs()
-        engine_args_llumnix.engine_args = pickle.dumps(engine_args)
-        engine_args_llumnix.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
+        bladellm_engine_args = BladellmEngineArgs(pickle.dumps(engine_args))
+        bladellm_engine_args.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
         if engine_args.disagg_options is not None:
-            engine_args_llumnix.instance_id = engine_args.disagg_options.inst_id
+            bladellm_engine_args.instance_id = engine_args.disagg_options.inst_id
 
         global entrypoints_context
-        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
+        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
 
     return llumnix_client

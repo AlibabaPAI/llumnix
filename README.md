@@ -5,11 +5,15 @@ Llumnix
 <h3 align="center">
 Efficient and easy <i>multi-instance</i> LLM serving
 </h3>
+<p align="center">
+| <a href="https://github.com/AlibabaPAI/llumnix/blob/main/docs"><b>Documentation</b></a> | <a href="https://arxiv.org/abs/2406.03243"><b>Paper</b></a> | <a href="https://llumnix.slack.com"><b>Developer Slack</b></a> |
+</p>
 
 ---
 
 ## 🔥 Latest News
 
+- [2025.5] We created a developer [slack](https://llumnix.slack.com) for discussion and collaboration.
 - [2025.1] We updated vLLM to version v0.6.3.post1.
 - [2024.11] Llumnix v0.1.0 launched!
 - [2024.7] We officially released the first version of Llumnix.

@@ -404,6 +404,8 @@ def to_markdown_table(data):
 
 def wait_port_free(port: int, max_retries: int = 5):
     retries = 0
+    history_pid = None
+
     while retries < max_retries:
         if check_free_port(port=port):
             return
@@ -411,7 +413,8 @@ def wait_port_free(port: int, max_retries: int = 5):
         for conn in psutil.net_connections():
             if conn.laddr.port == port:
                 print(f"Port {port} connection detail: {conn}")
-                if conn.pid:
+                if conn.pid and history_pid != conn.pid:
+                    history_pid = conn.pid
                     try:
                         proc = psutil.Process(conn.pid)
                         print(f"Port {port} is in use by process {conn.pid}, status {proc.status()}: \

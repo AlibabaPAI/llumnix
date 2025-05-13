@@ -406,8 +406,6 @@ def get_migration_backend(instance_id: str,
     target_migration_backend = None
     backend = migration_config.migration_backend
 
-    assert backend in ['nccl', 'rayrpc', 'gloo'], "Unsupported migration backend: {} for llumnix".format(backend)
-
     if backend in ['nccl', 'gloo']:
         target_migration_backend = RayColMigrationBackend(instance_id,
                                                           migration_config,

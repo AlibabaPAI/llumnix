@@ -454,7 +454,6 @@ def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration
     target_migration_backend = None
 
     backend = migration_config.migration_backend
-    assert backend in ['grpc', 'kvtransfer']
     if backend == 'grpc':
         target_migration_backend = GrpcMigrationBackend(rank, migration_config, request_sync_group, state_manager)
     else:

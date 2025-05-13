@@ -2,11 +2,12 @@ import time
 import sys
 import os
 import pickle
+
 import ray
 from ray.util.queue import Queue as RayQueue
 
-from llumnix.entrypoints.bladellm.arg_utils import add_llumnix_cli_args, get_args, BladellmEngineArgs
-from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
+from llumnix.entrypoints.bladellm.arg_utils import add_cli_args, get_args, BladellmEngineArgs
+from llumnix.arg_utils import LaunchArgs, LlumnixArgumentParser
 from llumnix.logging.logger import init_logger
 from llumnix.config import get_llumnix_config
 from llumnix.entrypoints.utils import LaunchMode
@@ -17,35 +18,31 @@ logger = init_logger('llumnix.entrypoints.bladellm.server')
 
 def main():
     # pylint: disable=import-outside-toplevel
-    from blade_llm.service.args import ServingArgs, add_args
-    from blade_llm.service.server import check_ports
-    parser = add_args()
+    from blade_llm.utils.argparse_helper import PatchedArgumentParser
+    # Make ArgumentParser of Llumnix compatible to the ArgumentParser of BladeLLM.
+    # Because import bladellm will raise no available gpu error, so define class inside the main function.
+    class LlumnixBladeLLMArgumentParser(LlumnixArgumentParser, PatchedArgumentParser):
+        # pylint: disable=super-init-not-called
+        def __init__(self, *args, **kwargs):
+            # Not explicity call the constructor of LlumnixArgumentParser.
+            self.cur_namespace = None
+            PatchedArgumentParser.__init__(self, *args, **kwargs)
+
+    parser: LlumnixBladeLLMArgumentParser = LlumnixBladeLLMArgumentParser()
+    parser = add_cli_args(parser)
     cli_args = parser.parse_args()
-    engine_args = ServingArgs.from_cli_args(cli_args)
-
-    # check port first
-    check_ports(engine_args)
-
-    # TODO(s5u13b): Fix it, cannot use parser of bladellm because Llumnix need to set namespace.
-    # generate llumnix_parser for checking parameters with choices
-    parser = LlumnixArgumentParser()
-    parser = add_llumnix_cli_args(parser)
-    llumnix_config = get_llumnix_config(engine_args.llumnix_config, cli_args=engine_args.llumnix_opts)
-
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.GLOBAL, parser, engine_args)
+    llumnix_config = get_llumnix_config(cli_args.config_file, args=cli_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.GLOBAL, parser, cli_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=BackendType.BLADELLM)
+    bladellm_engine_args = BladellmEngineArgs(pickle.dumps(engine_args))
+    bladellm_engine_args.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
 
     # magic actor to avoid fast api server actor initialization error
     # pylint: disable=unused-variable
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})
 
-    # Since importing the bladellm engine arguments requires available GPU,
-    # serialize the engine parameters before passing them to the manager.
-    engine_args_llumnix = BladellmEngineArgs()
-    engine_args_llumnix.engine_args = pickle.dumps(engine_args)
-    engine_args_llumnix.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-    setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args_llumnix, launch_args)
+    setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
 
     # keep the process alive to get the terminal output.
     if not entrypoints_args.disable_keep_serve_process_alive:

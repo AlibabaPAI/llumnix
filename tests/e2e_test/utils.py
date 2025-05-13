@@ -43,7 +43,7 @@ def generate_vllm_launch_command(
     tensor_parallel_size: int = 1,
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
-    config_path: str = "configs/vllm.yml",
+    config_file: str = "configs/vllm.yml",
     enable_migration: bool = True,
     enforce_eager: bool = True,
     **kwargs
@@ -72,7 +72,7 @@ def generate_vllm_launch_command(
         f"--request-output-queue-port {port + 10} "
         f"{'--launch-ray-cluster ' if launch_ray_cluster else ''}"
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
-        f"--config-file {config_path} "
+        f"--config-file {config_file} "
         f"--instance-type {instance_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'--simulator-mode ' if enable_simulator else ''}"
@@ -219,7 +219,6 @@ def generate_bladellm_serve_command(
         f"--port {port} "
         f"--model {model} "
         f"{'--enable_llumnix' if enable_llumnix else ''} "
-        f"--llumnix_config {config_file} "
         f"--disable_prompt_cache "
         f"--log_level INFO "
         f"-tp {tensor_parallel_size} "
@@ -232,12 +231,13 @@ def generate_bladellm_serve_command(
         f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role={instance_type} "
         f"--naming_url={NAMING_URL} "
-        f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
-        f"MANAGER.ENABLE_MIGRATION {enable_migration} "
-        f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
-        f"SERVER.REQUEST_OUTPUT_QUEUE_TYPE {request_output_queue_type} "
-        f"MANAGER.ENABLE_PORT_INCREMENT True "
-        f"MANAGER.MAX_INSTANCES {max_instances} "
+        f"--config-file {config_file} "
+        f"--dispatch-policy {dispatch_policy} "
+        f"{'--enable-migration' if enable_migration else ''} "
+        f"--migration-backend {migration_backend} "
+        f"--request-output-queue-type {request_output_queue_type} "
+        f"--enable-port-increment "
+        f"--max-instances {max_instances} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     return command

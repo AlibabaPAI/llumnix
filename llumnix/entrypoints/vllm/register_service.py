@@ -25,11 +25,12 @@ if __name__ == "__main__":
                         default='.',
                         help="Save path of the engine arguments.")
 
+    # TODO(s5u13b): Support BladeLLM.
     parser = add_engine_cli_args(parser)
     cli_args = parser.parse_args()
     engine_args = get_engine_args(cli_args)
-    llumnix_engine_args = VllmEngineArgs(engine_args=engine_args)
+    vllm_engine_args = VllmEngineArgs(engine_args=engine_args)
 
     connect_to_ray_cluster()
 
-    save_engine_args(cli_args.engine_type, cli_args.save_path, llumnix_engine_args, cli_args.save_key)
+    save_engine_args(cli_args.engine_type, cli_args.save_path, vllm_engine_args, cli_args.save_key)

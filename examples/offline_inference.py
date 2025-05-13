@@ -44,8 +44,8 @@ instance_args = InstanceArgs()
 engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370, enforce_eager=True)
 node_id = ray.get_runtime_context().get_node_id()
-llumnix_engine_args = VllmEngineArgs(engine_args=engine_args)
 launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.VLLM)
+vllm_engine_args = VllmEngineArgs(engine_args=engine_args)
 
 # Create a manager. If the manager is created first, and then the instances are created.
 manager: Manager = init_manager(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
@@ -55,7 +55,7 @@ ray.get(manager.is_ready.remote())
 instance_ids: List[str] = None
 instances: List[Llumlet] = None
 instance_ids, instances = ray.get(manager.init_instances.remote(
-    QueueType("rayqueue"), instance_args, llumnix_engine_args, node_id))
+    QueueType("rayqueue"), instance_args, vllm_engine_args, node_id))
 num_instance = 0
 while num_instance == 0:
     num_instance = ray.get(manager.scale_up.remote([], [], [], []))

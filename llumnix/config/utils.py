@@ -17,9 +17,9 @@ import argparse
 from llumnix.config import LlumnixConfig
 from llumnix.config.default import _C
 
-def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Namespace] = None, cli_args: List = None) -> LlumnixConfig:
-    if isinstance(others, argparse.Namespace):
-        others = vars(others)
+def get_llumnix_config(cfg_filename: str = "", args: Union[Dict, argparse.Namespace] = None, opts: List = None) -> LlumnixConfig:
+    if isinstance(args, argparse.Namespace):
+        args = vars(args)
 
     cfg: LlumnixConfig = _C.clone()
 
@@ -33,11 +33,11 @@ def get_llumnix_config(cfg_filename: str = "", others: Union[Dict, argparse.Name
             elif key.lower() in args and args[key.lower()] is not None:
                 config[key] = args[key.lower()]
 
-    if others is not None:
-        update_config(cfg, others)
+    if args is not None:
+        update_config(cfg, args)
 
-    if cli_args is not None:
-        cfg.merge_from_list(cli_args)
+    if opts is not None:
+        cfg.merge_from_list(opts)
 
     cfg.freeze()
     return cfg

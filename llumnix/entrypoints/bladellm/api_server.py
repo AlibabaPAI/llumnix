@@ -98,7 +98,7 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
     # llumnix_opts is used to receive config options
     llumnix_config = get_llumnix_config(engine_args.llumnix_config, opts=engine_args.llumnix_opts)
 
-    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, engine_args)
+    entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, engine_args=engine_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.BLADELLM)
 
     setup_ray_cluster(entrypoints_args)

@@ -128,10 +128,12 @@ def check_instance_args(instance_args):
     assert instance_args.migration_backend in ['grpc', 'kvtransfer'], \
         "Only support grpc and kvtransfer migration backend for BladeLLM."
 
-def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser: LlumnixArgumentParser, cli_args: "Namespace"):
-    # pylint: disable=import-outside-toplevel
-    from blade_llm.service.args import ServingArgs
-    engine_args: ServingArgs = ServingArgs.from_cli_args(cli_args)
+def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser: LlumnixArgumentParser,
+             cli_args: "Namespace" = None, engine_args = None):
+    if launch_mode == LaunchMode.GLOBAL:
+        # pylint: disable=import-outside-toplevel
+        from blade_llm.service.args import ServingArgs
+        engine_args: ServingArgs = ServingArgs.from_cli_args(cli_args)
     entrypoints_args, manager_args, instance_args = \
         get_llumnix_args(engine_args, BackendType.BLADELLM, launch_mode, llumnix_parser, llumnix_config)
 

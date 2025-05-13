@@ -140,6 +140,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, llumnix_par
     engine_args = load_registered_service_if_needed(manager_args, engine_args)
 
     if launch_mode == LaunchMode.LOCAL:
+        # pylint: disable=import-outside-toplevel
         from blade_llm.service.server import check_ports
         check_ports(engine_args)
 

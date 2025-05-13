@@ -202,13 +202,6 @@ def load_registered_service_if_needed(manager_args, engine_args):
             engine_args = engine_args_registered.engine_args
     return engine_args
 
-def print_args(entrypoints_args, manager_args, instance_args, engine_args):
-    logger.info("entrypoints_args: {}".format(entrypoints_args))
-    logger.info("manager_args: {}".format(manager_args))
-    logger.info("instance_args: {}".format(instance_args))
-    logger.info("engine_args: {}".format(engine_args))
-
-# args (get_llumnix_config)-> config (from_llumnix_config)-> args
 
 @dataclass
 class EntrypointsArgs:

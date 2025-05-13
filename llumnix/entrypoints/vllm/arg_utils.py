@@ -6,8 +6,7 @@ from vllm.config import EngineConfig, ParallelConfig
 from llumnix.logging.logger import init_logger
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, InstanceArgs,
-                               LlumnixArgumentParser, LlumnixEngineArgs, load_registered_service_if_needed,
-                               print_args)
+                               LlumnixArgumentParser, LlumnixEngineArgs, load_registered_service_if_needed)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.arg_utils import get_llumnix_args
 from llumnix.internal_config import MigrationConfig
@@ -94,7 +93,10 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
     if not manager_args.load_registered_service:
         check_engine_args(engine_args)
 
-    print_args(entrypoints_args, manager_args, instance_args, engine_args)
+    logger.info("entrypoints_args: {}".format(entrypoints_args))
+    logger.info("manager_args: {}".format(manager_args))
+    logger.info("instance_args: {}".format(instance_args))
+    logger.info("engine_args: {}".format(engine_args))
 
     return entrypoints_args, manager_args, instance_args, engine_args
 

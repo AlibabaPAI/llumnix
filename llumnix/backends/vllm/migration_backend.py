@@ -398,6 +398,9 @@ def get_migration_backend(instance_id: str,
                           local_rank: int,
                           use_ray_spmd_worker: bool,
                           worker_stage_seq_group_metadata_callback: Callable) -> MigrationBackendBase:
+    assert migration_config.migration_backend in ['rayrpc', 'gloo', 'nccl'], \
+        "Only support rayrpc, gloo and nccl migration backend for vLLM."
+
     if cache_engine[0].num_gpu_blocks < migration_config.migration_buffer_blocks:
         logger.warning("migration_cache_blocks({}) is larger than num_gpu_blocks({}), reducing it to num_gpu_blocks."
                        .format(migration_config.migration_buffer_blocks, cache_engine[0].num_gpu_blocks))

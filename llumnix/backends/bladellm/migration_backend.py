@@ -451,8 +451,10 @@ class KvTransferMigrationBackend(MigrationBackendBase):
 def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration_config: MigrationConfig,
                           request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker,
                           state_manager: StateManagerBase, serving_args: ServingArgs) -> MigrationBackendBase:
-    target_migration_backend = None
+    assert migration_config.migration_backend in ['grpc', 'kvtransfer'], \
+        "Only support grpc and kvtransfer migration backend for BladeLLM."
 
+    target_migration_backend = None
     backend = migration_config.migration_backend
     if backend == 'grpc':
         target_migration_backend = GrpcMigrationBackend(rank, migration_config, request_sync_group, state_manager)
@@ -460,4 +462,5 @@ def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration
         target_migration_backend = KvTransferMigrationBackend(rank, instance_id, worker_id, migration_config,
                                                               request_sync_group, base_worker, serving_args,
                                                               state_manager)
+
     return target_migration_backend

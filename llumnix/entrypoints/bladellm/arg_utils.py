@@ -16,7 +16,7 @@ import pickle
 
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
                                InstanceArgs, LlumnixEngineArgs, get_llumnix_args,
-                               load_registered_service_if_needed, print_args)
+                               load_registered_service_if_needed)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.logging.logger import init_logger
@@ -149,6 +149,9 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, llumnix_par
     if not manager_args.load_registered_service:
         check_engine_args(engine_args, manager_args)
 
-    print_args(entrypoints_args, manager_args, instance_args, engine_args)
+    logger.info("entrypoints_args: {}".format(entrypoints_args))
+    logger.info("manager_args: {}".format(manager_args))
+    logger.info("instance_args: {}".format(instance_args))
+    logger.info("engine_args: {}".format(engine_args))
 
     return entrypoints_args, manager_args, instance_args, engine_args

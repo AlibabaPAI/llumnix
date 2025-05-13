@@ -17,6 +17,7 @@ import argparse
 from llumnix.config import LlumnixConfig
 from llumnix.config.default import _C
 
+# default_config -> args_config -> cli_args
 def get_llumnix_config(cfg_filename: str = "", args: Union[Dict, argparse.Namespace] = None, opts: List = None) -> LlumnixConfig:
     if isinstance(args, argparse.Namespace):
         args = vars(args)

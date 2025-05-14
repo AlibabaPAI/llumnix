@@ -49,8 +49,8 @@ __all__ = [
 try:
     import vllm
     from vllm import *
-    from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+    from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs # pylint: disable=ungrouped-imports
     __all__.extend(getattr(vllm, "__all__", []))
-    __all__.extend(VllmEngineArgs)
+    __all__.append(VllmEngineArgs)
 except ImportError:
     pass

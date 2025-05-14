@@ -23,7 +23,6 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.ray_queue_server import RayQueueServer
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
 from llumnix.utils import try_convert_to_local_path
 from llumnix.version import __version__
 
@@ -44,21 +43,14 @@ __all__ = [
     "LaunchMode",
     "ZmqServer",
     "RayQueueServer",
-    "VllmEngineArgs",
     "try_convert_to_local_path"
 ]
 
 try:
     import vllm
     from vllm import *
+    from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
     __all__.extend(getattr(vllm, "__all__", []))
+    __all__.extend(VllmEngineArgs)
 except ImportError:
     pass
-
-# TODO(KuilongCui): import blade_llm after cuda is ready
-# try:
-#     import blade_llm
-#     from blade_llm import *
-#     __all__.extend(getattr(blade_llm, "__all__", []))
-# except ImportError:
-#     pass

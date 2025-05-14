@@ -157,20 +157,24 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
             conftest.SKIP_REASON = "When the migration backend is nccl, tensor parallelism is not supported."
 
         if launch_mode == "local":
-            if enable_simulator and tensor_parallel_size == 2:
-                conftest.SKIP_REASON = "Simulator in TP = 2 will not be tested."
-
             if tensor_parallel_size > 1:
                 conftest.SKIP_REASON = "Only test tensor parallelism in global launch mode."
 
             if migration_backend != "gloo":
                 conftest.SKIP_REASON = "Only test gloo in local launch mode for vLLM."
 
-        if enable_simulator and migration_backend != "gloo":
-            conftest.SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
+            if enable_simulator:
+                conftest.SKIP_REASON = "Simulator will not be tested in local launch mode for vLLM."
 
-        if enable_simulator and enable_pd_disagg:
-            conftest.SKIP_REASON = "Simulator is not supported in pd disaggregation mode for vLLM."
+        if enable_simulator:
+            if migration_backend != "gloo":
+                conftest.SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
+
+            if enable_pd_disagg:
+                conftest.SKIP_REASON = "Simulator is not supported in pd disaggregation mode for vLLM."
+
+            if tensor_parallel_size == 2:
+                conftest.SKIP_REASON = "Simulator in TP = 2 will not be tested."
 
     if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
         pytest.skip(conftest.SKIP_REASON)

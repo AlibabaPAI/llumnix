@@ -169,6 +169,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         if enable_simulator and migration_backend != "gloo":
             conftest.SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
 
+        if enable_simulator and enable_pd_disagg:
+            conftest.SKIP_REASON = "Simulator is not supported in pd disaggregation mode for vLLM."
+
     if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
         pytest.skip(conftest.SKIP_REASON)
 

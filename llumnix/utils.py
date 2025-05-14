@@ -211,9 +211,7 @@ def try_convert_to_local_path(data_path: str) -> str:
 def update_environment_variables(envs: Dict[str, str]):
     for k, v in envs.items():
         if k in os.environ and os.environ[k] != v:
-            logger.warning(
-                "Overwriting environment variable %s "
-                "from '%s' to '%s'".format(k, os.environ[k], v))
+            logger.warning("Overwriting environment variable {} from '{}' to '{}'".format(k, os.environ[k], v))
         os.environ[k] = v
 
 def ray_get_with_timeout(object_refs, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):

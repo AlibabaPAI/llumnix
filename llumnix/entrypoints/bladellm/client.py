@@ -162,11 +162,12 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
     async def drop_request(self, req_id: int) -> None:
         llumnix_id = self.entrypoint_id2llumnix_id.get(req_id, None)
         if llumnix_id:
-            logger.info("Abort request: {}.".format(req_id))
+            logger.info("Drop request: {}.".format(req_id))
             await execute_actor_method_async_with_retries(
                 self.manager.abort.remote, "Manager", "abort", str(req_id)
             )
             self.entrypoint_id2llumnix_id.pop(req_id, None)
+            self.request_streams.pop(llumnix_id, None)
 
     async def is_ready(self) -> bool:
         return await execute_actor_method_async_with_retries(

@@ -23,8 +23,11 @@ import warnings
 from typing_extensions import ParamSpec
 import ray
 
+from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
 from llumnix.constants import MODEL_PATH, DATASET_PATH, RAY_REMOTE_CALL_TIMEOUT
+
+logger = init_logger(__name__)
 
 
 _MAX_PORT = 65536
@@ -204,12 +207,13 @@ def try_convert_to_local_path(data_path: str) -> str:
         return local_dataset_path
 
     return data_path
+
 def update_environment_variables(envs: Dict[str, str]):
     for k, v in envs.items():
         if k in os.environ and os.environ[k] != v:
             logger.warning(
                 "Overwriting environment variable %s "
-                "from '%s' to '%s'", k, os.environ[k], v)
+                "from '%s' to '%s'".format(k, os.environ[k], v))
         os.environ[k] = v
 
 def ray_get_with_timeout(object_refs, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):

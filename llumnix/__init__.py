@@ -21,6 +21,10 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
+from llumnix.queue.zmq_server import ZmqServer
+from llumnix.queue.ray_queue_server import RayQueueServer
+from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+from llumnix.utils import try_convert_to_local_path
 from llumnix.version import __version__
 
 __all__ = [
@@ -37,7 +41,11 @@ __all__ = [
     "BackendType",
     "LaunchArgs",
     "EntrypointsArgs",
-    "LaunchMode"
+    "LaunchMode",
+    "ZmqServer",
+    "RayQueueServer",
+    "VllmEngineArgs",
+    "try_convert_to_local_path"
 ]
 
 try:

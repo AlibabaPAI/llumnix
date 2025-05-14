@@ -162,11 +162,12 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
     async def drop_request(self, req_id: int) -> None:
         llumnix_id = self.entrypoint_id2llumnix_id.get(req_id, None)
         if llumnix_id:
-            logger.info("Abort request: {}.".format(req_id))
+            logger.info("Drop request: {}.".format(req_id))
             await execute_actor_method_async_with_retries(
                 self.manager.abort.remote, "Manager", "abort", str(req_id)
             )
             self.entrypoint_id2llumnix_id.pop(req_id, None)
+            self.request_streams.pop(llumnix_id, None)
 
     async def is_ready(self) -> bool:
         return await execute_actor_method_async_with_retries(
@@ -192,8 +193,8 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 self.request_streams_last_completion_tokens[request_id] = processed_output[-1].usage.completion_tokens
                 if processed_output[-1].is_finished:
                     logger.debug("Client finish request {}".format(request_id))
-                    del self.entrypoint_id2llumnix_id[self.llumnix_id2entrypoint_id[request_id]]
-                    del self.llumnix_id2entrypoint_id[request_id]
+                    entrypoint_id = self.llumnix_id2entrypoint_id.pop(request_id, -1)
+                    self.entrypoint_id2llumnix_id.pop(entrypoint_id, None)
                     del self.request_streams[request_id]
                     self.request_streams_last_completion_tokens.pop(request_id, None)
                     self.request_streams_output_stash.pop(request_id, None)

@@ -96,7 +96,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     def drop_request(self, req_id: int):
         self.id2group[req_id]._status = RequestStatus.FINISHED
-        self.trans_wrapper.remove_request_server_info(req_id, self.step_counter)
+        self.trans_wrapper.remove_request_server_info(req_id, self.step_counter + 1)
         super().drop_request(req_id)
 
     # happends when moving request from waiting to running

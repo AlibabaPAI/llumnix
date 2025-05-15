@@ -29,7 +29,6 @@ import ray
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
 from llumnix.constants import MODEL_PATH, DATASET_PATH, RAY_REMOTE_CALL_TIMEOUT
-from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
 

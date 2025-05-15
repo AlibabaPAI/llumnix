@@ -36,7 +36,7 @@ class APIServerActorVLLM(APIServerActor):
             app,
             host=self.host,
             port=entrypoints_args.port,
-            log_level=entrypoints_args.log_level,
+            log_level=entrypoints_args.server_log_level,
             timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE,
             ssl_keyfile=entrypoints_args.ssl_keyfile,
             ssl_certfile=entrypoints_args.ssl_certfile,

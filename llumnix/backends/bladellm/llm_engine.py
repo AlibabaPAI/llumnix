@@ -502,7 +502,7 @@ class BackendBladeLLM(BackendInterface):
 
         ip_addr = get_ip_address()
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-        
+
         assert self.migration_config.grpc_migration_backend_server_port is None \
             or len(self.migration_config.grpc_migration_backend_server_port) == 0
         self.migration_config.grpc_migration_backend_server_port = []

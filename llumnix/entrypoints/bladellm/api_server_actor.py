@@ -20,7 +20,7 @@ class APIServerActorBladeLLM(APIServerActor):
         if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
             engine_args.host = get_ip_address()
         self.host = engine_args.host
-        wait_port_free(self.host)
+        wait_port_free(entrypoints_args.port)
 
     def _run_server(self,
                     entrypoints_args: EntrypointsArgs,

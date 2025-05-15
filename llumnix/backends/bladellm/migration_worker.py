@@ -17,6 +17,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import time
 from typing import List
+import gc
 
 import grpc
 import torch
@@ -61,11 +62,9 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             logger.warning("migration_buffer_blocks {} is too large, reset to grpc_limit_migration_num_blocks {}."
                            .format(migration_config.migration_buffer_blocks, grpc_limit_migration_num_blocks))
             migration_config.migration_buffer_blocks = grpc_limit_migration_num_blocks
-
         self.migration_backend = get_migration_backend(instance_id, rank, rank, migration_config,
-                                                    request_sync_group, base_worker, state_manager, args)
-
-        self.migration_grpc_addr = get_ip_address() + ":" + \
+                                                       request_sync_group, base_worker, state_manager, args)
+        self.migration_grpc_ip_addr = get_ip_address() + ":" + \
             str(self.migration_config.grpc_migration_backend_server_port[self.rank])
 
         asyncio.create_task(self._launch_grpc_service())
@@ -75,12 +74,17 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             ('grpc.max_send_message_length', GRPC_MAX_MESSAGE_LENGTH),
             ('grpc.max_receive_message_length', GRPC_MAX_MESSAGE_LENGTH),
         ]
-        server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
-        migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(self, server)
-        server.add_insecure_port(self.migration_grpc_addr)
-        await server.start()
-        # TODO(KuilongCui): clear server state
-        await server.wait_for_termination()
+        self.migration_server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
+        migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(self, self.migration_server)
+        self.migration_server.add_insecure_port(self.migration_grpc_ip_addr)
+        await self.migration_server.start()
+        await self.migration_server.wait_for_termination()
+
+    # pylint: disable=unused-argument
+    def close_migration(self, request, context):
+        del self.migration_server
+        gc.collect()
+        return empty_pb2.Empty()
 
     # pylint: disable=unused-argument
     def is_ready(self, request, context):
@@ -122,6 +126,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         return resp
 
 
+# TODO(s5u13b): Adapt to RemoteWorker.
 class MigrationLocalWorker(LocalWorker, MigrationWorker):
     def __init__(self, rank: int, serving_args: ServingArgs,
                  instance_id: str, migration_config: MigrationConfig,) -> None:
@@ -134,7 +139,7 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
 
     # used for wait_worker_ready
     async def info(self, req: empty_pb2.Empty) -> str:
-        async with grpc.aio.insecure_channel(self.migration_grpc_addr) as channel:
+        async with grpc.aio.insecure_channel(self.migration_grpc_ip_addr) as channel:
             stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
             await stub.is_ready(empty_pb2.Empty())
         return await LocalWorker.info(self, req)

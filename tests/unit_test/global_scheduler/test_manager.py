@@ -396,10 +396,11 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
 
     # wait for scale up
     await asyncio.sleep(5.0)
-    server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
-    ray.get(server.is_ready.remote())
     instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
     ray.get(instance.is_ready.remote())
+    await asyncio.sleep(5.0)
+    server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+    ray.get(server.is_ready.remote())
     num_instances = ray.get(manager.scale_up.remote(instance_id, instance, InstanceType("no_constraints"), pg))
     assert num_instances == 1
 
@@ -461,8 +462,8 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
                     if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
     assert len(instance_ids) == 4
     remove_placement_group(instance_ids[0])
-    kill_server(instance_ids[1])
-    kill_instance(instance_ids[2])
+    await kill_server(instance_ids[1])
+    await kill_instance(instance_ids[2])
     # Wait for check deployment states, scale down instance and auto scale up.
     await asyncio.sleep(90.0)
 
@@ -532,7 +533,8 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
     num_decode_instances = 0
     prefill_instance_ids = []
     decode_instance_ids = []
-    for _, instance_handle in curr_instances.items():
+    for instance_id in curr_instances:
+        instance_handle = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
         instance_type = ray.get(instance_handle.get_instance_type.remote())
         if instance_type == InstanceType.PREFILL:
             num_prefill_instances += 1
@@ -542,15 +544,15 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
             decode_instance_ids.append(ray.get(instance_handle.get_instance_info.remote()).instance_id)
 
     assert num_prefill_instances == 2 and num_decode_instances == 2
-    assert set(prefill_instance_ids).union(set(decode_instance_ids)) == set(curr_instances.keys())
+    assert set(prefill_instance_ids).union(set(decode_instance_ids)) == set(curr_instances)
 
-    kill_instance(prefill_instance_ids[0])
+    await kill_instance(prefill_instance_ids[0])
     await asyncio.sleep(10.0)
 
-    kill_instance(prefill_instance_ids[1])
+    await kill_instance(prefill_instance_ids[1])
     await asyncio.sleep(10.0)
 
-    kill_instance(decode_instance_ids[1])
+    await kill_instance(decode_instance_ids[1])
     await asyncio.sleep(90.0)
     alive_decode_instance_id = decode_instance_ids[0]
 
@@ -562,7 +564,8 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
     num_prefill_instances = 0
     num_decode_instances = 0
     decode_instance_ids = []
-    for instance_id, instance_handle in curr_instances.items():
+    for instance_id in curr_instances:
+        instance_handle = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
         instance_type = ray.get(instance_handle.get_instance_type.remote())
         if instance_type == InstanceType.PREFILL:
             num_prefill_instances += 1
@@ -640,7 +643,8 @@ async def test_auto_scale_up_loop_enable_pdd_node_affinity_scheduling():
     num_prefill_instances = 0
     num_decode_instances = 0
     num_no_constraints_instances = 0
-    for instance_handle in curr_instances.values():
+    for instance_id in curr_instances:
+        instance_handle = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
         instance_type = ray.get(instance_handle.get_instance_type.remote())
         if instance_type == InstanceType.PREFILL:
             num_prefill_instances += 1

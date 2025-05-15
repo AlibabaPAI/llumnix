@@ -62,7 +62,7 @@ class BackendSimVLLM(BackendVLLM):
         self.instance_id = instance_id
 
         self.state = EngineState.INIT
-        logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
+        logger.info("engine {} current state: {}".format(self.instance_id, self.state))
 
         self.disable_async_output_proc = engine_args.disable_async_output_proc
 

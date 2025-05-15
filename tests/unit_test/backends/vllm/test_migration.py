@@ -320,7 +320,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
         await gen_origin_outputs(prompt)
 
     if migration_request_status == 'waiting':
-        kill_instance("0")
+        await kill_instance("0")
         remove_placement_group("0")
         if use_ray_spmd_worker:
             num_gpus = 0.5

@@ -128,12 +128,17 @@ class Llumlet:
         while True:
             await asyncio.sleep(CHECK_ENGINE_STATE_INTERVAL)
             if self.backend_engine.state == EngineState.CRASHED:
-                logger.error("Llumlet ({}) detected backend engine crashed. Stopping...".format(self.instance_id))
+                logger.error("Llumlet {} detected backend engine crashed. Stopping...".format(self.instance_id))
                 # pylint: disable=protected-access
                 self.backend_engine._stop_event.set()
                 await asyncio.sleep(0)
-                self_actor = ray.get_actor(name=self.actor_name, namespace="llumnix")
-                ray.kill(self_actor)
+                self.stop()
+
+    def stop(self):
+        if self.backend_engine.state == EngineState.RUNNING:
+            self.backend_engine.stop()
+        self_actor = ray.get_actor(name=self.actor_name, namespace="llumnix")
+        ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[str]:
         # TODO(Failover): Currently, llumnix directly return if meeting exception during migration,

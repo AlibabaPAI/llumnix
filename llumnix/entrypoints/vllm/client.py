@@ -20,15 +20,17 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.ray_utils import execute_actor_method_async_with_retries
 from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.entrypoints.api_server_actor import APIServerActor
 
 logger = init_logger(__name__)
 
 
 class LlumnixClientVLLM:
-    def __init__(self, entrypoints_context: EntrypointsContext):
+    def __init__(self, entrypoints_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
         self.manager: Manager = entrypoints_context.manager
         self.instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_output_queue: QueueServerBase = entrypoints_context.request_output_queue
+        self.server: APIServerActor = entrypoints_context.server
         self.server_info: ServerInfo = entrypoints_context.server_info
         self.log_requests: bool = entrypoints_context.log_requests
         self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
@@ -40,6 +42,9 @@ class LlumnixClientVLLM:
             self.instance_num_requests[ins_id] = 0
         self.num_finished_requests = 0
         self.manager_available = True
+
+        loop.create_task(self.get_request_outputs_loop())
+        loop.create_task(self.request_output_queue.run_server_loop())
 
     async def generate(self,
                        prompt: str,
@@ -160,7 +165,7 @@ class LlumnixClientVLLM:
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
-                processed_output = self.process_output_order(request_id, request_output)
+                processed_output = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
                 self.request_streams[request_id].put(processed_output)
@@ -169,7 +174,7 @@ class LlumnixClientVLLM:
                     del self.request_streams[request_id]
                     self.request_streams_last_completion_tokens.pop(request_id, None)
 
-    def process_output_order(
+    def _process_output_order(
         self, request_id: int, request_output: RequestOutput
     ) -> RequestOutput:
         current_completion_tokens = None
@@ -199,3 +204,21 @@ class LlumnixClientVLLM:
             current_completion_tokens
         )
         return request_output
+
+    # TODO(s5u13b): Add base class of LlumnixClient.
+    def cleanup(self):
+        self.request_output_queue.cleanup()
+        instance_ids = list(self.instances.keys())
+        try:
+            # Not call manager scale down to reduce manager overhead.
+            for instance in self.instances.values():
+                # Instance might die before.
+                try:
+                    ray.kill(instance)
+                # pylint: disable=bare-except
+                except:
+                    pass
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.exception("Server cleanup failed (instance_ids: {}): {}".format(instance_ids, e))
+        logger.info("Server stops (instance_ids: {}).".format(instance_ids))

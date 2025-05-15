@@ -27,6 +27,7 @@ import grpc
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from loguru import logger as loguru_logger
+from google.protobuf import empty_pb2
 
 from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.engine import AsyncLLMEngine
@@ -43,7 +44,7 @@ from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
 from llumnix.utils import (get_ip_address, ray_get_with_timeout, asyncio_wait_for_with_timeout,
-                           get_free_port, wait_port_free)
+                           get_free_port, wait_port_free, run_coroutine_in_new_thread)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
@@ -209,19 +210,19 @@ class AsyncLLMEngineLlumnixMixin:
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_worker_ip_address: List[str],
+                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
-                 backend_type: BackendType,
+                 backend_type: BackendType
                  ) -> None:
         self.instance_id = instance_id
         self.state = EngineState.INIT
-        logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
+        logger.info("engine {} current state: {}".format(self.instance_id, self.state))
 
         self.placement_group = placement_group
         self.request_output_queue_type = request_output_queue_type
         self._worker_processes = WorkerProcessesRay(placement_group, self._args, instance_id, migration_config)
-        self.src_worker_ip_address = src_worker_ip_address
 
+        self.src_workers_migration_ip_addr_list = src_workers_migration_ip_addr_list
         self._migration_semaphore = asyncio.Semaphore(0)
         self.request_barriers: queue.Queue = request_barriers
         self.migrated_request = set()
@@ -247,8 +248,8 @@ class AsyncLLMEngineLlumnixMixin:
         self._scheduler.trans_wrapper = self.trans_wrapper
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
-        self.worker_channels = [grpc.aio.insecure_channel(worker) for worker in self.src_worker_ip_address]
-        self.worker_stubs = [migration_worker_pb2_grpc.MigrationWorkerStub(channel) for channel in self.worker_channels]
+        self.worker_migration_channels = [grpc.aio.insecure_channel(worker) for worker in self.src_workers_migration_ip_addr_list]
+        self.worker_migration_stubs = [migration_worker_pb2_grpc.MigrationWorkerStub(channel) for channel in self.worker_migration_channels]
 
     def inject_request_barriers(self):
         async def finish_callback(resp_list, request_barriers: List[RequestBarrier]):
@@ -289,23 +290,42 @@ class AsyncLLMEngineLlumnixMixin:
     async def _loop(self):
         previous_state = self.state
         self.state = EngineState.RUNNING
-        logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+        logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
 
         try:
             await super()._loop()
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Error in engine loop, unexpected exception: {}".format(e))
+            self.stop()
             previous_state = self.state
             self.state = EngineState.CRASHED
-            logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+            logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
 
         if self.state == EngineState.RUNNING:
+            self.stop()
             self.state = EngineState.STOPPED
-            logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+            logger.info("engine {} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
-        for channel in self.worker_channels:
-            await channel.close()
+    def stop(self):
+        run_coroutine_in_new_thread(self.close_migration(), blocking=True)
+        super().stop()
+
+    # Close migraion grpc client and delete server.
+    async def close_migration(self):
+        # delete grpc server
+        try:
+            await self.run_workers("close_migration", empty_pb2.Empty())
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.exception("Failed to close migration for workers, exception: {}".format(e))
+        # close grpc client
+        tasks = [channel.close() for channel in self.worker_migration_channels]
+        rets = await asyncio.gather(*tasks, return_exceptions=True)
+        for rank, ret in enumerate(rets):
+            if isinstance(ret, Exception):
+                logger.exception("Failed to close migration channel for worker(rank: {}), "
+                                 "unexpected exception: {}".format(rank, ret))
 
     async def _handle_abort(self, abort: Optional[List[Tuple[int, int, str]]] = None):
         await super()._handle_abort(abort)
@@ -330,9 +350,10 @@ class AsyncLLMEngineLlumnixMixin:
         logger.debug("engine {} drop request {}".format(self.instance_id, req_id))
         await self._client.drop_request(req_id)
 
+    # Only be used in migration method.
     async def run_workers(self, worker_method: str, *args, **kwargs):
         coros = []
-        for stub in self.worker_stubs:
+        for stub in self.worker_migration_stubs:
             method = getattr(stub, worker_method)
             coros.append(method(*args, **kwargs))
         result = await asyncio.gather(*coros, return_exceptions=True)
@@ -366,7 +387,7 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_worker_ip_address: List[str],
+                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
                  serving_args: ServingArgs,
@@ -374,8 +395,28 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                  ) -> None:
         setup_dist(serving_args)
         AsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
-                                            migration_config, src_worker_ip_address, request_barriers, backend_type)
+        AsyncLLMEngineLlumnixMixin.__init__(
+            self,
+            instance_id,
+            placement_group,
+            request_output_queue_type,
+            migration_config,
+            src_workers_migration_ip_addr_list,
+            request_barriers,
+            backend_type
+        )
+
+    def _setup_dist_options(self, serving_args: ServingArgs):
+        # It means that dist_init_addr can be None when enabling distributed inference.
+        if serving_args.dist_inference_options.dist_init_addr is not None:
+            master_port = int(serving_args.dist_inference_options.dist_init_addr.split(":")[1])
+        else:
+            master_port = NCCL_PORT
+        # The IP of engine and worker 0 will be same due to our sorting of workers,
+        # so directly set the dist_init_addr to IP of engine is correct.
+        serving_args.dist_inference_options.dist_init_addr = f"{serving_args.host}:{master_port}"
+        # TODO(s5u13b): New BladeLLM will not use this environment variables, update it after rebase BladeLLM.
+        os.environ["MASTER_ADDR"] = serving_args.host
 
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
@@ -384,7 +425,7 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_worker_ip_address: List[str],
+                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
                  serving_args: ServingArgs,
@@ -392,8 +433,16 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
                 ) -> None:
         setup_dist(serving_args)
         PrefillAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
-                                            migration_config, src_worker_ip_address, request_barriers, backend_type)
+        AsyncLLMEngineLlumnixMixin.__init__(
+            self,
+            instance_id,
+            placement_group,
+            request_output_queue_type,
+            migration_config,
+            src_workers_migration_ip_addr_list,
+            request_barriers,
+            backend_type
+        )
 
 
 
@@ -403,7 +452,7 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_worker_ip_address: List[str],
+                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
                  serving_args: ServingArgs,
@@ -411,8 +460,16 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
                 ) -> None:
         setup_dist(serving_args)
         DecodeAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
-        AsyncLLMEngineLlumnixMixin.__init__(self, instance_id, placement_group, request_output_queue_type,
-                                            migration_config, src_worker_ip_address, request_barriers, backend_type)
+        AsyncLLMEngineLlumnixMixin.__init__(
+            self,
+            instance_id,
+            placement_group,
+            request_output_queue_type,
+            migration_config,
+            src_workers_migration_ip_addr_list,
+            request_barriers,
+            backend_type
+        )
 
 
 class BackendBladeLLM(BackendInterface):
@@ -445,29 +502,30 @@ class BackendBladeLLM(BackendInterface):
 
         ip_addr = get_ip_address()
         world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-
+        
         assert self.migration_config.grpc_migration_backend_server_port is None \
             or len(self.migration_config.grpc_migration_backend_server_port) == 0
         self.migration_config.grpc_migration_backend_server_port = []
         for _ in range(world_size):
             self.migration_config.grpc_migration_backend_server_port.append(get_free_port())
         grpc_ports = self.migration_config.grpc_migration_backend_server_port
-        self.src_worker_ip_address = [ip_addr + ":" + str(port) for port in grpc_ports]
+        self.src_workers_migration_ip_addr_list = [ip_addr + ":" + str(port) for port in grpc_ports]
         logger.info("Engine {} set grpc migration server address for all workers: {}".format(
-                    self.instance_id, self.src_worker_ip_address))
+                    self.instance_id, self.src_workers_migration_ip_addr_list))
 
         self.worker_infos = []
         self.kv_transfer_instance_id = self.instance_id
         if engine_args.enable_disagg and engine_args.disagg_options is not None:
             self.kv_transfer_instance_id = engine_args.disagg_options.inst_id
-        for index, ip_addr in enumerate(self.src_worker_ip_address):
-            self.worker_infos.append(WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id,
-                                                kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
+        for index, ip_addr in enumerate(self.src_workers_migration_ip_addr_list):
+            self.worker_infos.append(
+                WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id,
+                           kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
 
         self.request_barriers: queue.Queue = queue.Queue()
         engine_cls = self._get_engine_cls()
         self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, migration_config,
-                                 self.src_worker_ip_address, self.request_barriers, BackendType.BLADELLM, engine_args)
+                                 self.src_workers_migration_ip_addr_list, self.request_barriers, BackendType.BLADELLM, engine_args)
 
         self._engine_ready_event = asyncio.Event()
         asyncio.create_task(self._start_engine())
@@ -490,10 +548,14 @@ class BackendBladeLLM(BackendInterface):
             )
             msg_server = EngineMsgServer(engine=self.engine, args=communication_args)
             await msg_server.async_start(asyncio.get_event_loop(), disable_frontend_multiprocessing=True,
-                                   enable_disagg_pd=True)
+                                         enable_disagg_pd=True)
 
         await self.engine.async_start(asyncio.get_event_loop())
         self._engine_ready_event.set()
+
+    def stop(self):
+        self.engine.stop()
+        logger.info("Engine stops (instance_id: {}).".format(self.instance_id))
 
     async def is_ready(self) -> bool:
         await self._engine_ready_event.wait()

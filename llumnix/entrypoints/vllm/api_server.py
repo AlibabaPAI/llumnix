@@ -19,7 +19,6 @@ import json
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-import ray
 import uvicorn
 
 from vllm.sampling_params import SamplingParams
@@ -45,18 +44,29 @@ llumnix_client: LlumnixClientVLLM = None
 # pylint: disable=unused-argument
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
-    asyncio.create_task(llumnix_client.request_output_queue.run_server_loop())
-    asyncio.create_task(llumnix_client.get_request_outputs_loop())
-    yield
-    llumnix_client.request_output_queue.cleanup()
-    for instance in llumnix_client.instances.values():
-        try:
-            ray.kill(instance)
-        # pylint: disable=bare-except
-        except:
-            pass
+    try:
+        yield
+    finally:
+        llumnix_client.cleanup()
+
 
 app = FastAPI(lifespan=lifespan)
+
+
+# pylint: disable=unused-argument
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    server_id = llumnix_client.server_info.server_id
+    logger.exception("Server {} caught exception: {}".format(server_id, type(exc).__name__))
+    llumnix_client.cleanup()
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error_type": type(exc).__name__,
+            "error": str(exc)
+        }
+    )
 
 
 @app.get("/health")
@@ -200,14 +210,20 @@ if __name__ == "__main__":
     # if gpu is not available, it means that this node is head pod without any llumnix components.
     if is_gpu_available():
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args)
-        llumnix_client = LlumnixClientVLLM(entrypoints_context)
-
         # Start the api server after all the components of llumnix are ready.
-        logger.info("Start api server on '{}:{}'.".format(entrypoints_args.host, entrypoints_args.port))
-        uvicorn.run(app,
-                    host=entrypoints_args.host,
-                    port=entrypoints_args.port,
-                    log_level=entrypoints_args.server_log_level,
-                    timeout_keep_alive=SERVER_TIMEOUT_KEEP_ALIVE,
-                    ssl_keyfile=entrypoints_args.ssl_keyfile,
-                    ssl_certfile=entrypoints_args.ssl_certfile)
+        loop = asyncio.new_event_loop()
+        llumnix_client = LlumnixClientVLLM(entrypoints_context, loop)
+        asyncio.set_event_loop(loop)
+        config = uvicorn.Config(app,
+            host=entrypoints_args.host,
+            port=entrypoints_args.port,
+            log_level=entrypoints_args.log_level,
+            timeout_keep_alive=SERVER_TIMEOUT_KEEP_ALIVE,
+            ssl_keyfile=entrypoints_args.ssl_keyfile,
+            ssl_certfile=entrypoints_args.ssl_certfile
+        )
+        server = uvicorn.Server(config)
+        try:
+            loop.run_until_complete(server.serve())
+        finally:
+            loop.close()

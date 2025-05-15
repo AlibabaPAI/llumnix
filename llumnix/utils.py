@@ -11,7 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import os
+import time
 import uuid
 import asyncio
 import threading
@@ -20,11 +22,15 @@ import socket
 from functools import partial
 import warnings
 
+import psutil
 from typing_extensions import ParamSpec
 import ray
 
+from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
 from llumnix.constants import MODEL_PATH, DATASET_PATH, RAY_REMOTE_CALL_TIMEOUT
+
+logger = init_logger(__name__)
 
 
 _MAX_PORT = 65536
@@ -155,7 +161,6 @@ def _bind_and_close_port(port: Optional[int] = None, host: str = '0.0.0.0') -> i
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # the SO_REUSEADDR flag tells the kernel to reuse a local socket in TIME_WAIT state,
         # without waiting for its natural timeout to expire. see https://docs.python.org/3/library/socket.html#example
-        # NOTE(qzhong): Is it a risk to reuse old port before closing it?
         # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((host, port or 0))
         return s.getsockname()[1]
@@ -187,6 +192,35 @@ def check_free_port(host='0.0.0.0', port=8081):
         else:
             raise
 
+def wait_port_free(port: int, max_retries: int = 5):
+    retries = 0
+    history_pid = None
+
+    while retries < max_retries:
+        if check_free_port(port=port):
+            return
+
+        for conn in psutil.net_connections():
+            if conn.laddr.port == port:
+                logger.info("Port {} connection detail: {}".format(port, conn))
+                if conn.pid and history_pid != conn.pid:
+                    history_pid = conn.pid
+                    try:
+                        proc = psutil.Process(conn.pid)
+                        logger.info("Port {} is in use by process {}, status {}: {}. Retrying in 3 seconds...".format(
+                            port, conn.pid, proc.status(), ' '.join(proc.cmdline())))
+                    except psutil.NoSuchProcess:
+                        continue
+
+            if conn.status == 'TIME_WAIT':
+                time.sleep(60)
+
+        gc.collect()
+        time.sleep(3)
+        retries += 1
+
+    raise RuntimeError(f"Port {port} is still in use after {max_retries} retries.")
+
 def try_convert_to_local_path(data_path: str) -> str:
     if os.path.isabs(data_path):
         return data_path
@@ -205,12 +239,11 @@ def try_convert_to_local_path(data_path: str) -> str:
         return local_dataset_path
 
     return data_path
+
 def update_environment_variables(envs: Dict[str, str]):
     for k, v in envs.items():
         if k in os.environ and os.environ[k] != v:
-            logger.warning(
-                "Overwriting environment variable %s "
-                "from '%s' to '%s'", k, os.environ[k], v)
+            logger.warning("Overwriting environment variable {} from '{}' to '{}'".format(k, os.environ[k], v))
         os.environ[k] = v
 
 def ray_get_with_timeout(object_refs, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):

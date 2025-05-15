@@ -21,9 +21,10 @@ import pytest
 import aiohttp
 import torch
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path
+from llumnix.utils import get_ip_address, try_convert_to_local_path, wait_port_free
 
 # pylint: disable=unused-import
+from tests import conftest
 from tests.conftest import ray_env, cleanup_ray_env_func
 from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
                                   wait_for_llumnix_service_ready, generate_bladellm_launch_command,
@@ -128,11 +129,55 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
+@pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
+@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'kvtransfer'])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_correctness(ray_env, shutdown_llumnix_service,
-                           model, launch_mode, enable_pd_disagg, tensor_parallel_size, engine):
+async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
+                           launch_mode, enable_pd_disagg, enable_simulator, tensor_parallel_size,
+                           migration_backend, engine):
     engine = engine.split("_")[1]
+
+    if "BladeLLM" in engine:
+        # TODO(KuilongCui): add bladellm migration correctness test for grpc and kvtransfer
+        if migration_backend not in ['grpc', 'kvtransfer']:
+            conftest.SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
+
+        if launch_mode == "local" and tensor_parallel_size == 2:
+            conftest.SKIP_REASON = "Only test tensor parallelism in global launch mode."
+
+        if enable_simulator:
+            conftest.SKIP_REASON = "Simulator for BladeLLM is not supported yet."
+
+    if "vLLM" in engine:
+        if migration_backend not in ['rayrpc', 'gloo', 'nccl']:
+            conftest.SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
+
+        if tensor_parallel_size == 2 and migration_backend == 'nccl':
+            conftest.SKIP_REASON = "When the migration backend is nccl, tensor parallelism is not supported."
+
+        if launch_mode == "local":
+            if tensor_parallel_size > 1:
+                conftest.SKIP_REASON = "Only test tensor parallelism in global launch mode."
+
+            if migration_backend != "gloo":
+                conftest.SKIP_REASON = "Only test gloo in local launch mode for vLLM."
+
+            if enable_simulator:
+                conftest.SKIP_REASON = "Simulator will not be tested in local launch mode for vLLM."
+
+        if enable_simulator:
+            if migration_backend != "gloo":
+                conftest.SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
+
+            if enable_pd_disagg:
+                conftest.SKIP_REASON = "Simulator is not supported in pd disaggregation mode for vLLM."
+
+            if tensor_parallel_size == 2:
+                conftest.SKIP_REASON = "Simulator in TP = 2 will not be tested."
+
+    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
+        pytest.skip(conftest.SKIP_REASON)
 
     global test_times
 
@@ -180,6 +225,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
     launch_commands = []
     if launch_mode == "local":
         if enable_pd_disagg:
+            wait_port_free(base_port)
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
@@ -188,7 +234,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     instance_type="prefill",
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
+
             decode_port = base_port + 50
+            wait_port_free(decode_port)
             launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
                                                     launch_ray_cluster=False,
                                                     model=model,
@@ -199,17 +247,21 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
         else:
+            wait_port_free(base_port)
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
                                                     port=base_port,
                                                     tensor_parallel_size=tensor_parallel_size))
     else:
+        for i in range(instance_count):
+            wait_port_free(base_port + i)
         launch_commands.append(generate_serve_command_func(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,
                                                model=model,
                                                enable_pd_disagg=enable_pd_disagg,
+                                               enable_simulator=enable_simulator,
                                                tensor_parallel_size=tensor_parallel_size,
                                                enable_migration=enable_migration,
                                                max_instances=instance_count))
@@ -226,11 +278,10 @@ async def test_correctness(ray_env, shutdown_llumnix_service,
 
     # compare
     raw_output = engine_prompt_output if not enable_pd_disagg else engine_pdd_prompt_output
-    for prompt in prompts:
-        assert llumnix_output[prompt] == raw_output[prompt]
+    if not enable_simulator:
+        for prompt in prompts:
+            assert llumnix_output[prompt] == raw_output[prompt]
 
     await asyncio.sleep(3)
-
-    check_log_exception()
 
     test_times += 1

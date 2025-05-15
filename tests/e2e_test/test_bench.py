@@ -21,11 +21,12 @@ import pytest
 import torch
 import numpy as np
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path
+from llumnix.utils import get_ip_address, try_convert_to_local_path, wait_port_free
 
 # pylint: disable=unused-import
+from tests import conftest
 from tests.conftest import ray_env
-from .utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
                     wait_for_llumnix_service_ready, shutdown_llumnix_service,
                     generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
                     generate_bladellm_serve_command)
@@ -77,35 +78,20 @@ def parse_log_file(title: str):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
-@pytest.mark.parametrize("launch_mode", ['global', 'local'])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
-@pytest.mark.parametrize("enable_simulator", [False, True])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
+@pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enable_simulator,
-                                model, launch_mode, enable_pd_disagg, request_output_queue_type, engine):
+async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception,
+                                enable_pd_disagg, model, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
+    num_prompts = 500
 
-    if "BladeLLM" in engine and enable_simulator:
-        pytest.skip("Simulator for BladeLLM is not supported yet.")
+    if "vLLM" in engine and enable_pd_disagg:
+        conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
 
-    if request_output_queue_type == "zmq" and not (
-        launch_mode == "global" and not enable_simulator and not enable_pd_disagg):
-        pytest.skip("Only test zmq queue type when simulator is disabled and prefill-decode "
-                    "disaggregation is disabled.")
-
-    # Currently, global launch mode is not tested in e2e benchmark test.
-    if request_output_queue_type == 'rayqueue' and launch_mode == 'local':
-        pytest.skip("Only test rayqueue in global launch mode.")
-
-    if enable_simulator and enable_pd_disagg:
-        pytest.skip("When enabling simulator, prefill-decode disaggregation is not tested.")
-
-    if launch_mode == 'global' and not enable_simulator:
-        num_prompts = 500 if not enable_pd_disagg else 50
-    else:
-        num_prompts = 50
+    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
+        pytest.skip(conftest.SKIP_REASON)
 
     global test_times
 
@@ -119,76 +105,25 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
     num_instances = device_count
 
     if "vLLM" in engine:
-        generate_launch_command = generate_vllm_launch_command
         generate_serve_command = generate_vllm_serve_command
-        enable_migration = True
     elif "BladeLLM" in engine:
-        generate_launch_command = generate_bladellm_launch_command
         generate_serve_command = generate_bladellm_serve_command
-        enable_migration = False
     else:
         raise ValueError(f"Unknown engine: {engine}")
 
-    if launch_mode == 'local':
-        if enable_pd_disagg:
-            for i in range(device_count//2):
-                port = base_port + i
-                ip_port = f"{ip}:{port}"
-                ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(port)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_pd_disagg=enable_pd_disagg,
-                                                         enable_migration=enable_migration,
-                                                         instance_type="prefill",
-                                                         request_output_queue_type=request_output_queue_type)
-                subprocess.run(launch_command, shell=True, check=True)
-            for i in range(device_count//2):
-                port = base_port + i + (device_count//2)
-                ip_port = f"{ip}:{port}"
-                if engine == "vLLM":
-                    ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(port)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_pd_disagg=enable_pd_disagg,
-                                                         enable_migration=enable_migration,
-                                                         instance_type="decode",
-                                                         request_output_queue_type=request_output_queue_type)
-                subprocess.run(launch_command, shell=True, check=True)
-        else:
-            for i in range(device_count):
-                port = base_port + i
-                ip_port = f"{ip}:{port}"
-                ip_ports.append(ip_port)
-                launch_command = generate_launch_command(result_filename=str(base_port+i)+".out",
-                                                         launch_ray_cluster=False,
-                                                         ip=ip,
-                                                         port=port,
-                                                         model=model,
-                                                         enable_simulator=enable_simulator,
-                                                         request_output_queue_type=request_output_queue_type,
-                                                         enable_migration=enable_migration)
-                subprocess.run(launch_command, shell=True, check=True)
-    else: # global
-        for i in range(device_count):
-            port = base_port + i
-            ip_port = f"{ip}:{port}"
-            ip_ports.append(ip_port)
-        serve_command = generate_serve_command(result_filename=str(base_port)+".out",
-                                               ip=ip,
-                                               port=base_port,
-                                               model=model,
-                                               enable_pd_disagg=enable_pd_disagg,
-                                               enable_simulator=enable_simulator,
-                                               request_output_queue_type=request_output_queue_type,
-                                               enable_migration=enable_migration,
-                                               max_instances=num_instances)
-        subprocess.run(serve_command, shell=True, check=True)
+    for i in range(device_count):
+        port = base_port + i
+        wait_port_free(port)
+        ip_port = f"{ip}:{port}"
+        ip_ports.append(ip_port)
+
+    serve_command = generate_serve_command(result_filename=str(base_port)+".out",
+                                            ip=ip,
+                                            port=base_port,
+                                            model=model,
+                                            request_output_queue_type=request_output_queue_type,
+                                            max_instances=num_instances)
+    subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 
     def run_bench_command(command):
@@ -221,12 +156,9 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, enab
 
     await asyncio.sleep(5)
 
-    if num_prompts == 500:
-        with open("performance.txt", "a", encoding="utf-8") as f:
-            f.write(parse_log_file(title=request.node.name))
+    with open("performance.txt", "a", encoding="utf-8") as f:
+        f.write(parse_log_file(title=request.node.name))
 
     await asyncio.sleep(3)
-
-    check_log_exception()
 
     test_times += 1

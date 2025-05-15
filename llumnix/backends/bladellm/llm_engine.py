@@ -38,11 +38,12 @@ from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyn
 from blade_llm.service.communications.engine_msg_server import EngineMsgServer
 from blade_llm.service.engine_args import CommunicationArgs
 from blade_llm.service.metric import init_metric
-from blade_llm.module.parallel import setup_dist_environ
+from blade_llm.module.parallel import setup_dist_environ, master_node_in_distributed_inference
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
-from llumnix.utils import get_ip_address, ray_get_with_timeout, asyncio_wait_for_with_timeout, get_free_port
+from llumnix.utils import (get_ip_address, ray_get_with_timeout, asyncio_wait_for_with_timeout,
+                           get_free_port, wait_port_free)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
@@ -430,6 +431,9 @@ class BackendBladeLLM(BackendInterface):
         if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
             engine_args.host = get_ip_address()
         self._config_inner_engine_logger(engine_args)
+
+        if master_node_in_distributed_inference():
+            wait_port_free(engine_args.multi_node_hb_port())
 
         # add instance_id to avoid path conflict when multi-engine running in a single pod
         # use instance_id[:5] to avoid the length of worker_socket_path exceeding the OS limit

@@ -6,7 +6,7 @@ from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.api_server_actor import APIServerActor
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, wait_port_free
 
 logger = init_logger(__name__)
 
@@ -20,6 +20,7 @@ class APIServerActorBladeLLM(APIServerActor):
         if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
             engine_args.host = get_ip_address()
         self.host = engine_args.host
+        wait_port_free(entrypoints_args.port)
 
     def _run_server(self,
                     entrypoints_args: EntrypointsArgs,

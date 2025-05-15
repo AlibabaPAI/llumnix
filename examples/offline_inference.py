@@ -2,6 +2,7 @@ from typing import List
 import os
 import time
 import asyncio
+import uuid
 
 import ray
 
@@ -10,11 +11,8 @@ from vllm.sampling_params import SamplingParams
 
 from llumnix import (Manager, launch_ray_cluster, connect_to_ray_cluster, init_manager,
                      ManagerArgs, InstanceArgs, Llumlet, ServerInfo, QueueType, BackendType,
-                     LaunchArgs, EntrypointsArgs, LaunchMode)
-from llumnix.utils import random_uuid, try_convert_to_local_path
-from llumnix.queue.ray_queue_server import RayQueueServer
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
-
+                     LaunchArgs, EntrypointsArgs, LaunchMode, RayQueueServer, VllmEngineArgs)
+from llumnix.utils import try_convert_to_local_path
 from tests.conftest import cleanup_ray_env_func
 
 # Sample prompts.
@@ -62,7 +60,7 @@ while num_instance == 0:
     time.sleep(1.0)
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
-server_id = random_uuid()
+server_id = str(uuid.uuid4().hex)
 request_output_queue = RayQueueServer()
 server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue, None, None)
 
@@ -85,7 +83,7 @@ async def main():
     asyncio.create_task(request_output_queue.run_server_loop())
 
     for request in prompts:
-        request_id = random_uuid()
+        request_id = str(uuid.uuid4().hex)
         await manager.generate.remote(request_id=request_id,
                                       server_info=server_info,
                                       prompt=request,
@@ -94,15 +92,6 @@ async def main():
     await output_task
 
 asyncio.run(main())
-
-# Kill all actor, as detach actor will not be killed by ray.shutdown.
-named_actor_infos = ray.util.list_named_actors(True)
-for actor_info in named_actor_infos:
-    try:
-        actor_handle = ray.get_actor(actor_info['name'], namespace=actor_info['namespace'])
-        ray.kill(actor_handle)
-    except:
-        continue
 
 cleanup_ray_env_func()
 

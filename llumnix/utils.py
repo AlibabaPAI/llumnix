@@ -11,7 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import os
+import time
 import uuid
 import asyncio
 import threading
@@ -20,6 +22,7 @@ import socket
 from functools import partial
 import warnings
 
+import psutil
 from typing_extensions import ParamSpec
 import ray
 
@@ -188,6 +191,35 @@ def check_free_port(host='0.0.0.0', port=8081):
             return False
         else:
             raise
+
+def wait_port_free(port: int, max_retries: int = 5):
+    retries = 0
+    history_pid = None
+
+    while retries < max_retries:
+        if check_free_port(port=port):
+            return
+
+        for conn in psutil.net_connections():
+            if conn.laddr.port == port:
+                logger.info("Port {} connection detail: {}".format(port, conn))
+                if conn.pid and history_pid != conn.pid:
+                    history_pid = conn.pid
+                    try:
+                        proc = psutil.Process(conn.pid)
+                        logger.info("Port {} is in use by process {}, status {}: {}. Retrying in 3 seconds...".format(
+                            port, conn.pid, proc.status(), ' '.join(proc.cmdline())))
+                    except psutil.NoSuchProcess:
+                        continue
+
+            if conn.status == 'TIME_WAIT':
+                time.sleep(60)
+
+        gc.collect()
+        time.sleep(3)
+        retries += 1
+
+    raise RuntimeError(f"Port {port} is still in use after {max_retries} retries.")
 
 def try_convert_to_local_path(data_path: str) -> str:
     if os.path.isabs(data_path):

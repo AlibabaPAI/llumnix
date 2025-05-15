@@ -15,14 +15,12 @@ import os
 import time
 import subprocess
 import uuid
-import gc
 from typing import Optional
 
-import psutil
 import pytest
 import requests
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path, check_free_port
+from llumnix.utils import get_ip_address, try_convert_to_local_path
 from tests import conftest
 
 
@@ -401,32 +399,3 @@ def to_markdown_table(data):
 
     table = f"{header_row}\n{separator_row}\n" + "\n".join(data_rows) + "\n\n"
     return table
-
-def wait_port_free(port: int, max_retries: int = 5):
-    retries = 0
-    history_pid = None
-
-    while retries < max_retries:
-        if check_free_port(port=port):
-            return
-
-        for conn in psutil.net_connections():
-            if conn.laddr.port == port:
-                print(f"Port {port} connection detail: {conn}")
-                if conn.pid and history_pid != conn.pid:
-                    history_pid = conn.pid
-                    try:
-                        proc = psutil.Process(conn.pid)
-                        print(f"Port {port} is in use by process {conn.pid}, status {proc.status()}: \
-                              {' '.join(proc.cmdline())}. Retrying in 3 seconds...")
-                    except psutil.NoSuchProcess:
-                        continue
-
-            if conn.status == 'TIME_WAIT':
-                time.sleep(60)
-
-        gc.collect()
-        time.sleep(3)
-        retries += 1
-
-    raise RuntimeError(f"Port {port} is still in use after {max_retries} retries.")

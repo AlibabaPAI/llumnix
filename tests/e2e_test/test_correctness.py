@@ -21,12 +21,12 @@ import pytest
 import aiohttp
 import torch
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path
+from llumnix.utils import get_ip_address, try_convert_to_local_path, wait_port_free
 
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env, cleanup_ray_env_func
-from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command, wait_port_free,
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
                                   wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                                   shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
                                   generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,

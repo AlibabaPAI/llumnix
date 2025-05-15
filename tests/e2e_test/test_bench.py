@@ -21,13 +21,13 @@ import pytest
 import torch
 import numpy as np
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path
+from llumnix.utils import get_ip_address, try_convert_to_local_path, wait_port_free
 
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env
 from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
-                    wait_for_llumnix_service_ready, shutdown_llumnix_service, wait_port_free,
+                    wait_for_llumnix_service_ready, shutdown_llumnix_service,
                     generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
                     generate_bladellm_serve_command)
 

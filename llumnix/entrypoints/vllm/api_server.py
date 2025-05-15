@@ -217,7 +217,7 @@ if __name__ == "__main__":
         config = uvicorn.Config(app,
             host=entrypoints_args.host,
             port=entrypoints_args.port,
-            log_level=entrypoints_args.log_level,
+            log_level=entrypoints_args.server_log_level,
             timeout_keep_alive=SERVER_TIMEOUT_KEEP_ALIVE,
             ssl_keyfile=entrypoints_args.ssl_keyfile,
             ssl_certfile=entrypoints_args.ssl_certfile

@@ -42,7 +42,8 @@ class Server:
 
     async def get_request_outputs_loop(self, request_output_queue):
         while True:
-            request_outputs = await request_output_queue.get()
+            request_outputs_engine = await request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
             for request_output in request_outputs:
                 self.zmq_rpc_latencies.append(time.time() - request_output.send_time)
                 if request_output.finished:

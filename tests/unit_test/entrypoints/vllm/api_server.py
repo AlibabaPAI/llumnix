@@ -44,7 +44,7 @@ class MockManager:
         request_output.request_timestamps = RequestTimestamps()
         await self.request_output_queue.put_nowait([request_output], server_info)
 
-    async def abort(self, request_id):
+    async def abort(self, request_id, instance_id):
         self._num_aborts += 1
 
     def testing_stats(self):

@@ -14,13 +14,25 @@
 import asyncio
 import random
 from typing import Dict, List
-from blade_llm.protocol import GenerateStreamResponse, Token, TokenUsage
+import time
+
 import pytest
+import ray
+from unittest.mock import MagicMock
+
+from blade_llm.protocol import GenerateStreamResponse, Token, TokenUsage
+
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
+from llumnix.utils import random_uuid
+from llumnix.request_output_info import RequestOutputInfo
+from llumnix.ray_utils import get_instance_name
+
+# pylint: disable=unused-import
+from tests.conftest import ray_env
 
 
 class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
-    def __init__(self):  # pylint: disable=super-init-not-called
+    def __init__(self, loop = None):  # pylint: disable=super-init-not-called
         self.entrypoint_id2llumnix_id = {}  # int32 -> int32
 
         self.request_streams: Dict[int, asyncio.Queue] = {}
@@ -30,6 +42,14 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.num_finished_requests = 0
         self.manager_available = True
 
+        self.request_output_queue = asyncio.Queue()
+        self.llumnix_id2entrypoint_id = {}
+        self.entrypoint_id2llumnix_id = {}
+        self.request_instance = {}
+        self.global_instances = {}
+        if loop:
+            loop.create_task(self.get_request_outputs_loop())
+
     def _process_output_order(
         self, request_id: int, request_output: GenerateStreamResponse
     ) -> List[GenerateStreamResponse]:
@@ -38,6 +58,24 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
             self.request_streams_last_completion_tokens[request_id] = \
                 res[-1].usage.completion_tokens
         return res
+
+    # pylint: disable=arguments-differ,invalid-overridden-method
+    async def _add_request(self, request_id):
+        self.llumnix_id2entrypoint_id[request_id] = request_id
+        self.entrypoint_id2llumnix_id[request_id] = request_id
+        self.request_streams[request_id] = asyncio.Queue()
+
+
+@ray.remote(num_cpus=0)
+class MockLlumlet:
+    def __init__(self):
+        self.num_aborts = 0
+
+    def abort(self, request_id):
+        self.num_aborts += 1
+
+    def get_num_aborts(self):
+        return self.num_aborts
 
 
 def get_correct_order_output(length: int = 1000, contain_block: bool = False):
@@ -147,3 +185,56 @@ def test_out_of_order_output(contain_block, is_finished_flag_at_last_output):
         ):
             res.extend(client._process_output_order(request_id, request_output))
         check_processed_output(res, output_length)
+
+
+@pytest.mark.asyncio
+async def test_drop_request(ray_env):
+    client = MockLlumnixClientBladeLLM(loop=asyncio.get_event_loop())
+    # yield to run get_request_outputs_loop and run_server_loop
+    await asyncio.sleep(3.0)
+
+    request_id = random.randint(0, 1024)
+    # Add request_id to request_streams for get_request_outputs_loop.
+    await client._add_request(request_id)
+    instance_id = random_uuid()
+
+    # test no instance_id case
+    instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
+    assert instance_id_returned is None and instance_returned is None
+
+    request_output = GenerateStreamResponse(req_id=request_id)
+    request_output_info = RequestOutputInfo(instance_id=instance_id)
+    await client.request_output_queue.put([(request_output.model_dump_json(), request_output_info)])
+    # yield to get request outputs
+    await asyncio.sleep(3.0)
+
+    # test no instance case
+    assert request_id in client.request_instance and client.request_instance[request_id] == instance_id
+    instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
+    assert instance_id_returned == instance_id and instance_returned is None
+
+    instance = MockLlumlet.options(name=get_instance_name(instance_id),
+                                   namespace="llumnix").remote()
+
+    # test correct case
+    instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
+    assert instance_id_returned == instance_id and instance_returned == instance
+    await client.drop_request(request_id)
+    time.sleep(3.0)
+    assert client.global_instances[instance_id] == instance
+    num_aborts = ray.get(instance.get_num_aborts.remote())
+    assert num_aborts == 1
+
+    request_output.is_finished = True
+    client._process_output_order = MagicMock()
+    client._process_output_order.return_value = [request_output]
+    await client.request_output_queue.put([(request_output.model_dump_json(), request_output_info)])
+    # yield to get request outputs
+    await asyncio.sleep(3.0)
+    # test request states
+    assert request_id not in client.request_streams and \
+        request_id not in client.request_streams_last_completion_tokens and \
+        request_id not in client.request_instance and \
+        request_id not in client.request_streams_output_stash and \
+        request_id not in client.llumnix_id2entrypoint_id and \
+        request_id not in client.entrypoint_id2llumnix_id

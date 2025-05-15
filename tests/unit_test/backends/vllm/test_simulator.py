@@ -107,11 +107,12 @@ async def test_backend(ray_env):
         finished = False
         output = None
         while not finished:
-            request_outputs = await request_output_queue.get()
+            request_outputs_engine = await request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
             for request_output in request_outputs:
                 output = request_output.outputs[0]
                 finished = request_output.finished
-        assert output is not None and len(output.token_ids)==100
+        assert output is not None and len(output.token_ids) == 100
 
     await check_output_len()
 

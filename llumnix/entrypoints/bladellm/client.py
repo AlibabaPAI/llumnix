@@ -36,7 +36,7 @@ from llumnix.metrics.timestamps import set_timestamp
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
-from llumnix.ray_utils import execute_actor_method_async_with_retries
+from llumnix.ray_utils import execute_actor_method_async_with_retries, get_instance
 from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.entrypoints.api_server_actor import APIServerActor
 
@@ -61,6 +61,8 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.entrypoint_id2llumnix_id = {} # int32 -> int32
         self.llumnix_id2entrypoint_id = {} # int32 -> int32
         self.request_streams: Dict[int, asyncio.Queue] = {}
+        self.request_instance: Dict[str, str] = {}
+        self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.request_streams_last_completion_tokens: Dict[str, int] = {}
         self.request_streams_output_stash: Dict[str, list[GenerateStreamResponse]] = {}
         self.instance_num_requests: Dict[str, int] = {}
@@ -87,7 +89,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         return resp_stream
 
     async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
-        logger.info("Client add request: {}".format(request_id))
+        logger.info("Client received request {}".format(request_id))
         results_queue = asyncio.Queue()
         self.request_streams[request_id] = results_queue
         server_info_copy = copy.deepcopy(self.server_info)
@@ -163,13 +165,36 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
 
     async def drop_request(self, req_id: int) -> None:
         llumnix_id = self.entrypoint_id2llumnix_id.get(req_id, None)
-        if llumnix_id:
-            logger.info("Drop request: {}.".format(req_id))
-            await execute_actor_method_async_with_retries(
-                self.manager.abort.remote, "Manager", "abort", str(req_id)
-            )
-            self.entrypoint_id2llumnix_id.pop(req_id, None)
-            self.request_streams.pop(llumnix_id, None)
+        if llumnix_id is None:
+            instance_id, instance = None, None
+        else:
+            instance_id, instance = self._get_instance_for_abort(llumnix_id)
+        if instance:
+            self.global_instances[instance_id] = instance
+            logger.info("Abort request {} (instance_id: {}).".format(llumnix_id, instance_id))
+            try:
+                await asyncio_wait_for_with_timeout(instance.abort.remote(llumnix_id))
+            except Exception as e: # pylint: disable=broad-except
+                if isinstance(e, ray.exceptions.RayActorError):
+                    logger.info("Instance {} is dead.".format(instance_id))
+                elif isinstance(e, asyncio.TimeoutError):
+                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
+                else:
+                    logger.exception("Failed to abort request {} of instance {}, "
+                                     "unexpected exception: {}".format(llumnix_id, instance_id, e))
+        else:
+            logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
+                llumnix_id, instance_id, instance))
+
+    def _get_instance_for_abort(self, request_id: str) -> Tuple[str, Llumlet]:
+        instance_id = self.request_instance.get(request_id, None)
+        if instance_id is None:
+            instance = None
+        else:
+            instance = self.global_instances[instance_id] \
+                if instance_id in self.global_instances else get_instance(instance_id)
+
+        return instance_id, instance
 
     async def is_ready(self) -> bool:
         return await execute_actor_method_async_with_retries(
@@ -178,28 +203,36 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
 
     async def get_request_outputs_loop(self):
         while True:
-            request_output_jsons = await self.request_output_queue.get()
-            if request_output_jsons is None:
+            request_outputs_engine = await self.request_output_queue.get()
+            if request_outputs_engine is None:
                 continue
-            for request_output_json in request_output_jsons:
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            request_output_infos = [request_output_info for _, request_output_info in request_outputs_engine]
+            for request_output_json, request_output_info in zip(request_outputs, request_output_infos):
                 request_output = GenerateStreamResponse(**json.loads(request_output_json))
                 request_id = request_output.req_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
+                self.request_instance[request_id] = request_output_info.instance_id
                 processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
                 for req in processed_output:
                     self.request_streams[request_id].put_nowait(req)
                 self.request_streams_last_completion_tokens[request_id] = processed_output[-1].usage.completion_tokens
-                if processed_output[-1].is_finished:
-                    logger.debug("Client finish request {}".format(request_id))
-                    entrypoint_id = self.llumnix_id2entrypoint_id.pop(request_id, -1)
-                    self.entrypoint_id2llumnix_id.pop(entrypoint_id, None)
-                    del self.request_streams[request_id]
-                    self.request_streams_last_completion_tokens.pop(request_id, None)
-                    self.request_streams_output_stash.pop(request_id, None)
+                if processed_output[-1].is_finished or not processed_output[-1].is_ok:
+                    logger.debug("Client finished request {}, is_finished: {}, is_ok: {}".format(
+                        request_id, processed_output[-1].is_finished, processed_output[-1].is_ok))
+                    self._clear_client_request_states(request_id)
+
+    def _clear_client_request_states(self, request_id: str):
+        entrypoint_id = self.llumnix_id2entrypoint_id.pop(request_id, -1)
+        self.entrypoint_id2llumnix_id.pop(entrypoint_id, None)
+        self.request_streams.pop(request_id, None)
+        self.request_streams_last_completion_tokens.pop(request_id, None)
+        self.request_streams_output_stash.pop(request_id, None)
+        self.request_instance.pop(request_id, None)
 
     def _process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
         current_completion_tokens = None

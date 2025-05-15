@@ -60,6 +60,7 @@ from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.request_output_info import RequestOutputInfo
 
 logger = init_logger(__name__)
 
@@ -160,7 +161,8 @@ class AsyncBackQueueWrapper:
         # Reorganize data in order to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            server_request_outputs[server_id].append(request_output.model_dump_json())
+            request_output_info = RequestOutputInfo(instance_id=self.instance_id)
+            server_request_outputs[server_id].append((request_output.model_dump_json(), request_output_info))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         if server_info_dict:
@@ -373,9 +375,6 @@ class AsyncLLMEngineLlumnixMixin:
     # metrics
     def get_num_trans_wrapper_cached_request(self):
         return len(self.trans_wrapper.request_server_map)
-
-    def get_all_request_ids(self) -> List[int]:
-        return list(self._scheduler.get_all_request_ids())
 
     def get_num_wait_update_request_ids(self) -> int:
         return self.request_barriers.qsize()
@@ -596,9 +595,6 @@ class BackendBladeLLM(BackendInterface):
         request_ids = set(request_id)
         for req_id in request_ids:
             self.engine.drop_request(int(req_id))
-
-    def get_all_request_ids(self) -> List[int]:
-        return self.engine.scheduler.get_all_request_ids()
 
     # -------------- migration related method --------------
 

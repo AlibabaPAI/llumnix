@@ -16,7 +16,6 @@ import time
 import csv
 import os
 from typing import Dict, List, Tuple, Union, Iterable
-from collections import defaultdict
 from functools import partial
 
 import ray
@@ -41,8 +40,7 @@ from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.constants import (CLEAR_REQUEST_INSTANCE_INTERVAL, NO_INSTANCE_RETRY_GENERATE_INTERVAL,
-                               WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
+from llumnix.constants import NO_INSTANCE_RETRY_GENERATE_INTERVAL, WAIT_ALL_MIGRATIONS_DONE_INTERVAL
 from llumnix.scaler import Scaler
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.api_server_actor import APIServerActor
@@ -133,10 +131,6 @@ class Manager:
         self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
 
-        # request states
-        # TODO(tongchenghao): need to save decode instance when p-d disaggregation
-        self.request_instance: Dict[str, str] = {}
-
         # migration states
         self.num_instance_info_updates = 0
         self.migrating = False
@@ -151,7 +145,6 @@ class Manager:
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
-        asyncio.create_task(self._clear_request_instance_loop(CLEAR_REQUEST_INSTANCE_INTERVAL))
 
     async def generate(self, request_id: str, server_info: ServerInfo, *args, **kwargs) -> None:
         while self.num_instances == 0:
@@ -185,41 +178,6 @@ class Manager:
             logger.info("dispath request {} to instance {}".format(request_id, prefill_instance_id))
             if self.manager_args.enable_engine_pd_disagg:
                 logger.info("dispatch request {} to decode instance {}".format(request_id, decode_instance_id))
-                self.request_instance[request_id] = decode_instance_id
-            else:
-                self.request_instance[request_id] = prefill_instance_id
-
-    async def abort(self, request_id: Union[str, Iterable[str]]) -> None:
-        if isinstance(request_id, str):
-            request_id = (request_id,)
-        request_ids = set(request_id)
-        instance_requests = defaultdict(list)
-        for req_id in request_ids:
-            # Requests will be free by instance when finished, so it is acceptable to miss aborted requests.
-            if req_id in self.request_instance:
-                instance_id = self.request_instance[req_id]
-                instance_requests[instance_id].append(req_id)
-        for instance_id, request_ids in instance_requests.items():
-            try:
-                asyncio.create_task(
-                    asyncio_wait_for_with_timeout(
-                        async_wrapper(
-                            self.instances[instance_id].abort.remote, request_ids
-                        )
-                    )
-                )
-            # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Failed to abort request {} by instance {}, unexcepted exception: {}".format(
-                    request_id, instance_id, e))
-                self.scale_down(instance_id)
-            if self.log_requests:
-                logger.info("Abort requests: {}.".format(request_ids))
-            for req_id in request_ids:
-                if req_id in self.request_instance:
-                    del self.request_instance[req_id]
-                else:
-                    logger.warning("request {} is not in request_instance".format(req_id))
 
     @classmethod
     def from_args(cls,
@@ -342,7 +300,7 @@ class Manager:
                         except Exception as e: # pylint: disable=broad-except
                             if isinstance(e, ray.exceptions.RayActorError):
                                 logger.info("Instance {} is dead.".format(instance_id))
-                            elif isinstance(ret, asyncio.TimeoutError):
+                            elif isinstance(e, asyncio.TimeoutError):
                                 logger.error("Instance {} is hang, please check the cause.".format(instance_id))
                             else:
                                 logger.exception("Failed to clear migration states of instance {}, "
@@ -354,9 +312,6 @@ class Manager:
                         await self.scale_down(instance_id)
             else:
                 migrate_out_request_ids = ret
-                if migrate_out_request_ids:
-                    migrate_out_request_id = migrate_out_request_ids[0]
-                    self.request_instance[migrate_out_request_id] = migrate_instance_pair[1]
                 if not self.enable_pd_disagg:
                     logger.info("Instance {}->{} migrate done, migrate request {}".format(
                         migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
@@ -699,46 +654,6 @@ class Manager:
         await asyncio.gather(*tasks, return_exceptions=True)
 
         return results
-
-    async def _get_request_instance(self) -> None:
-        async def get_request_instance_done_callback(instance_id: str, fut):
-            ret = fut.result()[0]
-            if not isinstance(ret, Exception):
-                instance_requests.append(ret)
-                instance_ids.append(instance_id)
-            else:
-                if isinstance(ret, ray.exceptions.RayActorError):
-                    logger.info("Instance {} is dead.".format(instance_id))
-                if isinstance(ret, asyncio.TimeoutError):
-                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
-                else:
-                    logger.exception("Failed to get request_instance of instance {}, "
-                                     "unexpected exception: {}".format(instance_id, ret))
-                await self.scale_down(instance_id)
-
-        instance_requests = []
-        instance_ids = []
-        tasks = []
-        for instance_id, instance_actor_handle in self.instances.items():
-            task = asyncio.gather(
-                asyncio_wait_for_with_timeout(instance_actor_handle.get_all_request_ids.remote()),
-                return_exceptions=True
-            )
-            task.add_done_callback(partial(get_request_instance_done_callback, instance_id))
-            tasks.append(task)
-        await asyncio.gather(*tasks, return_exceptions=True)
-        logger.debug("instance_ids: {}".format(instance_ids))
-        logger.debug("instance_requests: {}".format(instance_requests))
-        for (instance_id, requests) in zip(instance_ids, instance_requests):
-            for request_id in requests:
-                self.request_instance[request_id] = instance_id
-
-    async def _clear_request_instance_loop(self, interval: float):
-        await self._get_request_instance()
-        # Clear the request_instance at a certain interval to prevent memory leaking.
-        while True:
-            await asyncio.sleep(interval)
-            self.request_instance = {}
 
     def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:
         # pylint: disable=consider-using-with

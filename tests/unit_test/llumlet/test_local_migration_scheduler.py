@@ -15,6 +15,7 @@ import math
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
+
 class MockRequest(LlumnixRequest):
     def __init__(self, request_id, length, expected_steps, status=RequestStatus.RUNNING) -> None:
         super().__init__(request_id=request_id, server_info=None, expected_steps=expected_steps)
@@ -69,6 +70,7 @@ class MockRequest(LlumnixRequest):
     def block_size(self) -> int:
         pass
 
+
 class MockeEngine():
     def __init__(self) -> None:
         self.running = []
@@ -87,6 +89,7 @@ class MockeEngine():
 
     def get_waiting_queue(self):
         return self.waiting
+
 
 def test_scheduler_policy():
     engine = MockeEngine()

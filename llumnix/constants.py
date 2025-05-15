@@ -28,7 +28,6 @@ MODEL_PATH: str = '/mnt/model'
 DATASET_PATH: str = '/mnt/dataset'
 
 # llumnix/manager.py
-CLEAR_REQUEST_INSTANCE_INTERVAL: float = 1000.0
 NO_INSTANCE_RETRY_GENERATE_INTERVAL: float = 1.0
 WAIT_ALL_MIGRATIONS_DONE_INTERVAL: float = 0.1
 AUTO_SCALE_UP_INTERVAL: float = 1.0

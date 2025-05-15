@@ -69,7 +69,8 @@ server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue,
 async def background_process_outputs(num_tasks):
     finish_task = 0
     while finish_task != num_tasks:
-        request_outputs = await request_output_queue.get()
+        request_outputs_engine = await request_output_queue.get()
+        request_outputs = [request_output for request_output, _ in request_outputs_engine]
         for request_output in request_outputs:
             if request_output.finished:
                 finish_task += 1

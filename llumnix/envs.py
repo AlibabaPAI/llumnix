@@ -62,6 +62,12 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("MODEL_PATH", ""),
     "DATASET_PATH":
     lambda: os.getenv("DATASET_PATH", ""),
+
+    # used for scale up
+    "SERVER_READY_TIMEOUT":
+    lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", "60"),
+    "INSTANCE_READY_TIMEOUT":
+    lambda: os.getenv("LLUMNIX_INSTANCE_READY_TIMEOUT", "300"),
 }
 
 

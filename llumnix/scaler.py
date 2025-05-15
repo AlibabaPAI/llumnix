@@ -14,7 +14,7 @@
 import asyncio
 import copy
 import random
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Union, Iterable
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -29,7 +29,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs, LlumnixEngineArgsFactory
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.utils import (get_service_resouces, random_uuid,
-                           get_service_instance_type)
+                           get_service_instance_type, asyncio_wait_for_with_timeout)
 from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get_server_name,
                                get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
                                get_scaler_name, get_placement_group_name,
@@ -44,6 +44,7 @@ from llumnix.constants import (INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT,
                                CHECK_DEPLOYMENT_STATES_INTERVAL, WATCH_DEPLOYMENT_INTERVAL)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.ray_utils import clear_gloo_backend_ray_resources
 
 logger = init_logger(__name__)
 
@@ -173,7 +174,7 @@ class Scaler:
                 instance_id = pending_pg_info["name"].split("_")[-1]
                 if new_pg is not None and instance_id == new_instance_id:
                     continue
-                self.clear_instance_ray_resources(instance_id)
+                await self.clear_instance_ray_resources(instance_id)
             alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
             alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
             alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
@@ -207,8 +208,21 @@ class Scaler:
                         "instance_id: {}.".format(new_instance_id))
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
-        async def watch_instance_deployment_states(instance_id: str):
-            # There might be some delays of calling _init_server_and_instance, so sleep first.
+        async def watch_instance_deployment_states(instance_id: str, server_exists: bool, instance_exists: bool):
+            # Waiting for _init_server_and_instance scheduled.
+            if not server_exists and not instance_exists:
+                await asyncio.sleep(1.0)
+            # Server is initialized after instance is ready, so waiting for instance ready first.
+            if not server_exists and instance_exists:
+                instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+                try:
+                    await asyncio_wait_for_with_timeout(instance.is_ready.remote())
+                # Instance exception could be handled by manager, so check states loop omits exception case here.
+                # pylint: disable=bare-except
+                except:
+                    return
+            logger.info("watch instance {} deployment states, server_exists: {}, instance_exists: {}".format(
+                instance_id, server_exists, instance_exists))
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
             pg_created, server_exists, instance_exists = self._get_instance_deployment_states(instance_id)
             if pg_created and (not server_exists or not instance_exists):
@@ -221,14 +235,21 @@ class Scaler:
         # If encounter error during check loop, to make scaler keep running, we do not raise exception.
         while True:
             try:
+                # Not check right after scaler initialized, so sleep at the beginning.
+                await asyncio.sleep(interval)
                 curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
                 assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
                 tasks = []
                 for instance_id in curr_pgs:
-                    if instance_id not in curr_servers or instance_id not in curr_instances:
-                        tasks.append(asyncio.create_task(watch_instance_deployment_states(instance_id)))
+                    server_exists = instance_id in curr_servers
+                    instance_exists = instance_id in curr_instances
+                    if not server_exists or not instance_exists:
+                        tasks.append(
+                            asyncio.create_task(
+                                watch_instance_deployment_states(instance_id, server_exists, instance_exists)
+                            )
+                        )
                 await asyncio.gather(*tasks, return_exceptions=True)
-                await asyncio.sleep(interval)
             # pylint: disable=broad-except
             except Exception as e:
                 logger.exception("Error during check deployment states loop, "
@@ -291,34 +312,25 @@ class Scaler:
 
         return scale_down_instance_id
 
-    def _get_cluster_deployment_states(self) -> Tuple[Dict[str, PlacementGroup], Dict[str, APIServerActor], Dict[str, Llumlet]]:
-        curr_pgs: Dict[str, PlacementGroup] = {}
-        curr_servers: Dict[str, PlacementGroup] = {}
-        curr_instances: Dict[str, Llumlet] = {}
+    def _get_cluster_deployment_states(self) -> Tuple[List[str], List[str], List[str]]:
+        curr_pgs: List[str] = []
+        curr_servers: List[str] = []
+        curr_instances: List[str] = []
 
         created_pg_infos = get_placement_group_infos_by_state(state="CREATED")
         for created_pg_info in created_pg_infos:
             instance_id = created_pg_info["name"].split("_")[-1]
-            try:
-                curr_pgs[instance_id] = ray.util.get_placement_group(created_pg_info["name"])
-            except ValueError:
-                continue
+            curr_pgs.append(instance_id)
 
         curr_server_names = get_actor_names_by_name_prefix(name_prefix=SERVER_NAME_PREFIX)
         for curr_server_name in curr_server_names:
             instance_id = curr_server_name.split("_")[-1]
-            try:
-                curr_servers[instance_id] = ray.get_actor(curr_server_name, namespace="llumnix")
-            except ValueError:
-                continue
+            curr_servers.append(instance_id)
 
         curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
         for curr_instance_name in curr_instance_names:
             instance_id = curr_instance_name.split("_")[-1]
-            try:
-                curr_instances[instance_id] = ray.get_actor(curr_instance_name, namespace="llumnix")
-            except ValueError:
-                continue
+            curr_instances.append(instance_id)
 
         return curr_pgs, curr_servers, curr_instances
 
@@ -361,14 +373,17 @@ class Scaler:
                                         placement_group: PlacementGroup,
                                         instance_type: InstanceType = None):
         async def done_scale_up(instance_id: str, instance: Llumlet,
-                                instance_type: InstanceType, placement_group: PlacementGroup,
-                                server: ray.actor.ActorHandle):
+                                instance_type: InstanceType, next_entrypoints_args: EntrypointsArgs,
+                                next_engine_args: LlumnixEngineArgs):
             try:
                 instance_ready = False
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
                 instance_ready = True
-                # Run server until instance is ready.
-                await asyncio.wait_for(server.run.remote(self.manager, instance_id, instance), timeout=SERVER_READY_TIMEOUT)
+                # Initialize server after instance is ready.
+                server = self._init_server(instance_id, placement_group, backend_type,
+                                           next_entrypoints_args, next_engine_args,
+                                           self.manager, instance)
+                await asyncio.wait_for(server.is_ready.remote(), timeout=SERVER_READY_TIMEOUT)
                 await execute_actor_method_async_with_retries(
                     self.manager.scale_up.remote, 'Manager', 'scale_up',
                     instance_id, instance, instance_type, placement_group, server
@@ -384,7 +399,7 @@ class Scaler:
                         logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
                 else:
                     logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
-                self.clear_instance_ray_resources(instance_id)
+                await self.clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
                 self.inflight_num_decode_instances -= 1 if instance_type == InstanceType.DECODE else 0
@@ -404,24 +419,28 @@ class Scaler:
             request_output_queue_type,
             next_engine_args,
         )
-        server = self._init_server(get_server_name(instance_id), placement_group, backend_type, next_entrypoints_args, next_engine_args)
 
         self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
         self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
-        asyncio.create_task(done_scale_up(instance_id, instance, next_instance_args.instance_type, placement_group, server))
+        asyncio.create_task(done_scale_up(instance_id, instance, next_instance_args.instance_type,
+                                          next_entrypoints_args, next_engine_args))
 
     def _init_server(self,
-                     server_name: str,
+                     instance_id: str,
                      placement_group: PlacementGroup,
                      backend_type: BackendType,
                      entrypoints_args: EntrypointsArgs,
-                     engine_args) -> APIServerActor:
+                     engine_args,
+                     manager: ray.actor.ActorHandle,
+                     instance: ray.actor.ActorHandle) -> APIServerActor:
         if backend_type == BackendType.BLADELLM:
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM # pylint: disable=import-outside-toplevel
-            api_server = APIServerActorBladeLLM.from_args(NUM_GPUS_BLADELLM_GPU_ACTOR, server_name, placement_group, entrypoints_args, engine_args)
+            api_server = APIServerActorBladeLLM.from_args(NUM_GPUS_BLADELLM_GPU_ACTOR, instance_id, placement_group,
+                                                          entrypoints_args, engine_args, manager, instance)
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
-            api_server = APIServerActorVLLM.from_args(0, server_name, placement_group, entrypoints_args, engine_args)
+            api_server = APIServerActorVLLM.from_args(0, instance_id, placement_group, entrypoints_args, engine_args,
+                                                      manager, instance)
 
         return api_server
 
@@ -457,7 +476,7 @@ class Scaler:
                 )
             except asyncio.TimeoutError:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
-                self.clear_instance_ray_resources(instance_id)
+                await self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
                     logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
@@ -466,7 +485,7 @@ class Scaler:
                                  "instance is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
                 else:
                     logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
-                self.clear_instance_ray_resources(instance_id)
+                await self.clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []
         instances: List[Llumlet] = []
@@ -501,13 +520,17 @@ class Scaler:
 
         return instance_ids, instances
 
-    def clear_instance_ray_resources(self, instance_id: str):
-        # There could be multiple clear_instance_ray_resources calls for one error instance,
-        # so the kill operations could be failed if it is not the first attempt to kill.
-        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
-            kill_server(instance_id)
-        kill_instance(instance_id)
-        remove_placement_group(instance_id)
+    async def clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]]):
+        if isinstance(instance_id, str):
+            instance_id = [instance_id,]
+        instance_ids = list(instance_id)
+        for ins_id in instance_ids:
+            # There could be multiple clear_instance_ray_resources calls for one error instance,
+            # so the kill operations could be failed if it is not the first attempt to kill.
+            if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
+                await kill_server(ins_id)
+            await kill_instance(ins_id)
+            remove_placement_group(ins_id)
 
     async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
         if (
@@ -582,3 +605,6 @@ class Scaler:
                     else InstanceType.DECODE
 
         return instance_type
+
+    def clear_gloo_backend_ray_resources(self):
+        clear_gloo_backend_ray_resources()

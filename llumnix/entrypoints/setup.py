@@ -184,7 +184,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
     return manager, available_instance_ids, available_instances, request_output_queue
 
 def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances,
-                              request_output_queue: QueueServerBase) -> EntrypointsContext:
+                              request_output_queue, server=None) -> EntrypointsContext:
     instances_dict: Dict[str, Llumlet] = {}
     for idx, ins_id in enumerate(instance_ids):
         instances_dict[ins_id] = instances[idx]
@@ -203,6 +203,7 @@ def setup_entrypoints_context(entrypoints_args, manager, instance_ids, instances
     entrypoints_context = EntrypointsContext(manager,
                                              instances_dict,
                                              request_output_queue,
+                                             server,
                                              server_info,
                                              log_requests,
                                              log_request_timestamps)

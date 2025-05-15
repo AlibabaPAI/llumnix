@@ -88,7 +88,6 @@ class ZmqClient(QueueClientBase):
         self.context = zmq.asyncio.Context(ZMQ_IO_THREADS)
         self.socket_factory: ZmqSocketFactory = ZmqSocketFactory(context=self.context)
 
-    # This function is not called explicitly.
     def close(self):
         self.socket_factory.close_all_sockets()
         self.context.destroy()

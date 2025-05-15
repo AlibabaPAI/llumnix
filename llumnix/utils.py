@@ -38,6 +38,8 @@ _MAX_PORT = 65536
 P = ParamSpec('P')
 T = TypeVar("T")
 
+logger = init_logger(__name__)
+
 
 def random_uuid() -> str:
     return str(uuid.uuid4().hex)
@@ -251,3 +253,6 @@ def ray_get_with_timeout(object_refs, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **
 
 def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
     return asyncio.wait_for(fut, *args, timeout=timeout, **kwargs)
+
+async def async_wrapper(ray_call, *args, **kwargs):
+    return await ray_call(*args, **kwargs)

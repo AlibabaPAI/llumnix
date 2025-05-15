@@ -19,12 +19,14 @@ class EntrypointsContext:
                  manager: "Manager",
                  instances: Dict[str, "Llumlet"],
                  request_output_queue: "QueueServerBase",
+                 server: "APIServerActor",
                  server_info: "ServerInfo",
                  log_requests: bool,
                  log_request_timestamps: bool):
         self.manager = manager
         self.instances = instances
         self.request_output_queue = request_output_queue
+        self.server = server
         self.server_info = server_info
         self.log_requests = log_requests
         self.log_request_timestamps = log_request_timestamps

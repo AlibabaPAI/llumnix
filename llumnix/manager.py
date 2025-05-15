@@ -33,9 +33,10 @@ from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs, LlumnixEngineArgs
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import random_uuid, run_coroutine_in_new_thread, ray_get_with_timeout, asyncio_wait_for_with_timeout
-from llumnix.ray_utils import (clear_gloo_backend_ray_resources, get_manager_name, INSTANCE_NAME_PREFIX,
-                               get_placement_group_name, log_actor_ray_info, execute_actor_method_async_with_retries)
+from llumnix.utils import (random_uuid, run_coroutine_in_new_thread, async_wrapper,
+                           ray_get_with_timeout, asyncio_wait_for_with_timeout)
+from llumnix.ray_utils import (get_manager_name, INSTANCE_NAME_PREFIX, get_placement_group_name,
+                               log_actor_ray_info, execute_actor_method_async_with_retries)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_server_base import QueueServerBase
@@ -165,14 +166,20 @@ class Manager:
                 decode_instance_id, None
             )
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
-        # TODO(s5u13b): Still contains serialization cost, optimize it.
         try:
-            self.instances[prefill_instance_id].generate.remote(request_id, server_info, request_expected_steps, *args, **kwargs)
+            asyncio.create_task(
+                asyncio_wait_for_with_timeout(
+                    async_wrapper(
+                        self.instances[prefill_instance_id].generate.remote, request_id, server_info, request_expected_steps, *args, **kwargs
+                    )
+                )
+            )
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Failed to generate request {} by instance {}, unexcepted exception: {}".format(
                 request_id, prefill_instance_id, e))
             self.scale_down(prefill_instance_id)
+            await asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
         if self.log_requests:
             logger.info("manager receive request {}".format(request_id))
             logger.info("dispath request {} to instance {}".format(request_id, prefill_instance_id))
@@ -193,9 +200,14 @@ class Manager:
                 instance_id = self.request_instance[req_id]
                 instance_requests[instance_id].append(req_id)
         for instance_id, request_ids in instance_requests.items():
-            # TODO(s5u13b): Still contains serialization cost, optimize it.
             try:
-                self.instances[instance_id].abort.remote(request_ids)
+                asyncio.create_task(
+                    asyncio_wait_for_with_timeout(
+                        async_wrapper(
+                            self.instances[instance_id].abort.remote, request_ids
+                        )
+                    )
+                )
             # pylint: disable=broad-except
             except Exception as e:
                 logger.exception("Failed to abort request {} by instance {}, unexcepted exception: {}".format(
@@ -496,9 +508,17 @@ class Manager:
         if self.enable_migration and self.is_group_kind_migration_backend:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
-                clear_gloo_backend_ray_resources()
+                await execute_actor_method_async_with_retries(
+                    self.scaler.clear_gloo_backend_ray_resources.remote, 'Scaler', 'clear_gloo_backend_ray_resources',
+                )
             elif indeed_update and no_pending_instance and rebuild_migration_backend and not self.instance_args.simulator_mode:
                 asyncio.create_task(self._rebuild_migration_backend())
+
+        asyncio.create_task(
+            execute_actor_method_async_with_retries(
+                self.scaler.clear_instance_ray_resources.remote, 'Scaler', 'clear_instance_ray_resources', instance_ids
+            )
+        )
 
         return self.num_instances
 
@@ -546,20 +566,24 @@ class Manager:
                     dead_instances.add(instance_name)
             if len(dead_instances) > 0:
                 await self.scale_down(dead_instances, rebuild_migration_backend=False)
-                clear_gloo_backend_ray_resources()
+                await execute_actor_method_async_with_retries(
+                    self.scaler.clear_gloo_backend_ray_resources.remote, 'Scaler', 'clear_gloo_backend_ray_resources',
+                )
             return dead_instances
 
         alive_instances = sorted(self.instances.keys())
         pending_task = self.pending_rebuild_migration_instances
         group_name = None
-        clear_gloo_backend_ray_resources()
+        await execute_actor_method_async_with_retries(
+            self.scaler.clear_gloo_backend_ray_resources.remote, 'Scaler', 'clear_gloo_backend_ray_resources',
+        )
 
         while len(alive_instances) > 0 and self.pending_rebuild_migration_instances > 0:
             dead_instances = set()
             group_name = random_uuid()
             instance_rank = {instance_id: index for index, instance_id in enumerate(alive_instances)}
-            dead_instances.update(await run_task(alive_instances, "rebuild_migration_backend",
-                                                                  instance_rank, group_name))
+            dead_instances.update(await run_task(
+                alive_instances, "rebuild_migration_backend", instance_rank, group_name))
             if len(dead_instances) == 0 and self.pending_rebuild_migration_instances == pending_task:
                 dead_instances.update(await run_task(alive_instances, "warmup"))
             if len(dead_instances) == 0:

@@ -17,6 +17,7 @@ from collections import defaultdict
 import threading
 import asyncio
 import queue
+import gc
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -62,6 +63,10 @@ class LlumnixRequestOutputFactory(RequestOutputFactory):
         return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
 
+class StopPutQueueSignal:
+    pass
+
+
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
@@ -88,6 +93,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.put_queue_loop_thread = threading.Thread(
             target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
         )
+        self.request_output_queue_type = request_output_queue_type
         self.async_put_queue_actor: AsyncPutQueueActor = ray.remote(
             num_cpus=1,
             scheduling_strategy=scheduling_strategy,
@@ -241,7 +247,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         set_timestamp(request_outputs, 'engine_put_queue_timestamp', time.time())
 
         if request_outputs:
-            self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
+            if self.put_queue_loop_thread.is_alive():
+                self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
+            # Ensure engine will die if put queue loop thread is dead.
+            else:
+                raise RuntimeError("Engine put queue loop thread is dead.")
 
         set_timestamp(request_outputs, 'engine_step_postprocess_timestamp_end', time.time())
 
@@ -252,6 +262,16 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # pylint: disable=too-many-function-args
         outputs = await super().step_async(0)
         return self._process_request_outputs(outputs)
+
+    def stop(self) -> None:
+        self.put_queue_args_queue.put(StopPutQueueSignal())
+        self.put_queue_loop_thread.join()
+        try:
+            ray_get_with_timeout(self.async_put_queue_actor.stop.remote())
+        # pylint: disable=broad-except
+        except Exception as e:
+            logger.exception("Failed to stop AsyncPutQueueActor, unexpected exception: {}".format(e))
+        gc.collect()
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
@@ -275,8 +295,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
     def _start_put_queue_loop(self):
         while True:
-            args = self.put_queue_args_queue.get()
-            request_outputs, server_infos = args
+            item = self.put_queue_args_queue.get()
+            if isinstance(item, StopPutQueueSignal):
+                break
+            request_outputs, server_infos = item
             set_timestamp(request_outputs, 'engine_thread_put_queue_timestamp', time.time())
             self._put_request_outputs_to_server(request_outputs, server_infos)
 
@@ -339,7 +361,7 @@ class BackendVLLM(BackendInterface):
                                             placement_group=placement_group)
 
         self.state = EngineState.INIT
-        logger.info("engine ({}) current state {}".format(self.instance_id, self.state))
+        logger.info("engine {} current state: {}".format(self.instance_id, self.state))
 
         self.disable_async_output_proc = engine_args.disable_async_output_proc
 
@@ -359,7 +381,7 @@ class BackendVLLM(BackendInterface):
 
         previous_state = self.state
         self.state = EngineState.RUNNING
-        logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+        logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
 
         while not self._stop_event.is_set():
             try:
@@ -374,15 +396,20 @@ class BackendVLLM(BackendInterface):
             # pylint: disable=broad-except
             except Exception as e:
                 logger.exception("Error in engine loop, unexpected exception: {}".format(e))
-                self._run_workers("shutdown")
+                self.stop()
                 previous_state = self.state
                 self.state = EngineState.CRASHED
-                logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+                logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
                 break
 
         if self.state == EngineState.RUNNING:
+            self.stop()
             self.state = EngineState.STOPPED
-            logger.info("engine ({}) change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+            logger.info("engine {} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+
+    def stop(self):
+        self.engine.stop()
+        logger.info("Engine stops, instance_id: {}".format(self.instance_id))
 
     async def execute_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)

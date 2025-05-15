@@ -30,14 +30,13 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.num_finished_requests = 0
         self.manager_available = True
 
-    def process_output_order(
+    def _process_output_order(
         self, request_id: int, request_output: GenerateStreamResponse
     ) -> List[GenerateStreamResponse]:
-        res = super().process_output_order(request_id, request_output)
+        res = super()._process_output_order(request_id, request_output)
         if res:
-            self.request_streams_last_completion_tokens[request_id] = res[
-                -1
-            ].usage.completion_tokens
+            self.request_streams_last_completion_tokens[request_id] = \
+                res[-1].usage.completion_tokens
         return res
 
 
@@ -127,7 +126,7 @@ def test_correct_order_output(contain_block):
         res = []
 
         for request_output in get_correct_order_output(output_length, contain_block):
-            res.extend(client.process_output_order(request_id, request_output))
+            res.extend(client._process_output_order(request_id, request_output))
 
         check_processed_output(res, output_length)
 
@@ -146,5 +145,5 @@ def test_out_of_order_output(contain_block, is_finished_flag_at_last_output):
             contain_block=contain_block,
             is_finished_flag_at_last_output=True,
         ):
-            res.extend(client.process_output_order(request_id, request_output))
+            res.extend(client._process_output_order(request_id, request_output))
         check_processed_output(res, output_length)

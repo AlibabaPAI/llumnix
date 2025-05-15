@@ -82,6 +82,10 @@ class AsyncPutQueueActor:
                         request_ids.append(reque_output.req_id)
                 await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(request_ids))
 
+    def stop(self):
+        if self.request_output_queue_type == QueueType.ZMQ:
+            self.request_output_queue_client.close()
+
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,
                         request_output_queue_type: QueueType,

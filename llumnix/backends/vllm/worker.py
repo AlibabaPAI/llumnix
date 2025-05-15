@@ -230,8 +230,3 @@ class MigrationWorker(Worker):
 
     def warmup(self) -> bool:
         return self.migration_backend.warmup()
-
-    def shutdown(self) -> None:
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
-        torch.cuda.reset_max_memory_allocated()

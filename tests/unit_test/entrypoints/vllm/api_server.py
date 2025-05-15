@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import argparse
+import asyncio
 
 import uvicorn
 import ray
@@ -68,22 +69,29 @@ def setup_entrypoints_context(request_output_queue_type: QueueType):
     entrypoints_context = EntrypointsContext(manager,
                                              {'0': None},
                                              request_output_queue,
+                                             None,
                                              server_info,
                                              None,
                                              None)
     return entrypoints_context
 
-def run_uvicorn_server(host: str, port: int, entrypoints_context: EntrypointsContext):
-    llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(entrypoints_context)
+def run_server(host: str, port: int, entrypoints_context: EntrypointsContext):
     app = tests.unit_test.entrypoints.vllm.api.app
-
-    uvicorn.run(
+    loop = asyncio.new_event_loop()
+    llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(entrypoints_context, loop)
+    asyncio.set_event_loop(loop)
+    config = uvicorn.Config(
         app,
         host=host,
         port=port,
         log_level="debug",
-        timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE)
-
+        timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE
+    )
+    server = uvicorn.Server(config)
+    try:
+        loop.run_until_complete(server.serve())
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -96,4 +104,4 @@ if __name__ == "__main__":
     manager = MockManager.from_args(request_output_queue_type)
     entrypoints_context = setup_entrypoints_context(request_output_queue_type)
 
-    run_uvicorn_server(entrypoints_args.host, entrypoints_args.port, entrypoints_context)
+    run_server(entrypoints_args.host, entrypoints_args.port, entrypoints_context)

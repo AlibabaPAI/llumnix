@@ -21,9 +21,9 @@ from llumnix.queue.utils import init_request_output_queue_client, QueueType
 from llumnix.ray_utils import get_manager_name
 
 from tests.unit_test.entrypoints.vllm.api_server import (MockManager, setup_entrypoints_context,
-                                                         run_uvicorn_server)
+                                                         run_server)
 
-ENTRYPOINTS_ACTOR_NAME = "entrypoints"
+SERVER_NAME = "server"
 
 
 class MockManagerServer(MockManager):
@@ -33,10 +33,10 @@ class MockManagerServer(MockManager):
         self.request_output_queue = init_request_output_queue_client(
                                         QueueType(entrypoints_args.request_output_queue_type))
         self.server = self.init_server(entrypoints_args)
-        ray.get(self.server.run.remote())
+        ray.get(self.server.is_ready.remote())
 
     def init_server(self, entrypoints_args):
-        server = APIServerActor.options(name=ENTRYPOINTS_ACTOR_NAME,
+        server = APIServerActor.options(name=SERVER_NAME,
                                         namespace='llumnix').remote(entrypoints_args)
         return server
 
@@ -57,20 +57,24 @@ class APIServerActor:
         self.host = entrypoints_args.host
         self.port = entrypoints_args.port
         self.request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
+        self._start_server_thread()
 
     def _setup_entrypoints_context(self):
         self.entrypoints_context = setup_entrypoints_context(self.request_output_queue_type)
 
-    def _run_uvicorn_server(self):
-        run_uvicorn_server(self.host, self.port, self.entrypoints_context)
+    def _run_server(self):
+        run_server(self.host, self.port, self.entrypoints_context)
 
-    def run(self):
+    def _start_server_thread(self):
         self._setup_entrypoints_context()
         self.run_uvicorn_server_thread = threading.Thread(
-            target=self._run_uvicorn_server, args=(),
+            target=self._run_server, args=(),
             daemon=True, name="run_uvicorn_server"
         )
         self.run_uvicorn_server_thread.start()
+
+    def is_ready(self) -> bool:
+        return True
 
 
 if __name__ == "__main__":

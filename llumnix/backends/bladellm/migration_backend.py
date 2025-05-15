@@ -105,7 +105,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
     def __init__(self, rank: int, migration_config: MigrationConfig,
                  request_sync_group: WorkerRequestSyncGroup, state_manager: StateManagerBase):
         self.request_sync_group: WorkerRequestSyncGroup = request_sync_group
-        self.worker_address = get_ip_address() + ":" + str(migration_config.grpc_migration_backend_server_port[rank])
+        self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_backend_server_port[rank])
         self.state_manager = state_manager
         self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
 
@@ -177,7 +177,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
         self.state_manager.add_new_request(self._create_dummy_worker_request())
         self.migrate_cache(
             MigrateCacheRequest(
-                src_handlers=[WorkerInfo(ip_address=self.worker_address)],
+                src_handlers=[WorkerInfo(ip_address=self.worker_migration_ip_addr)],
                 request_id=0,
                 is_last_stage=True,
                 src_blocks=[0],
@@ -319,7 +319,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
         nic_affinity.generate()
         self.instance_id = instance_id
         self.worker_id = worker_id
-        self.worker_address = get_ip_address() + ":" + str(migration_config.grpc_migration_backend_server_port[rank])
+        self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_backend_server_port[rank])
         self.serving_args = serving_args
         self.state_manager = state_manager
         self.request_sync_group = request_sync_group
@@ -365,7 +365,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
     def warmup(self) -> bool:
         # CUDA_IPC does not support communication with itself, used only for RDMA_DIRECT warmup
         if self.tranfer_type == KVTransferProtocolType.RDMA_DIRECT:
-            self.migrate_cache(WorkerInfo(ip_address=self.worker_address, instance_id=self.instance_id,
+            self.migrate_cache(WorkerInfo(ip_address=self.worker_migration_ip_addr, instance_id=self.instance_id,
                 worker_id=self.worker_id), [0], [1])
         return True
 

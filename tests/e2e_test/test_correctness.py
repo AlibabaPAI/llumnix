@@ -185,7 +185,6 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     base_port = 40000 + test_times * 100
     if "BladeLLM" in engine:
         base_port += 5000
-    wait_port_free(base_port)
     device_count = min(4, torch.cuda.device_count())
     instance_count = device_count // tensor_parallel_size
 
@@ -226,6 +225,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     launch_commands = []
     if launch_mode == "local":
         if enable_pd_disagg:
+            wait_port_free(base_port)
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
@@ -234,7 +234,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     instance_type="prefill",
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
+
             decode_port = base_port + 50
+            wait_port_free(decode_port)
             launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
                                                     launch_ray_cluster=False,
                                                     model=model,
@@ -245,12 +247,15 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
         else:
+            wait_port_free(base_port)
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
                                                     port=base_port,
                                                     tensor_parallel_size=tensor_parallel_size))
     else:
+        for i in range(instance_count):
+            wait_port_free(base_port + i)
         launch_commands.append(generate_serve_command_func(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,

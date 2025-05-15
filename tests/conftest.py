@@ -45,6 +45,25 @@ def ray_start():
 def ray_stop():
     subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL)
 
+def ray_stop(max_retries=5, delay=1):
+    def is_ray_running():
+        result = subprocess.run(["ps", "-ef"], stdout=subprocess.PIPE, text=True, check=False)
+        lines = [line for line in result.stdout.splitlines() if 'ray' in line and 'grep' not in line]
+        return len(lines) > 0
+
+    attempt = 0
+    while attempt <= max_retries:
+        subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL)
+        if not is_ray_running():
+            print("Ray has been successfully stopped.")
+            return
+        
+        attempt += 1
+        print(f"Ray processes still running. Retry {attempt}/{max_retries} after {delay} second(s)...")
+        time.sleep(delay)
+
+    print("Failed to stop Ray processes after maximum retries.")
+
 def cleanup_ray_env_func():
     actor_infos = list_named_actors(True)
     for actor_info in actor_infos:

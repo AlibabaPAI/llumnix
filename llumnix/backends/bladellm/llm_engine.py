@@ -173,16 +173,16 @@ class AsyncBackQueueWrapper:
             request_timestamps = None
             if hasattr(server_info, "request_timestamps"):
                 request_timestamps = server_info.request_timestamps
-            set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_end', time.time())
-            engine_put_queue_timestamp = time.time()
-            set_timestamp(request_timestamps, 'engine_put_queue_timestamp', engine_put_queue_timestamp)
-            set_timestamp(request_timestamps, 'engine_thread_put_queue_timestamp', engine_put_queue_timestamp)
-            set_timestamp(request_timestamps, 'engine_step_timestamp_end',
-                          self.current_step_metrics.engine_step_timestamp_end)
-            set_timestamp(request_timestamps, 'engine_step_postprocess_timestamp_end',
-                          self.current_step_metrics.engine_step_postprocess_timestamp_end)
-            set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
-                          self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
+                set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_end', time.time())
+                engine_put_queue_timestamp = time.time()
+                set_timestamp(request_timestamps, 'engine_put_queue_timestamp', engine_put_queue_timestamp)
+                set_timestamp(request_timestamps, 'engine_thread_put_queue_timestamp', engine_put_queue_timestamp)
+                set_timestamp(request_timestamps, 'engine_step_timestamp_end',
+                            self.current_step_metrics.engine_step_timestamp_end)
+                set_timestamp(request_timestamps, 'engine_step_postprocess_timestamp_end',
+                            self.current_step_metrics.engine_step_postprocess_timestamp_end)
+                set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
+                            self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
 
             server_request_outputs[server_id].append((request_output.model_dump_json(), request_timestamps))
             if server_id not in server_info_dict:

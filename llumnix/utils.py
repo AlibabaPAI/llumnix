@@ -223,7 +223,7 @@ def wait_port_free(port: int, max_retries: int = 5):
         retries += 1
 
         cost_time = time.time() - start_time
-        logger.info("Waiting for port {} to be free for {} seconds...")
+        logger.info("Waiting for port {} to be free for {} seconds...".format(port, cost_time))
 
     raise RuntimeError(f"Port {port} is still in use after {max_retries} retries.")
 

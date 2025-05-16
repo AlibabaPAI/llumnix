@@ -137,7 +137,7 @@ class AsyncBackQueueWrapper:
                 try:
                     self.current_step_metrics = self.metrics_queue.get_nowait()
                 except asyncio.QueueEmpty:
-                    continue
+                    pass
                 resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:

@@ -32,8 +32,7 @@ from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext
 from llumnix.utils import get_ip_address
 from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix.constants import (MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL,
-                               SUBPROCESS_RUN_TIMEOUT, INSTANCE_READY_TIMEOUT)
+from llumnix.constants import (MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL, SUBPROCESS_RUN_TIMEOUT)
 from llumnix import envs as llumnix_envs
 
 
@@ -148,7 +147,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
     available_instances = []
     for instance_id, instance in zip(instance_ids, instances):
         try:
-            ray.get(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
+            ray.get(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
             available_instance_ids.append(instance_id)
             available_instances.append(instance)
         # pylint: disable=broad-except

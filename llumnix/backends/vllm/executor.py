@@ -30,7 +30,8 @@ from vllm.model_executor.layers.sampler import SamplerOutput
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, ray_get_with_timeout
-from llumnix.constants import INSTANCE_READY_TIMEOUT, NUM_GPUS_VLLM_GPU_ACTOR
+from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR
+import llumnix.envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -253,7 +254,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         all_kwargs: Optional[List[Dict[str, Any]]] = None,
         use_dummy_driver: bool = False,
         max_concurrent_workers: Optional[int] = None,
-        timeout: float = INSTANCE_READY_TIMEOUT,
+        timeout: float = float(llumnix_envs.INSTANCE_READY_TIMEOUT),
         **kwargs,
     ) -> Any:
         """Runs the given method on all workers. Can be used in the following

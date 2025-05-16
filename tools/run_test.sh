@@ -21,4 +21,4 @@ nvidia-docker run --rm -t \
   -v /mnt:/mnt \
   -w /test_workspace \
   $docker_options \
-  "$image" sh -c "$install_command > /dev/null && make $test_mode"
+  "$image" sh -c "echo install_time && time $install_command > /dev/null && make $test_mode"

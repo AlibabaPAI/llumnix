@@ -14,6 +14,7 @@
 # pylint: disable=protected-access
 
 import sys
+import time
 from functools import partial
 import json
 from typing import List, Optional, Tuple, Union, Iterable, Dict, Any
@@ -60,6 +61,7 @@ from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 
 logger = init_logger(__name__)
 
@@ -82,6 +84,7 @@ class AsyncBackQueueWrapper:
                  instance_id: str,
                  request_output_queue_type: QueueType,
                  resp_queue: asyncio.Queue,
+                 metrics_queue: asyncio.Queue,
                  backend_type: BackendType) -> None:
         scheduling_strategy = PlacementGroupSchedulingStrategy(
             placement_group=placement_group,
@@ -96,6 +99,7 @@ class AsyncBackQueueWrapper:
             name=f"AsyncPutQueueActor_{instance_id}"
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type, backend_type)
         self.put_queue_args_queue: asyncio.Queue = resp_queue
+        self.metrics_queue: asyncio.Queue = metrics_queue
 
         self.request_server_map = {}
         # asyncio.queue is not thread-safe, just create a asyncio.task
@@ -130,6 +134,10 @@ class AsyncBackQueueWrapper:
             resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
             while isinstance(resp, int):
                 self.get_current_step_counter_queue.put_nowait(resp)
+                try:
+                    self.current_step_metrics = self.metrics_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    continue
                 resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
@@ -137,6 +145,7 @@ class AsyncBackQueueWrapper:
                 self.request_server_map.pop(resp.req_id, None)
             return resp, server_info
 
+        self.current_step_metrics: RequestTimestamps = None
         while True:
             request_outputs, server_info_outputs = [], []
 
@@ -160,7 +169,22 @@ class AsyncBackQueueWrapper:
         # Reorganize data in order to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            server_request_outputs[server_id].append(request_output.model_dump_json())
+
+            request_timestamps = None
+            if hasattr(server_info, "request_timestamps"):
+                request_timestamps = server_info.request_timestamps
+            set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_end', time.time())
+            engine_put_queue_timestamp = time.time()
+            set_timestamp(request_timestamps, 'engine_put_queue_timestamp', engine_put_queue_timestamp)
+            set_timestamp(request_timestamps, 'engine_thread_put_queue_timestamp', engine_put_queue_timestamp)
+            set_timestamp(request_timestamps, 'engine_step_timestamp_end',
+                          self.current_step_metrics.engine_step_timestamp_end)
+            set_timestamp(request_timestamps, 'engine_step_postprocess_timestamp_end',
+                          self.current_step_metrics.engine_step_postprocess_timestamp_end)
+            set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
+                          self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
+
+            server_request_outputs[server_id].append((request_output.model_dump_json(), request_timestamps))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         if server_info_dict:
@@ -227,9 +251,11 @@ class AsyncLLMEngineLlumnixMixin:
         self.request_barriers: queue.Queue = request_barriers
         self.migrated_request = set()
         self.resp_queue = asyncio.Queue()
+        self.metrics_queue = asyncio.Queue()
 
         self.backend_type = backend_type
         self.step_counter: int = 0
+        self.log_request_timestamps: bool = False
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -244,7 +270,7 @@ class AsyncLLMEngineLlumnixMixin:
         self._client = self.init_client_from_engine()
         self.trans_wrapper = AsyncBackQueueWrapper(self.placement_group, self.instance_id,
                                                    self.request_output_queue_type, self.resp_queue,
-                                                   self.backend_type)
+                                                   self.metrics_queue, self.backend_type)
         self._scheduler.trans_wrapper = self.trans_wrapper
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
@@ -282,6 +308,20 @@ class AsyncLLMEngineLlumnixMixin:
                     RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
     async def update_callback(self, resp_list, *args, **kwargs):
+        if self.log_request_timestamps:
+            request_groups = resp_list[0].generation_groups.generation_group
+            step_timestamps = RequestTimestamps()
+            for gen_group in request_groups:
+                request_group_id = gen_group.request_group_id
+                if request_group_id in self._back_queue:
+                    worker_metrics = resp_list[0].worker_step_metrics
+                    wroker_forward_time = worker_metrics.worker_bubble_time_us/1000000 + worker_metrics.prepare_step_ms + \
+                        worker_metrics.model_forward_ms + worker_metrics.post_step_ms
+                    set_timestamp(step_timestamps, 'engine_step_timestamp_end', wroker_forward_time/1000)
+                    set_timestamp(step_timestamps, 'engine_step_postprocess_timestamp_end', wroker_forward_time/1000)
+                    set_timestamp(step_timestamps, 'engine_process_model_outputs_timestamp_begin', time.time())
+            self.metrics_queue.put_nowait(step_timestamps)
+
         self.resp_queue.put_nowait(self.step_counter)
         await super().update_callback(resp_list, *args, **kwargs)
         self._update_request_inference_type(resp_list)
@@ -341,7 +381,9 @@ class AsyncLLMEngineLlumnixMixin:
         self.trans_wrapper.clear()
 
     async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
-        logger.debug("engine {} add request {}".format(self.instance_id, server_request))
+        logger.debug("engine {} add request {}:{}".format(self.instance_id, server_request.id, server_request.external_id))
+        self.log_request_timestamps = self.log_request_timestamps or hasattr(server_info, 'request_timestamps')
+        set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
         self.trans_wrapper.add_request(server_request.id, server_info)
         # pylint: disable=protected-access
         await self._client._add_request(server_request, self.resp_queue)

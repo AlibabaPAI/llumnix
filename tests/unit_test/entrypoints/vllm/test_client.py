@@ -28,9 +28,18 @@ from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.utils import random_uuid
 from llumnix.request_output_info import RequestOutputInfo
 from llumnix.ray_utils import get_instance_name
+from llumnix.metrics.timestamps import RequestTimestamps
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
+
+
+def get_request_output_engine(request_id, instance_id="", finished=False):
+    completion_output = CompletionOutput(0, "", [], 0.0, None)
+    request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=finished)
+    request_output.request_timestamps = RequestTimestamps()
+    request_output_info = RequestOutputInfo(instance_id=instance_id)
+    return (request_output, request_output_info)
 
 
 class MockLlumnixClientVLLM(LlumnixClientVLLM):
@@ -189,10 +198,9 @@ async def test_abort_and_abort_request(ray_env):
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
     assert instance_id_returned is None and instance_returned is None
 
-    completion_output = CompletionOutput(0, "", [], 0.0, None)
-    request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=False)
-    request_output_info = RequestOutputInfo(instance_id=instance_id)
-    client.request_output_queue.queue.put([(request_output, request_output_info)], block=True)\
+    request_output_engine = get_request_output_engine(request_id, instance_id, False)
+    request_output, request_output_info = request_output_engine
+    client.request_output_queue.queue.put([request_output_engine], block=True)
     # yield to get request outputs
     await asyncio.sleep(3.0)
 

@@ -24,8 +24,8 @@ NUM_GPUS_VLLM_GPU_ACTOR = 0.5
 NUM_GPUS_BLADELLM_GPU_ACTOR = 0.25
 
 # examples/offline_inference.py, tests/*
-MODEL_PATH: str = '/mnt/model'
-DATASET_PATH: str = '/mnt/dataset'
+DEFAULT_MODEL_PATH: str = '/mnt/model'
+DEFAULT_DATASET_PATH: str = '/mnt/dataset'
 
 # llumnix/manager.py
 CLEAR_REQUEST_INSTANCE_INTERVAL: float = 1000.0
@@ -86,6 +86,3 @@ NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION = [torch.float32, torch.float16]
 SERVER_GRACEFUL_SHUTDOWN_TIMEOUT: float = 10.0
 SERVER_START_TIMEOUT: float = 10.0
 SERVER_STOP_TIMEOUT: float = 10.0
-
-DEFAULT_MODEL_PATH: str = "/mnt/model/"
-DEFAULT_DATASET_PATH: str = "/mnt/dataset/"

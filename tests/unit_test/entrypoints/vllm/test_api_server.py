@@ -114,6 +114,7 @@ def test_api_server(ray_env, api_server, interface: str):
         # Cancel requests
         prompts = ["canceled requests"] * 100
         pool.map_async(_query_server_long, prompts)
+        # Once finished, terminate cannot take effects.
         time.sleep(0.01)
         pool.terminate()
         pool.join()
@@ -124,6 +125,7 @@ def test_api_server(ray_env, api_server, interface: str):
 
         num_aborted_requests = requests.get(
             "http://localhost:8000/stats").json()["num_aborted_requests"]
+        # abort and abort_request
         assert num_aborted_requests > 0
 
     # check that server still runs after cancellations

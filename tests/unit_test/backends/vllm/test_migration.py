@@ -246,7 +246,8 @@ async def test_migration_correctness(migration_backend, migration_request_status
         origin_output = None
         finished = False
         while not finished:
-            request_outputs = await request_output_queue.get()
+            request_outputs_engine = await request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
             for request_output in request_outputs:
                 origin_output = request_output.outputs[0]
                 finished = request_output.finished
@@ -280,7 +281,8 @@ async def test_migration_correctness(migration_backend, migration_request_status
         output = None
         finished = False
         while not finished:
-            request_outputs = await request_output_queue.get()
+            request_outputs_engine = await request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
             for request_output in request_outputs:
                 output = request_output.outputs[0]
                 finished = request_output.finished
@@ -406,7 +408,8 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         origin_output = None
         finished = False
         while not finished:
-            request_outputs = await request_output_queue.get()
+            request_outputs_engine = await request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
             for request_output in request_outputs:
                 origin_output = request_output.outputs[0]
                 finished = request_output.finished
@@ -423,7 +426,8 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         output = None
         finished = False
         while not finished:
-            request_outputs = await request_output_queue.get()
+            request_outputs_engine = await request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
             for request_output in request_outputs:
                 output = request_output.outputs[0]
                 finished = request_output.finished

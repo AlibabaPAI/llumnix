@@ -161,8 +161,8 @@ async def generate_benchmark(request: Request) -> Response:
 
     if llumnix_client.log_requests:
         llumnix_client.num_finished_requests += 1
-        logger.info("entrypoints finished request {}".format(request_id))
-        logger.info("num_finished_requests {}".format(llumnix_client.num_finished_requests))
+        logger.info("Entrypoints finished request {}".format(request_id))
+        logger.info("Entrypoints num_finished_requests: {}".format(llumnix_client.num_finished_requests))
 
     generation = final_output.outputs[0].text
     num_output_tokens = len(final_output.outputs[0].token_ids)

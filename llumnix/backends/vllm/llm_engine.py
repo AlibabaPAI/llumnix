@@ -48,6 +48,7 @@ from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_REMOTE_CALL_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
+from llumnix.request_output_info import RequestOutputInfo
 
 logger = init_logger(__name__)
 
@@ -222,7 +223,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
         for request_output in request_outputs:
             if request_output.finished:
-                logger.info("engine finished request {}".format(request_output.request_id))
+                logger.info("Engine finished request {}".format(request_output.request_id))
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -308,7 +309,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Reorganize data in orther to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            server_request_outputs[server_id].append(request_output)
+            request_output_info = RequestOutputInfo(instance_id=self.instance_id)
+            server_request_outputs[server_id].append((request_output, request_output_info))
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
@@ -468,7 +470,7 @@ class BackendVLLM(BackendInterface):
         request_ids = set(request_id)
         return self.engine.abort_request(request_ids)
 
-    def get_running_queue(self) -> List[SequenceGroupLlumnix]:
+    def get_running_queue(self) -> Deque[SequenceGroupLlumnix]:
         return self.engine.scheduler[0].get_running_queue()
 
     def get_waiting_queue(self) -> Deque[SequenceGroupLlumnix]:
@@ -542,6 +544,3 @@ class BackendVLLM(BackendInterface):
 
     def free_src_request(self, backend_request: SequenceGroup) -> None:
         return self.engine.scheduler[0].free_src_request(backend_request)
-
-    def get_all_request_ids(self) -> List[str]:
-        return self.engine.scheduler[0].get_all_request_ids()

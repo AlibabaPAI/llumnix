@@ -95,13 +95,6 @@ class SchedulerLlumnix(Scheduler):
     def get_waiting_queue(self) -> Deque[SequenceGroupLlumnix]:
         return self.waiting
 
-    def get_all_request_ids(self) -> List[str]:
-        request_ids : List[str] = []
-        for state_queue in [self.waiting, self.running, self.swapped]:
-            for seq_group in state_queue:
-                request_ids.append(seq_group.request_id)
-        return request_ids
-
     def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         seq = backend_request.get_seqs()[0]
         if seq.seq_id not in self.block_manager.block_tables:

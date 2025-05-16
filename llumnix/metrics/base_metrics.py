@@ -39,7 +39,6 @@ class LlumnixMetrics(ABC):
         # stastics
         self.num_watermark_blocks = Status("num_watermark_blocks")
         self.num_killed_requests = Status("num_killed_requests")
-        self.all_request_ids = Status("all_request_ids")
 
         self.dumper: Dumper = None
         self._init_dumper()

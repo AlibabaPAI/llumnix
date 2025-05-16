@@ -216,14 +216,6 @@ class PagedSchedulerLlumnix(PagedScheduler):
     def add_block_table(self, block_table: BlockTable, block_table_id: int) -> None:
         self.block_manager.block_tables[block_table_id] = block_table
 
-    # metrics
-    def get_all_request_ids(self) -> List[int]:
-        request_ids : List[str] = []
-        for state_queue in [self.waiting, self.running, self.swapped, self.hanging]:
-            for seq_group in state_queue:
-                request_ids.append(seq_group.request_group_id)
-        return request_ids
-
     def get_num_killed_requests(self) -> int:
         cnt = len(self.swapped)
         for seq_group in self.waiting:

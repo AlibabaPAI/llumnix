@@ -221,6 +221,13 @@ async def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None
         return False
     return True
 
+def get_instance(instance_id: str) -> ray.actor.ActorHandle:
+    try:
+        instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+        return instance
+    except ValueError:
+        return None
+
 def _make_key(actor_name: str):
     return actor_name.encode("ascii")
 

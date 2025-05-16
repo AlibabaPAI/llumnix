@@ -78,8 +78,9 @@ def wait_for_all_instances_finished():
     while True:
         all_finished = True
         for instance in instance_actor_handles:
-            all_request_ids = ray.get(instance.execute_engine_method.remote("get_all_request_ids"))
-            if len(all_request_ids) != 0:
+            running_request_ids = ray.get(instance.execute_engine_method.remote("get_running_queue"))
+            waiting_request_ids = ray.get(instance.execute_engine_method.remote("get_waiting_queue"))
+            if len(running_request_ids) != 0 or len(waiting_request_ids) != 0:
                 all_finished = False
         if all_finished:
             break

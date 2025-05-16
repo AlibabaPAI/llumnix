@@ -39,9 +39,9 @@ from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get
                                actor_exists, get_instance_name, PLACEMENT_GROUP_NAME_PREFIX,
                                execute_actor_method_async_with_retries)
 from llumnix.internal_config import PDDConfig
-from llumnix.constants import (INSTANCE_READY_TIMEOUT, SERVER_READY_TIMEOUT,
-                               WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
+from llumnix.constants import (WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
                                CHECK_DEPLOYMENT_STATES_INTERVAL, WATCH_DEPLOYMENT_INTERVAL)
+from llumnix.envs import envs
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.ray_utils import clear_gloo_backend_ray_resources
@@ -377,13 +377,13 @@ class Scaler:
                                 next_engine_args: LlumnixEngineArgs):
             try:
                 instance_ready = False
-                await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
+                await asyncio.wait_for(instance.is_ready.remote(), timeout=float(envs.SERVER_READY_TIMEOUT))
                 instance_ready = True
                 # Initialize server after instance is ready.
                 server = self._init_server(instance_id, placement_group, backend_type,
                                            next_entrypoints_args, next_engine_args,
                                            self.manager, instance)
-                await asyncio.wait_for(server.is_ready.remote(), timeout=SERVER_READY_TIMEOUT)
+                await asyncio.wait_for(server.is_ready.remote(), timeout=float(envs.SERVER_READY_TIMEOUT))
                 await execute_actor_method_async_with_retries(
                     self.manager.scale_up.remote, 'Manager', 'scale_up',
                     instance_id, instance, instance_type, placement_group, server
@@ -394,9 +394,9 @@ class Scaler:
                     logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
                 elif isinstance(e, asyncio.TimeoutError):
                     if not instance_ready:
-                        logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                        logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(envs.INSTANCE_READY_TIMEOUT)))
                     else:
-                        logger.error("Server {} is not ready in {} seconds.".format(instance_id, SERVER_READY_TIMEOUT))
+                        logger.error("Server {} is not ready in {} seconds.".format(instance_id, float(envs.SERVER_READY_TIMEOUT)))
                 else:
                     logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
                 await self.clear_instance_ray_resources(instance_id)
@@ -469,20 +469,20 @@ class Scaler:
         async def instance_ready_scale_up(instance_id: str, instance: Llumlet,
                                           instance_type: InstanceType, placement_group: PlacementGroup):
             try:
-                await asyncio.wait_for(instance.is_ready.remote(), timeout=INSTANCE_READY_TIMEOUT)
+                await asyncio.wait_for(instance.is_ready.remote(), timeout=float(envs.INSTANCE_READY_TIMEOUT))
                 await execute_actor_method_async_with_retries(
                     self.manager.scale_up.remote, 'Manager', 'scale_up',
                     instance_id, instance, instance_type, placement_group
                 )
             except asyncio.TimeoutError:
-                logger.error("Instance {} is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(envs.INSTANCE_READY_TIMEOUT)))
                 await self.clear_instance_ray_resources(instance_id)
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
                     logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
                 elif isinstance(e, asyncio.TimeoutError):
                     logger.error("Failed to scale up instance {}, "
-                                 "instance is not ready in {} seconds.".format(instance_id, INSTANCE_READY_TIMEOUT))
+                                 "instance is not ready in {} seconds.".format(instance_id, float(envs.INSTANCE_READY_TIMEOUT)))
                 else:
                     logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
                 await self.clear_instance_ray_resources(instance_id)

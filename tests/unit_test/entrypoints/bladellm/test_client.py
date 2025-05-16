@@ -225,16 +225,47 @@ async def test_drop_request(ray_env):
     num_aborts = ray.get(instance.get_num_aborts.remote())
     assert num_aborts == 1
 
+    # test request states
+    assert request_id not in client.request_streams and \
+        request_id not in client.request_streams_last_completion_tokens and \
+        request_id not in client.request_instance and \
+        request_id not in client.request_streams_output_stash and \
+        request_id not in client.llumnix_id2entrypoint_id and \
+        request_id not in client.entrypoint_id2llumnix_id
+
+
+@pytest.mark.asyncio
+async def test_drop_request(ray_env):
+    client = MockLlumnixClientBladeLLM(loop=asyncio.get_event_loop())
+    # yield to run get_request_outputs_loop and run_server_loop
+    await asyncio.sleep(3.0)
+
+    request_id = random.randint(0, 1024)
+    # Add request_id to request_streams for get_request_outputs_loop.
+    await client._add_request(request_id)
+    instance_id = random_uuid()
+
+    request_output = GenerateStreamResponse(req_id=request_id)
+    request_output_info = RequestOutputInfo(instance_id=instance_id)
+    await client.request_output_queue.put([(request_output.model_dump_json(), request_output_info)])
+    # yield to get request outputs
+    await asyncio.sleep(3.0)
+
+    # test request states
+    assert request_id in client.request_streams and \
+        request_id in client.request_instance and \
+        request_id in client.llumnix_id2entrypoint_id and \
+        request_id in client.entrypoint_id2llumnix_id
+
     request_output.is_finished = True
     client._process_output_order = MagicMock()
     client._process_output_order.return_value = [request_output]
     await client.request_output_queue.put([(request_output.model_dump_json(), request_output_info)])
     # yield to get request outputs
     await asyncio.sleep(3.0)
+
     # test request states
     assert request_id not in client.request_streams and \
-        request_id not in client.request_streams_last_completion_tokens and \
         request_id not in client.request_instance and \
-        request_id not in client.request_streams_output_stash and \
         request_id not in client.llumnix_id2entrypoint_id and \
         request_id not in client.entrypoint_id2llumnix_id

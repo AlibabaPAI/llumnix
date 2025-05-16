@@ -47,6 +47,8 @@ SUBPROCESS_RUN_TIMEOUT: float = 60.0
 
 # llumnix/entrypoints/vllm/client.py, llumnix/entrypoints/bladellm/client.py
 WAIT_MANAGER_INTERVAL: float = 1.0
+INIT_GLOBAL_INSTANCES_INTERVAL: float = 600.0
+UPDATE_GLOBAL_INSTANCES_INTERVAL: float = 1800.0
 
 # llumnix/entrypoints/vllm/api_server.py
 SERVER_TIMEOUT_KEEP_ALIVE: float = 5.0

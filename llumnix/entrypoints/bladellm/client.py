@@ -31,12 +31,13 @@ from llumnix.manager import Manager
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
-from llumnix.constants import WAIT_MANAGER_INTERVAL
+from llumnix.constants import WAIT_MANAGER_INTERVAL, INIT_GLOBAL_INSTANCES_INTERVAL, UPDATE_GLOBAL_INSTANCES_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
-from llumnix.ray_utils import execute_actor_method_async_with_retries, get_instance
+from llumnix.ray_utils import (execute_actor_method_async_with_retries, get_instance, get_actor_names_by_name_prefix,
+                               INSTANCE_NAME_PREFIX)
 from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.entrypoints.api_server_actor import APIServerActor
 
@@ -73,6 +74,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
 
         loop.create_task(self.get_request_outputs_loop())
         loop.create_task(self.request_output_queue.run_server_loop())
+        loop.create_task(self._update_global_instances_loop())
 
     async def _add_request(self, request: ServerRequest) -> LLMResponse:
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
@@ -174,6 +176,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             logger.info("Abort request {} (instance_id: {}).".format(llumnix_id, instance_id))
             try:
                 await asyncio_wait_for_with_timeout(instance.abort.remote(llumnix_id))
+                self._clear_client_request_states(llumnix_id)
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
                     logger.info("Instance {} is dead.".format(instance_id))
@@ -277,6 +280,22 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             return res
 
         return [request_output]
+
+    async def _update_global_instances_loop(self):
+        await asyncio.sleep(INIT_GLOBAL_INSTANCES_INTERVAL)
+        while True:
+            curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
+            curr_instance_ids = [curr_instance_name.split("_")[-1] for curr_instance_name in curr_instance_names]
+            new_global_instances = {}
+            for instance_id in curr_instance_ids:
+                if instance_id in self.global_instances:
+                    new_global_instances[instance_id] = self.global_instances[instance_id]
+                else:
+                    instance = get_instance(instance_id)
+                    if instance is not None:
+                        new_global_instances[instance_id] = instance
+            self.global_instances = new_global_instances
+            await asyncio.sleep(UPDATE_GLOBAL_INSTANCES_INTERVAL)
 
     def cleanup(self):
         self.request_output_queue.cleanup()

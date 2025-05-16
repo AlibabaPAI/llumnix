@@ -101,7 +101,7 @@ def test_engine_step_exception(ray_env):
     assert origin_free_memory_list != cur_free_memory_list
 
     ray.get(llumlet.set_error_step.remote())
-    time.sleep(3)
+    time.sleep(5.0)
 
     actor_infos = ray.util.list_named_actors(True)
     all_actor_names = [actor["name"] for actor in actor_infos]

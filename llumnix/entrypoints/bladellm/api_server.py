@@ -49,12 +49,12 @@ class LlumnixEntrypoint(Entrypoint):
         per_token_latency_breakdown_list = []
         output_streamer = results_generator.async_stream()
         timestamps_streamer = self._client.get_request_timestamps_generator(server_req.id)
-        if entrypoints_context.log_request_timestamps:
+        if llumnix_client.log_request_timestamps:
             assert timestamps_streamer, "timestamps_streamer is not available."
 
         async for r in output_streamer:
             token_timestamps = None
-            if entrypoints_context.log_request_timestamps:
+            if llumnix_client.log_request_timestamps:
                 try:
                     token_timestamps = timestamps_streamer.get_nowait()
                 except asyncio.QueueEmpty:

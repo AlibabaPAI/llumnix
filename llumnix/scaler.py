@@ -41,7 +41,7 @@ from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
                                CHECK_DEPLOYMENT_STATES_INTERVAL, WATCH_DEPLOYMENT_INTERVAL)
-from llumnix.envs import envs
+import llumnix.envs as envs
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.ray_utils import clear_gloo_backend_ray_resources

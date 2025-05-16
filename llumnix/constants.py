@@ -13,8 +13,6 @@
 
 import torch
 
-# pylint: disable=consider-using-from-import
-import llumnix.envs as envs
 
 RAY_REMOTE_CALL_TIMEOUT: float = 10.0
 

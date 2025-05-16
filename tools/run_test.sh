@@ -20,4 +20,4 @@ nvidia-docker run --rm -t \
   -v ${PWD}:/test_workspace \
   -v /mnt:/mnt \
   -w /test_workspace \
-  "$image" sh -c "apt-get install time && time $install_command > /dev/null && echo 'llumnix env is ready.' && make $test_mode"
+  "$image" sh -c "date && $install_command > /dev/null && date && make $test_mode"

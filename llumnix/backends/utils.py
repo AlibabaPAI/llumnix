@@ -78,6 +78,8 @@ class AsyncPutQueueActor:
                     from blade_llm.protocol import GenerateStreamResponse # pylint: disable=import-outside-toplevel
                     request_ids = []
                     for req_output_json in req_outputs:
+                        if isinstance(req_outputs, tuple):
+                            req_output_json = req_output_json[0]
                         reque_output = GenerateStreamResponse(**json.loads(req_output_json))
                         request_ids.append(reque_output.req_id)
                 await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(request_ids))

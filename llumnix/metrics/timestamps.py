@@ -20,9 +20,15 @@ def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
         obj = [obj,]
     objs = list(obj)
     for item in objs:
-        if hasattr(item, "request_timestamps"):
+        if isinstance(item, tuple):
+            assert len(item) > 1, "Item should contain output and timestamps."
+            if hasattr(item[-1], timestamp_attr):
+                setattr(item[-1], timestamp_attr, timestamp)
+        elif hasattr(item, "request_timestamps"):
             if hasattr(item.request_timestamps, timestamp_attr):
                 setattr(item.request_timestamps, timestamp_attr, timestamp)
+        elif hasattr(item, timestamp_attr):
+            setattr(item, timestamp_attr, timestamp)
 
 
 @dataclass

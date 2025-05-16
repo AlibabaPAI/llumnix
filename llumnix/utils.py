@@ -202,6 +202,7 @@ def wait_port_free(port: int, max_retries: int = 5):
         if check_free_port(port=port):
             return
 
+        start_time = time.time()
         for conn in psutil.net_connections():
             if conn.laddr.port == port:
                 logger.info("Port {} connection detail: {}".format(port, conn))
@@ -209,7 +210,7 @@ def wait_port_free(port: int, max_retries: int = 5):
                     history_pid = conn.pid
                     try:
                         proc = psutil.Process(conn.pid)
-                        logger.info("Port {} is in use by process {}, status {}: {}. Retrying in 3 seconds...".format(
+                        logger.info("Port {} is in use by process {}, status {}: {}.".format(
                             port, conn.pid, proc.status(), ' '.join(proc.cmdline())))
                     except psutil.NoSuchProcess:
                         continue
@@ -220,6 +221,9 @@ def wait_port_free(port: int, max_retries: int = 5):
         gc.collect()
         time.sleep(3)
         retries += 1
+
+        cost_time = time.time() - start_time
+        logger.info("Waiting for port {} to be free for {} seconds...".format(port, cost_time))
 
     raise RuntimeError(f"Port {port} is still in use after {max_retries} retries.")
 

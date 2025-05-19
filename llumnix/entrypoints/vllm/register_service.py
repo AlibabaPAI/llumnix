@@ -2,7 +2,6 @@ import argparse
 
 from llumnix.entrypoints.vllm.arg_utils import add_engine_cli_args, get_engine_args, VllmEngineArgs
 from llumnix.arg_utils import save_engine_args
-from llumnix.entrypoints.setup import connect_to_ray_cluster
 
 # TODO(s5u13b): Add examples for pdd launch.
 

@@ -93,7 +93,7 @@ def init_backend_engine(instance_id: str,
                         backend_type: BackendType,
                         engine_args: LlumnixEngineArgs,
                         profiling_result_file_path: str = None) -> BackendInterface:
-    engine_args = engine_args.unwrap_engine_args_if_needed()
+    engine_args = engine_args.load_engine_args_if_needed()
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.llm_engine import BackendVLLM

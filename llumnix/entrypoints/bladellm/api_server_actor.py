@@ -18,7 +18,7 @@ class APIServerActorBladeLLM(APIServerActor):
         assert isinstance(engine_args, BladellmEngineArgs)
         # pylint: disable=import-outside-toplevel
         from blade_llm.service.args import ServingArgs
-        engine_args: ServingArgs = engine_args.unwrap_engine_args_if_needed()
+        engine_args: ServingArgs = engine_args.load_engine_args_if_needed()
         if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
             engine_args.host = get_ip_address()
         self.host = engine_args.host
@@ -36,7 +36,7 @@ class APIServerActorBladeLLM(APIServerActor):
         from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
         from blade_llm.service.args import ServingArgs
         # bladellm engine_args is dumped by pickle
-        engine_args: ServingArgs = engine_args.unwrap_engine_args_if_needed()
+        engine_args: ServingArgs = engine_args.load_engine_args_if_needed()
         engine_args.host = self.host
 
         self.loop = asyncio.new_event_loop()

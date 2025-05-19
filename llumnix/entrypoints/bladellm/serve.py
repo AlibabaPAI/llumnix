@@ -1,7 +1,6 @@
 import time
 import sys
 import os
-import pickle
 
 import ray
 from ray.util.queue import Queue as RayQueue
@@ -34,9 +33,7 @@ def main():
     llumnix_config = get_llumnix_config(cli_args.config_file, args=cli_args)
     entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.GLOBAL, parser, cli_args)
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=BackendType.BLADELLM)
-    bladellm_engine_args = BladellmEngineArgs(pickle.dumps(engine_args))
-    bladellm_engine_args.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-
+    bladellm_engine_args = BladellmEngineArgs(engine_args)
     # magic actor to avoid fast api server actor initialization error
     # pylint: disable=unused-variable
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",

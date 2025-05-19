@@ -1,6 +1,5 @@
 from dataclasses import asdict
 from unittest.mock import patch
-import pickle
 from blade_llm.service.args import ServingArgs, DisaggOptions
 from blade_llm.utils.load_model_options import LoadModelOptions
 
@@ -13,11 +12,9 @@ from llumnix.internal_config import PDDConfig
 # pylint: disable=unused-argument
 def mocked_load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
     return BladellmEngineArgs(
-        engine_args=pickle.dumps(
-            ServingArgs(
-                load_model_options=LoadModelOptions(model="./"),
-                disagg_options=DisaggOptions(),
-            )
+        engine_args=ServingArgs(
+            load_model_options=LoadModelOptions(model="./"),
+            disagg_options=DisaggOptions(),
         )
     )
 
@@ -32,13 +29,13 @@ def test_gen_next_engine_args_baldellm():
     serving_args = ServingArgs(
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
-    engine_args = BladellmEngineArgs(engine_args=pickle.dumps(serving_args))
+    engine_args = BladellmEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, InstanceType.NO_CONSTRAINTS.value
     )
     assert next_engine_args is not engine_args
-    assert asdict(next_engine_args.unwrap_engine_args_if_needed()) == asdict(
-        engine_args.unwrap_engine_args_if_needed()
+    assert asdict(next_engine_args.load_engine_args_if_needed()) == asdict(
+        engine_args.load_engine_args_if_needed()
     )
 
 
@@ -56,20 +53,20 @@ def test_gen_next_engine_args_baldellm_from_registered_service():
         engine_args, InstanceType.PREFILL.value
     )
     assert next_engine_args is not engine_args
-    assert asdict(next_engine_args.unwrap_engine_args_if_needed()) == asdict(
+    assert asdict(next_engine_args.load_engine_args_if_needed()) == asdict(
         mocked_load_engine_args(
             InstanceType.PREFILL.value, ""
-        ).unwrap_engine_args_if_needed()
+        ).load_engine_args_if_needed()
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, InstanceType.DECODE.value
     )
     assert next_engine_args is not engine_args
-    assert asdict(next_engine_args.unwrap_engine_args_if_needed()) == asdict(
+    assert asdict(next_engine_args.load_engine_args_if_needed()) == asdict(
         mocked_load_engine_args(
             InstanceType.DECODE.value, ""
-        ).unwrap_engine_args_if_needed()
+        ).load_engine_args_if_needed()
     )
 
 
@@ -85,7 +82,7 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
     serving_args = ServingArgs(
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
-    engine_args = BladellmEngineArgs(engine_args=pickle.dumps(serving_args))
+    engine_args = BladellmEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, InstanceType.PREFILL.value
     )
@@ -94,16 +91,16 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
     )
     assert next_engine_args is not engine_args
     assert (
-        next_engine_args.unwrap_engine_args_if_needed().disagg_options.inst_role
+        next_engine_args.load_engine_args_if_needed().disagg_options.inst_role
         == "prefill"
     )
     assert (
-        engine_args.unwrap_engine_args_if_needed().disagg_options.token_port
-        == next_engine_args.unwrap_engine_args_if_needed().disagg_options.token_port
+        engine_args.load_engine_args_if_needed().disagg_options.token_port
+        == next_engine_args.load_engine_args_if_needed().disagg_options.token_port
     )
     assert (
-        engine_args.unwrap_engine_args_if_needed().disagg_options.token_port + 10
-        == next_engine_args2.unwrap_engine_args_if_needed().disagg_options.token_port
+        engine_args.load_engine_args_if_needed().disagg_options.token_port + 1
+        == next_engine_args2.load_engine_args_if_needed().disagg_options.token_port
     )
 
 
@@ -119,13 +116,13 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
     serving_args = ServingArgs(
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
-    engine_args = BladellmEngineArgs(engine_args=pickle.dumps(serving_args))
+    engine_args = BladellmEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, InstanceType.PREFILL.value
     )
     assert next_engine_args is not engine_args
     assert (
-        next_engine_args.unwrap_engine_args_if_needed().disagg_options.inst_role
+        next_engine_args.load_engine_args_if_needed().disagg_options.inst_role
         == "prefill"
     )
 
@@ -134,6 +131,6 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
     )
     assert next_engine_args is not engine_args
     assert (
-        next_engine_args.unwrap_engine_args_if_needed().disagg_options.inst_role
+        next_engine_args.load_engine_args_if_needed().disagg_options.inst_role
         == "decode"
     )

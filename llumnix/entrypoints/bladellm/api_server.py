@@ -13,7 +13,6 @@
 
 import time
 import asyncio
-import pickle
 
 from aiohttp import web
 
@@ -99,13 +98,7 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
 
     # If gpu is not available, it means that this node is head pod without any llumnix components.
     if is_gpu_available():
-        # Since importing the bladellm engine arguments requires available GPU,
-        # serialize the engine parameters before passing them to the manager.
-        bladellm_engine_args = BladellmEngineArgs(pickle.dumps(engine_args))
-        bladellm_engine_args.world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-        if engine_args.disagg_options is not None:
-            bladellm_engine_args.instance_id = engine_args.disagg_options.inst_id
-
+        bladellm_engine_args = BladellmEngineArgs(engine_args)
         global llumnix_client
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)

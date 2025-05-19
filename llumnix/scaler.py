@@ -354,7 +354,7 @@ class Scaler:
         # num_cpus=2+(0/1), for Llumlet + AsyncPutQueueActor + (ApiServerActor)
         if not BackendType.is_sim_backend(backend_type):
             # num_gpus=world_size, for world_size Workers
-            world_size = engine_args.get_engine_world_size()
+            world_size = engine_args.get_world_size()
             resources = get_service_resouces(service_name, world_size)
             placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
                                                          num_gpus=world_size, detached=True, block=block, node_id=node_id,

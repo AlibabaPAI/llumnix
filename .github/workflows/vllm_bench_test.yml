@@ -1,4 +1,4 @@
-name: bench_test
+name: vllm_bench_test
 
 on:
   pull_request:

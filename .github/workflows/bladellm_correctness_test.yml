@@ -1,4 +1,4 @@
-name: correctness_test
+name: bladellm_correctness_test
 
 on:
   pull_request:

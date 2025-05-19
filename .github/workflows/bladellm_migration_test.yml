@@ -1,4 +1,4 @@
-name: migration_test
+name: bladellm_migration_test
 
 on:
   pull_request:

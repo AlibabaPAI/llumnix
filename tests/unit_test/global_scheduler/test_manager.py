@@ -34,7 +34,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.utils import random_uuid, try_convert_to_local_path
+from llumnix.utils import random_uuid
 from llumnix.ray_utils import (get_placement_group_name, get_server_name, get_instance_name,
                                remove_placement_group, INSTANCE_NAME_PREFIX, kill_server,
                                kill_instance, get_manager_name, get_scaler_name,
@@ -45,6 +45,7 @@ from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func, ray_stop, ray_start
+from tests.utils import try_convert_to_local_path
 
 
 @ray.remote(num_cpus=1)

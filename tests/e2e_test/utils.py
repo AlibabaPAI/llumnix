@@ -20,8 +20,10 @@ from typing import Optional
 import pytest
 import requests
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path
+from llumnix.utils import get_ip_address
+
 from tests import conftest
+from tests.utils import try_convert_to_local_path
 
 
 def generate_vllm_launch_command(

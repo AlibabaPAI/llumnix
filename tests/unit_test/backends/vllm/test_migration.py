@@ -29,7 +29,7 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.llumlet.request import RequestInferenceType, RequestStatus
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import get_llumnix_env_vars, try_convert_to_local_path
+from llumnix.utils import get_llumnix_env_vars
 from llumnix.ray_utils import (initialize_placement_group, get_placement_group_name,
                                remove_placement_group, kill_instance)
 from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
@@ -37,9 +37,11 @@ from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func
+from tests.utils import try_convert_to_local_path
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt
+
 
 TEST_PROMPTS = [
     "hello world, ",

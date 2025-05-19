@@ -12,8 +12,10 @@ from vllm.sampling_params import SamplingParams
 from llumnix import (Manager, launch_ray_cluster, connect_to_ray_cluster, init_manager,
                      ManagerArgs, InstanceArgs, Llumlet, ServerInfo, QueueType, BackendType,
                      LaunchArgs, EntrypointsArgs, LaunchMode, RayQueueServer, VllmEngineArgs)
-from llumnix.utils import try_convert_to_local_path
+
+from tests.utils import try_convert_to_local_path
 from tests.conftest import cleanup_ray_env_func
+
 
 # Sample prompts.
 prompts = [

@@ -1,4 +1,4 @@
-name: correctness_test
+name: vllm_correctness_test
 
 on:
   pull_request:

@@ -1,4 +1,4 @@
-name: offline_test
+name: vllm_offline_test
 
 on:
   pull_request:

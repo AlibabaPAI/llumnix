@@ -1,4 +1,4 @@
-name: unit_test
+name: vllm_unit_test
 
 on:
   pull_request:

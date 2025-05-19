@@ -194,7 +194,7 @@ def check_free_port(host='0.0.0.0', port=8081):
         else:
             raise
 
-def wait_port_free(port: int, max_retries: int = 5):
+def wait_port_free(port: int, max_retries: int = 5, force: bool = False):
     retries = 0
     history_pid = None
 
@@ -212,6 +212,9 @@ def wait_port_free(port: int, max_retries: int = 5):
                         proc = psutil.Process(conn.pid)
                         logger.info("Port {} is in use by process {}, status {}: {}.".format(
                             port, conn.pid, proc.status(), ' '.join(proc.cmdline())))
+                        if force:
+                            proc.kill()
+                            proc.wait(timeout=5)
                     except psutil.NoSuchProcess:
                         continue
 

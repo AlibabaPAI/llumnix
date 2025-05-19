@@ -13,6 +13,12 @@
 
 import os
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from llumnix.constants import (
+    DEFAULT_SERVER_READY_TIMEOUT,
+    DEFAULT_INSTANCE_READY_TIMEOUT,
+    DEFAULT_DATASET_PATH,
+    DEFAULT_MODEL_PATH,
+)
 
 if TYPE_CHECKING:
     HEAD_NODE: Optional[str] = None
@@ -59,9 +65,15 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("LLUMNIX_LOG_NODE_PATH", ""),
 
     "MODEL_PATH":
-    lambda: os.getenv("MODEL_PATH", ""),
+    lambda: os.getenv("MODEL_PATH", DEFAULT_MODEL_PATH),
     "DATASET_PATH":
-    lambda: os.getenv("DATASET_PATH", ""),
+    lambda: os.getenv("DATASET_PATH", DEFAULT_DATASET_PATH),
+
+    # used for scale up
+    "SERVER_READY_TIMEOUT":
+    lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", str(DEFAULT_SERVER_READY_TIMEOUT)),
+    "INSTANCE_READY_TIMEOUT":
+    lambda: os.getenv("LLUMNIX_INSTANCE_READY_TIMEOUT", str(DEFAULT_INSTANCE_READY_TIMEOUT)),
 }
 
 

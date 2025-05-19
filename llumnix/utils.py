@@ -28,7 +28,7 @@ import ray
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
-from llumnix.constants import MODEL_PATH, DATASET_PATH, RAY_REMOTE_CALL_TIMEOUT
+from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -230,12 +230,12 @@ def try_convert_to_local_path(data_path: str) -> str:
     assert "/" in data_path
     base_data_name = os.path.basename(data_path)
 
-    base_model_path: str = llumnix_envs.MODEL_PATH if llumnix_envs.MODEL_PATH else MODEL_PATH
+    base_model_path: str = llumnix_envs.MODEL_PATH
     local_model_path: str = os.path.join(base_model_path, base_data_name)
     if os.path.exists(local_model_path):
         return local_model_path
 
-    base_dataset_path: str = llumnix_envs.DATASET_PATH if llumnix_envs.DATASET_PATH else DATASET_PATH
+    base_dataset_path: str = llumnix_envs.DATASET_PATH
     local_dataset_path: str = os.path.join(base_dataset_path, base_data_name)
     if os.path.exists(local_dataset_path):
         return local_dataset_path

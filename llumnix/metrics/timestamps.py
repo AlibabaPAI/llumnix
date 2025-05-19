@@ -22,8 +22,8 @@ def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
     for item in objs:
         if isinstance(item, tuple):
             for value in item:
-                if hasattr(item, timestamp_attr):
-                    setattr(item, timestamp_attr, timestamp)
+                if hasattr(value, timestamp_attr):
+                    setattr(value, timestamp_attr, timestamp)
         elif hasattr(item, "request_timestamps"):
             if hasattr(item.request_timestamps, timestamp_attr):
                 setattr(item.request_timestamps, timestamp_attr, timestamp)

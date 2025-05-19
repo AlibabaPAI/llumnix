@@ -16,6 +16,8 @@ else
     exit 1
 fi
 
+date
+
 nvidia-docker run --rm -t \
   -v ${PWD}:/test_workspace \
   -v /mnt:/mnt \

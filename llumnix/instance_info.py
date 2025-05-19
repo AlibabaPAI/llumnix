@@ -38,9 +38,8 @@ class InstanceInfo:
     step_id: int = None
     timestamp: float = None
     num_batched_tokens: int = None
-    num_seqs = None
+    num_seqs: int = None
     running_seq_lens: List[int] = field(default_factory=list)
-    all_request_ids: List[int] = field(default_factory=list)
     last_inference_latency: float = None
     inference_type: RequestInferenceType = None
 

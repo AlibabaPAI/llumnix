@@ -304,14 +304,3 @@ class BackendInterface(ABC):
             backend_request: An object representing the backend request.
         """
         raise NotImplementedError
-
-    @abstractmethod
-    def get_all_request_ids(self) -> List[str]:
-        """Get all requests in instance.
-
-        This method is used by the manager to get all requests in instance when it restarts.
-
-        Returns:
-            The list of request ID.
-        """
-        raise NotImplementedError

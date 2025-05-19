@@ -199,7 +199,7 @@ class Llumlet:
         else: # ABORTED_SRC or ABORTED_DST
             migrate_out_request.reset_migration_args_src()
             migrate_out_request.reset_status()
-            # If dst aborts itself, dst proactively frees the pre allocated cache in migrate_in_pre_alloc.
+            # If src aborts itself, dst should free the pre allocated cache in migrate_in_pre_alloc.
             if status == MigrationStatus.ABORTED_SRC:
                 await asyncio_wait_for_with_timeout(
                     dst_instance_actor_handle.execute_migration_method.remote(
@@ -230,9 +230,6 @@ class Llumlet:
 
     def get_engine_disagg_inst_id(self) -> str:
         return self.engine_disagg_inst_id
-
-    def get_all_request_ids(self) -> List[str]:
-        return self.backend_engine.get_all_request_ids()
 
     async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())

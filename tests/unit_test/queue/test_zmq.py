@@ -19,8 +19,6 @@ import pytest
 import ray
 import numpy as np
 
-from vllm.outputs import CompletionOutput, RequestOutput
-
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.zmq_client import ZmqClient
 from llumnix.utils import random_uuid
@@ -28,6 +26,8 @@ from llumnix.server_info import ServerInfo
 
 # pylint: disable=W0611
 from tests.conftest import ray_env
+from tests.unit_test.entrypoints.vllm.test_client import get_request_output_engine
+
 
 @ray.remote(num_cpus=1)
 class Server:
@@ -42,7 +42,8 @@ class Server:
 
     async def get_request_outputs_loop(self, request_output_queue):
         while True:
-            request_outputs = await request_output_queue.get()
+            request_outputs_engine = await request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
             for request_output in request_outputs:
                 self.zmq_rpc_latencies.append(time.time() - request_output.send_time)
                 if request_output.finished:
@@ -65,10 +66,8 @@ def gen_request_outputs(num_outputs):
     request_outputs = []
     for _ in range(num_outputs):
         request_id = random_uuid()
-        completion_output = CompletionOutput(0, "", [], 0.0, None)
-        request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=False)
-        request_outputs.append(request_output)
-    request_outputs[-1].finished = True
+        request_outputs.append(get_request_output_engine(request_id))
+    request_outputs[-1][0].finished = True
     return request_outputs
 
 async def async_request_output_gen(generator, qps):
@@ -81,7 +80,7 @@ async def async_request_output_gen(generator, qps):
             return
 
 async def put_queue(request_output_queue, request_output, server_info):
-    request_output.send_time = time.time()
+    request_output[0].send_time = time.time()
     await request_output_queue.put_nowait([request_output], server_info)
 
 class TimeoutException(Exception):

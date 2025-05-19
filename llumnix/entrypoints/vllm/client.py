@@ -2,7 +2,7 @@ import copy
 import math
 import time
 import asyncio
-from typing import Dict
+from typing import Dict, Tuple
 
 import ray.exceptions
 
@@ -17,8 +17,9 @@ from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.server_info import ServerInfo
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.constants import WAIT_MANAGER_INTERVAL
-from llumnix.ray_utils import execute_actor_method_async_with_retries
+from llumnix.constants import WAIT_MANAGER_INTERVAL, INIT_GLOBAL_INSTANCES_INTERVAL, UPDATE_GLOBAL_INSTANCES_INTERVAL
+from llumnix.ray_utils import (execute_actor_method_async_with_retries, get_instance, get_actor_names_by_name_prefix,
+                               INSTANCE_NAME_PREFIX)
 from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.entrypoints.api_server_actor import APIServerActor
 
@@ -36,6 +37,9 @@ class LlumnixClientVLLM:
         self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
 
         self.request_streams: Dict[str, AsyncStream] = {}
+        self.request_instance: Dict[str, str] = {}
+        # TODO(s5u13): Consider a better way to get instance handle without calling ray.
+        self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
         self.request_streams_last_completion_tokens: Dict[str, int] = {}
         for ins_id in self.instances.keys():
@@ -45,6 +49,7 @@ class LlumnixClientVLLM:
 
         loop.create_task(self.get_request_outputs_loop())
         loop.create_task(self.request_output_queue.run_server_loop())
+        loop.create_task(self._update_global_instances_loop())
 
     async def generate(self,
                        prompt: str,
@@ -54,7 +59,7 @@ class LlumnixClientVLLM:
                        **kwargs) -> AsyncStream:
         if sampling_params.n > 1:
             raise ValueError("Unsupported feature: multiple sequence decoding")
-        logger.info("entrypoints receive request {}".format(request_id))
+        logger.info("Client received request {}".format(request_id))
         # pylint: disable=unexpected-keyword-arg
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
         self.request_streams[request_id] = results_generator
@@ -142,14 +147,44 @@ class LlumnixClientVLLM:
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
 
     async def abort(self, request_id: str) -> None:
-        logger.info("Abort request: {}.".format(request_id))
-        return await execute_actor_method_async_with_retries(
-            self.manager.abort.remote, "Manager", "abort", request_id
-        )
+        instance_id, instance = self._get_instance_for_abort(request_id)
+        if instance:
+            self.global_instances[instance_id] = instance
+            logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
+            try:
+                await asyncio_wait_for_with_timeout(instance.abort.remote(request_id))
+                self._clear_client_request_states(request_id)
+            except Exception as e: # pylint: disable=broad-except
+                if isinstance(e, ray.exceptions.RayActorError):
+                    logger.info("Instance {} is dead.".format(instance_id))
+                elif isinstance(e, asyncio.TimeoutError):
+                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
+                else:
+                    logger.exception("Failed to abort request {} of instance {}, "
+                                     "unexpected exception: {}".format(request_id, instance_id, e))
+        else:
+            logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
+                request_id, instance_id, instance))
 
     def abort_request(self, request_id: str) -> None:
-        logger.info("Abort request: {}.".format(request_id))
-        self.manager.abort.remote(request_id)
+        instance_id, instance = self._get_instance_for_abort(request_id)
+        if instance:
+            logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
+            # TODO(s5u13b): Optimize the serialization cost.
+            instance.abort.remote(request_id)
+        else:
+            logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
+                request_id, instance_id, instance))
+
+    def _get_instance_for_abort(self, request_id: str) -> Tuple[str, Llumlet]:
+        instance_id = self.request_instance.get(request_id, None)
+        if instance_id is None:
+            instance = None
+        else:
+            instance = self.global_instances[instance_id] \
+                if instance_id in self.global_instances else get_instance(instance_id)
+
+        return instance_id, instance
 
     async def is_ready(self) -> bool:
         return await execute_actor_method_async_with_retries(
@@ -158,21 +193,33 @@ class LlumnixClientVLLM:
 
     async def get_request_outputs_loop(self):
         while True:
-            request_outputs = await self.request_output_queue.get()
+            request_outputs_engine = await self.request_output_queue.get()
+            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            request_output_infos = [request_output_info for _, request_output_info in request_outputs_engine]
             set_timestamp(request_outputs, 'api_server_get_queue_timestamp', time.time())
-            for request_output in request_outputs:
+            for request_output, request_output_info in zip(request_outputs, request_output_infos):
                 request_id = request_output.request_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
+                # Update when request_id is in self.request_streams.
+                self.request_instance[request_id] = request_output_info.instance_id
                 processed_output = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
                 self.request_streams[request_id].put(processed_output)
                 if request_output.finished:
-                    self.request_streams[request_id].finish()
-                    del self.request_streams[request_id]
-                    self.request_streams_last_completion_tokens.pop(request_id, None)
+                    logger.info("Client finished request {}".format(request_id))
+                    self._clear_client_request_states(request_id)
+
+    def _clear_client_request_states(self, request_id: str):
+        if request_id in self.request_streams:
+            self.request_streams[request_id].finish()
+            del self.request_streams[request_id]
+        else:
+            logger.error("Request {} not found.".format(request_id))
+        self.request_streams_last_completion_tokens.pop(request_id, None)
+        self.request_instance.pop(request_id, None)
 
     def _process_output_order(
         self, request_id: int, request_output: RequestOutput
@@ -185,9 +232,7 @@ class LlumnixClientVLLM:
             # request_output has no outputs, return the request_output directly.
             return request_output
 
-        last_completion_tokens = self.request_streams_last_completion_tokens.get(
-            request_id, 0
-        )
+        last_completion_tokens = self.request_streams_last_completion_tokens.get(request_id, 0)
         if current_completion_tokens <= last_completion_tokens:
             # process the out-of-order output
             logger.info(
@@ -200,10 +245,25 @@ class LlumnixClientVLLM:
                 logger.info("out-of-order request({}) output timestamps: {}".format(
                     request_id, request_output.request_timestamps.to_latency_breakdown_dict()))
             return None
-        self.request_streams_last_completion_tokens[request_id] = (
-            current_completion_tokens
-        )
+        self.request_streams_last_completion_tokens[request_id] = current_completion_tokens
+
         return request_output
+
+    async def _update_global_instances_loop(self):
+        await asyncio.sleep(INIT_GLOBAL_INSTANCES_INTERVAL)
+        while True:
+            curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
+            curr_instance_ids = [curr_instance_name.split("_")[-1] for curr_instance_name in curr_instance_names]
+            new_global_instances = {}
+            for instance_id in curr_instance_ids:
+                if instance_id in self.global_instances:
+                    new_global_instances[instance_id] = self.global_instances[instance_id]
+                else:
+                    instance = get_instance(instance_id)
+                    if instance is not None:
+                        new_global_instances[instance_id] = instance
+            self.global_instances = new_global_instances
+            await asyncio.sleep(UPDATE_GLOBAL_INSTANCES_INTERVAL)
 
     # TODO(s5u13b): Add base class of LlumnixClient.
     def cleanup(self):

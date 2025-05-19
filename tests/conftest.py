@@ -46,7 +46,8 @@ def ray_stop(max_retries=5, delay=5):
     def is_ray_running():
         result = subprocess.run(["ps", "-ef"], stdout=subprocess.PIPE, text=True, check=False)
         lines = [line for line in result.stdout.splitlines() if
-                 'ray' in line and 'rayqueue' not in line and 'use_ray_spmd_worker' not in line]
+                 'ray' in line and 'rayqueue' not in line and 'rayrpc' not in line
+                 and 'use_ray_spmd_worker' not in line]
         if len(lines) > 0:
             print("Ray processes are still running: {}".format('\n'.join(lines)))
         return len(lines) > 0

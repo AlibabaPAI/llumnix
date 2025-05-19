@@ -198,7 +198,7 @@ def wait_port_free(port: int, max_retries: int = 5, force: bool = False):
     retries = 0
     history_pid = None
 
-    while retries < max_retries:
+    while retries < max_retries: # pylint: disable=too-many-nested-blocks
         if check_free_port(port=port):
             return
 

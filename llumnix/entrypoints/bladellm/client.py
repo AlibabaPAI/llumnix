@@ -16,7 +16,7 @@ import time
 import asyncio
 import copy
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import ray.exceptions
 
@@ -64,8 +64,9 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         self.request_streams: Dict[int, asyncio.Queue] = {}
         self.request_instance: Dict[str, str] = {}
         self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
+        self.timestamps_streams: Dict[int, asyncio.Queue] = {}
         self.request_streams_last_completion_tokens: Dict[str, int] = {}
-        self.request_streams_output_stash: Dict[str, list[GenerateStreamResponse]] = {}
+        self.request_streams_output_stash: Dict[str, List[GenerateStreamResponse]] = {}
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
@@ -76,24 +77,33 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         loop.create_task(self.request_output_queue.run_server_loop())
         loop.create_task(self._update_global_instances_loop())
 
+    def get_request_timestamps_generator(self, entrypoint_id: int) -> Optional[asyncio.Queue]:
+        return self.timestamps_streams.get(entrypoint_id, None)
+
     async def _add_request(self, request: ServerRequest) -> LLMResponse:
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
             return error_resp(request.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
 
-        # To prevent different api_servers from generating the same request_id, a random number is used to replace original req_id.
+        # To prevent different api_servers from generating the same request_id,
+        # a random number is used to replace original req_id.
         llumnix_id = random.randint(1, (1 << 31) - 1)
         self.llumnix_id2entrypoint_id[llumnix_id] = request.id
         self.entrypoint_id2llumnix_id[request.id] = llumnix_id
         logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_id))
-        request.id = llumnix_id
+        internal_request = copy.deepcopy(request)
+        internal_request.id = llumnix_id
 
-        resp_stream = await self._generate(llumnix_id, request.model_dump_json())
+        resp_stream = await self._generate(llumnix_id, internal_request.model_dump_json())
         return resp_stream
 
     async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
         logger.info("Client received request {}".format(request_id))
         results_queue = asyncio.Queue()
         self.request_streams[request_id] = results_queue
+        if self.log_request_timestamps:
+            entrypoint_id = self.llumnix_id2entrypoint_id.get(request_id, None)
+            if entrypoint_id is not None:
+                self.timestamps_streams[entrypoint_id] = asyncio.Queue()
         server_info_copy = copy.deepcopy(self.server_info)
 
         # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
@@ -209,24 +219,36 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             request_outputs_engine = await self.request_output_queue.get()
             if request_outputs_engine is None:
                 continue
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
-            request_output_infos = [request_output_info for _, request_output_info in request_outputs_engine]
-            for request_output_json, request_output_info in zip(request_outputs, request_output_infos):
+            request_outputs = [request_output for request_output, _, _ in request_outputs_engine]
+            request_output_infos = [request_output_info for _, request_output_info, _ in request_outputs_engine]
+            request_timestamps = [request_timestamp for _, _, request_timestamp in request_outputs_engine]
+
+            for request_output_json, request_output_info, request_timestamp in \
+                zip(request_outputs, request_output_infos, request_timestamps):
                 request_output = GenerateStreamResponse(**json.loads(request_output_json))
+                set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
                 request_id = request_output.req_id
-                # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+                # Request could be dispatched twice when manager is dead, the first request will free
+                # the request_streams when finished. Or the request is dropped already.
                 if request_id not in self.request_streams:
                     continue
                 self.request_instance[request_id] = request_output_info.instance_id
+
+                if self.log_request_timestamps:
+                    # Do not consider the out of order for request timestamp currently.
+                    entrypoint_id = self.llumnix_id2entrypoint_id.get(request_id, None)
+                    if entrypoint_id is not None:
+                        self.timestamps_streams[entrypoint_id].put_nowait(request_timestamp)
                 processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
                 for req in processed_output:
                     self.request_streams[request_id].put_nowait(req)
-                self.request_streams_last_completion_tokens[request_id] = processed_output[-1].usage.completion_tokens
+                last_output = processed_output[-1]
+                self.request_streams_last_completion_tokens[request_id] = last_output.usage.completion_tokens
                 if processed_output[-1].is_finished or not processed_output[-1].is_ok:
-                    logger.debug("Client finished request {}, is_finished: {}, is_ok: {}".format(
-                        request_id, processed_output[-1].is_finished, processed_output[-1].is_ok))
+                    logger.debug("Client finish request {}, is_ok: {}, err_info: {}".format(
+                        request_id, last_output.is_ok, last_output.error_info))
                     self._clear_client_request_states(request_id)
 
     def _clear_client_request_states(self, request_id: str):

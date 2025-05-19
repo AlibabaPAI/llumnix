@@ -229,7 +229,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
-        # TODO(KuilongCui): add cli_args to determine whether to collect profiling data
         instance_info.profiling_data=(instance_info.inference_type.value if instance_info.inference_type else "",
                                       instance_info.num_seqs,
                                       sum(instance_info.running_seq_lens),

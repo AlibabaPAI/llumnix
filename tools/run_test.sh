@@ -16,9 +16,12 @@ else
     exit 1
 fi
 
+date
+
 nvidia-docker run --rm -t \
   -v ${PWD}:/test_workspace \
   -v /mnt:/mnt \
   -w /test_workspace \
   $docker_options \
-  "$image" sh -c "$install_command > /dev/null && make $test_mode"
+  --shm-size=512m \
+  "$image" sh -c "date && $install_command > /dev/null && date && make $test_mode"

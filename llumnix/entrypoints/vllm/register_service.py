@@ -31,6 +31,4 @@ if __name__ == "__main__":
     engine_args = get_engine_args(cli_args)
     vllm_engine_args = VllmEngineArgs(engine_args=engine_args)
 
-    connect_to_ray_cluster()
-
     save_engine_args(cli_args.engine_type, cli_args.save_path, vllm_engine_args, cli_args.save_key)

@@ -71,7 +71,6 @@ def get_current_node_resources():
 
 
 if __name__ == "__main__":
-
     # Assume that there is an existing ray cluster when using centralized deployment.
     connect_to_ray_cluster()
 

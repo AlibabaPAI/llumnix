@@ -13,11 +13,11 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
-from llumnix.utils import try_convert_to_local_path
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 from tests.unit_test.queue.utils import request_output_queue_server
+from tests.utils import try_convert_to_local_path
 
 from .utils import create_dummy_prompt, initialize_scheduler
 

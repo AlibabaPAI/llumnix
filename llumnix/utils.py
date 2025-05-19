@@ -227,25 +227,6 @@ def wait_port_free(port: int, max_retries: int = 5):
 
     raise RuntimeError(f"Port {port} is still in use after {max_retries} retries.")
 
-def try_convert_to_local_path(data_path: str) -> str:
-    if os.path.isabs(data_path):
-        return data_path
-
-    assert "/" in data_path
-    base_data_name = os.path.basename(data_path)
-
-    base_model_path: str = llumnix_envs.MODEL_PATH
-    local_model_path: str = os.path.join(base_model_path, base_data_name)
-    if os.path.exists(local_model_path):
-        return local_model_path
-
-    base_dataset_path: str = llumnix_envs.DATASET_PATH
-    local_dataset_path: str = os.path.join(base_dataset_path, base_data_name)
-    if os.path.exists(local_dataset_path):
-        return local_dataset_path
-
-    return data_path
-
 def update_environment_variables(envs: Dict[str, str]):
     for k, v in envs.items():
         if k in os.environ and os.environ[k] != v:

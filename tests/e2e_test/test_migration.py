@@ -22,7 +22,7 @@ import pytest
 import torch
 import ray
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path, wait_port_free
+from llumnix.utils import get_ip_address, wait_port_free
 
 # pylint: disable=unused-import
 from tests import conftest
@@ -31,6 +31,8 @@ from tests.e2e_test.utils import (generate_bench_command, to_markdown_table,
                                   wait_for_llumnix_service_ready, shutdown_llumnix_service,
                                   generate_bladellm_serve_command, check_log_exception,
                                   generate_vllm_serve_command)
+from tests.utils import try_convert_to_local_path
+
 
 size_pattern = re.compile(r'total_kv_cache_size:\s*([\d.]+)\s*(B|KB|MB|GB|KB|TB)')
 speed_pattern = re.compile(r'speed:\s*([\d.]+)GB/s')

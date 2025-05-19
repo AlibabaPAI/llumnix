@@ -26,11 +26,12 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
-from llumnix.utils import try_convert_to_local_path, random_uuid
+from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
+from tests.utils import try_convert_to_local_path
 
 
 @ray.remote(num_cpus=1)

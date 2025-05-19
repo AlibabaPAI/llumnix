@@ -22,11 +22,13 @@ from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.backends.vllm.worker import MigrationWorker
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import random_uuid, try_convert_to_local_path
+from llumnix.utils import random_uuid
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
+from tests.utils import try_convert_to_local_path
+
 from .test_worker import create_worker
 
 

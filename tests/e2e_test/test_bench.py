@@ -21,7 +21,7 @@ import pytest
 import torch
 import numpy as np
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path, wait_port_free
+from llumnix.utils import get_ip_address, wait_port_free
 
 # pylint: disable=unused-import
 from tests import conftest
@@ -30,6 +30,8 @@ from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_c
                     wait_for_llumnix_service_ready, shutdown_llumnix_service,
                     generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
                     generate_bladellm_serve_command)
+from tests.utils import try_convert_to_local_path
+
 
 BENCH_TEST_TIMEOUT_MINS = 60
 # Used to caculate port to avoid port conficts between tests.

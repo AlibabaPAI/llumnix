@@ -21,7 +21,7 @@ import pytest
 import aiohttp
 import torch
 
-from llumnix.utils import get_ip_address, try_convert_to_local_path, wait_port_free
+from llumnix.utils import get_ip_address, wait_port_free
 
 # pylint: disable=unused-import
 from tests import conftest
@@ -31,6 +31,7 @@ from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_se
                                   shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
                                   generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
                                   check_log_exception, generate_bladellm_serve_command)
+from tests.utils import try_convert_to_local_path
 
 
 async def get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func):
@@ -125,7 +126,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
     return bladellm_outputs
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="at least 2 gpus required for correctness test")
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])

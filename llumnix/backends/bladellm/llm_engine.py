@@ -23,6 +23,7 @@ import asyncio
 import queue
 import os
 
+import msgspec
 import ray
 import grpc
 from ray.util.placement_group import PlacementGroup
@@ -33,7 +34,7 @@ from google.protobuf import empty_pb2
 from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse, BatchGenerateStreamResponse
 from blade_llm.service.proto.bladellm_pb2 import WorkerStepResponse
 from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
@@ -131,15 +132,17 @@ class AsyncBackQueueWrapper:
                 self.backup_dangling_request_server_info.pop(req_id, None)
 
     async def _put_request_outputs_loop(self):
-        async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
-            resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
+        async def get_engine_response() -> Tuple[Union[GenerateStreamResponse, BatchGenerateStreamResponse], ServerInfo]:
+            resp: Union[GenerateStreamResponse, BatchGenerateStreamResponse, int] = \
+                await self.put_queue_args_queue.get()
             while isinstance(resp, int):
                 self.get_current_step_counter_queue.put_nowait(resp)
                 try:
                     self.current_step_metrics = self.metrics_queue.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
-                resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
+                resp: Union[GenerateStreamResponse, BatchGenerateStreamResponse, int] = \
+                    await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
                 logger.info("Engine {} finish request {}.".format(self.instance_id, resp.req_id))
@@ -150,20 +153,20 @@ class AsyncBackQueueWrapper:
         while True:
             request_outputs, server_info_outputs = [], []
 
-            resp, server_info = await get_single_response()
+            resp, server_info = await get_engine_response()
             request_outputs.append(resp)
             server_info_outputs.append(server_info)
 
             if self.put_queue_args_queue.qsize() > 0:
                 output_size = self.put_queue_args_queue.qsize()
                 for _ in range(output_size):
-                    resp, server_info = await get_single_response()
+                    resp, server_info = await get_engine_response()
                     request_outputs.append(resp)
                     server_info_outputs.append(server_info)
 
             await self._put_request_outputs_to_server(request_outputs, server_info_outputs)
 
-    async def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
+    def _put_request_outputs_to_server(self, request_outputs: List[Union[GenerateStreamResponse, BatchGenerateStreamResponse]],
                                        server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
@@ -184,7 +187,7 @@ class AsyncBackQueueWrapper:
                             self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
 
             llumnix_response = LlumnixRequestOuputBladeLLM(request_output.req_id, self.instance_id,
-                                                       request_output.model_dump_json(), request_timestamps)
+                                                       request_output, request_timestamps)
             server_id = server_info.server_id
             server_request_outputs[server_id].append(llumnix_response)
             if server_id not in server_info_dict:
@@ -625,7 +628,7 @@ class BackendBladeLLM(BackendInterface):
 
     async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
-        server_request = ServerRequest(**json.loads(kwargs["server_request"]))
+        server_request: ServerRequest = msgspec.msgpack.decode(kwargs["server_request"], type=ServerRequest)
         # The instance ID of the decode instance. If provided, engine will skip dispatch decode instance after prefilling.
         server_request.decode_instances = [kwargs.get("decode_instance_id", ""),]
         await self.engine.add_request(server_info, server_request)

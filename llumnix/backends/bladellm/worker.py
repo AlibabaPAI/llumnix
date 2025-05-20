@@ -153,8 +153,8 @@ class WorkerProcessesRay(WorkerProcesses):
                     logger.exception("Worker {} is dead (pid {}, node_id: {}, gpu_ids: {}).".format(
                         rank, self.worker_pids[rank],
                         self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]))
-            if self.remote_watch_dog:
-                has_dead = has_dead or self.remote_watch_dog.worker_watch_dog()
+            if self._remote_watch_dog:
+                has_dead = has_dead or self._remote_watch_dog.worker_watch_dog()
             if has_dead:
                 self._exit_server()
         logger.info("watch dog exit.")
@@ -331,8 +331,8 @@ class WorkerProcessesRay(WorkerProcesses):
             self._spawn_workers_ray(self._args, self.addition_args, self.addition_kwargs)
         except: # pylint: disable=bare-except
             self._exit_server()
-        if self.remote_watch_dog:
-            self.remote_watch_dog.start()
+        if self._remote_watch_dog:
+            self._remote_watch_dog.start()
         self._watchdog = threading.Thread(target=self._worker_watch_dog, args=(), daemon=True, name="worker_watchdog")
         self._watchdog.start()
 
@@ -356,5 +356,5 @@ class WorkerProcessesRay(WorkerProcesses):
             except Exception as e:
                 logger.exception("Failed to kill worker (instance_id: {}, rank: {}), "
                                  "unexpected exception: {}.".format(self.instance_id, rank, e))
-        if self.remote_watch_dog:
-            self.remote_watch_dog.stop()
+        if self._remote_watch_dog:
+            self._remote_watch_dog.stop()

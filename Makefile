@@ -77,27 +77,27 @@ vllm_offline_test:
 # TODO(KuilongCui): add bladellm offine inference example
 
 .PHONY: vllm_correctness_test
-vllm_correctness_test:
+vllm_correctness_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
 
 .PHONY: bladellm_correctness_test
-bladellm_correctness_test:
+bladellm_correctness_test: check_pytest_installed
 	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_correctness.py
 
 .PHONY: vllm_bench_test
-vllm_bench_test:
+vllm_bench_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_bench.py
 
 .PHONY: bladellm_bench_test
-bladellm_bench_test:
+bladellm_bench_test: check_pytest_installed
 	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_bench.py
 
 .PHONY: vllm_migration_test
-vllm_migration_test:
+vllm_migration_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_migration.py
 
 .PHONY: bladellm_migration_test
-bladellm_migration_test:
+bladellm_migration_test: check_pytest_installed
 	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_migration.py
 
 ####################################### test end ########################################
@@ -144,5 +144,9 @@ check_pytest_installed:
 	@python3 -m pip show pytest-asyncio > /dev/null 2>&1 || { \
 		echo "pytest-asyncio is not installed. Installing pytest-asyncio ..."; \
 		python3 -m pip install pytest-asyncio; }
+
+	@python3 -m pip show pytest-timeout > /dev/null 2>&1 || { \
+		echo "pytest-timeout is not installed. Installing pytest-timeout ..."; \
+		python3 -m pip install pytest-timeout; }
 
 ###################################### pytest end #######################################

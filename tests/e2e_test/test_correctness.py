@@ -181,7 +181,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         pytest.skip(conftest.SKIP_REASON)
 
     global test_times
-
+    print("Going to set new env...")
     ip = get_ip_address()
     base_port = 40000 + test_times * 100
     if "BladeLLM" in engine:
@@ -226,7 +226,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     launch_commands = []
     if launch_mode == "local":
         if enable_pd_disagg:
-            wait_port_free(base_port)
+            wait_port_free(base_port, force=True)
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
@@ -237,7 +237,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     tensor_parallel_size=tensor_parallel_size))
 
             decode_port = base_port + 50
-            wait_port_free(decode_port)
+            wait_port_free(decode_port, force=True)
             launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
                                                     launch_ray_cluster=False,
                                                     model=model,
@@ -248,7 +248,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
         else:
-            wait_port_free(base_port)
+            wait_port_free(base_port, force=True)
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
@@ -256,7 +256,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     tensor_parallel_size=tensor_parallel_size))
     else:
         for i in range(instance_count):
-            wait_port_free(base_port + i)
+            wait_port_free(base_port + i, force=True)
         launch_commands.append(generate_serve_command_func(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,
@@ -267,6 +267,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                enable_migration=enable_migration,
                                                max_instances=instance_count))
     for launch_command in launch_commands:
+        print(f"Going to run command: {launch_command}")
         subprocess.run(launch_command, shell=True, check=True)
     await asyncio.sleep(3)
 

@@ -127,7 +127,7 @@ class LlumnixEngineArgsFactory:
             if self.enable_port_increment:
                 next_engine_args.revised_args.disagg_options_token_port_offset = \
                     self.disagg_options_token_port_offset
-                self.disagg_options_token_port_offset += 1
+                self.disagg_options_token_port_offset += 10
             if self.pdd_config.enable_engine_pd_disagg:
                 next_engine_args.revised_args.disagg_options_inst_role = (
                     instance_type.value

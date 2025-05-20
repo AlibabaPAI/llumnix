@@ -218,8 +218,8 @@ def wait_port_free(port: int, max_retries: int = 5, force: bool = False):
                     except psutil.NoSuchProcess:
                         continue
 
-            if conn.status == 'TIME_WAIT':
-                time.sleep(60)
+                if conn.status == 'TIME_WAIT':
+                    time.sleep(60)
 
         gc.collect()
         time.sleep(3)

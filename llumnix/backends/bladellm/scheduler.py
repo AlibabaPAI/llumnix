@@ -39,7 +39,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self.llumnix_metrics = BladeLLMMetrics()
         self.id2group: Dict[int, GenerationGroupStateLlumnix] = {}
         self.pre_alloc_cache_dict: Dict[int, BlockTable] = {}
-        self.migrating_out_request_last_stage: Dict[int, int] = {}
+        self.migrating_out_request_last_stage: Dict[int, GenerationGroupStateLlumnix] = {}
         self.llumnix_metrics.block_manager_init_metrics(self.block_manager)
         self.llumnix_metrics.scheduler_init_metrics(self)
 
@@ -151,7 +151,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         return False
 
     def add_migrating_out_request_last_stage(self, backend_request: GenerationGroupStateLlumnix) -> None:
-        self.migrating_out_request_last_stage[backend_request.request_group_id] = backend_request.request_group_id
+        self.migrating_out_request_last_stage[backend_request.request_group_id] = backend_request
 
     def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.id2group[backend_request.request_id] = backend_request

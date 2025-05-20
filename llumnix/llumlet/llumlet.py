@@ -252,7 +252,7 @@ class Llumlet:
             # back to the running request queue.
             migrating_out_requests_last_stage = self.backend_engine.free_migrating_out_requests_last_stage()
             for backend_request in migrating_out_requests_last_stage:
-                logger.info("clear_migration_states: add request {} back to engine".format(backend_request.request_id))
+                logger.info("clear_migration_states: add request {} back to engine.".format(backend_request.request_id))
                 assert RequestStatus.is_migrating(backend_request.status), \
                     "The status of request in migrating_out_requests_last_stage should be \
                      RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"

@@ -14,12 +14,11 @@
 # limitations under the License.
 
 import argparse
-import copy
 import dataclasses
 from dataclasses import dataclass
 import os
 import pickle
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 from abc import ABC, abstractmethod
 
 from llumnix.instance_info import InstanceType
@@ -59,21 +58,25 @@ class LlumnixEngineArgs(ABC):
         self, engine_args, backend_type: BackendType
     ) -> None:
         self.engine_args = engine_args
-        self.engine_args_wrapped = None
+        self.revised_args = None
         self.backend_type: BackendType = backend_type
 
     @abstractmethod
-    def unwrap_engine_args_if_needed(self):
+    def _get_engine_args(self, engine_args):
+        pass
+
+    @abstractmethod
+    def load_engine_args_if_needed(self):
         # returun the engine args after overriding
         pass
 
     @abstractmethod
-    def get_engine_world_size(self):
+    def get_world_size(self):
         pass
 
     def update_arg(self, args_key: str, args_value):
-        if self.engine_args_wrapped and hasattr(self.engine_args_wrapped, args_key):
-            setattr(self.engine_args_wrapped, args_key, args_value)
+        if self.revised_args and hasattr(self.revised_args, args_key):
+            setattr(self.revised_args, args_key, args_value)
 
     def update_args(self, **kwargs):
         for args_key, args_value in kwargs.items():
@@ -92,7 +95,7 @@ class LlumnixEngineArgsFactory:
         self.load_registered_service: bool = load_registered_service
         self.load_registered_service_path: str = load_registered_service_path
         self.pdd_config: PDDConfig = pdd_config
-        self.engine_args_dict: dict[str, LlumnixEngineArgs] = {}
+        self.engine_args_dict: Dict[str, LlumnixEngineArgs] = {}
         self.enable_port_increment: bool = enable_port_increment
         self.disagg_options_token_port_offset = 0  # used in bladellm
 
@@ -115,21 +118,18 @@ class LlumnixEngineArgsFactory:
         if self.load_registered_service:
             return self.engine_args_dict[instance_type]
 
-        engine_args_copied = copy.deepcopy(current_engine_args.engine_args)
-
-        # lazy import to void circular import
+        # lazy import to avoid circular import
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
 
         if isinstance(current_engine_args, BladellmEngineArgs):
-            next_engine_args = BladellmEngineArgs(engine_args_copied)
-            next_engine_args.world_size = current_engine_args.get_engine_world_size()
+            next_engine_args = BladellmEngineArgs(current_engine_args)
             if self.enable_port_increment:
-                next_engine_args.engine_args_wrapped.disagg_options_token_port_offset = \
+                next_engine_args.revised_args.disagg_options_token_port_offset = \
                     self.disagg_options_token_port_offset
                 self.disagg_options_token_port_offset += 10
             if self.pdd_config.enable_engine_pd_disagg:
-                next_engine_args.engine_args_wrapped.disagg_options_inst_role = (
+                next_engine_args.revised_args.disagg_options_inst_role = (
                     instance_type.value
                     if isinstance(instance_type, InstanceType)
                     else instance_type
@@ -140,7 +140,7 @@ class LlumnixEngineArgsFactory:
         from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
 
         if isinstance(current_engine_args, VllmEngineArgs):
-            vllm_engine_args = VllmEngineArgs(engine_args_copied, current_engine_args.backend_type)
+            vllm_engine_args = VllmEngineArgs(current_engine_args, current_engine_args.backend_type)
             return vllm_engine_args
 
         raise TypeError(

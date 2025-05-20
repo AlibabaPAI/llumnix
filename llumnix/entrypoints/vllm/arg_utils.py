@@ -1,4 +1,5 @@
-from typing import Tuple
+from typing import Tuple, Union
+import copy
 
 from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
 from vllm.config import EngineConfig, ParallelConfig
@@ -16,13 +17,22 @@ logger = init_logger(__name__)
 
 
 class VllmEngineArgs(LlumnixEngineArgs):
-    def __init__(self, engine_args, backend_type: BackendType = BackendType.VLLM) -> None:
+    def __init__(self,
+                 engine_args: Union[AsyncEngineArgs, LlumnixEngineArgs],
+                 backend_type: BackendType = BackendType.VLLM) -> None:
+        engine_args = self._get_engine_args(engine_args)
         super().__init__(engine_args=engine_args, backend_type=backend_type)
 
-    def unwrap_engine_args_if_needed(self):
+    def _get_engine_args(self,
+                         engine_args: Union[AsyncEngineArgs, LlumnixEngineArgs]):
+        if isinstance(engine_args, LlumnixEngineArgs):
+            return copy.deepcopy(engine_args.engine_args)
+        return engine_args
+
+    def load_engine_args_if_needed(self):
         return self.engine_args
 
-    def get_engine_world_size(self):
+    def get_world_size(self):
         engine_config = self.engine_args.create_engine_config()
         return engine_config.parallel_config.world_size
 
@@ -85,7 +95,6 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
     entrypoints_args, manager_args, instance_args = \
         get_llumnix_args(engine_args, BackendType.VLLM, launch_mode, parser, llumnix_config)
 
-    # TODO(s5u13b): Refine check args logic.
     engine_args = load_registered_service_if_needed(manager_args, engine_args)
 
     # backend related check args

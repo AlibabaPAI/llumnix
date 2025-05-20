@@ -6,12 +6,14 @@ import uuid
 
 import ray
 
+from vllm.outputs import RequestOutput
 from vllm.engine.arg_utils import EngineArgs
 from vllm.sampling_params import SamplingParams
 
 from llumnix import (Manager, launch_ray_cluster, connect_to_ray_cluster, init_manager,
                      ManagerArgs, InstanceArgs, Llumlet, ServerInfo, QueueType, BackendType,
-                     LaunchArgs, EntrypointsArgs, LaunchMode, RayQueueServer, VllmEngineArgs)
+                     LaunchArgs, EntrypointsArgs, LaunchMode, RayQueueServer, VllmEngineArgs,
+                     LlumnixRequestOuputVLLM)
 
 from tests.utils import try_convert_to_local_path
 from tests.conftest import cleanup_ray_env_func
@@ -71,9 +73,9 @@ server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue,
 async def background_process_outputs(num_tasks):
     finish_task = 0
     while finish_task != num_tasks:
-        request_outputs_engine = await request_output_queue.get()
-        request_outputs = [request_output for request_output, _ in request_outputs_engine]
-        for request_output in request_outputs:
+        request_outputs_engine: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+        for request_output_engine in request_outputs_engine:
+            request_output: RequestOutput = request_output_engine.get_engine_output()
             if request_output.finished:
                 finish_task += 1
                 prompt = request_output.prompt

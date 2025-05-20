@@ -13,18 +13,22 @@
 
 import asyncio
 import math
+from typing import List
+
 import pytest
 import ray
 
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
 from vllm.sequence import ExecuteModelRequest
+from vllm.outputs import RequestOutput
 
 from llumnix.backends.vllm.sim_executor import SimGPUExecutor
 from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 
 # pylint: disable=unused-import
@@ -120,8 +124,9 @@ async def test_backend(ray_env):
         finished = False
         output = None
         while not finished:
-            request_outputs_engine = await request_output_queue.get()
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            llumnix_responses: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+            request_outputs: List[RequestOutput] = [llumnix_response.get_engine_output()
+                                                    for llumnix_response in llumnix_responses]
             for request_output in request_outputs:
                 output = request_output.outputs[0]
                 finished = request_output.finished

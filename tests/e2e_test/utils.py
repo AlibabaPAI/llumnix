@@ -84,6 +84,7 @@ def generate_vllm_launch_command(
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
+    print(f"Going to run command: {command}")
     return command
 
 def generate_vllm_serve_command(
@@ -141,6 +142,7 @@ def generate_vllm_serve_command(
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
+    print(f"Going to run command: {command}")
     return command
 
 NAMING_URL = "file:/tmp/llumnix/naming"
@@ -194,6 +196,7 @@ def generate_bladellm_launch_command(
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
+    print(f"Going to run command: {command}")
     return command
 
 def generate_bladellm_serve_command(
@@ -244,6 +247,7 @@ def generate_bladellm_serve_command(
         f"--max-instances {max_instances} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
+    print(f"Going to run command: {command}")
     return command
 
 

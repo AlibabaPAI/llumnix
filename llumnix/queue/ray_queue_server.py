@@ -22,6 +22,8 @@ from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import random_uuid
 
 
+# TODO(KuilongCui): make rayqueueserver and api server stay in the same node
+# for local launch mode
 class RayQueueServer(QueueServerBase):
     def __init__(self) -> None:
         super().__init__()

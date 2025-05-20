@@ -40,6 +40,7 @@ from llumnix.ray_utils import (execute_actor_method_async_with_retries, get_inst
                                INSTANCE_NAME_PREFIX)
 from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 
 logger = init_logger(__name__)
 
@@ -92,12 +93,11 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_id))
         internal_request = copy.deepcopy(request)
         internal_request.id = llumnix_id
-
         resp_stream = await self._generate(llumnix_id, internal_request.model_dump_json())
         return resp_stream
 
     async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
-        logger.info("Client received request {}".format(request_id))
+        logger.info("Client receive request {}.".format(request_id))
         results_queue = asyncio.Queue()
         self.request_streams[request_id] = results_queue
         if self.log_request_timestamps:
@@ -216,29 +216,27 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
 
     async def get_request_outputs_loop(self):
         while True:
-            request_outputs_engine = await self.request_output_queue.get()
-            if request_outputs_engine is None:
+            request_responses: List[LlumnixRequestOuputBladeLLM] = await self.request_output_queue.get()
+            if request_responses is None:
                 continue
-            request_outputs = [request_output for request_output, _, _ in request_outputs_engine]
-            request_output_infos = [request_output_info for _, request_output_info, _ in request_outputs_engine]
-            request_timestamps = [request_timestamp for _, _, request_timestamp in request_outputs_engine]
 
-            for request_output_json, request_output_info, request_timestamp in \
-                zip(request_outputs, request_output_infos, request_timestamps):
-                request_output = GenerateStreamResponse(**json.loads(request_output_json))
+            for request_response in request_responses:
+                request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
+                request_timestamp: RequestTimestamps = request_response.request_timestamps
                 set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
                 request_id = request_output.req_id
                 # Request could be dispatched twice when manager is dead, the first request will free
                 # the request_streams when finished. Or the request is dropped already.
                 if request_id not in self.request_streams:
                     continue
-                self.request_instance[request_id] = request_output_info.instance_id
+                self.request_instance[request_id] = request_response.instance_id
 
                 if self.log_request_timestamps:
                     # Do not consider the out of order for request timestamp currently.
                     entrypoint_id = self.llumnix_id2entrypoint_id.get(request_id, None)
                     if entrypoint_id is not None:
                         self.timestamps_streams[entrypoint_id].put_nowait(request_timestamp)
+
                 processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
@@ -247,7 +245,7 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
                 last_output = processed_output[-1]
                 self.request_streams_last_completion_tokens[request_id] = last_output.usage.completion_tokens
                 if processed_output[-1].is_finished or not processed_output[-1].is_ok:
-                    logger.debug("Client finish request {}, is_ok: {}, err_info: {}".format(
+                    logger.debug("Client finish request {}, is_ok: {}, err_info: {}.".format(
                         request_id, last_output.is_ok, last_output.error_info))
                     self._clear_client_request_states(request_id)
 

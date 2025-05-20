@@ -11,11 +11,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from typing import Any
+
 from llumnix.metrics.timestamps import RequestTimestamps
 
 
-@dataclass
-class RequestOutputInfo:
-    request_timestamps: RequestTimestamps = None
-    instance_id: str = None
+class LlumnixRequestOuput:
+    def __init__(self, request_id: int, instance_id: str,
+                 engine_output: Any, request_timestamps: RequestTimestamps = None):
+        self.request_id = request_id
+        self.instance_id = instance_id
+        self.engine_output = engine_output
+        self.request_timestamps = request_timestamps
+
+    def get_engine_output(self):
+        return self.engine_output

@@ -15,7 +15,7 @@ import copy
 import math
 import time
 import asyncio
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
 import ray.exceptions
 
@@ -35,6 +35,7 @@ from llumnix.ray_utils import (execute_actor_method_async_with_retries, get_inst
                                INSTANCE_NAME_PREFIX)
 from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 
 logger = init_logger(__name__)
 
@@ -206,23 +207,23 @@ class LlumnixClientVLLM:
 
     async def get_request_outputs_loop(self):
         while True:
-            request_outputs_engine = await self.request_output_queue.get()
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
-            request_output_infos = [request_output_info for _, request_output_info in request_outputs_engine]
-            set_timestamp(request_outputs, 'api_server_get_queue_timestamp', time.time())
-            for request_output, request_output_info in zip(request_outputs, request_output_infos):
-                request_id = request_output.request_id
+            request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
+            for request_response in request_responses:
+                request_output: RequestOutput = request_response.get_engine_output()
+                set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
+                request_id = request_response.request_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_streams:
                     continue
                 # Update when request_id is in self.request_streams.
-                self.request_instance[request_id] = request_output_info.instance_id
+                self.request_instance[request_id] = request_response.instance_id
+
                 processed_output = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
                 self.request_streams[request_id].put(processed_output)
                 if request_output.finished:
-                    logger.info("Client finished request {}".format(request_id))
+                    logger.info("Client finish request {}.".format(request_id))
                     self._clear_client_request_states(request_id)
 
     def _clear_client_request_states(self, request_id: str):

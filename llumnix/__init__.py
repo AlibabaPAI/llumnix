@@ -23,6 +23,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.ray_queue_server import RayQueueServer
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.version import __version__
 
 __all__ = [
@@ -41,7 +42,8 @@ __all__ = [
     "EntrypointsArgs",
     "LaunchMode",
     "ZmqServer",
-    "RayQueueServer"
+    "RayQueueServer",
+    "LlumnixRequestOuputVLLM"
 ]
 
 try:

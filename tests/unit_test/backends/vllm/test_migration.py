@@ -15,6 +15,7 @@ import asyncio
 import math
 import os
 from unittest.mock import MagicMock
+from typing import List
 
 import pytest
 import ray
@@ -23,6 +24,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from vllm import EngineArgs, SamplingParams
 from vllm.utils import random_uuid
 from vllm.sequence import SequenceStatus
+from vllm.outputs import RequestOutput
 
 from llumnix.backends.vllm.llm_engine import BackendVLLM
 from llumnix.llumlet.llumlet import Llumlet
@@ -33,6 +35,7 @@ from llumnix.utils import get_llumnix_env_vars
 from llumnix.ray_utils import (initialize_placement_group, get_placement_group_name,
                                remove_placement_group, kill_instance)
 from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 
 from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
@@ -248,8 +251,9 @@ async def test_migration_correctness(migration_backend, migration_request_status
         origin_output = None
         finished = False
         while not finished:
-            request_outputs_engine = await request_output_queue.get()
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            llumnix_responses: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+            request_outputs: List[RequestOutput] = [llumnix_response.get_engine_output()
+                                                    for llumnix_response in llumnix_responses]
             for request_output in request_outputs:
                 origin_output = request_output.outputs[0]
                 finished = request_output.finished
@@ -283,8 +287,9 @@ async def test_migration_correctness(migration_backend, migration_request_status
         output = None
         finished = False
         while not finished:
-            request_outputs_engine = await request_output_queue.get()
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            llumnix_responses: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+            request_outputs: List[RequestOutput] = [llumnix_response.get_engine_output()
+                                                    for llumnix_response in llumnix_responses]
             for request_output in request_outputs:
                 output = request_output.outputs[0]
                 finished = request_output.finished
@@ -410,8 +415,9 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         origin_output = None
         finished = False
         while not finished:
-            request_outputs_engine = await request_output_queue.get()
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            llumnix_responses: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+            request_outputs: List[RequestOutput] = [llumnix_response.get_engine_output()
+                                                    for llumnix_response in llumnix_responses]
             for request_output in request_outputs:
                 origin_output = request_output.outputs[0]
                 finished = request_output.finished
@@ -428,8 +434,9 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         output = None
         finished = False
         while not finished:
-            request_outputs_engine = await request_output_queue.get()
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            llumnix_responses: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+            request_outputs: List[RequestOutput] = [llumnix_response.get_engine_output()
+                                                    for llumnix_response in llumnix_responses]
             for request_output in request_outputs:
                 output = request_output.outputs[0]
                 finished = request_output.finished

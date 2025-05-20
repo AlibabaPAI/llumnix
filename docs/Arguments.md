@@ -53,6 +53,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-max-stages MIGRATION_MAX_STAGES]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
             [--enable-pd-disagg]
+            [--enable-engine-pd-disagg]
             [--pd-ratio PD_RATIO]
             [--load-registered-service]
             [--load-registered-service-path]
@@ -245,7 +246,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Default: 16
 
 `--enable-pd-disagg`
-- Enable prefill decode disaggregation.
+- Enable prefill decode disaggregation (for vLLM).
+
+`--enable-engine-pd-disagg`
+- Enable engine-based prefill decode disaggregation (for BladeLLM).
 
 `--pd-ratio`
 - The p:d ratio used in gloabl launch mode.

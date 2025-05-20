@@ -7,9 +7,9 @@ from vllm.config import EngineConfig, ParallelConfig
 from llumnix.logging.logger import init_logger
 from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, InstanceArgs,
-                               LlumnixArgumentParser, LlumnixEngineArgs, load_registered_service_if_needed)
+                               LlumnixArgumentParser, LlumnixEngineArgs, load_registered_engine_args,
+                               init_llumnix_args, post_init_llumnix_args)
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.arg_utils import get_llumnix_args
 from llumnix.internal_config import MigrationConfig
 from llumnix.config import LlumnixConfig
 
@@ -47,7 +47,7 @@ def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
 
     return parser
 
-def add_engine_cli_args(parser: LlumnixArgumentParser) -> "Namespace":
+def add_engine_cli_args(parser: "ArgumentParser") -> "Namespace":
     parser = AsyncEngineArgs.add_cli_args(parser)
 
     return parser
@@ -91,16 +91,16 @@ def check_instance_args(instance_args: InstanceArgs, engine_args: AsyncEngineArg
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
         -> Tuple[EntrypointsArgs, ManagerArgs, InstanceArgs, AsyncEngineArgs]:
-    engine_args = AsyncEngineArgs.from_cli_args(cli_args)
-    entrypoints_args, manager_args, instance_args = \
-        get_llumnix_args(engine_args, BackendType.VLLM, launch_mode, parser, llumnix_config)
-
-    engine_args = load_registered_service_if_needed(manager_args, engine_args)
+    entrypoints_args, manager_args, instance_args = init_llumnix_args(llumnix_config)
+    if manager_args.load_registered_service:
+        engine_args = load_registered_engine_args(manager_args)
+    else:
+        engine_args = AsyncEngineArgs.from_cli_args(cli_args)
+    post_init_llumnix_args(engine_args, instance_args, manager_args, entrypoints_args, BackendType.VLLM, launch_mode, parser)
 
     # backend related check args
+    check_engine_args(engine_args)
     check_instance_args(instance_args, engine_args)
-    if not manager_args.load_registered_service:
-        check_engine_args(engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))
     logger.info("manager_args: {}".format(manager_args))

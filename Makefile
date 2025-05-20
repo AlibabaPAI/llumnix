@@ -60,15 +60,11 @@ proto-clean:
 vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctness_test vllm_bench_test vllm_migration_test
 
 .PHONY: bladellm_test
-bladellm_test: check_pytest_installed bladellm_unit_test bladellm_correctness_test bladellm_bench_test bladellm_migration_test
+bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_test bladellm_migration_test
 
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed
 	@pytest -v --ignore=third_party --ignore=tests/e2e_test --ignore-glob="tests/**/bladellm" --disable-warnings
-
-.PHONY: bladellm_unit_test
-bladellm_unit_test: check_pytest_installed
-	@pytest -v -k 'engine_BladeLLM or not engine_' --ignore=third_party --ignore=tests/e2e_test --ignore-glob="tests/**/vllm" --disable-warnings
 
 .PHONY: vllm_offline_test
 vllm_offline_test:
@@ -82,7 +78,7 @@ vllm_correctness_test: check_pytest_installed
 
 .PHONY: bladellm_correctness_test
 bladellm_correctness_test: check_pytest_installed
-	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_correctness.py
+	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
 
 .PHONY: vllm_bench_test
 vllm_bench_test: check_pytest_installed
@@ -90,7 +86,7 @@ vllm_bench_test: check_pytest_installed
 
 .PHONY: bladellm_bench_test
 bladellm_bench_test: check_pytest_installed
-	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_bench.py
+	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_bench.py
 
 .PHONY: vllm_migration_test
 vllm_migration_test: check_pytest_installed
@@ -98,7 +94,15 @@ vllm_migration_test: check_pytest_installed
 
 .PHONY: bladellm_migration_test
 bladellm_migration_test: check_pytest_installed
-	@pytest -v -k 'engine_BladeLLM or not engine_' -x -s --tb=long ./tests/e2e_test/test_migration.py
+	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_migration.py
+
+.PHONY: vllm_service_test
+vllm_service_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_service.py
+
+.PHONY: bladellm_service_test
+bladellm_service_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_service.py
 
 ####################################### test end ########################################
 

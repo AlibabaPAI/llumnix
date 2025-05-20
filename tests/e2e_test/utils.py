@@ -187,6 +187,7 @@ def generate_bladellm_launch_command(
         f"--disagg_pd.inst_role={instance_type} "
         f"--naming_url={NAMING_URL} "
         f"SERVER.REQUEST_OUTPUT_QUEUE_TYPE {request_output_queue_type} "
+        f"MANAGER.ENABLE_ENGINE_PD_DISAGG {enable_pd_disagg} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration and not enable_pd_disagg} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
@@ -229,10 +230,11 @@ def generate_bladellm_serve_command(
         f"--disable_frontend_multiprocessing "
         f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "
         f"{'--enable_disagg' if enable_pd_disagg else ''} "
-        f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
-        f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
-        f"--disagg_pd.inst_role={instance_type} "
-        f"--naming_url={NAMING_URL} "
+        f"--disagg_pd.inst_id {str(uuid.uuid4().hex)[:8]} "
+        f"--disagg_pd.disagg_transfer_type {engine_disagg_transfer_type} "
+        f"--disagg_pd.inst_role {instance_type} "
+        f"--naming_url {NAMING_URL} "
+        f"{'--enable-engine-pd-disagg' if enable_pd_disagg else ''} "
         f"--dispatch-policy {dispatch_policy} "
         f"{'--enable-migration' if enable_migration else ''} "
         f"--migration-backend {migration_backend} "
@@ -339,6 +341,96 @@ def generate_bench_command(backend: str,
     )
     return command
 
+def generate_vllm_register_service_command_func(
+    engine_type: str,
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000
+):
+    command = (
+        f"python -u -m llumnix.entrypoints.vllm.register_service "
+        f"--engine-type {engine_type} "
+        f"--save-path ./service_test "
+        f"--save-key vllm "
+        f"--model {model} "
+        f"--max-model-len 4096 "
+        f"--worker-use-ray "
+        f"--enforce-eager "
+        f"--trust-remote-code "
+    )
+    return command
+
+def generate_vllm_serve_service_command_func(
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    max_instances: int = 4,
+    result_filename: str = ""
+):
+    command = (
+        f"RAY_DEDUP_LOGS=0 "
+        f"nohup python -u -m llumnix.entrypoints.vllm.serve "
+        f"--load-registered-service "
+        f"--load-registered-service-path ./service_test/vllm "
+        f"--host {ip} "
+        f"--port {port} "
+        f"--enable-pd-disagg "
+        f"--pd-ratio 1:1 "
+        f"--max-instances {max_instances} "
+        f"--enable-port-increment "
+        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+    )
+    return command
+
+def generate_bladellm_register_service_command_func(
+    engine_type: str,
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000
+):
+    command = (
+        f"python -u -m llumnix.entrypoints.bladellm.register_service "
+        f"--engine-type {engine_type} "
+        f"--save-path ./service_test "
+        f"--save-key bladellm "
+        f"--model {model} "
+        f"--host {ip} " # must set, saved in engine args, default value can take effect
+        f"--port {port} " # must set, saved in engine args, can take effect
+        f"--enable_llumnix "
+        f"--disable_frontend_multiprocessing "
+        f"--disable_signal_handler "
+        f"--enable_disagg "
+        f"--disagg_pd.inst_id {str(uuid.uuid4().hex)[:8]} "
+        f"--disagg_pd.inst_role {engine_type} "
+        f"--disagg_pd.disagg_transfer_type rdma "
+        f"--naming_url {NAMING_URL} "
+    )
+    return command
+
+def generate_bladellm_serve_service_command_func(
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    max_instances: int = 4,
+    result_filename: str = ""
+):
+    command = (
+        f"RAY_DEDUP_LOGS=0 "
+        f"nohup python -u -m llumnix.entrypoints.bladellm.serve "
+        f"--load-registered-service "
+        f"--load-registered-service-path ./service_test/bladellm "
+        f"--model {model} " # must set, checked when parse args
+        f"--host {ip} " # must set, for server
+        f"--port {port} " # must set, for server
+        f"--enable-engine-pd-disagg "
+        f"--pd-ratio 1:1 "
+        f"--max-instances {max_instances} "
+        f"--enable-port-increment "
+        f"--migration-backend kvtransfer "
+        f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
+    )
+    return command
+
 def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
@@ -357,6 +449,7 @@ def shutdown_llumnix_service():
         subprocess.run('rm -rf nohup.out', shell=True, check=False)
         subprocess.run('rm -rf core.*', shell=True, check=False)
         subprocess.run('rm -rf nfs*', shell=True, check=False)
+        subprocess.run('rm -rf service_test', shell=True, check=False)
         yield
     finally:
         if conftest.SKIP_REASON is None or len(conftest.SKIP_REASON) == 0:

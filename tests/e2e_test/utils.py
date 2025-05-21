@@ -436,7 +436,7 @@ def generate_bladellm_serve_service_command_func(
         f"--pd-ratio 1:1 "
         f"--max-instances {max_instances} "
         f"--enable-port-increment "
-        f"--migration-backend kvtransfer "
+        f"--migration-backend grpc " # TODO(KuilongCui): must set, otherwise will get error, fix it
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     return command

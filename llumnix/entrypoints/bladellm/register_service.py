@@ -7,7 +7,7 @@ def main():
     from blade_llm.utils.argparse_helper import PatchedArgumentParser
 
     parser = PatchedArgumentParser()
-    ServiceArgs.add_cli_args(parser)
+    RegisterServiceArgs.add_cli_args(parser)
 
     parser = add_engine_cli_args(parser)
     cli_args = parser.parse_args()

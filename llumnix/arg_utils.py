@@ -612,7 +612,7 @@ class InstanceArgs:
 
 
 @dataclass
-class ServiceArgs:
+class RegisterServiceArgs:
     engine_type: str = None
     save_key: str = None
     save_path: str = None

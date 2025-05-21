@@ -18,7 +18,6 @@ from typing import List
 
 import ray
 import pytest
-import aiohttp
 import torch
 
 from llumnix.utils import get_ip_address, wait_port_free
@@ -30,17 +29,9 @@ from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_se
                                   wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                                   shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
                                   generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
-                                  check_log_exception, generate_bladellm_serve_command)
+                                  check_log_exception, generate_bladellm_serve_command, get_llumnix_response)
 from tests.utils import try_convert_to_local_path
 
-
-async def get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func):
-    timeout = aiohttp.ClientTimeout(total=60)
-    request = generate_request_func(prompt)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, json=request) as resp:
-            output = await resp.json()
-            return process_api_server_output_func(output)
 
 prompts = [
     "Hello, my name is",

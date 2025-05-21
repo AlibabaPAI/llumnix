@@ -10,12 +10,20 @@ from llumnix.ray_utils import get_actor_names_by_name_prefix, INSTANCE_NAME_PREF
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func
-from tests.e2e_test.utils import (check_log_exception, shutdown_llumnix_service,
-                                  generate_vllm_register_service_command_func,
-                                  generate_bladellm_register_service_command_func,
-                                  generate_vllm_serve_service_command_func,
-                                  generate_bladellm_serve_service_command_func,
-                                  wait_for_llumnix_service_ready)
+from tests.e2e_test.utils import (
+    check_log_exception,
+    shutdown_llumnix_service,
+    generate_vllm_register_service_command_func,
+    generate_bladellm_register_service_command_func,
+    generate_vllm_serve_service_command_func,
+    generate_bladellm_serve_service_command_func,
+    wait_for_llumnix_service_ready,
+    generate_vllm_request,
+    process_vllm_api_server_output,
+    generate_bladellm_request,
+    process_bladellm_api_server_output,
+    get_llumnix_response
+)
 from tests.utils import try_convert_to_local_path
 
 
@@ -32,9 +40,17 @@ def check_pd_instance_count():
             d_instance_count += 1
     assert p_instance_count == 2 and d_instance_count == 2, \
         "The service serve command is supposed to launch 2 prefill instances and 2 decode instances."
+    print("Check pd instance count passed.")
 
 
 test_times = 0
+
+prompts = [
+    "Hello, my name is",
+    "The president of the United States is",
+    "The capital of France is",
+    "The future of AI is",
+]
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
@@ -55,30 +71,50 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
     if engine == "vLLM":
         generate_register_service_command_func = generate_vllm_register_service_command_func
         genertate_serve_service_command_func = generate_vllm_serve_service_command_func
+        generate_request_func = generate_vllm_request
+        process_api_server_output_func = process_vllm_api_server_output
+        url = f'http://{ip}:{base_port}/generate'
     else:
         generate_register_service_command_func = generate_bladellm_register_service_command_func
         genertate_serve_service_command_func = generate_bladellm_serve_service_command_func
+        generate_request_func = generate_bladellm_request
+        process_api_server_output_func = process_bladellm_api_server_output
+        url = f'http://{ip}:{base_port}/v1/chat/completions'
 
     ip_ports = []
     for i in range(instance_count):
         wait_port_free(base_port + i)
         ip_ports.append(f"{ip}:{base_port + i}")
 
-    subprocess.run(generate_register_service_command_func(
-        model=model, ip=ip, port=base_port, engine_type="prefill"), shell=True, check=True)
-    subprocess.run(generate_register_service_command_func(
-        model=model, ip=ip, port=base_port, engine_type="decode"), shell=True, check=True)
-    subprocess.run(
+    commands = []
+    commands.append(
+        generate_register_service_command_func(
+            model=model, ip=ip, port=base_port, engine_type="prefill"
+        )
+    )
+    commands.append(
+        generate_register_service_command_func(
+            model=model, ip=ip, port=base_port, engine_type="decode"
+        )
+    )
+    commands.append(
         genertate_serve_service_command_func(
             model=model, ip=ip, port=base_port, max_instances=instance_count, result_filename=str(base_port)+".out"
-        ),
-        shell=True, check=True
+        )
     )
+    for command in commands:
+        print(f"Going to run command: {command}")
+        subprocess.run(command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)
 
     await asyncio.sleep(3)
 
     check_pd_instance_count()
+
+    for prompt in prompts:
+        _ = await get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func)
+
+    await asyncio.sleep(3)
 
     test_times += 1

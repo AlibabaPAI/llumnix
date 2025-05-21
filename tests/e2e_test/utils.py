@@ -19,6 +19,7 @@ from typing import Optional
 
 import pytest
 import requests
+import aiohttp
 
 from llumnix.utils import get_ip_address
 
@@ -285,6 +286,14 @@ def generate_bladellm_request(prompt):
 
 def process_bladellm_api_server_output(output):
     return output['choices'][0]['message']['content']
+
+async def get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func):
+    timeout = aiohttp.ClientTimeout(total=60)
+    request = generate_request_func(prompt)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(url, json=request) as resp:
+            output = await resp.json()
+            return process_api_server_output_func(output)
 
 def wait_for_llumnix_service_ready(ip_ports, timeout=120):
     start_time = time.time()

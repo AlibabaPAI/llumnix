@@ -57,10 +57,10 @@ proto-clean:
 ###################################### test begin #######################################
 
 .PHONY: vllm_test
-vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctness_test vllm_bench_test vllm_migration_test
+vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctness_test vllm_bench_test vllm_migration_test vllm_service_test
 
 .PHONY: bladellm_test
-bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_test bladellm_migration_test
+bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_test bladellm_migration_test bladellm_service_test
 
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed

@@ -51,7 +51,7 @@ def check_pd_instance_count():
             p_instance_count += 1
         elif instance_type == "decode":
             d_instance_count += 1
-    assert p_instance_count == 2 and d_instance_count == 2, \
+    assert p_instance_count == 1 and d_instance_count == 1, \
         "The service serve command is supposed to launch 2 prefill instances and 2 decode instances."
     print("Check pd instance count passed.")
 

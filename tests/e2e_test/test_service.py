@@ -72,7 +72,7 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
     base_port = 60000 + test_times * 100
     if "BladeLLM" in engine:
         base_port += 5000
-    device_count = min(4, torch.cuda.device_count())
+    device_count = min(2, torch.cuda.device_count())
     instance_count = device_count
 
     if engine == "vLLM":

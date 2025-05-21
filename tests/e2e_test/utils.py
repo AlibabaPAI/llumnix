@@ -384,6 +384,7 @@ def generate_vllm_serve_service_command_func(
         f"--host {ip} "
         f"--port {port} "
         f"--enable-pd-disagg "
+        f"--enable-migration "
         f"--pd-ratio 1:1 "
         f"--max-instances {max_instances} "
         f"--enable-port-increment "

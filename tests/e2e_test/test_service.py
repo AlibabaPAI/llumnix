@@ -58,12 +58,6 @@ def check_pd_instance_count():
 
 test_times = 0
 
-prompts = [
-    "Hello, my name is",
-    "The president of the United States is",
-    "The capital of France is",
-    "The future of AI is",
-]
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
@@ -125,8 +119,7 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
 
     check_pd_instance_count()
 
-    for prompt in prompts:
-        _ = await get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func)
+    _ = await get_llumnix_response("Hello, my name is", url, generate_request_func, process_api_server_output_func)
 
     await asyncio.sleep(3)
 

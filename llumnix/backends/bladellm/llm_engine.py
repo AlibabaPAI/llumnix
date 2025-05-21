@@ -44,7 +44,7 @@ from blade_llm.module.parallel import setup_dist_environ, master_node_in_distrib
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
-from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, ray_get_with_timeout,
+from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout,
                            get_free_port, wait_port_free, run_coroutine_in_new_thread)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
@@ -161,9 +161,9 @@ class AsyncBackQueueWrapper:
                     request_outputs.append(resp)
                     server_info_outputs.append(server_info)
 
-            self._put_request_outputs_to_server(request_outputs, server_info_outputs)
+            await self._put_request_outputs_to_server(request_outputs, server_info_outputs)
 
-    def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
+    async def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
                                        server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
@@ -191,12 +191,8 @@ class AsyncBackQueueWrapper:
                 server_info_dict[server_id] = server_info
 
         if server_info_dict:
-            # Step-by-step request outputs forwarding, and sub thread should die together with the AsyncPutQueueActor,
-            # so just ray.get here.
-            ray_get_with_timeout(
-                self.async_put_queue_actor.put_nowait_to_servers.remote(
-                    server_request_outputs, server_info_dict
-                )
+            await self.async_put_queue_actor.put_nowait_to_servers.remote(
+                server_request_outputs, server_info_dict
             )
 
     def remove_request_server_info(self, request_id: int, expired_step: int) -> None:

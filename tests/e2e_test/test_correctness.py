@@ -12,6 +12,7 @@
 # limitations under the License.
 
 
+import random
 import subprocess
 import asyncio
 from typing import List
@@ -174,7 +175,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     global test_times
 
     ip = get_ip_address()
-    base_port = 40000 + test_times * 100
+    base_port = 40000 + random.randint(0, 46) + test_times * 100
     if "BladeLLM" in engine:
         base_port += 5000
     device_count = min(4, torch.cuda.device_count())

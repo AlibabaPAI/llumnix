@@ -18,7 +18,6 @@ from typing import List
 
 import ray
 import pytest
-import aiohttp
 import torch
 
 from llumnix.utils import get_ip_address, wait_port_free
@@ -30,17 +29,9 @@ from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_se
                                   wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                                   shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
                                   generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
-                                  check_log_exception, generate_bladellm_serve_command)
+                                  check_log_exception, generate_bladellm_serve_command, get_llumnix_response)
 from tests.utils import try_convert_to_local_path
 
-
-async def get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func):
-    timeout = aiohttp.ClientTimeout(total=60)
-    request = generate_request_func(prompt)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, json=request) as resp:
-            output = await resp.json()
-            return process_api_server_output_func(output)
 
 prompts = [
     "Hello, my name is",
@@ -223,14 +214,18 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         if enable_pd_disagg and len(engine_pdd_prompt_output) == 0:
             engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_migration)
 
+    ip_ports = []
+
     launch_commands = []
     if launch_mode == "local":
         if enable_pd_disagg:
-            wait_port_free(base_port, force=True)
-            launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
+            prefill_port = base_port
+            wait_port_free(prefill_port, force=True)
+            ip_ports.append(f"{ip}:{prefill_port}")
+            launch_commands.append(generate_launch_command_func(result_filename=str(prefill_port)+".out",
                                                     model=model,
                                                     ip=ip,
-                                                    port=base_port,
+                                                    port=prefill_port,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="prefill",
                                                     enable_migration=enable_migration,
@@ -238,6 +233,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
             decode_port = base_port + 50
             wait_port_free(decode_port, force=True)
+            ip_ports.append(f"{ip}:{decode_port}")
             launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
                                                     launch_ray_cluster=False,
                                                     model=model,
@@ -249,6 +245,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     tensor_parallel_size=tensor_parallel_size))
         else:
             wait_port_free(base_port, force=True)
+            ip_ports.append(f"{ip}:{base_port}")
             launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
                                                     model=model,
                                                     ip=ip,
@@ -257,6 +254,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     else:
         for i in range(instance_count):
             wait_port_free(base_port + i, force=True)
+            ip_ports.append(f"{ip}:{base_port + i}")
         launch_commands.append(generate_serve_command_func(result_filename=str(base_port)+".out",
                                                ip=ip,
                                                port=base_port,
@@ -269,10 +267,13 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     for launch_command in launch_commands:
         print(f"Going to run command: {launch_command}")
         subprocess.run(launch_command, shell=True, check=True)
+
     await asyncio.sleep(3)
 
-    wait_for_llumnix_service_ready(ip_ports=[f"{ip}:{base_port}"])
-    await asyncio.sleep(30)
+    wait_for_llumnix_service_ready(ip_ports)
+
+    await asyncio.sleep(3)
+
     llumnix_output = {}
     for prompt in prompts:
         response = await get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func)

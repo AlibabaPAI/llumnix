@@ -71,6 +71,8 @@ _C.MANAGER.ENABLE_PORT_INCREMENT = False
 _C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
 # Enable prefill-decode disaggregation
 _C.MANAGER.ENABLE_PD_DISAGG = False
+# Enable engine-based prefill-decode disaggregation
+_C.MANAGER.ENABLE_ENGINE_PD_DISAGG = False
 # The p:d ratio used in gloabl launch mode
 _C.MANAGER.PD_RATIO = "1:1"
 # Load engine arguments from storage

@@ -17,8 +17,8 @@ from typing import Union
 import copy
 
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
-                               InstanceArgs, LlumnixEngineArgs, get_llumnix_args,
-                               load_registered_service_if_needed)
+                               InstanceArgs, LlumnixEngineArgs, init_llumnix_args,
+                               load_registered_engine_args, post_init_llumnix_args)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.logging.logger import init_logger
@@ -81,7 +81,8 @@ class BladellmEngineArgs(LlumnixEngineArgs):
 
 @dataclass
 class RevisedArgs:
-    # bladellm engine args need to override
+    # TODO: Remove disagg_options_token_port_offset.
+    # bladellm engine args need to revised
     disagg_options_token_port_offset: int = field(default=None)
     disagg_options_inst_role: str = field(default=None)
     engine_disagg_inst_id: str = field(default=None)
@@ -101,7 +102,14 @@ def add_cli_args(parser: LlumnixArgumentParser, add_engine_args: bool = True) ->
 
     return parser
 
-def detect_unsupported_engine_feature(engine_args) -> None:
+def add_engine_cli_args(parser: "ArgumentParser") -> "Namespace":
+    # pylint: disable=import-outside-toplevel
+    from blade_llm.service.args import add_args
+    parser = add_args(parser)
+
+    return parser
+
+def detect_unsupported_engine_feature(engine_args: "ServingArgs") -> None:
     # pylint: disable=import-outside-toplevel
     from blade_llm.service.args import ServingArgs
     assert isinstance(engine_args, ServingArgs)
@@ -121,17 +129,8 @@ def detect_unsupported_engine_feature(engine_args) -> None:
     if unsupported_feature:
         raise ValueError(f'Llumnix does not support "{unsupported_feature}" for BladeLLM currently.')
 
-def check_engine_args(engine_args, manager_args) -> None:
+def check_engine_args(engine_args: "ServingArgs") -> None:
     detect_unsupported_engine_feature(engine_args)
-
-    assert not (engine_args.enable_disagg and manager_args.enable_pd_disagg), \
-        "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Llumnix."
-
-    assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
-        "Migration feature is temporarily unavailable for pipeline parallelism in BladeLLM."
-
-    assert not (engine_args.enable_disagg and manager_args.enable_migration), \
-        "Migration feature is temporarily unavailable for the engine based pd-disaggregation in BladeLLM."
 
     if not engine_args.serving_multi_processing_options.disable_frontend_multiprocessing:
         logger.warning("In llumnix, the api server and engine are in different ray actors, "
@@ -143,33 +142,46 @@ def check_engine_args(engine_args, manager_args) -> None:
                        "a process with a main function.")
         engine_args.disable_signal_handler = True
 
-def check_instance_args(instance_args):
+def check_instance_args(instance_args: InstanceArgs):
     assert not instance_args.simulator_mode, "Simulator mode is not supported for BladeLLM temporarily."
     assert 'W' not in instance_args.request_migration_policy, \
         "Migrating waiting request is not supported for BladeLLM temporarily."
     assert instance_args.migration_backend in ['grpc', 'kvtransfer'], \
         "Only support grpc and kvtransfer migration backend for BladeLLM."
 
-def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, llumnix_parser: LlumnixArgumentParser,
+def check_manager_args(manager_args: ManagerArgs, engine_args: "ServingArgs") -> None:
+    assert not (engine_args.enable_disagg and manager_args.enable_pd_disagg), \
+        "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Llumnix."
+
+    assert manager_args.enable_engine_pd_disagg == engine_args.enable_disagg, \
+        "Engine-based pd-disaggregation of manager and engine should be enabled/disabled at the same time."
+
+    assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
+        "Migration feature is temporarily unavailable for pipeline parallelism in BladeLLM."
+
+    assert not (engine_args.enable_disagg and manager_args.enable_migration), \
+        "Migration feature is temporarily unavailable for the engine based pd-disaggregation in BladeLLM."
+
+def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser,
              cli_args: "Namespace" = None, engine_args = None):
-    if launch_mode == LaunchMode.GLOBAL:
-        # pylint: disable=import-outside-toplevel
-        from blade_llm.service.args import ServingArgs
-        engine_args: ServingArgs = ServingArgs.from_cli_args(cli_args)
-    entrypoints_args, manager_args, instance_args = \
-        get_llumnix_args(engine_args, BackendType.BLADELLM, launch_mode, llumnix_parser, llumnix_config)
+    entrypoints_args, manager_args, instance_args = init_llumnix_args(llumnix_config)
+    if manager_args.load_registered_service:
+        engine_args = load_registered_engine_args(manager_args)
+    else:
+        if launch_mode == LaunchMode.GLOBAL:
+            # pylint: disable=import-outside-toplevel
+            from blade_llm.service.args import ServingArgs
+            engine_args: ServingArgs = ServingArgs.from_cli_args(cli_args)
+    post_init_llumnix_args(engine_args, instance_args, manager_args, entrypoints_args, BackendType.BLADELLM, launch_mode, parser)
 
-    engine_args = load_registered_service_if_needed(manager_args, engine_args)
-
+    # backend related check args
     if launch_mode == LaunchMode.LOCAL:
         # pylint: disable=import-outside-toplevel
         from blade_llm.service.server import check_ports
         check_ports(engine_args)
-
-    # backend related check args
+    check_engine_args(engine_args)
     check_instance_args(instance_args)
-    if not manager_args.load_registered_service:
-        check_engine_args(engine_args, manager_args)
+    check_manager_args(manager_args, engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))
     logger.info("manager_args: {}".format(manager_args))
@@ -177,3 +189,12 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, llumnix_par
     logger.info("engine_args: {}".format(engine_args))
 
     return entrypoints_args, manager_args, instance_args, engine_args
+
+def get_engine_args(cli_args: "Namespace") -> "ServingArgs":
+    # pylint: disable=import-outside-toplevel
+    from blade_llm.service.args import ServingArgs
+    engine_args: ServingArgs = ServingArgs.from_cli_args(cli_args)
+    check_engine_args(engine_args)
+    logger.info("engine_args: {}".format(engine_args))
+
+    return engine_args

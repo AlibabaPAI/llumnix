@@ -11,21 +11,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
-
 from llumnix.arg_utils import RegisterServiceArgs, save_engine_args
-from llumnix.entrypoints.vllm.arg_utils import add_engine_cli_args, get_engine_args, VllmEngineArgs
+from llumnix.entrypoints.bladellm.arg_utils import add_engine_cli_args, get_engine_args, BladellmEngineArgs
+from llumnix.entrypoints.bladellm.serve import launch_job_on_gpu_node
 
-# TODO(s5u13b): Add examples for pdd launch.
+def main():
+    # pylint: disable=import-outside-toplevel
+    from blade_llm.utils.argparse_helper import PatchedArgumentParser
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = PatchedArgumentParser()
     RegisterServiceArgs.add_cli_args(parser)
 
     parser = add_engine_cli_args(parser)
     cli_args = parser.parse_args()
     engine_args = get_engine_args(cli_args)
-    vllm_engine_args = VllmEngineArgs(engine_args)
+    bladellm_engine_args = BladellmEngineArgs(engine_args)
 
-    save_engine_args(cli_args.engine_type, cli_args.save_path, vllm_engine_args, cli_args.save_key)
+    save_engine_args(cli_args.engine_type, cli_args.save_path, bladellm_engine_args, cli_args.save_key)
+
+
+if __name__ == "__main__":
+    launch_job_on_gpu_node(module="llumnix.entrypoints.bladellm.register_service", main_func=main)

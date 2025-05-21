@@ -116,7 +116,7 @@ class LlumnixEngineArgsFactory:
         self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
-            return self.engine_args_dict[instance_type]
+            current_engine_args = self.engine_args_dict[instance_type]
 
         # lazy import to avoid circular import
         # pylint: disable=import-outside-toplevel
@@ -128,7 +128,7 @@ class LlumnixEngineArgsFactory:
                 next_engine_args.revised_args.disagg_options_token_port_offset = \
                     self.disagg_options_token_port_offset
                 self.disagg_options_token_port_offset += 10
-            if self.pdd_config.enable_engine_pd_disagg:
+            if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
                 next_engine_args.revised_args.disagg_options_inst_role = (
                     instance_type.value
                     if isinstance(instance_type, InstanceType)
@@ -176,31 +176,6 @@ def check_args_choices(args, parser):
         if hasattr(action, 'choices') and action.choices is not None and hasattr(args, action.dest):
             cur_arg = getattr(args, action.dest)
             assert cur_arg in action.choices, f"{action.dest} should be one of {action.choices}, but {cur_arg} is set."
-
-def get_llumnix_args(engine_args, backend_type, launch_mode, parser, llumnix_config):
-    instance_args = InstanceArgs.from_llumnix_config(llumnix_config)
-    instance_args.init_from_engine_args(engine_args, backend_type)
-    manager_args = ManagerArgs.from_llumnix_config(llumnix_config)
-    manager_args.init_from_instance_args(instance_args)
-    entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_config)
-    entrypoints_args.init_from_engine_args(engine_args, backend_type)
-
-    EntrypointsArgs.check_args(entrypoints_args, parser)
-    ManagerArgs.check_args(manager_args, launch_mode, parser)
-    InstanceArgs.check_args(instance_args, manager_args, launch_mode, parser)
-
-    return entrypoints_args, manager_args, instance_args
-
-def load_registered_service_if_needed(manager_args, engine_args):
-    if manager_args.load_registered_service:
-        if not manager_args.enable_pd_disagg and not manager_args.enable_engine_pd_disagg:
-            instance_type_list = ['no_constraints']
-        else:
-            instance_type_list = ['prefill', 'decode']
-        for instance_type in instance_type_list:
-            engine_args_registered = load_engine_args(instance_type, manager_args.load_registered_service_path)
-            engine_args = engine_args_registered.engine_args
-    return engine_args
 
 
 @dataclass
@@ -345,8 +320,10 @@ class ManagerArgs:
                 "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
                 "in global launch mode."
 
+        if args.enable_pd_disagg:
+            assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
+
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
-        self.enable_engine_pd_disagg = instance_args.enable_engine_pd_disagg
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
 
     def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
@@ -455,6 +432,9 @@ class ManagerArgs:
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',
                             help='enable prefill-decode disaggregation')
+        parser.add_argument('--enable-engine-pd-disagg',
+                            action='store_true',
+                            help='enable engine-based prefill-decode disaggregation')
         parser.add_argument('--pd-ratio',
                             type=str,
                             help='the prefill decode ratio used in gloabl launch mode e.g. "1:1"')
@@ -537,14 +517,11 @@ class InstanceArgs:
     def init_from_engine_args(self, engine_args, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
             self.enable_engine_pd_disagg = engine_args.enable_disagg
+            # for local launch mode
             if self.enable_engine_pd_disagg:
                 self.instance_type = engine_args.disagg_options.inst_role
-        elif backend_type == BackendType.VLLM:
-            self.enable_engine_pd_disagg = False
-        elif backend_type == BackendType.SIM_VLLM:
-            self.enable_engine_pd_disagg = False
         else:
-            raise ValueError(f"Unsupported backend type: {backend_type}")
+            self.enable_engine_pd_disagg = False
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.request_migration_policy,
@@ -636,6 +613,66 @@ class InstanceArgs:
                             help='environment variable used as engine instance id')
         return parser
 
+
+@dataclass
+class RegisterServiceArgs:
+    engine_type: str = None
+    save_key: str = None
+    save_path: str = None
+
+    @staticmethod
+    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        parser.add_argument('--engine-type',
+                            type=str,
+                            choices=['prefill', 'decode', 'no_constraints'],
+                            default='no_constraints',
+                            help="Engine type of the engine arguments. The actual save filename is generated according to "
+                                "the engine type, following the format f\"engine_args_{engine_type}.pkl\".")
+        parser.add_argument('--save-key',
+                            type=str,
+                            help="Save key of the engine arguments. The actual save filepath is generated according to "
+                                "the save path and save key, following the organization f\"{save_path}/{save_key}/\".")
+        parser.add_argument('--save-path',
+                            type=str,
+                            default='.',
+                            help="Save path of the engine arguments.")
+        return parser
+
+
+def init_llumnix_args(llumnix_config: LlumnixConfig):
+    instance_args = InstanceArgs.from_llumnix_config(llumnix_config)
+    manager_args = ManagerArgs.from_llumnix_config(llumnix_config)
+    entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_config)
+
+    return entrypoints_args, manager_args, instance_args
+
+def post_init_llumnix_args(
+    engine_args,
+    instance_args: InstanceArgs,
+    manager_args: ManagerArgs,
+    entrypoints_args: EntrypointsArgs,
+    backend_type: BackendType,
+    launch_mode: LaunchMode,
+    parser: LlumnixArgumentParser
+):
+    # bottom-up to ensure the correctness of the args
+    instance_args.init_from_engine_args(engine_args, backend_type)
+    manager_args.init_from_instance_args(instance_args)
+    entrypoints_args.init_from_engine_args(engine_args, backend_type)
+
+    EntrypointsArgs.check_args(entrypoints_args, parser)
+    ManagerArgs.check_args(manager_args, launch_mode, parser)
+    InstanceArgs.check_args(instance_args, manager_args, launch_mode, parser)
+
+def load_registered_engine_args(manager_args: ManagerArgs):
+    if not manager_args.enable_pd_disagg and not manager_args.enable_engine_pd_disagg:
+        instance_type_list = ['no_constraints']
+    else:
+        instance_type_list = ['prefill', 'decode']
+    for instance_type in instance_type_list:
+        engine_args_registered: LlumnixEngineArgs = load_engine_args(instance_type, manager_args.load_registered_service_path)
+        engine_args = engine_args_registered.load_engine_args_if_needed()
+    return engine_args
 
 def _get_engine_args_filename(engine_type: str) -> str:
     return f"engine_args_{engine_type}.pkl"

@@ -320,6 +320,9 @@ class ManagerArgs:
                 "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
                 "in global launch mode."
 
+        if args.enable_pd_disagg:
+            assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
+
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
 

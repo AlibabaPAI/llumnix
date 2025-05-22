@@ -35,8 +35,6 @@ from tests.conftest import ray_env
 
 class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
     def __init__(self, loop = None):  # pylint: disable=super-init-not-called
-        self.entrypoint_id2llumnix_id = {}  # int32 -> int32
-
         self.request_stream: Dict[int, asyncio.Queue] = {}
         self.request_stream_last_completion_tokens: Dict[int, int] = {}
         self.request_stream_output_stash: Dict[int, list[GenerateStreamResponse]] = {}
@@ -46,8 +44,8 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.log_request_timestamps = False
 
         self.request_output_queue = asyncio.Queue()
-        self.llumnix_id2entrypoint_id = {}
-        self.entrypoint_id2llumnix_id = {}
+        self.llumnix_req_id_to_entrypoint_req_id = {}
+        self.entrypoint_req_id_to_llumnix_req_id = {}
         self.request_instance = {}
         self.global_instances = {}
         if loop:
@@ -64,8 +62,8 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
 
     # pylint: disable=arguments-differ,invalid-overridden-method
     async def _add_request(self, request_id):
-        self.llumnix_id2entrypoint_id[request_id] = request_id
-        self.entrypoint_id2llumnix_id[request_id] = request_id
+        self.llumnix_req_id_to_entrypoint_req_id[request_id] = request_id
+        self.entrypoint_req_id_to_llumnix_req_id[request_id] = request_id
         self.request_stream[request_id] = asyncio.Queue()
 
 
@@ -205,7 +203,7 @@ async def test_drop_request(ray_env):
     assert instance_id_returned is None and instance_returned is None
 
     request_output = GenerateStreamResponse(req_id=request_id)
-    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output)
+    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output.model_dump_json())
     await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
@@ -232,8 +230,8 @@ async def test_drop_request(ray_env):
         request_id not in client.request_stream_last_completion_tokens and \
         request_id not in client.request_instance and \
         request_id not in client.request_stream_output_stash and \
-        request_id not in client.llumnix_id2entrypoint_id and \
-        request_id not in client.entrypoint_id2llumnix_id
+        request_id not in client.llumnix_req_id_to_entrypoint_req_id and \
+        request_id not in client.entrypoint_req_id_to_llumnix_req_id
 
 
 @pytest.mark.asyncio
@@ -248,7 +246,7 @@ async def test_clear_client_request_states(ray_env):
     instance_id = random_uuid()
 
     request_output = GenerateStreamResponse(req_id=request_id)
-    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output)
+    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output.model_dump_json())
     await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
@@ -256,13 +254,13 @@ async def test_clear_client_request_states(ray_env):
     # test request states
     assert request_id in client.request_stream and \
         request_id in client.request_instance and \
-        request_id in client.llumnix_id2entrypoint_id and \
-        request_id in client.entrypoint_id2llumnix_id
+        request_id in client.llumnix_req_id_to_entrypoint_req_id and \
+        request_id in client.entrypoint_req_id_to_llumnix_req_id
 
     request_output.is_finished = True
     client._process_output_order = MagicMock()
     client._process_output_order.return_value = [request_output]
-    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output)
+    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output.model_dump_json())
     await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
@@ -270,5 +268,5 @@ async def test_clear_client_request_states(ray_env):
     # test request states
     assert request_id not in client.request_stream and \
         request_id not in client.request_instance and \
-        request_id not in client.llumnix_id2entrypoint_id and \
-        request_id not in client.entrypoint_id2llumnix_id
+        request_id not in client.llumnix_req_id_to_entrypoint_req_id and \
+        request_id not in client.entrypoint_req_id_to_llumnix_req_id

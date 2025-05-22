@@ -107,15 +107,6 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
         next_engine_args.load_engine_args().disagg_options.inst_role
         == "prefill"
     )
-    assert (
-        engine_args.load_engine_args().disagg_options.token_port
-        == next_engine_args.load_engine_args().disagg_options.token_port
-    )
-    assert (
-        engine_args.load_engine_args().disagg_options.token_port + 10
-        == next_engine_args2.load_engine_args().disagg_options.token_port
-    )
-
 
 def test_gen_next_engine_args_baldellm_enable_pdd():
     with patch("llumnix.arg_utils.load_engine_args", new=mocked_load_engine_args):

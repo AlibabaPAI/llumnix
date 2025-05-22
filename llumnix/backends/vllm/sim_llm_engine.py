@@ -22,6 +22,7 @@ from ray.util.placement_group import PlacementGroup
 from vllm.engine.arg_utils import EngineArgs
 from vllm import envs as vllm_envs
 
+from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
@@ -40,16 +41,18 @@ class BackendSimVLLM(BackendVLLM):
         instance_id: str,
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
-        migration_config: MigrationConfig,
-        engine_args: EngineArgs,
-        profiling_result_file_path: str
+        instance_args: InstanceArgs,
+        llumnix_engine_args: LlumnixEngineArgs
     ) -> None:
         # multi-instance args
-        self.migration_config = migration_config
+        self.engine_disagg_inst_id = instance_id
+        engine_args = llumnix_engine_args.load_engine_args()
+        self.migration_config: MigrationConfig = instance_args.create_migration_config()
+        profiling_result_file_path = instance_args.profiling_result_file_path
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
-                                                                          migration_config=migration_config,
+                                                                          migration_config=self.migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           backend_type=BackendType.SIM_VLLM,

@@ -66,7 +66,7 @@ class LlumnixEngineArgs(ABC):
         pass
 
     @abstractmethod
-    def load_engine_args_if_needed(self):
+    def load_engine_args(self):
         # returun the engine args after overriding
         pass
 
@@ -488,10 +488,13 @@ class InstanceArgs:
     kvtransfer_migration_backend_naming_url: str = None
     migration_last_stage_max_blocks: int = None
     migration_max_stages: int = None
+    engine_disagg_inst_id_env_var: str = None
 
     # init from engine args
     enable_engine_pd_disagg: bool = None
-    engine_disagg_inst_id_env_var: str = None
+
+    # init from manager args
+    enable_migration: bool = None
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -523,8 +526,12 @@ class InstanceArgs:
         else:
             self.enable_engine_pd_disagg = False
 
+    def init_from_manager_args(self, manager_args: ManagerArgs):
+        self.enable_migration = manager_args.enable_migration
+
     def create_migration_config(self) -> MigrationConfig:
-        migration_config = MigrationConfig(self.request_migration_policy,
+        migration_config = MigrationConfig(self.enable_migration,
+                                           self.request_migration_policy,
                                            self.migration_backend,
                                            self.migration_buffer_blocks,
                                            self.migration_num_layers,
@@ -657,6 +664,7 @@ def post_init_llumnix_args(
 ):
     # bottom-up to ensure the correctness of the args
     instance_args.init_from_engine_args(engine_args, backend_type)
+    instance_args.init_from_manager_args(manager_args)
     manager_args.init_from_instance_args(instance_args)
     entrypoints_args.init_from_engine_args(engine_args, backend_type)
 
@@ -671,7 +679,7 @@ def load_registered_engine_args(manager_args: ManagerArgs):
         instance_type_list = ['prefill', 'decode']
     for instance_type in instance_type_list:
         engine_args_registered: LlumnixEngineArgs = load_engine_args(instance_type, manager_args.load_registered_service_path)
-        engine_args = engine_args_registered.load_engine_args_if_needed()
+        engine_args = engine_args_registered.load_engine_args()
     return engine_args
 
 def _get_engine_args_filename(engine_type: str) -> str:

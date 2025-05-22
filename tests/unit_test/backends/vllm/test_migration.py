@@ -99,7 +99,7 @@ def init_llumlet(request_output_queue_type, instance_id, instance_args, engine_a
                     instance_args=instance_args,
                     placement_group=placement_group,
                     request_output_queue_type=request_output_queue_type,
-                    engine_args=engine_args
+                    llumnix_engine_args=engine_args
                 )
     return llumlet
 
@@ -215,7 +215,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
     elif migration_request_status == 'waiting':
         request_migration_policy = "FCW"
 
-    instance_args = InstanceArgs()
+    instance_args = InstanceArgs(enable_migration=True)
     instance_args.request_migration_policy = request_migration_policy
     instance_args.migration_backend = migration_backend
 
@@ -349,8 +349,8 @@ async def test_migration_correctness(migration_backend, migration_request_status
                 instance_id="2",
                 instance_args=instance_args,
                 request_output_queue_type=request_output_queue_type,
-                engine_args=engine_args,
-                placement_group=placement_group
+                placement_group=placement_group,
+                llumnix_engine_args=VllmEngineArgs(engine_args),
             )
         while True:
             res = ray.get(llumlet_2.is_ready.remote())
@@ -384,7 +384,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
     )
     id_rank_map = {"0":0, "1":1}
 
-    instance_args = InstanceArgs()
+    instance_args = InstanceArgs(enable_migration=True)
     instance_args.request_migration_policy = "SR"
     instance_args.migration_backend = migration_backend
 

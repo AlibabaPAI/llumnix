@@ -64,7 +64,6 @@ class MigrationWorker(Worker):
     def get_global_rank(self):
         return self.global_rank
 
-    # TODO(KuilongCui): Fix it, this function is not be called.
     def reserve_memory_for_migration(self,
                                      migration_config: MigrationConfig,
                                      model_config: ModelConfig,

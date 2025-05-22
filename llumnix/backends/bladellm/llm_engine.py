@@ -44,6 +44,7 @@ from blade_llm.module.parallel import setup_dist_environ, master_node_in_distrib
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
+from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout,
                            get_free_port, wait_port_free, run_coroutine_in_new_thread)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
@@ -63,6 +64,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
+from llumnix.arg_utils import LlumnixEngineArgs
 
 logger = init_logger(__name__)
 
@@ -241,6 +243,7 @@ class AsyncLLMEngineLlumnixMixin:
                  ) -> None:
         self.instance_id = instance_id
         self.state = EngineState.INIT
+        self.migration_config = migration_config
         logger.info("Engine {} current state: {}.".format(self.instance_id, self.state))
 
         self.placement_group = placement_group
@@ -349,7 +352,8 @@ class AsyncLLMEngineLlumnixMixin:
             logger.info("Engine {} change state: {} -> {}.".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def stop(self):
-        run_coroutine_in_new_thread(self.close_migration(), blocking=True)
+        if self.migration_config.enable_migration:
+            run_coroutine_in_new_thread(self.close_migration(), blocking=True)
         super().stop()
 
     # Close migraion grpc client and delete server.
@@ -517,14 +521,23 @@ class BackendBladeLLM(BackendInterface):
                  instance_id: str,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 migration_config: MigrationConfig,
-                 engine_args: ServingArgs
+                 instance_args: InstanceArgs,
+                 llumnix_engine_args: LlumnixEngineArgs
                 ) -> None:
+        self.engine_disagg_inst_id: str = (
+            os.environ.get(instance_args.engine_disagg_inst_id_env_var)
+            if instance_args.engine_disagg_inst_id_env_var
+            else instance_id
+        )
+        llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
+        engine_args: ServingArgs = llumnix_engine_args.load_engine_args()
+
         init_metric(
             engine_args.serving_metric_options.metric_export_interval_sec,
             *engine_args.metric_exporters,
             observability_options=engine_args.serving_observability_options,
         )
+
         if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
             engine_args.host = get_ip_address()
         self._config_inner_engine_logger(engine_args)
@@ -538,33 +551,35 @@ class BackendBladeLLM(BackendInterface):
         engine_args.worker_socket_path = engine_args.worker_socket_path + "_" + str(instance_id)[:5]
         self.instance_id = instance_id
         self.engine_args = engine_args
-        self.migration_config: MigrationConfig = migration_config
+        self.migration_config: MigrationConfig = instance_args.create_migration_config()
+        self.src_workers_migration_ip_addr_list = []
 
-        ip_addr = get_ip_address()
-        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
+        if self.migration_config.enable_migration:
+            ip_addr = get_ip_address()
+            world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
 
-        assert self.migration_config.grpc_migration_backend_server_port is None \
-            or len(self.migration_config.grpc_migration_backend_server_port) == 0
-        self.migration_config.grpc_migration_backend_server_port = []
-        for _ in range(world_size):
-            self.migration_config.grpc_migration_backend_server_port.append(get_free_port())
-        grpc_ports = self.migration_config.grpc_migration_backend_server_port
-        self.src_workers_migration_ip_addr_list = [ip_addr + ":" + str(port) for port in grpc_ports]
-        logger.info("Engine {} set grpc migration server address for all workers: {}".format(
-                    self.instance_id, self.src_workers_migration_ip_addr_list))
+            assert self.migration_config.grpc_migration_backend_server_port is None \
+                or len(self.migration_config.grpc_migration_backend_server_port) == 0
+            self.migration_config.grpc_migration_backend_server_port = []
+            for _ in range(world_size):
+                self.migration_config.grpc_migration_backend_server_port.append(get_free_port())
+            grpc_ports = self.migration_config.grpc_migration_backend_server_port
+            self.src_workers_migration_ip_addr_list.extend([ip_addr + ":" + str(port) for port in grpc_ports])
+            logger.info("Engine {} set grpc migration server address for all workers: {}".format(
+                        self.instance_id, self.src_workers_migration_ip_addr_list))
 
-        self.worker_infos = []
-        self.kv_transfer_instance_id = self.instance_id
-        if engine_args.enable_disagg and engine_args.disagg_options is not None:
-            self.kv_transfer_instance_id = engine_args.disagg_options.inst_id
-        for index, ip_addr in enumerate(self.src_workers_migration_ip_addr_list):
-            self.worker_infos.append(
-                WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id,
-                           kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
+            self.worker_infos = []
+            self.kv_transfer_instance_id = self.instance_id
+            if engine_args.enable_disagg and engine_args.disagg_options is not None:
+                self.kv_transfer_instance_id = engine_args.disagg_options.inst_id
+            for index, ip_addr in enumerate(self.src_workers_migration_ip_addr_list):
+                self.worker_infos.append(
+                    WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id,
+                            kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
 
         self.request_barriers: queue.Queue = queue.Queue()
         engine_cls = self._get_engine_cls()
-        self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, migration_config,
+        self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, self.migration_config,
                                  self.src_workers_migration_ip_addr_list, self.request_barriers, BackendType.BLADELLM, engine_args)
 
         self._engine_ready_event = asyncio.Event()

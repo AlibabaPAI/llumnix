@@ -58,7 +58,7 @@ class BladellmEngineArgs(LlumnixEngineArgs):
             return copy.deepcopy(engine_args.engine_args)
         return pickle.dumps(engine_args)
 
-    def load_engine_args_if_needed(self):
+    def load_engine_args(self):
         # pylint: disable=import-outside-toplevel
         from blade_llm.service.args import ServingArgs
         from blade_llm.utils.disagg_utils import DecodeRoutingPolicy
@@ -144,10 +144,11 @@ def check_engine_args(engine_args: "ServingArgs") -> None:
 
 def check_instance_args(instance_args: InstanceArgs):
     assert not instance_args.simulator_mode, "Simulator mode is not supported for BladeLLM temporarily."
-    assert 'W' not in instance_args.request_migration_policy, \
-        "Migrating waiting request is not supported for BladeLLM temporarily."
-    assert instance_args.migration_backend in ['grpc', 'kvtransfer'], \
-        "Only support grpc and kvtransfer migration backend for BladeLLM."
+    if instance_args.enable_migration:
+        assert 'W' not in instance_args.request_migration_policy, \
+            "Migrating waiting request is not supported for BladeLLM temporarily."
+        assert instance_args.migration_backend in ['grpc', 'kvtransfer'], \
+            "Only support grpc and kvtransfer migration backend for BladeLLM."
 
 def check_manager_args(manager_args: ManagerArgs, engine_args: "ServingArgs") -> None:
     assert not (engine_args.enable_disagg and manager_args.enable_pd_disagg), \

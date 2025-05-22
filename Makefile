@@ -60,7 +60,7 @@ proto-clean:
 vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctness_test vllm_bench_test vllm_migration_test vllm_service_test
 
 .PHONY: bladellm_test
-bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_test bladellm_migration_test bladellm_service_test
+bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_test bladellm_migration_test bladellm_service_test bladellm_server_test
 
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed
@@ -103,6 +103,10 @@ vllm_service_test: check_pytest_installed
 .PHONY: bladellm_service_test
 bladellm_service_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_service.py
+
+.PHONY: bladellm_server_test
+bladellm_server_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_server.py
 
 ####################################### test end ########################################
 

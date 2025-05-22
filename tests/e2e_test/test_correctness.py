@@ -66,7 +66,7 @@ def run_vllm(model):
 
 async def run_bladellm(model, enable_pd_disagg, enable_migration):
     ip = get_ip_address()
-    base_port = 50000 + test_times * 100
+    base_port = 35000 + test_times * 100
 
     if not enable_pd_disagg:
         launch_command = generate_bladellm_launch_command(
@@ -175,9 +175,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     global test_times
 
     ip = get_ip_address()
-    base_port = 40000 + random.randint(0, 46) + test_times * 100
+    base_port = 30000 + random.randint(0, 46) + test_times * 100
     if "BladeLLM" in engine:
-        base_port += 5000
+        base_port += 2500
     device_count = min(4, torch.cuda.device_count())
     instance_count = device_count // tensor_parallel_size
 

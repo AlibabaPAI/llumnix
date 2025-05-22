@@ -155,8 +155,8 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
             self.send_response(resp)
         else:
             self.request_sync_group.update_migrated_in_request()
-            rpc_responce = await super().handle_rpc_call(request)
+            rpc_response = await super().handle_rpc_call(request)
             if method == "step":
                 self.request_sync_group.remove_backup_request_group(
                     [finish_info.request_id for finish_info in request.step.latest_finished_ids])
-            return rpc_responce
+            return rpc_response

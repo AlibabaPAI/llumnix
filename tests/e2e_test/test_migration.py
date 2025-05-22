@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import os
+import random
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
@@ -145,10 +146,10 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
         os.environ["VLLM_USE_RAY_COMPILED_DAG"] = "0"
 
     global test_times
-    print("Going to set new env...")
+
     request_migration_policy = 'SR' if migration_request_status == 'running' else 'FCW'
     ip = get_ip_address()
-    base_port = 30000 + test_times * 100
+    base_port = 30000 + random.randint(0, 96)  + test_times * 100
     if "BladeLLM" in engine:
         base_port += 5000
     ip_ports = []
@@ -181,7 +182,6 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
                         tensor_parallel_size=tensor_parallel_size,
                         enforce_eager=False,
                         max_instances=num_instances)
-    print(f"Going to run command: {launch_command}")
     subprocess.run(launch_command, shell=True, check=True)
 
     wait_for_llumnix_service_ready(ip_ports)

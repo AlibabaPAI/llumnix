@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 import json
 import os
+import random
 
 import pytest
 import torch
@@ -96,9 +97,9 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
         pytest.skip(conftest.SKIP_REASON)
 
     global test_times
-    print("Going to set new env...")
+
     ip = get_ip_address()
-    base_port = 20000 + test_times * 100
+    base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:
         base_port += 5000
 
@@ -125,7 +126,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             model=model,
                                             request_output_queue_type=request_output_queue_type,
                                             max_instances=num_instances)
-    print(f"Going to run command: {serve_command}")
     subprocess.run(serve_command, shell=True, check=True)
     wait_for_llumnix_service_ready(ip_ports)
 

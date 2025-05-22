@@ -36,6 +36,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 from llumnix.utils import random_uuid
 from llumnix.backends.backend_interface import BackendType
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -139,6 +140,6 @@ async def test_put_request_outputs_to_server(ray_env):
     llm_engine._put_request_outputs_to_server(request_outputs, server_infos)
     server_request_outputs, _ = ray.get(async_put_queue_actor.get.remote())
     request_outputs_engine = server_request_outputs[server_id]
-    request_output, request_output_info = request_outputs_engine[0]
-    assert request_output.request_id == request_id
-    assert request_output_info.instance_id == instance_id
+    llumnix_response: LlumnixRequestOuputVLLM = request_outputs_engine[0]
+    assert llumnix_response.request_id == request_id
+    assert llumnix_response.instance_id == instance_id

@@ -89,8 +89,8 @@ class LlumnixEntrypoint(Entrypoint):
 
     # pylint: disable=unused-argument
     async def is_ready(self, request):
-        responce = await self._client.is_ready()
-        return web.json_response(text=str(responce))
+        response = await self._client.is_ready()
+        return web.json_response(text=str(response))
 
     def create_web_app(self):
         app = super().create_web_app()

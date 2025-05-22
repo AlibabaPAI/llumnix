@@ -15,7 +15,6 @@ from typing import Dict, List
 import asyncio
 import time
 import os
-import json
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -31,6 +30,7 @@ from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.internal_config import MigrationConfig
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)
 
@@ -72,16 +72,10 @@ class AsyncPutQueueActor:
                     logger.debug("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
                                                                                 server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
-                if self.backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
-                    request_ids = [req_output.request_id for req_output in req_outputs]
-                else: # BackendType.BLADE_LLM
-                    from blade_llm.protocol import GenerateStreamResponse # pylint: disable=import-outside-toplevel
-                    request_ids = []
-                    for req_output_json in req_outputs:
-                        if isinstance(req_outputs, tuple):
-                            req_output_json = req_output_json[0]
-                        reque_output = GenerateStreamResponse(**json.loads(req_output_json))
-                        request_ids.append(reque_output.req_id)
+                request_ids = []
+                for req_output in req_outputs:
+                    assert isinstance(req_output, LlumnixRequestOuput)
+                    request_ids.append(req_output.request_id)
                 await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(request_ids))
 
     def stop(self):

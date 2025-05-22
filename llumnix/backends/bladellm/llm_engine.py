@@ -44,7 +44,7 @@ from blade_llm.module.parallel import setup_dist_environ, master_node_in_distrib
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
-from llumnix.utils import (get_ip_address, ray_get_with_timeout, asyncio_wait_for_with_timeout,
+from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout,
                            get_free_port, wait_port_free, run_coroutine_in_new_thread)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
@@ -61,7 +61,7 @@ from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
-from llumnix.request_output_info import RequestOutputInfo
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 
 logger = init_logger(__name__)
@@ -142,7 +142,7 @@ class AsyncBackQueueWrapper:
                 resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
-                logger.info("engine {} finish_request {}".format(self.instance_id, resp.req_id))
+                logger.info("Engine {} finish request {}.".format(self.instance_id, resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
             return resp, server_info
 
@@ -161,16 +161,14 @@ class AsyncBackQueueWrapper:
                     request_outputs.append(resp)
                     server_info_outputs.append(server_info)
 
-            self._put_request_outputs_to_server(request_outputs, server_info_outputs)
+            await self._put_request_outputs_to_server(request_outputs, server_info_outputs)
 
-    def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
+    async def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
                                        server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in order to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
-            server_id = server_info.server_id
-
             request_timestamps = None
             if hasattr(server_info, "request_timestamps"):
                 request_timestamps = server_info.request_timestamps
@@ -184,31 +182,32 @@ class AsyncBackQueueWrapper:
                             self.current_step_metrics.engine_step_postprocess_timestamp_end)
                 set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
                             self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
-            request_output_info = RequestOutputInfo(instance_id=self.instance_id)
-            server_request_outputs[server_id].append((request_output.model_dump_json(), request_output_info,
-                                                      request_timestamps))
+
+            llumnix_response = LlumnixRequestOuputBladeLLM(request_output.req_id, self.instance_id,
+                                                       request_output.model_dump_json(), request_timestamps)
+            server_id = server_info.server_id
+            server_request_outputs[server_id].append(llumnix_response)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
+
         if server_info_dict:
-            # Step-by-step request outputs forwarding, and sub thread should die together with the AsyncPutQueueActor,
-            # so just ray.get here.
-            ray_get_with_timeout(
-                self.async_put_queue_actor.put_nowait_to_servers.remote(
-                    server_request_outputs, server_info_dict
-                )
+            await self.async_put_queue_actor.put_nowait_to_servers.remote(
+                server_request_outputs, server_info_dict
             )
 
     def remove_request_server_info(self, request_id: int, expired_step: int) -> None:
         self.dangling_request_server_info[request_id] = expired_step
-        logger.debug("trans_wrapper is going to remove request {} at step {}".format(request_id, expired_step))
+        logger.debug("Trans_wrapper {} is going to remove request {} at step {}.".format(
+            self.instance_id, request_id, expired_step))
 
     def add_request(self, request_id: int, server_info: ServerInfo) -> None:
         self.request_server_map[request_id] = server_info
-        logger.debug("trans_wrapper add_request {} {}".format(request_id, server_info))
+        logger.debug("Trans_wrapper {} add_request {} from server {}.".format(
+            self.instance_id, request_id, server_info.server_id))
 
     def clear(self):
         self.request_server_map = {}
-        logger.info("trans_wrapper reset")
+        logger.info("Trans_wrapper reset.")
 
 
 def setup_dist_options(serving_args: ServingArgs):
@@ -242,7 +241,7 @@ class AsyncLLMEngineLlumnixMixin:
                  ) -> None:
         self.instance_id = instance_id
         self.state = EngineState.INIT
-        logger.info("engine {} current state: {}".format(self.instance_id, self.state))
+        logger.info("Engine {} current state: {}.".format(self.instance_id, self.state))
 
         self.placement_group = placement_group
         self.request_output_queue_type = request_output_queue_type
@@ -338,16 +337,16 @@ class AsyncLLMEngineLlumnixMixin:
             await super()._loop()
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Error in engine loop, unexpected exception: {}".format(e))
+            logger.exception("Error in engine loop, unexpected exception: {}.".format(e))
             self.stop()
             previous_state = self.state
             self.state = EngineState.CRASHED
-            logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+            logger.info("Engine {} change state: {} -> {}.".format(self.instance_id, previous_state, self.state))
 
         if self.state == EngineState.RUNNING:
             self.stop()
             self.state = EngineState.STOPPED
-            logger.info("engine {} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+            logger.info("Engine {} change state: {} -> {}.".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def stop(self):
         run_coroutine_in_new_thread(self.close_migration(), blocking=True)
@@ -383,7 +382,7 @@ class AsyncLLMEngineLlumnixMixin:
         self.trans_wrapper.clear()
 
     async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
-        logger.debug("engine {} add request {}:{}".format(self.instance_id, server_request.id, server_request.external_id))
+        logger.debug("Engine {} add request {}:{}.".format(self.instance_id, server_request.id, server_request.external_id))
         self.log_request_timestamps = self.log_request_timestamps or hasattr(server_info, 'request_timestamps')
         set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
         self.trans_wrapper.add_request(server_request.id, server_info)

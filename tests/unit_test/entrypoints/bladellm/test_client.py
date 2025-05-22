@@ -24,8 +24,8 @@ from blade_llm.protocol import GenerateStreamResponse, Token, TokenUsage
 
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.utils import random_uuid
-from llumnix.request_output_info import RequestOutputInfo
 from llumnix.ray_utils import get_instance_name
+from llumnix.request_output import LlumnixRequestOuput
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -41,6 +41,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.instance_num_requests: Dict[str, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True
+        self.log_request_timestamps = False
 
         self.request_output_queue = asyncio.Queue()
         self.llumnix_id2entrypoint_id = {}
@@ -203,8 +204,8 @@ async def test_drop_request(ray_env):
     assert instance_id_returned is None and instance_returned is None
 
     request_output = GenerateStreamResponse(req_id=request_id)
-    request_output_info = RequestOutputInfo(instance_id=instance_id)
-    await client.request_output_queue.put([(request_output.model_dump_json(), request_output_info)])
+    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output)
+    await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
 
@@ -246,8 +247,8 @@ async def test_drop_request(ray_env):
     instance_id = random_uuid()
 
     request_output = GenerateStreamResponse(req_id=request_id)
-    request_output_info = RequestOutputInfo(instance_id=instance_id)
-    await client.request_output_queue.put([(request_output.model_dump_json(), request_output_info)])
+    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output)
+    await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
 
@@ -260,7 +261,8 @@ async def test_drop_request(ray_env):
     request_output.is_finished = True
     client._process_output_order = MagicMock()
     client._process_output_order.return_value = [request_output]
-    await client.request_output_queue.put([(request_output.model_dump_json(), request_output_info)])
+    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, request_output)
+    await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
 

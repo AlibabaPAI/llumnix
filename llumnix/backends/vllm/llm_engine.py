@@ -48,7 +48,7 @@ from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_REMOTE_CALL_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
-from llumnix.request_output_info import RequestOutputInfo
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 
 logger = init_logger(__name__)
 
@@ -308,8 +308,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Reorganize data in orther to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
-            request_output_info = RequestOutputInfo(instance_id=self.instance_id)
-            server_request_outputs[server_id].append((request_output, request_output_info))
+            request_timestamps = None if not hasattr(request_output, "request_timestamps") else request_output.request_timestamps
+            llumnix_response = LlumnixRequestOuputVLLM(request_output.request_id, self.instance_id,
+                                                   request_output, request_timestamps)
+            server_request_outputs[server_id].append(llumnix_response)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.

@@ -12,6 +12,7 @@
 # limitations under the License.
 
 
+import random
 import subprocess
 import asyncio
 from typing import List
@@ -172,9 +173,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         pytest.skip(conftest.SKIP_REASON)
 
     global test_times
-    print("Going to set new env...")
+
     ip = get_ip_address()
-    base_port = 40000 + test_times * 100
+    base_port = 40000 + random.randint(0, 46) + test_times * 100
     if "BladeLLM" in engine:
         base_port += 5000
     device_count = min(4, torch.cuda.device_count())
@@ -265,7 +266,6 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                enable_migration=enable_migration,
                                                max_instances=instance_count))
     for launch_command in launch_commands:
-        print(f"Going to run command: {launch_command}")
         subprocess.run(launch_command, shell=True, check=True)
 
     await asyncio.sleep(3)

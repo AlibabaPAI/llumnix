@@ -14,15 +14,19 @@
 import asyncio
 import signal
 import time
+from typing import List
 
 import pytest
 import ray
 import numpy as np
 
+from vllm.outputs import RequestOutput
+
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.zmq_client import ZmqClient
 from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
+from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 
 # pylint: disable=W0611
 from tests.conftest import ray_env
@@ -42,8 +46,8 @@ class Server:
 
     async def get_request_outputs_loop(self, request_output_queue):
         while True:
-            request_outputs_engine = await request_output_queue.get()
-            request_outputs = [request_output for request_output, _ in request_outputs_engine]
+            llumnix_reponses: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+            request_outputs = [llumnix_reponse.get_engine_output() for llumnix_reponse in llumnix_reponses]
             for request_output in request_outputs:
                 self.zmq_rpc_latencies.append(time.time() - request_output.send_time)
                 if request_output.finished:
@@ -67,7 +71,8 @@ def gen_request_outputs(num_outputs):
     for _ in range(num_outputs):
         request_id = random_uuid()
         request_outputs.append(get_request_output_engine(request_id))
-    request_outputs[-1][0].finished = True
+    engine_output = request_outputs[-1].get_engine_output()
+    engine_output.finished = True
     return request_outputs
 
 async def async_request_output_gen(generator, qps):
@@ -79,8 +84,9 @@ async def async_request_output_gen(generator, qps):
         except StopIteration:
             return
 
-async def put_queue(request_output_queue, request_output, server_info):
-    request_output[0].send_time = time.time()
+async def put_queue(request_output_queue, request_output: LlumnixRequestOuputVLLM, server_info):
+    engine_outpout: RequestOutput = request_output.get_engine_output()
+    engine_outpout.send_time = time.time()
     await request_output_queue.put_nowait([request_output], server_info)
 
 class TimeoutException(Exception):

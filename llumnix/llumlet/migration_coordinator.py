@@ -44,8 +44,8 @@ class MigrationCoordinator:
                  backend_type: BackendType,
                  migration_last_stage_max_blocks: int,
                  migration_max_stages: int) -> None:
-        self.backend_engine = backend_engine
         self.backend_type = backend_type
+        self.backend_engine = backend_engine
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages
 

@@ -298,7 +298,7 @@ async def test_http_oai_completions_stream_max_tokens_stream(
     server, max_tokens, expected_finish_reason
 ):
     req_dict = {
-        'prompt': 'hello',
+        'prompt': 'who is the author of One Hundred Years of Solitude',
         'stream': True,
         'max_tokens': max_tokens,
         "stop_tokens": [151645, 151644, 151643],
@@ -353,7 +353,7 @@ async def test_http_oai_completions_stream_max_tokens_non_stream(
     server, max_tokens, expected_finish_reason
 ):
     req_dict = {
-        'prompt': 'hello',
+        'prompt': 'who is the author of One Hundred Years of Solitude',
         'stream': False,
         'max_tokens': max_tokens,
         "stop_tokens": [151645, 151644, 151643],

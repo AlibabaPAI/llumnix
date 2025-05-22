@@ -377,7 +377,7 @@ class Scaler:
                                 next_engine_args: LlumnixEngineArgs):
             try:
                 instance_ready = False
-                await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.SERVER_READY_TIMEOUT))
+                await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
                 instance_ready = True
                 # Initialize server after instance is ready.
                 server = self._init_server(instance_id, placement_group, backend_type,

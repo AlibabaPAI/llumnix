@@ -301,6 +301,8 @@ async def test_http_oai_completions_stream_max_tokens_stream(
         'prompt': 'who is the author of One Hundred Years of Solitude',
         'stream': True,
         'max_tokens': max_tokens,
+        'temperature': 0,
+        'seed': 42,
         "stop_tokens": [151645, 151644, 151643],
         "stop": ["<|endoftext|>"],
     }
@@ -356,6 +358,8 @@ async def test_http_oai_completions_stream_max_tokens_non_stream(
         'prompt': 'who is the author of One Hundred Years of Solitude',
         'stream': False,
         'max_tokens': max_tokens,
+        'temperature': 0,
+        'seed': 42,
         "stop_tokens": [151645, 151644, 151643],
         "stop": ["<|endoftext|>"],
     }

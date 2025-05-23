@@ -101,7 +101,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     ip = get_ip_address()
     base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:
-        base_port += 5000
+        base_port += 2500
 
     ip_ports = []
     device_count = min(4, torch.cuda.device_count())

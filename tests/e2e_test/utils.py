@@ -460,14 +460,17 @@ def shutdown_llumnix_service_func():
     subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
     time.sleep(1.0)
 
+def cleanup_ci_outputs_func():
+    subprocess.run('rm -rf instance_*.out', shell=True, check=False)
+    subprocess.run('rm -rf nohup.out', shell=True, check=False)
+    subprocess.run('rm -rf core.*', shell=True, check=False)
+    subprocess.run('rm -rf nfs*', shell=True, check=False)
+    subprocess.run('rm -rf service_test', shell=True, check=False)
+
 @pytest.fixture
 def shutdown_llumnix_service():
     try:
-        subprocess.run('rm -rf instance_*.out', shell=True, check=False)
-        subprocess.run('rm -rf nohup.out', shell=True, check=False)
-        subprocess.run('rm -rf core.*', shell=True, check=False)
-        subprocess.run('rm -rf nfs*', shell=True, check=False)
-        subprocess.run('rm -rf service_test', shell=True, check=False)
+        cleanup_ci_outputs_func()
         yield
     finally:
         if conftest.SKIP_REASON is None or len(conftest.SKIP_REASON) == 0:

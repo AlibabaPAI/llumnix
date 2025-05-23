@@ -49,7 +49,7 @@ def generate_vllm_launch_command(
     request_output_queue_type: str = "zmq",
     config_file: str = "configs/vllm.yml",
     enable_migration: bool = True,
-    enforce_eager: bool = True,
+    enforce_eager: bool = False,
     **kwargs
 ):
     command = (
@@ -106,7 +106,7 @@ def generate_vllm_serve_command(
     config_path: str = "configs/vllm.yml",
     tensor_parallel_size: int = 1,
     enable_migration: bool = True,
-    enforce_eager: bool = True,
+    enforce_eager: bool = False,
     max_instances: int = 4,
     **kwargs
 ):
@@ -166,7 +166,7 @@ def generate_bladellm_launch_command(
     tensor_parallel_size: int = 1,
     cuda_visiable_device: Optional[str] = None,
     request_output_queue_type: str = "zmq",
-    enforce_eager: bool = True,
+    enforce_eager: bool = False,
     **kwargs
 ):
     command = (
@@ -219,7 +219,7 @@ def generate_bladellm_serve_command(
     tensor_parallel_size: int = 1,
     max_instances: int = 4,
     request_output_queue_type: str = "zmq",
-    enforce_eager: bool = True,
+    enforce_eager: bool = False,
     **kwargs
 ):
     command = (

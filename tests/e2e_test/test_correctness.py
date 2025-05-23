@@ -227,6 +227,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     model=model,
                                                     ip=ip,
                                                     port=prefill_port,
+                                                    enforce_eager=True,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="prefill",
                                                     enable_migration=enable_migration,
@@ -240,6 +241,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     model=model,
                                                     ip=ip,
                                                     port=decode_port,
+                                                    enforce_eager=True,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="decode",
                                                     enable_migration=enable_migration,
@@ -251,6 +253,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     model=model,
                                                     ip=ip,
                                                     port=base_port,
+                                                    enforce_eager=True,
                                                     tensor_parallel_size=tensor_parallel_size))
     else:
         for i in range(instance_count):
@@ -260,6 +263,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                ip=ip,
                                                port=base_port,
                                                model=model,
+                                               enforce_eager=True,
                                                enable_pd_disagg=enable_pd_disagg,
                                                enable_simulator=enable_simulator,
                                                tensor_parallel_size=tensor_parallel_size,

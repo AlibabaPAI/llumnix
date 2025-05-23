@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import asyncio
-from typing import List, Union, Iterable
+from typing import Any, List, Union, Iterable
 import time
 import os
 
@@ -235,7 +235,7 @@ class Llumlet:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
         await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
-    def abort(self, request_id: Union[str, Iterable[str]]) -> None:
+    def abort(self, request_id: Union[Any, Iterable[Any]]) -> None:
         if isinstance(request_id, (str, int)):
             request_id = (request_id,)
         request_ids = set(request_id)

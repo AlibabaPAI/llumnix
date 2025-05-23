@@ -107,7 +107,8 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
     )
     commands.append(
         genertate_serve_service_command_func(
-            model=model, ip=ip, port=base_port, max_instances=instance_count, result_filename=str(base_port)+".out"
+            model=model, ip=ip, port=base_port, max_instances=instance_count,
+            result_filename=str(base_port)+".out"
         )
     )
     for command in commands:

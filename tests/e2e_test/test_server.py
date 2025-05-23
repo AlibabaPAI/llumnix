@@ -13,6 +13,7 @@
 
 import json
 from typing import Type, TypeVar, Generator, Dict, Any
+import uuid
 
 import pytest
 import requests
@@ -27,6 +28,7 @@ from llumnix.logging.logger import init_logger
 
 from tests.utils import try_convert_to_local_path
 from tests.e2e_test.bladellm_utils import LlumnixServerProc
+# pylint: disable=unused-import
 from tests.e2e_test.utils import (
     wait_for_llumnix_service_ready,
     shutdown_llumnix_service_func,
@@ -36,27 +38,53 @@ from tests.e2e_test.utils import (
 logger = init_logger(__name__)
 
 RESP_T = TypeVar('RESP_T', OAICompletionsResponse, OAIChatCompletionsResponse)
+NAMING_URL = "file:/tmp/llumnix/naming"
 
-@pytest.fixture(scope="session")
-def server():
+
+@pytest.fixture(scope="session", params=["server", "pd_server"])
+def server(request):
     cleanup_ci_outputs_func()
     model = try_convert_to_local_path('Qwen/Qwen2.5-7B')
     ip = get_ip_address()
-    port = 45000
-    max_instances = 1
-    # TODO(KuilongCui): Fix it, not enabling migration, but still need to set the migration backend.
-    # pylint: disable=f-string-without-interpolation
-    cmd = [
-        f"--model={model}",
-        f"--host={ip}",
-        f"--port={port}",
-        f"--enable_llumnix",
-        f"--disable_frontend_multiprocessing",
-        f"--disable_signal_handler",
-        f"--disable_cuda_graph", # TODO(s5u13b): Disable cuda graph for other bladellm tests.
-        f"--max-instances={max_instances}",
-        f"--migration-backend=grpc"
-    ]
+    if not request.param == "pd_server":
+        port = 45000
+        max_instances = 1
+        # TODO(KuilongCui): Fix it, not enabling migration, but still need to set the migration backend.
+        # pylint: disable=f-string-without-interpolation
+        cmd = [
+            f"--model={model}",
+            f"--host={ip}",
+            f"--port={port}",
+            f"--enable_llumnix",
+            f"--disable_frontend_multiprocessing",
+            f"--disable_signal_handler",
+            f"--disable_cuda_graph",
+            f"--max-instances={max_instances}",
+            f"--migration-backend=grpc",
+        ]
+    else:
+        port = 45050
+        max_instances = 2
+        # pylint: disable=f-string-without-interpolation
+        cmd = [
+            f"--model={model}",
+            f"--host={ip}",
+            f"--port={port}",
+            f"--enable_llumnix",
+            f"--disable_frontend_multiprocessing",
+            f"--disable_signal_handler",
+            f"--disable_cuda_graph",
+            f"--enable_disagg",
+            f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]}",
+            f"--disagg_pd.inst_role=prefill", # useless, setted in scaler
+            f"--disagg_pd.disagg_transfer_type=rdma",
+            f"--naming_url={NAMING_URL}",
+            f"--enable-engine-pd-disagg",
+            f"--pd-ratio=1:1",
+            f"--max-instances={max_instances}",
+            f"--enable-port-increment",
+            f"--migration-backend=grpc",
+        ]
     server = LlumnixServerProc(cmd)
     ip_ports = [f"{ip}:{port}"]
     wait_for_llumnix_service_ready(ip_ports)

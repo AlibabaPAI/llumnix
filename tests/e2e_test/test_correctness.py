@@ -123,12 +123,13 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
+@pytest.mark.parametrize("enable_migration", [False, True])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'kvtransfer'])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            launch_mode, enable_pd_disagg, enable_simulator, tensor_parallel_size,
-                           migration_backend, engine):
+                           enable_migration, migration_backend, engine):
     engine = engine.split("_")[1]
 
     if "BladeLLM" in engine:
@@ -141,6 +142,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
         if enable_simulator:
             conftest.SKIP_REASON = "Simulator for BladeLLM is not supported yet."
+
+        if enable_migration and enable_pd_disagg:
+            conftest.SKIP_REASON = "Llumnix does not support migration for BladeLLM when prefill-decode disaggregation is enabled."
 
     if "vLLM" in engine:
         if migration_backend not in ['rayrpc', 'gloo', 'nccl']:
@@ -254,6 +258,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     ip=ip,
                                                     port=base_port,
                                                     enforce_eager=True,
+                                                    enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
     else:
         for i in range(instance_count):

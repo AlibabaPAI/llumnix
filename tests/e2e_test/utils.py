@@ -244,7 +244,7 @@ def generate_bladellm_serve_command(
         f"--naming_url {NAMING_URL} "
         f"{'--enable-engine-pd-disagg' if enable_pd_disagg else ''} "
         f"--dispatch-policy {dispatch_policy} "
-        f"{'--enable-migration' if enable_migration else ''} "
+        f"{'--enable-migration' if enable_migration and not enable_pd_disagg else ''} "
         f"--migration-backend {migration_backend} "
         f"--request-output-queue-type {request_output_queue_type} "
         f"--enable-port-increment "

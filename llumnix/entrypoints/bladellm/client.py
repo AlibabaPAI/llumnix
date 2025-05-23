@@ -11,20 +11,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import time
 import asyncio
 import copy
 import random
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
+import msgspec
 import ray.exceptions
 
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
-from blade_llm.service.communications.protocol import Stats
+from blade_llm.service.communications.protocol_msgspec import Stats
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse, BatchGenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.manager import Manager
@@ -135,7 +135,8 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
         # await to catch exception
         await asyncio_wait_for_with_timeout(
-            self.manager.generate.remote(str(request_id), server_info, server_request=request)
+            self.manager.generate.remote(str(request_id), server_info,
+                                         server_request=msgspec.msgpack.encode(request))
         )
 
     async def _generate_by_instance(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
@@ -215,39 +216,45 @@ class LlumnixClientBladeLLM(MultiProcessingLLMClient):
         )
 
     async def get_request_outputs_loop(self):
+        def _process_single_responce(request_output: GenerateStreamResponse, request_timestamp: RequestTimestamps):
+            request_id = request_output.req_id
+            # Request could be dispatched twice when manager is dead, the first request will free
+            # the request_streams when finished. Or the request is dropped already.
+            if request_id not in self.request_streams:
+                return
+            self.request_instance[request_id] = request_response.instance_id
+
+            if self.log_request_timestamps:
+                # Do not consider the out of order for request timestamp currently.
+                entrypoint_id = self.llumnix_id2entrypoint_id.get(request_id, None)
+                if entrypoint_id is not None:
+                    self.timestamps_streams[entrypoint_id].put_nowait(request_timestamp)
+
+            processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
+            if not processed_output:
+                return
+            for req in processed_output:
+                self.request_streams[request_id].put_nowait(req)
+            last_output = processed_output[-1]
+            self.request_streams_last_completion_tokens[request_id] = last_output.usage.completion_tokens
+            if processed_output[-1].is_finished or not processed_output[-1].is_ok:
+                logger.debug("Client finish request {}, is_ok: {}, err_info: {}.".format(
+                    request_id, last_output.is_ok, last_output.error_info))
+                self._clear_client_request_states(request_id)
+
         while True:
             request_responses: List[LlumnixRequestOuputBladeLLM] = await self.request_output_queue.get()
             if request_responses is None:
                 continue
 
             for request_response in request_responses:
-                request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
-                request_timestamp: RequestTimestamps = request_response.request_timestamps
-                set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
-                request_id = request_output.req_id
-                # Request could be dispatched twice when manager is dead, the first request will free
-                # the request_streams when finished. Or the request is dropped already.
-                if request_id not in self.request_streams:
-                    continue
-                self.request_instance[request_id] = request_response.instance_id
+                request_outputs: Union[BatchGenerateStreamResponse, GenerateStreamResponse] = request_response.get_engine_output()
+                request_timestamps: Union[List[RequestTimestamps], RequestTimestamps] = request_response.get_metrics()
+                set_timestamp(request_timestamps, 'api_server_get_queue_timestamp', time.time())
 
-                if self.log_request_timestamps:
-                    # Do not consider the out of order for request timestamp currently.
-                    entrypoint_id = self.llumnix_id2entrypoint_id.get(request_id, None)
-                    if entrypoint_id is not None:
-                        self.timestamps_streams[entrypoint_id].put_nowait(request_timestamp)
-
-                processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
-                if not processed_output:
-                    continue
-                for req in processed_output:
-                    self.request_streams[request_id].put_nowait(req)
-                last_output = processed_output[-1]
-                self.request_streams_last_completion_tokens[request_id] = last_output.usage.completion_tokens
-                if processed_output[-1].is_finished or not processed_output[-1].is_ok:
-                    logger.debug("Client finish request {}, is_ok: {}, err_info: {}.".format(
-                        request_id, last_output.is_ok, last_output.error_info))
-                    self._clear_client_request_states(request_id)
+                if isinstance(request_outputs, BatchGenerateStreamResponse):
+                    for responces, request_timestamp in zip(request_outputs.resps, request_timestamps):
+                        _process_single_responce(responces, request_timestamp)
 
     def _clear_client_request_states(self, request_id: str):
         entrypoint_id = self.llumnix_id2entrypoint_id.pop(request_id, -1)

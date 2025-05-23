@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import asyncio
-from typing import List, Union, Iterable, Any
+from typing import List, Union, Iterable
 import time
 import os
 

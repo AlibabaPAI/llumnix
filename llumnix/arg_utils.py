@@ -97,7 +97,6 @@ class LlumnixEngineArgsFactory:
         self.pdd_config: PDDConfig = pdd_config
         self.engine_args_dict: Dict[str, LlumnixEngineArgs] = {}
         self.enable_port_increment: bool = enable_port_increment
-        self.disagg_options_token_port_offset = 0  # used in bladellm
 
         if self.load_registered_service:
             if (
@@ -124,10 +123,6 @@ class LlumnixEngineArgsFactory:
 
         if isinstance(current_engine_args, BladellmEngineArgs):
             next_engine_args = BladellmEngineArgs(current_engine_args)
-            if self.enable_port_increment:
-                next_engine_args.revised_args.disagg_options_token_port_offset = \
-                    self.disagg_options_token_port_offset
-                self.disagg_options_token_port_offset += 10
             if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
                 next_engine_args.revised_args.disagg_options_inst_role = (
                     instance_type.value

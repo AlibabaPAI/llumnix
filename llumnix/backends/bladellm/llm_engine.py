@@ -44,8 +44,8 @@ from blade_llm.module.parallel import setup_dist_environ, master_node_in_distrib
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 
-from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout,
-                           get_free_port, wait_port_free, run_coroutine_in_new_thread)
+from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_free_port,
+                           wait_port_free, run_coroutine_in_new_thread)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
@@ -235,7 +235,6 @@ class AsyncLLMEngineLlumnixMixin:
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType
                  ) -> None:
@@ -247,7 +246,6 @@ class AsyncLLMEngineLlumnixMixin:
         self.request_output_queue_type = request_output_queue_type
         self._worker_processes = WorkerProcessesRay(placement_group, self._args, instance_id, migration_config)
 
-        self.src_workers_migration_ip_addr_list = src_workers_migration_ip_addr_list
         self._migration_semaphore = asyncio.Semaphore(0)
         self.request_barriers: queue.Queue = request_barriers
         self.migrated_request = set()
@@ -257,6 +255,9 @@ class AsyncLLMEngineLlumnixMixin:
         self.backend_type = backend_type
         self.step_counter: int = 0
         self.log_request_timestamps: bool = False
+
+    def set_worker_info(self, src_workers_migration_ip_addr_list: List[str]) -> None:
+        self.src_workers_migration_ip_addr_list = src_workers_migration_ip_addr_list
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -427,13 +428,11 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
                  serving_args: ServingArgs,
                  *args, **kwargs,
                  ) -> None:
-        setup_dist(serving_args)
         AsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(
             self,
@@ -441,22 +440,9 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
             placement_group,
             request_output_queue_type,
             migration_config,
-            src_workers_migration_ip_addr_list,
             request_barriers,
             backend_type
         )
-
-    def _setup_dist_options(self, serving_args: ServingArgs):
-        # It means that dist_init_addr can be None when enabling distributed inference.
-        if serving_args.dist_inference_options.dist_init_addr is not None:
-            master_port = int(serving_args.dist_inference_options.dist_init_addr.split(":")[1])
-        else:
-            master_port = NCCL_PORT
-        # The IP of engine and worker 0 will be same due to our sorting of workers,
-        # so directly set the dist_init_addr to IP of engine is correct.
-        serving_args.dist_inference_options.dist_init_addr = f"{serving_args.host}:{master_port}"
-        # TODO(s5u13b): New BladeLLM will not use this environment variables, update it after rebase BladeLLM.
-        os.environ["MASTER_ADDR"] = serving_args.host
 
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
@@ -465,13 +451,11 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
                  serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
-        setup_dist(serving_args)
         PrefillAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(
             self,
@@ -479,7 +463,6 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             placement_group,
             request_output_queue_type,
             migration_config,
-            src_workers_migration_ip_addr_list,
             request_barriers,
             backend_type
         )
@@ -492,13 +475,11 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
-                 src_workers_migration_ip_addr_list: List[str],
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
                  serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
-        setup_dist(serving_args)
         DecodeAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(
             self,
@@ -506,7 +487,6 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
             placement_group,
             request_output_queue_type,
             migration_config,
-            src_workers_migration_ip_addr_list,
             request_barriers,
             backend_type
         )
@@ -520,53 +500,13 @@ class BackendBladeLLM(BackendInterface):
                  migration_config: MigrationConfig,
                  engine_args: ServingArgs
                 ) -> None:
-        init_metric(
-            engine_args.serving_metric_options.metric_export_interval_sec,
-            *engine_args.metric_exporters,
-            observability_options=engine_args.serving_observability_options,
-        )
-        if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
-            engine_args.host = get_ip_address()
-        self._config_inner_engine_logger(engine_args)
-
-        if master_node_in_distributed_inference():
-            wait_port_free(engine_args.multi_node_hb_port())
-
-        # add instance_id to avoid path conflict when multi-engine running in a single pod
-        # use instance_id[:5] to avoid the length of worker_socket_path exceeding the OS limit
-        # Note that there is still a small probability that worker_socket_path will be repeated
-        engine_args.worker_socket_path = engine_args.worker_socket_path + "_" + str(instance_id)[:5]
         self.instance_id = instance_id
+        self.placement_group = placement_group
+        self.request_output_queue_type = request_output_queue_type
+        self.migration_config = migration_config
         self.engine_args = engine_args
-        self.migration_config: MigrationConfig = migration_config
-
-        ip_addr = get_ip_address()
-        world_size = engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
-
-        assert self.migration_config.grpc_migration_backend_server_port is None \
-            or len(self.migration_config.grpc_migration_backend_server_port) == 0
-        self.migration_config.grpc_migration_backend_server_port = []
-        for _ in range(world_size):
-            self.migration_config.grpc_migration_backend_server_port.append(get_free_port())
-        grpc_ports = self.migration_config.grpc_migration_backend_server_port
-        self.src_workers_migration_ip_addr_list = [ip_addr + ":" + str(port) for port in grpc_ports]
-        logger.info("Engine {} set grpc migration server address for all workers: {}".format(
-                    self.instance_id, self.src_workers_migration_ip_addr_list))
-
-        self.worker_infos = []
-        self.kv_transfer_instance_id = self.instance_id
-        if engine_args.enable_disagg and engine_args.disagg_options is not None:
-            self.kv_transfer_instance_id = engine_args.disagg_options.inst_id
-        for index, ip_addr in enumerate(self.src_workers_migration_ip_addr_list):
-            self.worker_infos.append(
-                WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id,
-                           kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
 
         self.request_barriers: queue.Queue = queue.Queue()
-        engine_cls = self._get_engine_cls()
-        self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, migration_config,
-                                 self.src_workers_migration_ip_addr_list, self.request_barriers, BackendType.BLADELLM, engine_args)
-
         self._engine_ready_event = asyncio.Event()
         asyncio.create_task(self._start_engine())
 
@@ -578,7 +518,55 @@ class BackendBladeLLM(BackendInterface):
             format=LOGGER_FORMAT,
         )
 
+    def _init_worker_info(self):
+        ip_addr = get_ip_address()
+        world_size = self.engine_args.tensor_parallel_size * self.engine_args.pipeline_parallel_size
+        assert self.migration_config.grpc_migration_backend_server_port is None \
+            or len(self.migration_config.grpc_migration_backend_server_port) == 0
+        self.migration_config.grpc_migration_backend_server_port = [get_free_port() for _ in range(world_size)]
+        grpc_ports = self.migration_config.grpc_migration_backend_server_port
+        self.src_workers_migration_ip_addr_list = [ip_addr + ":" + str(port) for port in grpc_ports]
+        logger.info("Engine {} set grpc migration server address for all workers: {}".format(
+                    self.instance_id, self.src_workers_migration_ip_addr_list))
+
+        self.worker_infos = []
+        self.kv_transfer_instance_id = self.instance_id
+        if self.engine_args.enable_disagg and self.engine_args.disagg_options is not None:
+            self.kv_transfer_instance_id = self.engine_args.disagg_options.inst_id
+        for index, ip_addr in enumerate(self.src_workers_migration_ip_addr_list):
+            self.worker_infos.append(
+                WorkerInfo(ip_address=ip_addr, instance_id=self.instance_id,
+                           kv_transfer_instance_id=self.kv_transfer_instance_id, worker_id=index))
+        self.engine.set_worker_info(self.src_workers_migration_ip_addr_list)
+
     async def _start_engine(self):
+        # add instance_id to avoid path conflict when multi-engine running in a single pod
+        # use instance_id[:5] to avoid the length of worker_socket_path exceeding the OS limit
+        # Note that there is still a small probability that worker_socket_path will be repeated
+        self.engine_args.worker_socket_path = self.engine_args.worker_socket_path + "_" + \
+            str(self.instance_id)[:5]
+
+        init_metric(
+            self.engine_args.serving_metric_options.metric_export_interval_sec,
+            *self.engine_args.metric_exporters,
+            observability_options=self.engine_args.serving_observability_options,
+        )
+        if self.engine_args.host not in ("127.0.0.1", "0.0.0.0"):
+            self.engine_args.host = get_ip_address()
+        self._config_inner_engine_logger(self.engine_args)
+
+        if master_node_in_distributed_inference():
+            wait_port_free(self.engine_args.multi_node_hb_port())
+
+        if self.engine_args.enable_disagg:
+            self.engine_args.disagg_options.token_port = get_free_port()
+
+        engine_cls = self._get_engine_cls()
+        setup_dist(self.engine_args)
+        self.engine: AsyncLLMEngineLlumnixMixin = engine_cls(self.instance_id, self.placement_group,
+                                 self.request_output_queue_type, self.migration_config,
+                                 self.request_barriers, BackendType.BLADELLM, self.engine_args)
+
         if self.engine_args.enable_disagg:
             communication_args = CommunicationArgs(
                 instance_name=self.engine_args.disagg_options.inst_id,
@@ -589,7 +577,7 @@ class BackendBladeLLM(BackendInterface):
             msg_server = EngineMsgServer(engine=self.engine, args=communication_args)
             await msg_server.async_start(asyncio.get_event_loop(), disable_frontend_multiprocessing=True,
                                          enable_disagg_pd=True)
-
+        self._init_worker_info()
         await self.engine.async_start(asyncio.get_event_loop())
         self._engine_ready_event.set()
 

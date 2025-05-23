@@ -34,7 +34,7 @@ from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH
-from llumnix.utils import get_ip_address, convert_bytes
+from llumnix.utils import get_ip_address, convert_bytes, wait_port_free
 
 logger = init_logger(__name__)
 
@@ -70,15 +70,21 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         asyncio.create_task(self._launch_grpc_service())
 
     async def _launch_grpc_service(self):
-        options=[
-            ('grpc.max_send_message_length', GRPC_MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', GRPC_MAX_MESSAGE_LENGTH),
-        ]
-        self.migration_server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
-        migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(self, self.migration_server)
-        self.migration_server.add_insecure_port(self.migration_grpc_ip_addr)
-        await self.migration_server.start()
-        await self.migration_server.wait_for_termination()
+        try:
+            options=[
+                ('grpc.max_send_message_length', GRPC_MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', GRPC_MAX_MESSAGE_LENGTH),
+            ]
+
+            self.migration_server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
+            migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(self, self.migration_server)
+            wait_port_free(self.migration_config.grpc_migration_backend_server_port[self.rank])
+            self.migration_server.add_insecure_port(self.migration_grpc_ip_addr)
+            await self.migration_server.start()
+            await self.migration_server.wait_for_termination()
+        except Exception as e: # pylint: disable=broad-except
+            logger.error("Failed to start migration backend grpc service, exception: {}.".format(e))
+            raise
 
     # pylint: disable=unused-argument
     def close_migration(self, request, context):

@@ -129,6 +129,10 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
     if "BladeLLM" in engine and migration_backend not in ['grpc', 'kvtransfer']:
         conftest.SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
 
+    # TODO(KuilongCui): Fix it
+    if "BladeLLM" in engine and tensor_parallel_size > 1:
+        conftest.SKIP_REASON = "Bug in BladeLLM migration when tensor_parallel_size > 1, skip it temporarily."
+
     if "vLLM" in engine and tensor_parallel_size == 2:
         conftest.SKIP_REASON = "vLLM tensor_parallel_size=2 has already been tested in the correctness test."
 

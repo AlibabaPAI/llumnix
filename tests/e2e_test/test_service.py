@@ -97,17 +97,17 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
     commands = []
     commands.append(
         generate_register_service_command_func(
-            model=model, ip=ip, port=base_port, enforce_eager=True, engine_type="prefill"
+            model=model, ip=ip, port=base_port, engine_type="prefill"
         )
     )
     commands.append(
         generate_register_service_command_func(
-            model=model, ip=ip, port=base_port, enforce_eager=True, engine_type="decode"
+            model=model, ip=ip, port=base_port, engine_type="decode"
         )
     )
     commands.append(
         genertate_serve_service_command_func(
-            model=model, ip=ip, port=base_port, enforce_eager=True, max_instances=instance_count,
+            model=model, ip=ip, port=base_port, max_instances=instance_count,
             result_filename=str(base_port)+".out"
         )
     )

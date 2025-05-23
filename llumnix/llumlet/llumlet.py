@@ -236,7 +236,7 @@ class Llumlet:
         await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
     def abort(self, request_id: Union[str, Iterable[str]]) -> None:
-        if isinstance(request_id, str):
+        if isinstance(request_id, (str, int)):
             request_id = (request_id,)
         request_ids = set(request_id)
         return self.backend_engine.abort_request(request_ids)

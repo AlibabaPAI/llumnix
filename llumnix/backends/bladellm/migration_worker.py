@@ -132,16 +132,21 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
                  instance_id: str, migration_config: MigrationConfig,) -> None:
         LocalWorker.__init__(self, rank, serving_args)
 
-        self.request_sync_group = WorkerRequestSyncGroup(self._engine._state_manager._request_groups,
-                                                            self._req_tracker)
-        MigrationWorker.__init__(self, self._engine._state_manager, instance_id, migration_config,
-                                    self.request_sync_group, self, rank, serving_args)
+        self.enable_migration = migration_config.enable_migration
+        if self.enable_migration:
+            self.request_sync_group = WorkerRequestSyncGroup(self._engine._state_manager._request_groups,
+                                                                self._req_tracker)
+            MigrationWorker.__init__(self, self._engine._state_manager, instance_id, migration_config,
+                                        self.request_sync_group, self, rank, serving_args)
+        else:
+            logger.info("Migration is disabled, skip migration initialization.")
 
     # used for wait_worker_ready
     async def info(self, req: empty_pb2.Empty) -> str:
-        async with grpc.aio.insecure_channel(self.migration_grpc_ip_addr) as channel:
-            stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
-            await stub.is_ready(empty_pb2.Empty())
+        if self.enable_migration:
+            async with grpc.aio.insecure_channel(self.migration_grpc_ip_addr) as channel:
+                stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
+                await stub.is_ready(empty_pb2.Empty())
         return await LocalWorker.info(self, req)
 
     async def barrier(self, request_group_ids: List[int]) -> str:
@@ -154,9 +159,10 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
             resp = await self.barrier(request.step.decode)
             self.send_response(resp)
         else:
-            self.request_sync_group.update_migrated_in_request()
+            if self.enable_migration:
+                self.request_sync_group.update_migrated_in_request()
             rpc_response = await super().handle_rpc_call(request)
-            if method == "step":
+            if self.enable_migration and method == "step":
                 self.request_sync_group.remove_backup_request_group(
                     [finish_info.request_id for finish_info in request.step.latest_finished_ids])
             return rpc_response

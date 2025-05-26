@@ -14,7 +14,6 @@
 import asyncio
 from typing import List, Union, Iterable
 import time
-import os
 
 import ray
 import ray.exceptions
@@ -29,7 +28,6 @@ from llumnix.backends.utils import init_backend_engine
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator, MigrationStatus
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.server_info import ServerInfo
-from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
@@ -48,20 +46,10 @@ class Llumlet:
                  instance_args: InstanceArgs,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 engine_args: LlumnixEngineArgs) -> None:
+                 llumnix_engine_args: LlumnixEngineArgs) -> None:
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
-        backend_type: BackendType = engine_args.backend_type
-        logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, backend_type))
-        # update disagg_options.inst_id for baldellm PDD
-        self.engine_disagg_inst_id: str = (
-            os.environ.get(instance_args.engine_disagg_inst_id_env_var)
-            if instance_args.engine_disagg_inst_id_env_var
-            else instance_id
-        )
-        engine_args.update_arg(
-            args_key="engine_disagg_inst_id", args_value=self.engine_disagg_inst_id
-        )
+        logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, llumnix_engine_args.backend_type))
         self.instance_args: InstanceArgs = instance_args
         self.actor_name = get_instance_name(instance_id)
         self.instance_load_calculator = InstanceLoadCalculator(
@@ -69,21 +57,20 @@ class Llumlet:
             migration_load_metric=instance_args.migration_load_metric,
             enable_defrag=instance_args.enable_defrag
         )
-        migration_config: MigrationConfig = instance_args.create_migration_config()
         self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
                                                                     placement_group,
                                                                     request_output_queue_type,
-                                                                    migration_config,
-                                                                    backend_type,
-                                                                    engine_args,
-                                                                    instance_args.profiling_result_file_path)
-        self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                            backend_type,
-                                                            migration_config.migration_last_stage_max_blocks,
-                                                            migration_config.migration_max_stages)
-        self.migration_scheduler = LocalMigrationScheduler(migration_config.request_migration_policy,
-                                                            self.backend_engine)
+                                                                    instance_args,
+                                                                    llumnix_engine_args)
         asyncio.create_task(self._check_engine_state_loop())
+
+        if self.instance_args.enable_migration:
+            self.migration_coordinator = MigrationCoordinator(self.backend_engine,
+                                                            llumnix_engine_args.backend_type,
+                                                            instance_args.migration_last_stage_max_blocks,
+                                                            instance_args.migration_max_stages)
+            self.migration_scheduler = LocalMigrationScheduler(instance_args.request_migration_policy,
+                                                                self.backend_engine)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -229,7 +216,7 @@ class Llumlet:
         return self.instance_args.instance_type
 
     def get_engine_disagg_inst_id(self) -> str:
-        return self.engine_disagg_inst_id
+        return self.backend_engine.engine_disagg_inst_id
 
     async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())

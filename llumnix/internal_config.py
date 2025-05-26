@@ -47,6 +47,7 @@ class GlobalSchedulerConfig:
 class MigrationConfig:
     def __init__(
             self,
+            enable_migration: bool,
             request_migration_policy: str,
             migration_backend: str,
             migration_buffer_blocks: int,
@@ -57,6 +58,7 @@ class MigrationConfig:
             kvtransfer_migration_backend_transfer_type: str = "",
             kvtransfer_migration_backend_naming_url: str = "",
             ) -> None:
+        self.enable_migration = enable_migration
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
         self.kvtransfer_migration_backend_transfer_type = kvtransfer_migration_backend_transfer_type

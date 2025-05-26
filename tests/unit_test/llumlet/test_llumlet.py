@@ -72,7 +72,7 @@ def init_llumlet(actor_name):
         instance_id="0",
         instance_args=InstanceArgs(),
         request_output_queue_type=QueueType.RAYQUEUE,
-        engine_args=engine_args,
+        llumnix_engine_args=engine_args,
     )
     ray.get(llumlet.is_ready.remote())
 

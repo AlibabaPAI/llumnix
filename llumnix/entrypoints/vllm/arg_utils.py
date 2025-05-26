@@ -42,7 +42,7 @@ class VllmEngineArgs(LlumnixEngineArgs):
             return copy.deepcopy(engine_args.engine_args)
         return engine_args
 
-    def load_engine_args_if_needed(self):
+    def load_engine_args(self):
         return self.engine_args
 
     def get_world_size(self):

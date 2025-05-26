@@ -378,22 +378,23 @@ class Manager:
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
                 instance_actor = instance_actor_handles[idx]
-                try:
-                    self.instance_id_2_engine_disagg_inst_id[ins_id] = \
-                        ray_get_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())
-                # pylint: disable=broad-except
-                except Exception as e:
-                    if isinstance(e, ray.exceptions.RayActorError):
-                        logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
-                    elif isinstance(e, ray.exceptions.GetTimeoutError):
-                        logger.error("Failed to scale up instance {}, instance is hang, "
-                                     "please check the cause.".format(ins_id))
-                    else:
-                        logger.exception("Error during scale up instance {}, "
-                                         "unexpected exception: {}".format(ins_id, e))
-                    continue
-                logger.info("Bind instance id {} with engine instance id {}.".format(
-                    ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))
+                if self.manager_args.enable_engine_pd_disagg:
+                    try:
+                        self.instance_id_2_engine_disagg_inst_id[ins_id] = \
+                            ray_get_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())
+                    # pylint: disable=broad-except
+                    except Exception as e:
+                        if isinstance(e, ray.exceptions.RayActorError):
+                            logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
+                        elif isinstance(e, ray.exceptions.GetTimeoutError):
+                            logger.error("Failed to scale up instance {}, instance is hang, "
+                                        "please check the cause.".format(ins_id))
+                        else:
+                            logger.exception("Error during scale up instance {}, "
+                                            "unexpected exception: {}".format(ins_id, e))
+                        continue
+                    logger.info("Bind instance id {} with engine instance id {}.".format(
+                        ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))
                 indeed_update = True
                 self.instances[ins_id] = instance_actor
                 self.pgs[ins_id] = placement_groups[idx]

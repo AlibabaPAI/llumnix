@@ -50,7 +50,6 @@ def server(request):
     if not request.param == "pd_server":
         port = 45000
         max_instances = 1
-        # TODO(KuilongCui): Fix it, not enabling migration, but still need to set the migration backend.
         # pylint: disable=f-string-without-interpolation
         cmd = [
             f"--model={model}",
@@ -61,7 +60,6 @@ def server(request):
             f"--disable_signal_handler",
             f"--disable_cuda_graph",
             f"--max-instances={max_instances}",
-            f"--migration-backend=grpc",
         ]
     else:
         port = 45050
@@ -84,7 +82,6 @@ def server(request):
             f"--pd-ratio=1:1",
             f"--max-instances={max_instances}",
             f"--enable-port-increment",
-            f"--migration-backend=grpc",
         ]
     server = LlumnixServerProc(cmd)
     ip_ports = [f"{ip}:{port}"]

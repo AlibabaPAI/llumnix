@@ -32,6 +32,7 @@ from vllm.usage.usage_lib import UsageContext
 from vllm.engine.llm_engine import SchedulerContext
 from vllm import envs as vllm_envs
 
+from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface, EngineState
@@ -331,12 +332,15 @@ class BackendVLLM(BackendInterface):
         instance_id: str,
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
-        migration_config: MigrationConfig,
-        engine_args: EngineArgs
+        instance_args: InstanceArgs,
+        llumnix_engine_args: LlumnixEngineArgs
     ) -> None:
+        self.engine_disagg_inst_id = instance_id
+        engine_args = llumnix_engine_args.load_engine_args()
+        self.migration_config = instance_args.create_migration_config()
         self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
                                                                           request_output_queue_type=request_output_queue_type,
-                                                                          migration_config=migration_config,
+                                                                          migration_config=self.migration_config,
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           backend_type=BackendType.VLLM)
@@ -353,15 +357,18 @@ class BackendVLLM(BackendInterface):
         for vid in range(engine_args.pipeline_parallel_size):
             self.engine.scheduler[vid].add_update_instance_info_callback(self.engine.update_instance_info)
         self.engine.output_processor.scheduler = self.engine.scheduler
-        self.migration_config = migration_config
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
             self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix"))
-        self._run_workers("init_migration", instance_id=instance_id,
-                                            migration_config=migration_config,
-                                            src_worker_handle_list=self.worker_handle_list,
-                                            placement_group=placement_group)
+
+        if self.migration_config.enable_migration:
+            self._run_workers("init_migration", instance_id=instance_id,
+                                                migration_config=self.migration_config,
+                                                src_worker_handle_list=self.worker_handle_list,
+                                                placement_group=placement_group)
+        else:
+            logger.info("Migration is disabled, skip migration initialization.")
 
         self.state = EngineState.INIT
         logger.info("engine {} current state: {}".format(self.instance_id, self.state))

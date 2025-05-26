@@ -19,7 +19,7 @@ import os
 import ray
 from ray.util.placement_group import PlacementGroup
 
-from llumnix.arg_utils import LlumnixEngineArgs
+from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
@@ -27,7 +27,6 @@ from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.server_info import ServerInfo
 from llumnix.logging.logger import init_logger
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
-from llumnix.internal_config import MigrationConfig
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.request_output import LlumnixRequestOuput
@@ -85,27 +84,25 @@ class AsyncPutQueueActor:
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,
                         request_output_queue_type: QueueType,
-                        migration_config: MigrationConfig,
-                        backend_type: BackendType,
-                        engine_args: LlumnixEngineArgs,
-                        profiling_result_file_path: str = None) -> BackendInterface:
-    engine_args = engine_args.load_engine_args_if_needed()
+                        instance_args: InstanceArgs,
+                        llumnix_engine_args: LlumnixEngineArgs) -> BackendInterface:
+    backend_type = llumnix_engine_args.backend_type
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.llm_engine import BackendVLLM
         backend_engine = BackendVLLM(instance_id,
                                      placement_group,
                                      request_output_queue_type,
-                                     migration_config,
-                                     engine_args)
+                                     instance_args,
+                                     llumnix_engine_args)
     elif backend_type == BackendType.BLADELLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.bladellm.llm_engine import BackendBladeLLM
         backend_engine = BackendBladeLLM(instance_id,
                                          placement_group,
                                          request_output_queue_type,
-                                         migration_config,
-                                         engine_args)
+                                         instance_args,
+                                         llumnix_engine_args)
     elif backend_type == BackendType.SIM_VLLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
@@ -113,9 +110,8 @@ def init_backend_engine(instance_id: str,
         backend_engine = BackendSimVLLM(instance_id,
                                         placement_group,
                                         request_output_queue_type,
-                                        migration_config,
-                                        engine_args,
-                                        profiling_result_file_path)
+                                        instance_args,
+                                        llumnix_engine_args)
     else:
         raise ValueError(f'Unsupported backend: {backend_type}')
     return backend_engine

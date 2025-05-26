@@ -44,8 +44,8 @@ def get_request_output_engine(request_id, instance_id="", finished=False):
 
 class MockLlumnixClientVLLM(LlumnixClientVLLM):
     def __init__(self, loop = None):  # pylint: disable=super-init-not-called
-        self.request_streams: Dict[str, AsyncStream] = {}
-        self.request_streams_last_completion_tokens: Dict[str, int] = {}
+        self.request_stream: Dict[str, AsyncStream] = {}
+        self.request_stream_last_completion_tokens: Dict[str, int] = {}
         self.request_output_queue = \
             init_request_output_queue_server(ip="127.0.0.1", queue_type="rayqueue")
         self.request_instance = {}
@@ -57,7 +57,7 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
     # pylint: disable=arguments-differ,invalid-overridden-method
     def generate(self, request_id):
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
-        self.request_streams[request_id] = results_generator
+        self.request_stream[request_id] = results_generator
 
 
 @ray.remote(num_cpus=0)
@@ -229,8 +229,8 @@ async def test_abort_and_abort_request(ray_env):
     assert num_aborts == 2
 
     # test request states
-    assert request_id not in client.request_streams and \
-        request_id not in client.request_streams_last_completion_tokens and \
+    assert request_id not in client.request_stream and \
+        request_id not in client.request_stream_last_completion_tokens and \
         request_id not in client.request_instance
 
 
@@ -251,7 +251,7 @@ async def test_clear_client_request_states(ray_env):
     await asyncio.sleep(3.0)
 
     # test request states
-    assert request_id in client.request_streams and \
+    assert request_id in client.request_stream and \
         request_id in client.request_instance
 
     request_output_engine.engine_output.finished = True
@@ -262,5 +262,5 @@ async def test_clear_client_request_states(ray_env):
     await asyncio.sleep(3.0)
 
     # test request states
-    assert request_id not in client.request_streams and \
+    assert request_id not in client.request_stream and \
         request_id not in client.request_instance

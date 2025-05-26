@@ -64,8 +64,8 @@ class MockManager:
 
 class MockLlumnixClientVLLM(LlumnixClientVLLM):
     def _clear_client_request_states(self, request_id: str):
-        if request_id in self.request_streams:
-            self.request_streams[request_id].finish()
+        if request_id in self.request_stream:
+            self.request_stream[request_id].finish()
 
 
 def setup_entrypoints_context(request_output_queue_type: QueueType, instance_id):

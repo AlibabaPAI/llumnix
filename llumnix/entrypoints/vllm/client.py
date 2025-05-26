@@ -37,7 +37,7 @@ logger = init_logger(__name__)
 
 class LlumnixClientVLLM(LlumnixClient):
     def __init__(self, entrypoints_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
-        self.request_streams: Dict[str, AsyncStream] = {}
+        self.request_stream: Dict[str, AsyncStream] = {}
         super().__init__(entrypoints_context, loop)
 
     async def generate(self,
@@ -51,7 +51,7 @@ class LlumnixClientVLLM(LlumnixClient):
         logger.info("Client received request {}".format(request_id))
         # pylint: disable=unexpected-keyword-arg
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
-        self.request_streams[request_id] = results_generator
+        self.request_stream[request_id] = results_generator
         server_info_copy = copy.deepcopy(self.server_info)
 
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
@@ -175,7 +175,7 @@ class LlumnixClientVLLM(LlumnixClient):
                 set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
                 request_id = request_response.request_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-                if request_id not in self.request_streams:
+                if request_id not in self.request_stream:
                     continue
                 # Update when request_id is in self.request_streams.
                 self.request_instance[request_id] = request_response.instance_id
@@ -183,15 +183,15 @@ class LlumnixClientVLLM(LlumnixClient):
                 processed_output = self._process_output_order(request_id, request_output)
                 if not processed_output:
                     continue
-                self.request_streams[request_id].put(processed_output)
+                self.request_stream[request_id].put(processed_output)
                 if request_output.finished:
                     logger.info("Client finish request {}.".format(request_id))
                     self._clear_client_request_states(request_id)
 
     def _clear_client_request_states(self, request_id: str):
-        if request_id in self.request_streams:
-            self.request_streams[request_id].finish()
-            del self.request_streams[request_id]
+        if request_id in self.request_stream:
+            self.request_stream[request_id].finish()
+            del self.request_stream[request_id]
         else:
             logger.error("Request {} not found.".format(request_id))
         self.request_stream_last_completion_tokens.pop(request_id, None)

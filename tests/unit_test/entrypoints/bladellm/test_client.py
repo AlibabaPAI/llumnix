@@ -30,14 +30,16 @@ from llumnix.request_output import LlumnixRequestOuput
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 
+# TODO(KuilongCui): cannot pass test, fix it
+
 
 class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
     def __init__(self, loop = None):  # pylint: disable=super-init-not-called
         self.entrypoint_id2llumnix_id = {}  # int32 -> int32
 
-        self.request_streams: Dict[int, asyncio.Queue] = {}
-        self.request_streams_last_completion_tokens: Dict[str, int] = {}
-        self.request_streams_output_stash: Dict[str, list[GenerateStreamResponse]] = {}
+        self.request_stream: Dict[int, asyncio.Queue] = {}
+        self.request_stream_last_completion_tokens: Dict[str, int] = {}
+        self.request_stream_output_stash: Dict[str, list[GenerateStreamResponse]] = {}
         self.instance_num_requests: Dict[str, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True
@@ -56,7 +58,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
     ) -> List[GenerateStreamResponse]:
         res = super()._process_output_order(request_id, request_output)
         if res:
-            self.request_streams_last_completion_tokens[request_id] = \
+            self.request_stream_last_completion_tokens[request_id] = \
                 res[-1].usage.completion_tokens
         return res
 
@@ -64,7 +66,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
     async def _add_request(self, request_id):
         self.llumnix_id2entrypoint_id[request_id] = request_id
         self.entrypoint_id2llumnix_id[request_id] = request_id
-        self.request_streams[request_id] = asyncio.Queue()
+        self.request_stream[request_id] = asyncio.Queue()
 
 
 @ray.remote(num_cpus=0)
@@ -187,7 +189,6 @@ def test_out_of_order_output(contain_block, is_finished_flag_at_last_output):
             res.extend(client._process_output_order(request_id, request_output))
         check_processed_output(res, output_length)
 
-
 @pytest.mark.asyncio
 async def test_drop_request(ray_env):
     client = MockLlumnixClientBladeLLM(loop=asyncio.get_event_loop())
@@ -227,16 +228,16 @@ async def test_drop_request(ray_env):
     assert num_aborts == 1
 
     # test request states
-    assert request_id not in client.request_streams and \
-        request_id not in client.request_streams_last_completion_tokens and \
+    assert request_id not in client.request_stream and \
+        request_id not in client.request_stream_last_completion_tokens and \
         request_id not in client.request_instance and \
-        request_id not in client.request_streams_output_stash and \
+        request_id not in client.request_stream_output_stash and \
         request_id not in client.llumnix_id2entrypoint_id and \
         request_id not in client.entrypoint_id2llumnix_id
 
 
 @pytest.mark.asyncio
-async def test_drop_request(ray_env):
+async def test_clear_client_request_states(ray_env):
     client = MockLlumnixClientBladeLLM(loop=asyncio.get_event_loop())
     # yield to run get_request_outputs_loop and run_server_loop
     await asyncio.sleep(3.0)
@@ -253,7 +254,7 @@ async def test_drop_request(ray_env):
     await asyncio.sleep(3.0)
 
     # test request states
-    assert request_id in client.request_streams and \
+    assert request_id in client.request_stream and \
         request_id in client.request_instance and \
         request_id in client.llumnix_id2entrypoint_id and \
         request_id in client.entrypoint_id2llumnix_id
@@ -267,7 +268,7 @@ async def test_drop_request(ray_env):
     await asyncio.sleep(3.0)
 
     # test request states
-    assert request_id not in client.request_streams and \
+    assert request_id not in client.request_stream and \
         request_id not in client.request_instance and \
         request_id not in client.llumnix_id2entrypoint_id and \
         request_id not in client.entrypoint_id2llumnix_id

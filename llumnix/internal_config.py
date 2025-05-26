@@ -69,8 +69,8 @@ class MigrationConfig:
         self.migration_backend_init_timeout = migration_backend_init_timeout
         self.kvtransfer_migration_backend_naming_url = kvtransfer_migration_backend_naming_url
 
-        # lazy init in BackendBladeLLM constructor
-        self.grpc_migration_backend_server_port: List = None
+        # lazy init in MigrationLocalWorker constructor
+        self.grpc_migration_server_port: List = None
 
 
 class PDDConfig:

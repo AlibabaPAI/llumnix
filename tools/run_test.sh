@@ -21,5 +21,5 @@ nvidia-docker run --rm -t \
   -v /mnt:/mnt \
   -w /test_workspace \
   $docker_options \
-  --shm-size=12gb \
+  --shm-size=512mb \
   "$image" sh -c "date && $install_command > /dev/null && date && make $test_mode"

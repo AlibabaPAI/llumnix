@@ -52,10 +52,12 @@ class RayWorkerMetaData:
 
 
 class WorkerProcessActor:
-    def __init__(self, rank: int, instance_id: str):
+    def __init__(self, rank: int, instance_id: str, worker_ray_name: str):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.rank = rank
         self.instance_id = instance_id
+        self.worker_ray_name = worker_ray_name
+        self.grpc_migration_server_port = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]}, rank={self.rank})"
@@ -65,6 +67,7 @@ class WorkerProcessActor:
         logger.debug("Init worker process, rank: {}, dist_inference_options: {}".format(
             self.rank, serving_args.dist_inference_options))
         set_start_method("spawn", force=True)
+        kwargs["worker_ray_name"] = self.worker_ray_name
         p = Process(
                 target=worker_main,
                 args=(rank, serving_args, *args),
@@ -77,6 +80,14 @@ class WorkerProcessActor:
 
     def get_node_ip(self) -> str:
         return get_ip_address()
+
+    def set_worker_port(self, port):
+        logger.debug("Worker process actor (rank: {}) set grpc migration server port: {}.".format(self.rank, port))
+        self.grpc_migration_server_port = port
+
+    def get_grpc_migration_back_port(self) -> Tuple[int, int]:
+        assert self.grpc_migration_server_port is not None
+        return self.grpc_migration_server_port
 
     def get_node_and_gpu_ids(self) -> Tuple[str, List[int]]:
         node_id = ray.get_runtime_context().get_node_id()
@@ -192,13 +203,14 @@ class WorkerProcessesRay(WorkerProcesses):
                 placement_group_bundle_index=bundle_id,
             )
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR if bundle_id == 0 else 1
+            worker_ray_name = f"worker_{self.instance_id}_"+random_uuid()
             worker = ray.remote(
                 num_cpus=0,
                 num_gpus=num_gpus,
-                name=f"worker_{self.instance_id}_"+random_uuid(),
+                name=worker_ray_name,
                 namespace='llumnix',
                 scheduling_strategy=scheduling_strategy
-            )(WorkerProcessActor).remote(rank=bundle_id, instance_id=instance_id)
+            )(WorkerProcessActor).remote(rank=bundle_id, instance_id=instance_id, worker_ray_name=worker_ray_name)
             workers.append(worker)
             worker_metadata.append(RayWorkerMetaData(worker=worker, created_rank=bundle_id))
         self.workers = workers
@@ -324,6 +336,9 @@ class WorkerProcessesRay(WorkerProcesses):
             for worker in self.workers
         ]
         return ray.get(ray_worker_outputs, timeout=timeout)
+
+    def get_all_workers_grpc_migration_server_port(self):
+        return self._run_workers("get_grpc_migration_back_port")
 
     def start(self):
         try:

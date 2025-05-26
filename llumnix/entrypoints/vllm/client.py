@@ -17,8 +17,6 @@ import time
 import asyncio
 from typing import Dict, List
 
-import ray.exceptions
-
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
 from vllm import SamplingParams
@@ -60,14 +58,7 @@ class LlumnixClientVLLM(LlumnixClient):
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.error("Manager is unavailable.")
-            elif isinstance(e, asyncio.TimeoutError):
-                logger.error("Failed to generate request {} by manager, manager is hang, "
-                             "please check the cause.".format(request_id))
-            else:
-                logger.exception("Failed to generate request {} by manager, "
-                                 "unexpected exception: {}".format(request_id, e))
+            self._handle_generate_by_manager_error(request_id, e)
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
@@ -88,7 +79,9 @@ class LlumnixClientVLLM(LlumnixClient):
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
-        await self.manager.generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
+        await asyncio_wait_for_with_timeout(
+            self.manager.generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
+        )
 
     # pylint: disable=arguments-differ
     async def _generate_by_instance(self,
@@ -108,8 +101,8 @@ class LlumnixClientVLLM(LlumnixClient):
                         request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
                     )
                 )
-                logger.warning("Manager is unavailable temporarily, dispatch request {} to instance {}".format(
-                    request_id, instance_id))
+                logger.warning("Manager is unavailable temporarily, "
+                               "dispatch request {} to instance {}.".format(request_id, instance_id))
             else:
                 logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
@@ -118,44 +111,11 @@ class LlumnixClientVLLM(LlumnixClient):
         # pylint: disable=broad-except
         except Exception as e:
             if instance_id in self.instances:
-                if isinstance(e, ray.exceptions.RayActorError):
-                    logger.info("Failed to generate request {} by instance {}, instance is dead.".format(
-                        request_id, instance_id))
-                elif isinstance(e, asyncio.TimeoutError):
-                    logger.error("Failed to generate request {} by instance {}, instance is hang, "
-                                 "please check the cause.".format(request_id, instance_id))
-                else:
-                    logger.exception("Failed to generate request {} by instance {}, "
-                                     "unexpected exception: {}".format(request_id, instance_id, e))
-                if instance_id in self.instances:
-                    del self.instances[instance_id]
-                else:
-                    logger.warning("Instance {} is not in self.instances.".format(instance_id))
-                if instance_id in self.instance_num_requests:
-                    del self.instance_num_requests[instance_id]
-                else:
-                    logger.warning("Instance {} is not in self.instance_num_requests.".format(instance_id))
+                self._handle_generate_by_instance_error(request_id, instance_id, e)
                 return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
 
     async def abort(self, request_id: str) -> None:
-        instance_id, instance = self._get_instance_for_abort(request_id)
-        if instance:
-            self.global_instances[instance_id] = instance
-            logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
-            try:
-                await asyncio_wait_for_with_timeout(instance.abort.remote(request_id))
-                self._clear_client_request_states(request_id)
-            except Exception as e: # pylint: disable=broad-except
-                if isinstance(e, ray.exceptions.RayActorError):
-                    logger.info("Instance {} is dead.".format(instance_id))
-                elif isinstance(e, asyncio.TimeoutError):
-                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
-                else:
-                    logger.exception("Failed to abort request {} of instance {}, "
-                                     "unexpected exception: {}".format(request_id, instance_id, e))
-        else:
-            logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
-                request_id, instance_id, instance))
+        await self._abort(request_id)
 
     def abort_request(self, request_id: str) -> None:
         instance_id, instance = self._get_instance_for_abort(request_id)
@@ -189,13 +149,12 @@ class LlumnixClientVLLM(LlumnixClient):
                     self._clear_client_request_states(request_id)
 
     def _clear_client_request_states(self, request_id: str):
+        super()._clear_client_request_states(request_id)
         if request_id in self.request_stream:
             self.request_stream[request_id].finish()
             del self.request_stream[request_id]
         else:
             logger.error("Request {} not found.".format(request_id))
-        self.request_stream_last_completion_tokens.pop(request_id, None)
-        self.request_instance.pop(request_id, None)
 
     def _process_output_order(self, request_id: int, request_output: RequestOutput) -> RequestOutput:
         current_completion_tokens = None

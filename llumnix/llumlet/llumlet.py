@@ -212,10 +212,12 @@ class Llumlet:
         await self.backend_engine.is_ready()
         return True
 
-    def get_instance_type(self) -> InstanceType:
+    async def get_instance_type(self) -> InstanceType:
+        await self.backend_engine.is_ready()
         return self.instance_args.instance_type
 
-    def get_engine_disagg_inst_id(self) -> str:
+    async def get_engine_disagg_inst_id(self) -> str:
+        await self.backend_engine.is_ready()
         return self.backend_engine.engine_disagg_inst_id
 
     async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:

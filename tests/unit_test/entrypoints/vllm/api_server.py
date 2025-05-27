@@ -62,6 +62,7 @@ class MockManager:
         manager = manager_class.remote(request_output_queue_type, instance_id)
         return manager
 
+
 class MockLlumnixClientVLLM(LlumnixClientVLLM):
     def _clear_client_request_states(self, request_id: str):
         if request_id in self.request_stream:
@@ -77,13 +78,17 @@ def setup_entrypoints_context(request_output_queue_type: QueueType, instance_id)
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_type)
     server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue,
                              ip, request_output_queue.port)
-    entrypoints_context = EntrypointsContext(manager,
-                                             {'0': None},
-                                             request_output_queue,
-                                             None,
-                                             server_info,
-                                             None,
-                                             None)
+    entrypoints_context = EntrypointsContext(
+        None,
+        manager,
+        {'0': None},
+        request_output_queue,
+        None,
+        server_info,
+        None,
+        None,
+    )
+
     return entrypoints_context
 
 def run_server(host: str, port: int, entrypoints_context: EntrypointsContext):

@@ -26,25 +26,55 @@ from llumnix.instance_info import InstanceType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import EntrypointsArgs, InstanceArgs, ManagerArgs, LaunchArgs, LlumnixEngineArgs, LlumnixEngineArgsFactory
+from llumnix.arg_utils import (
+    EntrypointsArgs,
+    InstanceArgs,
+    ManagerArgs,
+    LaunchArgs,
+    LlumnixEngineArgs,
+    LlumnixEngineArgsFactory,
+)
 from llumnix.entrypoints.api_server_actor import APIServerActor
-from llumnix.utils import (get_service_resouces, random_uuid,
-                           get_service_instance_type, asyncio_wait_for_with_timeout)
-from llumnix.ray_utils import (initialize_placement_group, get_manager_name, get_server_name,
-                               get_data_from_ray_internal_kv, put_data_to_ray_internal_kv,
-                               get_scaler_name, get_placement_group_name,
-                               get_placement_group_infos_by_name, get_placement_group_infos_by_state,
-                               kill_server, kill_instance, remove_placement_group,
-                               get_actor_names_by_name_prefix, SERVER_NAME_PREFIX, INSTANCE_NAME_PREFIX,
-                               actor_exists, get_instance_name, PLACEMENT_GROUP_NAME_PREFIX,
-                               execute_actor_method_async_with_retries)
+from llumnix.utils import (
+    get_service_resouces,
+    random_uuid,
+    get_service_instance_type,
+    asyncio_wait_for_with_timeout,
+)
+from llumnix.ray_utils import (
+    initialize_placement_group,
+    get_server_name,
+    get_data_from_ray_internal_kv,
+    put_data_to_ray_internal_kv,
+    get_scaler_name,
+    get_placement_group_name,
+    get_placement_group_infos_by_name,
+    get_placement_group_infos_by_state,
+    kill_server,
+    kill_instance,
+    remove_placement_group,
+    get_actor_names_by_name_prefix,
+    SERVER_NAME_PREFIX,
+    INSTANCE_NAME_PREFIX,
+    actor_exists,
+    get_instance_name,
+    PLACEMENT_GROUP_NAME_PREFIX,
+    execute_actor_method_async_with_retries,
+)
 from llumnix.internal_config import PDDConfig
-from llumnix.constants import (WAIT_PLACEMENT_GROUP_TIMEOUT, AUTO_SCALE_UP_INTERVAL,
-                               CHECK_DEPLOYMENT_STATES_INTERVAL, WATCH_DEPLOYMENT_INTERVAL)
+from llumnix.constants import (
+    WAIT_PLACEMENT_GROUP_TIMEOUT,
+    AUTO_SCALE_UP_INTERVAL,
+    CHECK_DEPLOYMENT_STATES_INTERVAL,
+    WATCH_DEPLOYMENT_INTERVAL,
+)
 from llumnix import envs as llumnix_envs
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.ray_utils import clear_gloo_backend_ray_resources
+from llumnix.queue.utils import init_request_output_queue_server
+from llumnix.queue.queue_server_base import QueueServerBase
+from llumnix.manager import Manager
 
 logger = init_logger(__name__)
 
@@ -55,63 +85,80 @@ class Scaler:
                  manager_args: ManagerArgs,
                  instance_args: InstanceArgs,
                  engine_args: LlumnixEngineArgs,
-                 launch_args: LaunchArgs,
-                 enable_port_increment: bool,
-                 enable_port_offset_store: bool,
-                 load_registered_service: bool,
-                 load_registered_service_path: str,
-                 pdd_config: PDDConfig):
+                 launch_args: LaunchArgs):
         self.entrypoints_args = entrypoints_args
         self.manager_args = manager_args
-        self.engine_args = engine_args
         self.instance_args = instance_args
+        self.engine_args = engine_args
 
+        # TODO(s5u13b): Merge manager args and instance args.
         # manager_args
         self.max_instances = manager_args.max_instances
+        self.enable_port_increment = manager_args.enable_port_increment
+        self.enable_port_offset_store = manager_args.enable_port_offset_store
+        self.load_registered_service = manager_args.load_registered_service
+        self.load_registered_service_path = manager_args.load_registered_service_path
+        self.pdd_config: PDDConfig = manager_args.create_pdd_config()
+
+        self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
+        self.manager = Manager.from_args(
+            entrypoints_args=entrypoints_args,
+            manager_args=manager_args,
+            instance_args=instance_args,
+            engine_args=engine_args,
+            launch_args=launch_args,
+        )
+        # Start scaling after manager is ready.
+        ray.get(self.manager.is_ready.remote())
 
         # launch args
         if launch_args is not None:
             self.launch_mode: LaunchMode = launch_args.launch_mode
             self.backend_type: BackendType = launch_args.backend_type
 
-        self.enable_port_increment = enable_port_increment
-        self.enable_port_offset_store = enable_port_offset_store
-        self.load_registered_service = load_registered_service
-        self.pdd_config = pdd_config
-
-        if enable_port_increment:
+        if self.enable_port_increment:
             self.port_offset = 0
-            if enable_port_offset_store:
+            if self.enable_port_offset_store:
                 # TODO(s5u13b): Do not use ray interval kv.
-                value = get_data_from_ray_internal_kv("manager.port_offset")
+                value = get_data_from_ray_internal_kv("scaler.port_offset")
                 self.port_offset = int(value)
 
         self.llumnix_engine_args_factory = LlumnixEngineArgsFactory(
-            enable_port_increment=enable_port_increment,
-            load_registered_service=load_registered_service,
-            load_registered_service_path=load_registered_service_path,
-            pdd_config=pdd_config,
+            enable_port_increment=self.enable_port_increment,
+            load_registered_service=self.load_registered_service,
+            load_registered_service_path=self.load_registered_service_path,
+            pdd_config=self.pdd_config,
         )
 
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
 
-        self.manager: ray.actor.ActorHandle = ray.get_actor(get_manager_name(), namespace="llumnix")
-
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
             self.last_timeout_instance_id = None
             if self.pdd_config.enable_pdd_node_affinity_scheduling:
-                asyncio.create_task(self._auto_scale_up_loop(service_name="prefill",
-                                                             max_instances=self.max_instances,
-                                                             interval=AUTO_SCALE_UP_INTERVAL))
-                asyncio.create_task(self._auto_scale_up_loop(service_name="decode",
-                                                             max_instances=self.max_instances,
-                                                             interval=AUTO_SCALE_UP_INTERVAL))
+                asyncio.create_task(
+                    self._auto_scale_up_loop(
+                        service_name="prefill",
+                        max_instances=self.max_instances,
+                        interval=AUTO_SCALE_UP_INTERVAL,
+                    )
+                )
+                asyncio.create_task(
+                    self._auto_scale_up_loop(
+                        service_name="decode",
+                        max_instances=self.max_instances,
+                        interval=AUTO_SCALE_UP_INTERVAL,
+                    )
+                )
             else:
-                asyncio.create_task(self._auto_scale_up_loop(service_name="no_constraints",
-                                                             max_instances=self.max_instances,
-                                                             interval=AUTO_SCALE_UP_INTERVAL))
+                asyncio.create_task(
+                    self._auto_scale_up_loop(
+                        service_name="no_constraints",
+                        max_instances=self.max_instances,
+                        interval=AUTO_SCALE_UP_INTERVAL,
+                    )
+                )
             asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
             if self.pdd_config.enable_pd_disagg:
                 asyncio.create_task(self._check_pd_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
@@ -123,32 +170,21 @@ class Scaler:
                   instance_args: InstanceArgs,
                   engine_args: LlumnixEngineArgs,
                   launch_args: LaunchArgs,
-                  enable_port_increment: bool,
-                  enable_port_offset_store: bool,
-                  load_registered_service: bool,
-                  load_registered_service_path: str,
-                  pdd_config: PDDConfig,
-                  node_id: str):
-        scaler_class = ray.remote(num_cpus=1,
-                                  max_restarts=-1,
-                                  name=get_scaler_name(),
-                                  namespace="llumnix",
-                                  lifetime="detached")(cls).options(
-                                    scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
-                                        node_id=node_id,
-                                        soft=False,
-                                    )
-                                  )
-        scaler = scaler_class.remote(entrypoints_args,
-                                     manager_args,
-                                     instance_args,
-                                     engine_args,
-                                     launch_args,
-                                     enable_port_increment,
-                                     enable_port_offset_store,
-                                     load_registered_service,
-                                     load_registered_service_path,
-                                     pdd_config)
+                  ) -> "Scaler":
+        scaler_class = ray.remote(
+            num_cpus=1,
+            max_restarts=-1,
+            name=get_scaler_name(),
+            namespace="llumnix",
+            lifetime="detached"
+        )(cls)
+        scaler = scaler_class.remote(
+            entrypoints_args,
+            manager_args,
+            instance_args,
+            engine_args,
+            launch_args
+        )
         return scaler
 
     async def _auto_scale_up_loop(self, service_name: str, max_instances: int, interval: float) -> None:
@@ -184,8 +220,13 @@ class Scaler:
                 continue
             if new_pg is None:
                 new_instance_id = random_uuid()
-                new_pg = self._init_placement_group(get_placement_group_name(new_instance_id), self.engine_args,
-                                                    init_server=True, block=False, service_name=service_name)
+                new_pg = self._init_placement_group(
+                    get_placement_group_name(new_instance_id),
+                    self.engine_args,
+                    init_server=True,
+                    block=False,
+                    service_name=service_name,
+                )
             try:
                 await asyncio.wait_for(new_pg.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
             except asyncio.TimeoutError:
@@ -196,9 +237,14 @@ class Scaler:
                 await asyncio.sleep(interval)
                 continue
             if service_name in ["prefill", "decode"]:
-                await self._init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
-                                                     self.engine_args, new_pg,
-                                                     instance_type=get_service_instance_type(service_name))
+                await self._init_server_and_instance(
+                    new_instance_id,
+                    self.entrypoints_args,
+                    self.instance_args,
+                    self.engine_args,
+                    new_pg,
+                    instance_type=get_service_instance_type(service_name),
+                )
             else:
                 # If not prefill/decode service, we do not specify the instance type,
                 # and the instance type is decided by _get_next_instance_type.
@@ -356,12 +402,24 @@ class Scaler:
             # num_gpus=world_size, for world_size Workers
             world_size = engine_args.get_world_size()
             resources = get_service_resouces(service_name, world_size)
-            placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
-                                                         num_gpus=world_size, detached=True, block=block, node_id=node_id,
-                                                         resources=resources)
+            placement_group = initialize_placement_group(
+                placement_group_name,
+                num_cpus=2+int(init_server),
+                num_gpus=world_size,
+                detached=True,
+                block=block,
+                node_id=node_id,
+                resources=resources,
+            )
         else:
-            placement_group = initialize_placement_group(placement_group_name, num_cpus=2+int(init_server),
-                                                         num_gpus=0, detached=True, block=block, node_id=node_id)
+            placement_group = initialize_placement_group(
+                placement_group_name,
+                num_cpus=2+int(init_server),
+                num_gpus=0,
+                detached=True,
+                block=block,
+                node_id=node_id,
+            )
 
         return placement_group
 
@@ -380,9 +438,16 @@ class Scaler:
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
                 instance_ready = True
                 # Initialize server after instance is ready.
-                server = self._init_server(instance_id, placement_group, backend_type,
-                                           next_entrypoints_args, next_engine_args,
-                                           self.manager, instance)
+                server = self._init_server(
+                    instance_id,
+                    placement_group,
+                    backend_type,
+                    next_entrypoints_args,
+                    next_engine_args,
+                    self.scaler,
+                    self.manager,
+                    instance,
+                )
                 await asyncio.wait_for(server.is_ready.remote(), timeout=float(llumnix_envs.SERVER_READY_TIMEOUT))
                 await execute_actor_method_async_with_retries(
                     self.manager.scale_up.remote, 'Manager', 'scale_up',
@@ -422,8 +487,15 @@ class Scaler:
 
         self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
         self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
-        asyncio.create_task(done_scale_up(instance_id, instance, next_instance_args.instance_type,
-                                          next_entrypoints_args, next_engine_args))
+        asyncio.create_task(
+            done_scale_up(
+                instance_id,
+                instance,
+                next_instance_args.instance_type,
+                next_entrypoints_args,
+                next_engine_args,
+            )
+        )
 
     def _init_server(self,
                      instance_id: str,
@@ -431,16 +503,33 @@ class Scaler:
                      backend_type: BackendType,
                      entrypoints_args: EntrypointsArgs,
                      engine_args,
+                     scaler: ray.actor.ActorHandle,
                      manager: ray.actor.ActorHandle,
                      instance: ray.actor.ActorHandle) -> APIServerActor:
         if backend_type == BackendType.BLADELLM:
             from llumnix.entrypoints.bladellm.api_server_actor import APIServerActorBladeLLM # pylint: disable=import-outside-toplevel
-            api_server = APIServerActorBladeLLM.from_args(NUM_GPUS_BLADELLM_GPU_ACTOR, instance_id, placement_group,
-                                                          entrypoints_args, engine_args, manager, instance)
+            api_server = APIServerActorBladeLLM.from_args(
+                NUM_GPUS_BLADELLM_GPU_ACTOR,
+                instance_id,
+                placement_group,
+                entrypoints_args,
+                engine_args,
+                scaler,
+                manager,
+                instance,
+            )
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
-            api_server = APIServerActorVLLM.from_args(0, instance_id, placement_group, entrypoints_args, engine_args,
-                                                      manager, instance)
+            api_server = APIServerActorVLLM.from_args(
+                0,
+                instance_id,
+                placement_group,
+                entrypoints_args,
+                engine_args,
+                scaler,
+                manager,
+                instance,
+            )
 
         return api_server
 
@@ -452,11 +541,12 @@ class Scaler:
                        engine_args: LlumnixEngineArgs
                        ) -> Tuple[str, Llumlet]:
         instance = Llumlet.from_args(
-                        instance_id,
-                        instance_args,
-                        placement_group,
-                        request_output_queue_type,
-                        engine_args)
+            instance_id,
+            instance_args,
+            placement_group,
+            request_output_queue_type,
+            engine_args,
+        )
 
         return instance
 
@@ -500,8 +590,13 @@ class Scaler:
                 instance_id = engine_args.instance_id
             else:
                 instance_id = random_uuid()
-            placement_group = self._init_placement_group(get_placement_group_name(instance_id), engine_args,
-                                                         init_server=False, block=True, node_id=node_id)
+            placement_group = self._init_placement_group(
+                get_placement_group_name(instance_id),
+                engine_args,
+                init_server=False,
+                block=True,
+                node_id=node_id,
+            )
             if placement_group is None:
                 logger.warning("Failed to initialize placement group for instance {}, "
                                "the remaining resources of node {} might be not enough, "
@@ -516,9 +611,22 @@ class Scaler:
             )
             instance_ids.append(instance_id)
             instances.append(instance)
-            asyncio.create_task(instance_ready_scale_up(instance_id, instance, instance_args.instance_type, placement_group))
+            asyncio.create_task(
+                instance_ready_scale_up(
+                    instance_id,
+                    instance,
+                    instance_args.instance_type,
+                    placement_group
+                )
+            )
 
         return instance_ids, instances
+
+    def init_request_output_queue_server(self, ip: str, queue_type: QueueType) -> QueueServerBase:
+        return init_request_output_queue_server(ip, queue_type)
+
+    def is_ready(self) -> bool:
+        return True
 
     async def clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]]):
         if isinstance(instance_id, str):
@@ -549,8 +657,8 @@ class Scaler:
                     self.manager.get_num_prefill_decode_instances.remote,
                     'Manager', 'get_num_prefill_decode_instances'
                 )
-            next_instance_args.instance_type = self._get_next_instance_type(cur_num_prefill_instances, cur_num_decode_instances,
-                                                                            self.pdd_config.pd_ratio, instance_type,)
+            next_instance_args.instance_type = self._get_next_instance_type(
+                cur_num_prefill_instances, cur_num_decode_instances, self.pdd_config.pd_ratio, instance_type,)
 
         return next_instance_args
 
@@ -562,7 +670,7 @@ class Scaler:
         next_entrypoints_args.port += self.port_offset
         self.port_offset += 1
         if self.enable_port_offset_store:
-            put_data_to_ray_internal_kv("manager.port_offset", self.port_offset)
+            put_data_to_ray_internal_kv("scaler.port_offset", self.port_offset)
 
         return next_entrypoints_args
 
@@ -601,8 +709,7 @@ class Scaler:
                 distance_if_decode = total_num_prefill_instances - (total_num_decode_instances + 1)
                 gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
                 gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
-                instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode \
-                    else InstanceType.DECODE
+                instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode else InstanceType.DECODE
 
         return instance_type
 

@@ -20,7 +20,6 @@ import ray
 from ray.util.placement_group import PlacementGroup
 import ray.actor
 import ray.exceptions
-from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceType

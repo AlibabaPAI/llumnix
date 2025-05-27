@@ -20,7 +20,6 @@ import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
-import ray
 
 from vllm.sampling_params import SamplingParams
 

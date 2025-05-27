@@ -13,7 +13,6 @@
 
 import time
 
-import ray
 from ray.util.queue import Queue as RayQueue
 
 from llumnix.entrypoints.bladellm.arg_utils import add_cli_args, get_args, BladellmEngineArgs

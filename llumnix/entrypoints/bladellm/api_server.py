@@ -15,7 +15,6 @@ import time
 import asyncio
 
 from aiohttp import web
-import ray
 
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.server import Entrypoint

@@ -102,14 +102,12 @@ class Scaler:
         self.pdd_config: PDDConfig = manager_args.create_pdd_config()
 
         self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
-        node_id = ray.get_runtime_context().get_node_id()
         self.manager = Manager.from_args(
             entrypoints_args=entrypoints_args,
             manager_args=manager_args,
             instance_args=instance_args,
             engine_args=engine_args,
             launch_args=launch_args,
-            node_id=node_id,
         )
         # Start scaling after manager is ready.
         ray.get(self.manager.is_ready.remote())
@@ -173,19 +171,14 @@ class Scaler:
                   instance_args: InstanceArgs,
                   engine_args: LlumnixEngineArgs,
                   launch_args: LaunchArgs,
-                  node_id: str) -> "Scaler":
+                  ) -> "Scaler":
         scaler_class = ray.remote(
             num_cpus=1,
             max_restarts=-1,
             name=get_scaler_name(),
             namespace="llumnix",
             lifetime="detached"
-        )(cls).options(
-            scheduling_strategy=NodeAffinitySchedulingStrategy(
-                node_id=node_id,
-                soft=False,
-            )
-        )
+        )(cls)
         scaler = scaler_class.remote(
             entrypoints_args,
             manager_args,

@@ -116,7 +116,6 @@ def init_scaler(
     entrypoints_args: EntrypointsArgs,
     engine_args: LlumnixEngineArgs,
     launch_args: LaunchArgs,
-    node_id: str,
 ) -> Scaler:
     # Only one instance create the manager actor, the other instances get the existing manager actor through ray.
     try:
@@ -126,7 +125,6 @@ def init_scaler(
             instance_args=instance_args,
             engine_args=engine_args,
             launch_args=launch_args,
-            node_id=node_id,
         )
         logger.info("Init Scaler on current node.")
     except ValueError:
@@ -139,13 +137,13 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
                             instance_args: InstanceArgs,
                             engine_args: LlumnixEngineArgs,
                             launch_args: LaunchArgs,
-                            node_id: str,
                             ) -> Tuple[Manager, List[str], List[Llumlet], QueueServerBase]:
-    scaler: Scaler = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args, node_id)
+    scaler: Scaler = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
     ray.get(scaler.is_ready.remote())
     manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
 
     request_output_queue_type: QueueType = QueueType(entrypoints_args.request_output_queue_type)
+    node_id = ray.get_runtime_context().get_node_id()
     instance_ids, instances = execute_actor_method_sync_with_retries(
         scaler.init_instances.remote, 'Scaler', 'init_instances',
         request_output_queue_type, instance_args, engine_args, node_id
@@ -222,17 +220,17 @@ def setup_entrypoints_context(entrypoints_args, scaler, manager, instance_ids, i
 
     return entrypoints_context
 
-def _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args, node_id) -> EntrypointsContext:
+def _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> EntrypointsContext:
     scaler, manager, instance_ids, instances, request_output_queue = \
-        init_llumnix_components(entrypoints_args, manager_args, instance_args, engine_args, launch_args, node_id)
+        init_llumnix_components(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 
     return setup_entrypoints_context(entrypoints_args, scaler, manager, instance_ids, instances, request_output_queue)
 
-def _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args, node_id) -> None:
-    _ = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args, node_id)
+def _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> None:
+    _ = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 
-def setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args, node_id) -> Optional[EntrypointsContext]:
+def setup_llumnix(entrypoints_args, manager_args, instance_args, engine_args, launch_args) -> Optional[EntrypointsContext]:
     if launch_args.launch_mode == LaunchMode.LOCAL:
-        return _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args, node_id)
+        return _setup_llumnix_local(entrypoints_args, manager_args, instance_args, engine_args, launch_args)
 
-    return _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args, node_id)
+    return _setup_llumnix_global(entrypoints_args, manager_args, instance_args, engine_args, launch_args)

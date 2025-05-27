@@ -65,14 +65,14 @@ launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.
 vllm_engine_args = VllmEngineArgs(engine_args=engine_args)
 
 # Create a manager. If the manager is created first, and then the instances are created.
-node_id = ray.get_runtime_context().get_node_id()
-scaler: Scaler = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args, node_id)
+scaler: Scaler = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 ray.get(scaler.is_ready.remote())
 manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
 
 # Create instances and register to manager.
 instance_ids: List[str] = None
 instances: List[Llumlet] = None
+node_id = ray.get_runtime_context().get_node_id()
 instance_ids, instances = ray.get(scaler.init_instances.remote(
     QueueType("rayqueue"), instance_args, vllm_engine_args, node_id))
 num_instance = 0

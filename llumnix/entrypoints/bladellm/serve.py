@@ -26,7 +26,6 @@ from llumnix.entrypoints.setup import setup_llumnix
 from llumnix.entrypoints.bladellm.utils import launch_job_on_gpu_node
 
 logger = init_logger('llumnix.entrypoints.bladellm.server')
-node_id = None
 
 def main():
     # pylint: disable=import-outside-toplevel
@@ -52,7 +51,7 @@ def main():
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})
 
-    setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args, node_id)
+    setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
 
     # keep the process alive to get the terminal output.
     if not entrypoints_args.disable_keep_serve_process_alive:
@@ -61,5 +60,4 @@ def main():
 
 
 if __name__ == "__main__":
-    node_id = ray.get_runtime_context().get_node_id()
     launch_job_on_gpu_node(module="llumnix.entrypoints.bladellm.serve", main_func=main)

@@ -41,14 +41,12 @@ def init_scaler(manager_args = None):
     try:
         manager_args = ManagerArgs(enable_migration=True)
         manager_args.log_instance_info = False
-        node_id = ray.get_runtime_context().get_node_id()
         scaler = Scaler.from_args(
             entrypoints_args=None,
             manager_args=manager_args,
             instance_args=InstanceArgs(migration_backend="rayrpc"),
             engine_args=None,
             launch_args=None,
-            node_id=node_id,
         )
     except ValueError:
         scaler = ray.get_actor(get_scaler_name(), namespace='llumnix')
@@ -139,10 +137,9 @@ def init_scaler_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio="
     )
     launch_args = LaunchArgs(launch_mode=launch_mode, backend_type=BackendType.VLLM)
 
-    node_id = ray.get_runtime_context().get_node_id()
     scaler: Scaler = Scaler.from_args(entrypoints_args=entrypoints_args, manager_args=manager_args,
                                       instance_args=instance_args, engine_args=engine_args,
-                                      launch_args=launch_args, node_id=node_id)
+                                      launch_args=launch_args)
     ray.get(scaler.is_ready.remote())
     manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
 
@@ -377,11 +374,9 @@ async def test_pd_disagg_deployment_states(ray_env):
             enforce_eager=True,
         )
     )
-    node_id = ray.get_runtime_context().get_node_id()
     scaler: Scaler = Scaler.from_args(entrypoints_args=EntrypointsArgs(), manager_args=manager_args,
                                       instance_args=InstanceArgs(migration_backend="rayrpc"),
-                                      engine_args=engine_args, launch_args=LaunchArgs(LaunchMode.LOCAL, BackendType.VLLM),
-                                      node_id=node_id)
+                                      engine_args=engine_args, launch_args=LaunchArgs(LaunchMode.LOCAL, BackendType.VLLM),)
     ray.get(scaler.is_ready.remote())
     manager: Manager = ray.get_actor(get_manager_name(), namespace="llumnix")
     ray.get(manager.is_ready.remote())

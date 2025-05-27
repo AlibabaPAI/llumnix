@@ -49,8 +49,7 @@ if __name__ == "__main__":
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})
 
-    node_id = ray.get_runtime_context().get_node_id()
-    setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args, node_id)
+    setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args)
 
     # keep the process alive to get the terminal output.
     if not entrypoints_args.disable_keep_serve_process_alive:

@@ -32,9 +32,8 @@ from tests.conftest import ray_env
 @pytest.fixture
 def manager():
     engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
-    node_id = ray.get_runtime_context().get_node_id()
     scaler: Scaler = Scaler.from_args(
-        EntrypointsArgs(), ManagerArgs(), InstanceArgs(), engine_args, LaunchArgs(), node_id)
+        EntrypointsArgs(), ManagerArgs(), InstanceArgs(), engine_args, LaunchArgs())
     ray.get(scaler.is_ready.remote())
     manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
     ray.get(manager.is_ready.remote())

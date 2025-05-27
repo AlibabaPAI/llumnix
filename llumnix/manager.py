@@ -175,7 +175,6 @@ class Manager:
                   instance_args: InstanceArgs,
                   engine_args: LlumnixEngineArgs,
                   launch_args: LaunchArgs,
-                  node_id: str,
                   ) -> "Manager":
         manager_class = ray.remote(
             num_cpus=1,
@@ -185,7 +184,7 @@ class Manager:
             lifetime="detached"
         )(cls).options(
             scheduling_strategy=NodeAffinitySchedulingStrategy(
-                node_id=node_id,
+                node_id=ray.get_runtime_context().get_node_id(),
                 soft=False,
             )
         )

@@ -104,7 +104,6 @@ class MockLlumlet:
 def init_manager():
     manager_args = ManagerArgs(enable_migration=True)
     manager_args.log_instance_info = False
-    node_id = ray.get_runtime_context().get_node_id()
     # manager is initialized by scaler
     scaler: Scaler = Scaler.from_args(
         entrypoints_args=None,
@@ -112,7 +111,6 @@ def init_manager():
         instance_args=InstanceArgs(migration_backend="rayrpc"),
         engine_args=None,
         launch_args=None,
-        node_id=node_id,
     )
     ray.get(scaler.is_ready.remote())
     manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')

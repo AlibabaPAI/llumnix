@@ -1,3 +1,16 @@
+# Copyright (c) 2024, Alibaba Group;
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Any
 import asyncio
@@ -20,6 +33,7 @@ from llumnix.ray_utils import (
     asyncio_wait_for_with_timeout,
 )
 from llumnix.logging.logger import init_logger
+from llumnix.utils import RequestIDType
 
 logger = init_logger(__name__)
 
@@ -38,13 +52,13 @@ class LlumnixClient(ABC):
         self.log_requests: bool = entrypoints_context.log_requests
         self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
 
-        self.request_instance: Dict[str, str] = {}
+        self.request_instance: Dict[RequestIDType, str] = {}
         # TODO(s5u13): Consider a better way to get instance handle without calling ray.
         self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
-        self.request_stream_last_completion_tokens: Dict[str, int] = {}
+        self.request_stream_last_completion_tokens: Dict[RequestIDType, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True
 
@@ -57,15 +71,15 @@ class LlumnixClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, *args, **kwargs):
+    async def _generate_by_manager(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
-    async def _generate_by_instance(self, request_id: int, server_info: ServerInfo, *args, **kwargs):
+    async def _generate_by_instance(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
-    def _process_output_order(self, request_id: int, request_output: Any):
+    def _process_output_order(self, request_id: RequestIDType, request_output: Any):
         raise NotImplementedError
 
     async def is_ready(self) -> bool:
@@ -90,7 +104,7 @@ class LlumnixClient(ABC):
             logger.exception("Server cleanup failed (instance_ids: {}): {}".format(instance_ids, e))
         logger.info("Server stops (instance_ids: {}).".format(instance_ids))
 
-    async def _abort(self, request_id: str) -> None:
+    async def _abort(self, request_id: RequestIDType) -> None:
         instance_id, instance = self._get_instance_for_abort(request_id)
         if instance:
             self.global_instances[instance_id] = instance
@@ -110,11 +124,11 @@ class LlumnixClient(ABC):
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
                 request_id, instance_id, instance))
 
-    def _clear_client_request_states(self, request_id: str):
+    def _clear_client_request_states(self, request_id: RequestIDType):
         self.request_stream_last_completion_tokens.pop(request_id, None)
         self.request_instance.pop(request_id, None)
 
-    def _get_instance_for_abort(self, request_id: str) -> Tuple[str, Llumlet]:
+    def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
         instance_id = self.request_instance.get(request_id, None)
         if instance_id is None:
             instance = None
@@ -140,7 +154,7 @@ class LlumnixClient(ABC):
             self.global_instances = new_global_instances
             await asyncio.sleep(UPDATE_GLOBAL_INSTANCES_INTERVAL)
 
-    def _handle_generate_by_manager_error(self, request_id: str, e: Exception) -> None:
+    def _handle_generate_by_manager_error(self, request_id: RequestIDType, e: Exception) -> None:
         if isinstance(e, ray.exceptions.RayActorError):
             logger.error("Manager is unavailable.")
         elif isinstance(e, asyncio.TimeoutError):
@@ -150,7 +164,7 @@ class LlumnixClient(ABC):
             logger.exception("Failed to generate request {} by manager, "
                              "unexpected exception: {}".format(request_id, e))
 
-    def _handle_generate_by_instance_error(self, request_id: str, instance_id: str, e: Exception) -> None:
+    def _handle_generate_by_instance_error(self, request_id: RequestIDType, instance_id: str, e: Exception) -> None:
         if isinstance(e, ray.exceptions.RayActorError):
             logger.info("Failed to generate request {} by instance {}, instance is dead.".format(
                 request_id, instance_id))

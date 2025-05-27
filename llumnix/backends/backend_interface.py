@@ -15,8 +15,11 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Iterable, List, Union, Deque, Tuple
 
+import ray.actor
+
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
+from llumnix.utils import RequestIDType
 
 
 class EngineState(str, Enum):
@@ -49,8 +52,8 @@ class BackendInterface(ABC):
 
     # Methods for inference
     @abstractmethod
-    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int,
-                    *args, **kwargs) -> None:
+    async def add_request(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int,
+                          *args, **kwargs) -> None:
         """Add a new inference request to the backend.
 
         This method should capture all necessary metadata of an inference request
@@ -71,7 +74,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
+    async def abort_request(self, request_id: Union[RequestIDType, Iterable[RequestIDType]]) -> None:
         """Abort one or multiple requests of the backend.
 
         Args:
@@ -115,7 +118,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def remove_running_request(self, request_id: str) -> bool:
+    async def remove_running_request(self, request_id: RequestIDType) -> bool:
         """
         Remove a request from the running queue of backend.
 
@@ -132,7 +135,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def remove_waiting_request(self, request_id: str) -> bool:
+    def remove_waiting_request(self, request_id: RequestIDType) -> bool:
         """
         Remove a request from the waiting queue of backend.
 
@@ -189,7 +192,7 @@ class BackendInterface(ABC):
 
     @abstractmethod
     def pre_alloc(self,
-                  request_id: str,
+                  request_id: RequestIDType,
                   request_status: RequestStatus,
                   request_arrival_time: float,
                   block_num: int,
@@ -241,7 +244,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
+    def free_dst_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
         """Free pre-allocated blocks for a migrating request on the destination instance.
 
         This method is responsible for releasing any cache blocks and other resources that were
@@ -267,10 +270,10 @@ class BackendInterface(ABC):
 
     @abstractmethod
     async def send_blocks(self,
-                          dst_ray_actor: "ray.actor.ActorHandle",
+                          dst_ray_actor: ray.actor.ActorHandle,
                           src_blocks: List[int],
                           dst_blocks: List[int],
-                          request_id: str,
+                          request_id: RequestIDType,
                           is_last_stage: bool) -> None:
         """
         Send cache blocks from the source instance to the destination instance.

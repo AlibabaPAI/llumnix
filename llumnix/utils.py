@@ -17,7 +17,7 @@ import time
 import uuid
 import asyncio
 import threading
-from typing import Callable, Awaitable, TypeVar, Coroutine, Dict, Optional
+from typing import Callable, Awaitable, TypeVar, Coroutine, Dict, Optional, Union
 import socket
 from functools import partial
 import warnings
@@ -37,6 +37,8 @@ _MAX_PORT = 65536
 
 P = ParamSpec('P')
 T = TypeVar("T")
+
+RequestIDType = Union[str, int]
 
 logger = init_logger(__name__)
 

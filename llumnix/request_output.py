@@ -14,10 +14,11 @@
 from typing import Any
 
 from llumnix.metrics.timestamps import RequestTimestamps
+from llumnix.utils import RequestIDType
 
 
 class LlumnixRequestOuput:
-    def __init__(self, request_id: int, instance_id: str,
+    def __init__(self, request_id: RequestIDType, instance_id: str,
                  engine_output: Any, request_timestamps: RequestTimestamps = None):
         self.request_id = request_id
         self.instance_id = instance_id

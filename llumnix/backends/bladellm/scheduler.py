@@ -88,14 +88,15 @@ class PagedSchedulerLlumnix(PagedScheduler):
         if gen_group.request_group_id in self.trans_wrapper.request_server_map:
             server_info = self.trans_wrapper.request_server_map[gen_group.request_group_id]
         gen_group_llumnix = GenerationGroupStateLlumnix(
-            gen_group, gen_group.request_group_id,
-            server_info)
+            gen_group, gen_group.request_group_id, server_info
+        )
         gen_group_llumnix._status = RequestStatus.WAITING
         self.id2group[gen_group.request_group_id] = gen_group_llumnix
         super().add_gen_group(gen_group_llumnix, *args, **kwargs)
 
     def drop_request(self, req_id: int):
-        self.id2group[req_id]._status = RequestStatus.FINISHED
+        if req_id in self.id2group:
+            self.id2group[req_id]._status = RequestStatus.FINISHED
         self.trans_wrapper.remove_request_server_info(req_id, self.step_counter + 1)
         super().drop_request(req_id)
 

@@ -12,19 +12,24 @@
 # limitations under the License.
 
 import json
-from typing import Type, TypeVar, Generator
+from typing import Type, TypeVar, Generator, Dict, Any, List
 import uuid
+from multiprocessing import Pool
+import time
 
 import pytest
 import requests
+import ray
+import torch
 
 from blade_llm.protocol import (
     OAIChatCompletionsResponse,
     OAICompletionsResponse,
 )
 
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, wait_port_free
 from llumnix.logging.logger import init_logger
+from llumnix.ray_utils import get_actor_names_by_name_prefix, INSTANCE_NAME_PREFIX, get_instance
 
 from tests.utils import try_convert_to_local_path
 from tests.e2e_test.bladellm_utils import LlumnixServerProc
@@ -42,49 +47,73 @@ RESP_T = TypeVar('RESP_T', OAICompletionsResponse, OAIChatCompletionsResponse)
 NAMING_URL = "file:/tmp/llumnix/naming"
 
 
+def generate_bladellm_non_pd_serve_args(
+    model: str = try_convert_to_local_path('Qwen/Qwen2.5-7B'),
+    ip: str = get_ip_address(),
+    port: int = 45000,
+    max_instances: int = 1,
+) -> List[str]:
+    # pylint: disable=f-string-without-interpolation
+    args = [
+        f"--model={model}",
+        f"--host={ip}",
+        f"--port={port}",
+        f"--enable_llumnix",
+        f"--disable_frontend_multiprocessing",
+        f"--disable_signal_handler",
+        f"--disable_cuda_graph",
+        f"--max-instances={max_instances}",
+        f"--enable-port-increment",
+    ]
+    return args
+
+def generate_bladellm_pdd_serve_args(
+    model: str = try_convert_to_local_path('Qwen/Qwen2.5-7B'),
+    ip: str = get_ip_address(),
+    port: int = 45000,
+    max_instances: int = 1,
+) -> List[str]:
+    # pylint: disable=f-string-without-interpolation
+    args = [
+        f"--model={model}",
+        f"--host={ip}",
+        f"--port={port}",
+        f"--enable_llumnix",
+        f"--disable_frontend_multiprocessing",
+        f"--disable_signal_handler",
+        f"--disable_cuda_graph",
+        f"--enable_disagg",
+        f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]}",
+        f"--disagg_pd.inst_role=prefill", # useless, setted in scaler
+        f"--disagg_pd.disagg_transfer_type=rdma",
+        f"--naming_url={NAMING_URL}",
+        f"--enable-engine-pd-disagg",
+        f"--pd-ratio=1:1",
+        f"--max-instances={max_instances}",
+        f"--enable-port-increment",
+    ]
+    return args
+
 @pytest.fixture(scope="session", params=["server", "pd_server"])
 def server(request):
     cleanup_ci_outputs_func()
     model = try_convert_to_local_path('Qwen/Qwen2.5-7B')
     ip = get_ip_address()
     if not request.param == "pd_server":
-        port = 45000
-        max_instances = 1
-        # pylint: disable=f-string-without-interpolation
-        cmd = [
-            f"--model={model}",
-            f"--host={ip}",
-            f"--port={port}",
-            f"--enable_llumnix",
-            f"--disable_frontend_multiprocessing",
-            f"--disable_signal_handler",
-            f"--disable_cuda_graph",
-            f"--max-instances={max_instances}",
-        ]
-    else:
-        port = 45050
+        base_port = 45000
         max_instances = 2
-        # pylint: disable=f-string-without-interpolation
-        cmd = [
-            f"--model={model}",
-            f"--host={ip}",
-            f"--port={port}",
-            f"--enable_llumnix",
-            f"--disable_frontend_multiprocessing",
-            f"--disable_signal_handler",
-            f"--disable_cuda_graph",
-            f"--enable_disagg",
-            f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]}",
-            f"--disagg_pd.inst_role=prefill", # useless, setted in scaler
-            f"--disagg_pd.disagg_transfer_type=rdma",
-            f"--naming_url={NAMING_URL}",
-            f"--enable-engine-pd-disagg",
-            f"--pd-ratio=1:1",
-            f"--max-instances={max_instances}",
-            f"--enable-port-increment",
-        ]
-    server = LlumnixServerProc(cmd)
-    ip_ports = [f"{ip}:{port}"]
+        args = generate_bladellm_non_pd_serve_args(model, ip, base_port, max_instances)
+    else:
+        base_port = 45050
+        max_instances = 4
+        args = generate_bladellm_pdd_serve_args(model, ip, base_port, max_instances)
+    ip_ports = []
+    for i in range(max_instances):
+        port = base_port + i
+        wait_port_free(port, force=True)
+        ip_port = f"{ip}:{port}"
+        ip_ports.append(ip_port)
+    server = LlumnixServerProc(args)
     wait_for_llumnix_service_ready(ip_ports)
     yield server
     cleanup_ray_env_func()
@@ -105,6 +134,7 @@ def sync_chunks(response, resp_cls: Type[RESP_T] = OAICompletionsResponse) -> Ge
             logger.warning('receive unexpected content: {}'.format(line))
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("max_tokens,finish_reason", [(1024, "stop"), (1, "length")])
 async def test_http_chat_api_stream(server, max_tokens, finish_reason):
     req_dict = {
@@ -144,6 +174,7 @@ async def test_http_chat_api_stream(server, max_tokens, finish_reason):
     assert finish_reason == last_resp['choices'][0]['finish_reason']
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("max_tokens,finish_reason", [(1024, "stop"), (1, "length")])
 async def test_http_chat_api_no_stream(server, max_tokens, finish_reason):
     req_dict = {
@@ -172,6 +203,7 @@ async def test_http_chat_api_no_stream(server, max_tokens, finish_reason):
     assert finish_reason == choice['finish_reason']
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("logprobs,top_logprobs", [('true', None), ('true', 1), ('true', 5)])
 async def test_http_chat_api_logprobs(server, logprobs, top_logprobs):
     req_dict = {
@@ -202,6 +234,7 @@ async def test_http_chat_api_logprobs(server, logprobs, top_logprobs):
     assert response_top_logprobs_example is None or len(response_top_logprobs_example) == top_logprobs
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_chat_api_resume(server):
     req_dict = {
         'messages': [
@@ -228,6 +261,7 @@ async def test_http_chat_api_resume(server):
     assert len(response_message['content']) > 0
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_lade_http_oai_completions_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -243,6 +277,7 @@ async def test_lade_http_oai_completions_stream(server):
     assert len(''.join(texts)) > 0
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_lade_http_oai_completions_non_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -258,6 +293,7 @@ async def test_lade_http_oai_completions_non_stream(server):
     assert len(OAICompletionsResponse(**response.json()).choices[0].text) > 0
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_lade_http_oai_completions_external_request_id_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -276,6 +312,7 @@ async def test_lade_http_oai_completions_external_request_id_stream(server):
     assert all(x == request_id for x in ids)
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_lade_http_oai_completions_external_request_id_no_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -294,6 +331,7 @@ async def test_lade_http_oai_completions_external_request_id_no_stream(server):
     assert OAICompletionsResponse(**response.json()).id == request_id
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -314,6 +352,7 @@ async def test_http_oai_completions_stream(server):
     assert len(''.join(texts)) > 0
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize(
     "max_tokens,expected_finish_reason",
     [
@@ -345,6 +384,7 @@ async def test_http_oai_completions_stream_max_tokens_stream(
     assert sse_chunks[-1].choices[0].finish_reason == expected_finish_reason
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_chat_completions_non_stream(server):
     req_dict = {
         'messages': [
@@ -371,6 +411,7 @@ async def test_http_oai_chat_completions_non_stream(server):
     assert all(c.logprob is not None for c in content)
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize(
     "max_tokens,expected_finish_reason",
     [
@@ -402,6 +443,7 @@ async def test_http_oai_completions_stream_max_tokens_non_stream(
     assert resp.choices[0].finish_reason == expected_finish_reason
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_non_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -421,6 +463,7 @@ async def test_http_oai_completions_non_stream(server):
     assert all(c.logprob is not None for c in content)
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_external_request_id_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -439,6 +482,7 @@ async def test_http_oai_completions_external_request_id_stream(server):
     assert all(x == request_id for x in ids)
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_external_request_id_no_stream(server):
     req_dict = {
         'prompt': 'hello',
@@ -457,6 +501,7 @@ async def test_http_oai_completions_external_request_id_no_stream(server):
     assert OAICompletionsResponse(**response.json()).id == request_id
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_empty_request(server):
     req_dict = {}
     assert server is not None
@@ -471,6 +516,7 @@ async def test_http_oai_completions_empty_request(server):
     assert 'Field required' in text
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_unsupported_request_param(server):
     # unsupported request params are ignored.
     req_dict = {
@@ -486,6 +532,7 @@ async def test_http_oai_completions_unsupported_request_param(server):
     assert response.status_code == 200
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_invalid_type_in_list(server):
     req_dict = {
         'prompt': 'hello',
@@ -504,6 +551,7 @@ async def test_http_oai_completions_invalid_type_in_list(server):
     assert 'Input should be a valid string' in text
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_invalid_type(server):
     req_dict = {
         'prompt': 'hello',
@@ -522,6 +570,7 @@ async def test_http_oai_completions_invalid_type(server):
     assert 'Input should be a valid int' in text
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_chat_completions_unsupported_request_param(server):
     # unsupported request param `prompt` are ignored, but `message` is required.
     req_dict = {
@@ -538,6 +587,7 @@ async def test_http_oai_chat_completions_unsupported_request_param(server):
     assert 'Field required' in text
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("penalty", ['presence_penalty', 'frequency_penalty'])
 @pytest.mark.parametrize("penalty_val", [-2.1, 2.1])
 async def test_http_oai_completions_invalid_precense_freqency_penalty(
@@ -561,6 +611,7 @@ async def test_http_oai_completions_invalid_precense_freqency_penalty(
     assert 'has to be in [-2, 2],' in text
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("penalty", ['presence_penalty', 'frequency_penalty'])
 @pytest.mark.parametrize("penalty_val", [-2.1, 2.1])
 async def test_http_oai_chat_completions_invalid_precens_frequency_penalty(
@@ -587,6 +638,7 @@ async def test_http_oai_chat_completions_invalid_precens_frequency_penalty(
     assert 'has to be in [-2, 2],' in text
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 async def test_http_oai_completions_invalid_repetition_penalty(server):
     # unsupported request param `prompt` are ignored, but `message` is required.
     req_dict = {
@@ -606,10 +658,11 @@ async def test_http_oai_completions_invalid_repetition_penalty(server):
     assert 'has to be a strictly positive float' in text
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("is_chat", [True, False])
 async def test_model_name_in_oai_completion(server, stream: bool, is_chat: bool):
-    url = '/v1/chat/completions' if is_chat else '/v1/completions'
+    url = f"http://{server.addr}/v1/chat/completions" if is_chat else f"http://{server.addr}/v1/completions"
     payload: Dict[str, Any] = (
         {
             'messages': [
@@ -622,7 +675,6 @@ async def test_model_name_in_oai_completion(server, stream: bool, is_chat: bool)
     )
     payload['model'] = 'mm'
     payload['stream'] = stream
-    url = f"http://{server.addr}/v1/chat/completions" if is_chat else f"http://{server.addr}/v1/completions"
     response = requests.post(
         url,
         json=payload,
@@ -635,3 +687,58 @@ async def test_model_name_in_oai_completion(server, stream: bool, is_chat: bool)
         assert response.status_code == 200
         resp = response.json()
         assert resp['model'] == 'mm'
+
+def _query_server(args):
+    url, payload = args
+    response = requests.post(
+        url,
+        json=payload,
+    )
+    response.raise_for_status()
+    return response.json()
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
+@pytest.mark.parametrize("is_chat", [True, False])
+async def test_http_oai_completions_drop_request(server, is_chat: bool):
+    url = f"http://{server.addr}/v1/chat/completions" \
+        if is_chat else f"http://{server.addr}/v1/completions"
+    payload: Dict[str, Any] = (
+        {
+            'messages': [
+                {'role': 'system', 'content': 'You are a helpful assistant.'},
+                {'role': 'user', 'content': 'hello'},
+            ]
+        }
+        if is_chat
+        else {'prompt': 'hello'}
+    )
+    payload['stream'] = True
+    payload['max_tokens'] = 4096
+    payload['ignore_eos'] = True
+
+    with Pool(32) as pool:
+        urls = [url] * 100
+        pyloads = [payload] * 100
+        pool.map_async(_query_server, zip(urls, pyloads))
+        # give it some times to add requests
+        time.sleep(1.0)
+        pool.terminate()
+        pool.join()
+
+    # give it some times to drop requests
+    time.sleep(5.0)
+
+    ray.init(ignore_reinit_error=True, namespace="llumnix")
+
+    curr_instances = []
+    curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
+    for curr_instance_name in curr_instance_names:
+        instance_id = curr_instance_name.split("_")[-1]
+        curr_instances.append(instance_id)
+    for instance_id in curr_instances:
+        instance = get_instance(instance_id)
+        running_request_ids = ray.get(instance.execute_engine_method.remote("get_running_queue"))
+        waiting_request_ids = ray.get(instance.execute_engine_method.remote("get_waiting_queue"))
+        # check that all requests are dropped
+        assert len(running_request_ids) == 0 and len(waiting_request_ids) == 0

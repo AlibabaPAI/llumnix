@@ -160,7 +160,7 @@ def check_manager_args(manager_args: ManagerArgs, engine_args: "ServingArgs") ->
     assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
         "Migration feature is temporarily unavailable for pipeline parallelism in BladeLLM."
 
-    assert not (engine_args.enable_disagg and manager_args.enable_migration), \
+    assert not (manager_args.enable_engine_pd_disagg and manager_args.enable_migration), \
         "Migration feature is temporarily unavailable for the engine based pd-disaggregation in BladeLLM."
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser,

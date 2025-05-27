@@ -34,7 +34,6 @@ from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
 from blade_llm.protocol import ServerRequest, GenerateStreamResponse
-from blade_llm.service.proto.bladellm_pb2 import WorkerStepResponse
 from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
 from blade_llm.service.communications.engine_msg_server import EngineMsgServer
@@ -43,6 +42,7 @@ from blade_llm.service.metric import init_metric
 from blade_llm.module.parallel import setup_dist_environ, master_node_in_distributed_inference
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
+from blade_llm.service.communications import AsyncLLMEngineClient
 
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout,
@@ -144,7 +144,7 @@ class AsyncBackQueueWrapper:
                 resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
-                logger.info("Engine {} finish request {}.".format(self.instance_id, resp.req_id))
+                logger.info("Engine finished request {}.".format(resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
             return resp, server_info
 
@@ -165,8 +165,9 @@ class AsyncBackQueueWrapper:
 
             await self._put_request_outputs_to_server(request_outputs, server_info_outputs)
 
-    async def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
-                                       server_infos: List[ServerInfo]) -> None:
+    async def _put_request_outputs_to_server(self,
+                                             request_outputs: List[GenerateStreamResponse],
+                                             server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in order to put request output to queue in batch at one time.
@@ -185,10 +186,11 @@ class AsyncBackQueueWrapper:
                 set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
                             self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
 
-            llumnix_response = LlumnixRequestOuputBladeLLM(request_output.req_id, self.instance_id,
-                                                       request_output.model_dump_json(), request_timestamps)
+            llumnix_request_output = LlumnixRequestOuputBladeLLM(
+                request_output.req_id, self.instance_id, request_output.model_dump_json(), request_timestamps
+            )
             server_id = server_info.server_id
-            server_request_outputs[server_id].append(llumnix_response)
+            server_request_outputs[server_id].append(llumnix_request_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
 
@@ -271,7 +273,7 @@ class AsyncLLMEngineLlumnixMixin:
 
     async def async_start(self, loop: asyncio.AbstractEventLoop):
         await super().async_start(loop)
-        self._client = self.init_client_from_engine()
+        self._client: AsyncLLMEngineClient = self.init_client_from_engine()
         self.trans_wrapper = AsyncBackQueueWrapper(self.placement_group, self.instance_id,
                                                    self.request_output_queue_type, self.resp_queue,
                                                    self.metrics_queue, self.backend_type)
@@ -302,7 +304,7 @@ class AsyncLLMEngineLlumnixMixin:
     # TODO(KuilongCui): As barrier is always used when a request is determined to be migrated, a request
     # can be identified as decode at the time it is scheduled by the scheduler, without having to wait until
     # the update_callback.
-    def _update_request_inference_type(self, resp_list: List[WorkerStepResponse]):
+    def _update_request_inference_type(self, resp_list):
         request_groups = resp_list[0].generation_groups.generation_group
         for gen_group in request_groups:
             request_group_id = gen_group.request_group_id
@@ -319,10 +321,10 @@ class AsyncLLMEngineLlumnixMixin:
                 request_group_id = gen_group.request_group_id
                 if request_group_id in self._back_queue:
                     worker_metrics = resp_list[0].worker_step_metrics
-                    worker_forward_time = worker_metrics.worker_bubble_time_us/1000000 + worker_metrics.prepare_step_ms + \
+                    worker_forward_time = worker_metrics.worker_bubble_time_us / 1000 + worker_metrics.prepare_step_ms + \
                         worker_metrics.model_forward_ms + worker_metrics.post_step_ms
-                    set_timestamp(step_timestamps, 'engine_step_timestamp_end', worker_forward_time/1000)
-                    set_timestamp(step_timestamps, 'engine_step_postprocess_timestamp_end', worker_forward_time/1000)
+                    set_timestamp(step_timestamps, 'engine_step_timestamp_end', worker_forward_time / 1000)
+                    set_timestamp(step_timestamps, 'engine_step_postprocess_timestamp_end', worker_forward_time / 1000)
                     set_timestamp(step_timestamps, 'engine_process_model_outputs_timestamp_begin', time.time())
             self.metrics_queue.put_nowait(step_timestamps)
 
@@ -394,7 +396,7 @@ class AsyncLLMEngineLlumnixMixin:
         await self._client._add_request(server_request, self.resp_queue)
 
     async def drop_request(self, req_id: int):
-        logger.debug("engine {} drop request {}".format(self.instance_id, req_id))
+        logger.debug("Engine {} drop request {}.".format(self.instance_id, req_id))
         await self._client.drop_request(req_id)
 
     # Only be used in migration method.
@@ -626,19 +628,19 @@ class BackendBladeLLM(BackendInterface):
 
     # -------------- dispatch related method --------------
 
-    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def add_request(self, request_id: int, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
         server_request = ServerRequest(**json.loads(kwargs["server_request"]))
         # The instance ID of the decode instance. If provided, engine will skip dispatch decode instance after prefilling.
         server_request.decode_instances = [kwargs.get("decode_instance_id", ""),]
         await self.engine.add_request(server_info, server_request)
 
-    def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
-        if isinstance(request_id, str):
+    async def abort_request(self, request_id: Union[int, Iterable[int]]) -> None:
+        if isinstance(request_id, int):
             request_id = (request_id,)
         request_ids = set(request_id)
         for req_id in request_ids:
-            self.engine.drop_request(int(req_id))
+            await self.engine.drop_request(req_id)
 
     # -------------- migration related method --------------
 
@@ -724,7 +726,7 @@ class BackendBladeLLM(BackendInterface):
                           dst_ray_actor: ray.actor.ActorHandle,
                           src_blocks: List[int],
                           dst_blocks: List[int],
-                          request_id: str,
+                          request_id: int,
                           is_last_stage: bool):
         request = MigrateCacheRequest(
             src_handlers=self.worker_infos,

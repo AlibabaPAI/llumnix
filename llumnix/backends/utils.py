@@ -47,7 +47,7 @@ class AsyncPutQueueActor:
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, List],
+                                    server_request_outputs: Dict[str, List[LlumnixRequestOuput]],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         if self.engine_actor_handle is None:
             # The lifetime of AsyncPutQueueActor is the same as the lifetime of the instance actor,

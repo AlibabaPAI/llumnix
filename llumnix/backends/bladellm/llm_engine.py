@@ -450,18 +450,6 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
             backend_type
         )
 
-    def _setup_dist_options(self, serving_args: ServingArgs):
-        # It means that dist_init_addr can be None when enabling distributed inference.
-        if serving_args.dist_inference_options.dist_init_addr is not None:
-            master_port = int(serving_args.dist_inference_options.dist_init_addr.split(":")[1])
-        else:
-            master_port = NCCL_PORT
-        # The IP of engine and worker 0 will be same due to our sorting of workers,
-        # so directly set the dist_init_addr to IP of engine is correct.
-        serving_args.dist_inference_options.dist_init_addr = f"{serving_args.host}:{master_port}"
-        # TODO(s5u13b): New BladeLLM will not use this environment variables, update it after rebase BladeLLM.
-        os.environ["MASTER_ADDR"] = serving_args.host
-
 
 class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEngine):
     def __init__(self,

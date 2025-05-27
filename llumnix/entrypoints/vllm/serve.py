@@ -12,6 +12,8 @@
 # limitations under the License.
 
 import time
+
+import ray
 from ray.util.queue import Queue as RayQueue
 
 from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs, add_cli_args, get_args
@@ -47,7 +49,8 @@ if __name__ == "__main__":
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})
 
-    setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args)
+    node_id = ray.get_runtime_context().get_node_id()
+    setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args, node_id)
 
     # keep the process alive to get the terminal output.
     if not entrypoints_args.disable_keep_serve_process_alive:

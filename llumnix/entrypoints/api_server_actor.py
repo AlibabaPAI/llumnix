@@ -37,12 +37,14 @@ class APIServerActor(ABC):
                  instance_id: str,
                  entrypoints_args: EntrypointsArgs,
                  engine_args,
+                 scaler: ray.actor.ActorHandle,
                  manager: ray.actor.ActorHandle,
                  instance: ray.actor.ActorHandle):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
         self.entrypoints_args = entrypoints_args
         self.engine_args = engine_args
+        self.scaler = scaler
         self.manager = manager
         self.instance = instance
         self._set_host(entrypoints_args, engine_args)
@@ -52,7 +54,7 @@ class APIServerActor(ABC):
         self.request_output_queue = init_request_output_queue_server(
             self.host, self.request_output_queue_type)
 
-        self._setup_entrypoints_context(self.manager, self.instance_id, self.instance)
+        self._setup_entrypoints_context(self.scaler, self.manager, self.instance_id, self.instance)
         self._start_server_thread()
         self._wait_server()
 
@@ -60,6 +62,7 @@ class APIServerActor(ABC):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     def _setup_entrypoints_context(self,
+                                   scaler: ray.actor.ActorHandle,
                                    manager: ray.actor.ActorHandle,
                                    instance_id: str,
                                    instance: ray.actor.ActorHandle):
@@ -67,7 +70,7 @@ class APIServerActor(ABC):
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.setup import setup_entrypoints_context
         self.entrypoints_context = setup_entrypoints_context(
-                                        self.entrypoints_args, manager, [instance_id], [instance], self.request_output_queue)
+            self.entrypoints_args, scaler, manager, [instance_id], [instance], self.request_output_queue)
 
     def _start_server_thread(self):
         self.run_server_thread = threading.Thread(
@@ -124,21 +127,24 @@ class APIServerActor(ABC):
                   placement_group: PlacementGroup,
                   entrypoints_args: EntrypointsArgs,
                   engine_args,
+                  scaler: ray.actor.ActorHandle,
                   manager: ray.actor.ActorHandle,
                   instance: ray.actor.ActorHandle):
-        api_server_class = ray.remote(num_cpus=1,
-                                      num_gpus=num_gpus,
-                                      name=get_server_name(instance_id),
-                                      namespace="llumnix",
-                                      lifetime="detached")(cls).options(
-                                            scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                                placement_group=placement_group,
-                                                placement_group_bundle_index=0,
-                                                placement_group_capture_child_tasks=True
-                                            )
-                                        )
-        api_server = api_server_class.remote(instance_id, entrypoints_args, engine_args,
-                                             manager, instance)
+        api_server_class = ray.remote(
+            num_cpus=1,
+            num_gpus=num_gpus,
+            name=get_server_name(instance_id),
+            namespace="llumnix",
+            lifetime="detached"
+        )(cls).options(
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_bundle_index=0,
+                placement_group_capture_child_tasks=True
+            )
+        )
+        api_server = api_server_class.remote(
+            instance_id, entrypoints_args, engine_args, scaler, manager, instance)
 
         return api_server
 

@@ -29,6 +29,7 @@ class LaunchMode(str, Enum):
 # Use "" type hint to avoid circular import.
 class EntrypointsContext:
     def __init__(self,
+                 scaler: "Scaler",
                  manager: "Manager",
                  instances: Dict[str, "Llumlet"],
                  request_output_queue: "QueueServerBase",
@@ -36,6 +37,7 @@ class EntrypointsContext:
                  server_info: "ServerInfo",
                  log_requests: bool,
                  log_request_timestamps: bool):
+        self.scaler = scaler
         self.manager = manager
         self.instances = instances
         self.request_output_queue = request_output_queue

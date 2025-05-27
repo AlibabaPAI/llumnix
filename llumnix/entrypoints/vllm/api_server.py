@@ -20,6 +20,7 @@ import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
+import ray
 
 from vllm.sampling_params import SamplingParams
 
@@ -209,7 +210,8 @@ if __name__ == "__main__":
 
     # if gpu is not available, it means that this node is head pod without any llumnix components.
     if is_gpu_available():
-        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args)
+        node_id = ray.get_runtime_context().get_node_id()
+        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args, node_id)
         # Start the api server after all the components of llumnix are ready.
         loop = asyncio.new_event_loop()
         llumnix_client = LlumnixClientVLLM(entrypoints_context, loop)

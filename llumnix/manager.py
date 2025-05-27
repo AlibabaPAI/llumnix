@@ -22,6 +22,7 @@ import ray
 import ray.actor
 from ray.util.placement_group import PlacementGroup
 import ray.exceptions
+from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
@@ -29,19 +30,32 @@ from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
 from llumnix.instance_info import InstanceInfo, InstanceType
-from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, InstanceArgs, LaunchArgs, LlumnixEngineArgs
+from llumnix.arg_utils import (
+    ManagerArgs,
+    EntrypointsArgs,
+    InstanceArgs,
+    LaunchArgs,
+    LlumnixEngineArgs,
+)
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import (random_uuid, run_coroutine_in_new_thread, async_wrapper,
-                           ray_get_with_timeout, asyncio_wait_for_with_timeout)
-from llumnix.ray_utils import (get_manager_name, INSTANCE_NAME_PREFIX, get_placement_group_name,
-                               log_actor_ray_info, execute_actor_method_async_with_retries)
+from llumnix.utils import (
+    random_uuid,
+    run_coroutine_in_new_thread,
+    async_wrapper,
+    ray_get_with_timeout,
+    asyncio_wait_for_with_timeout,
+)
+from llumnix.ray_utils import (
+    get_manager_name,
+    INSTANCE_NAME_PREFIX,
+    get_placement_group_name,
+    log_actor_ray_info,
+    execute_actor_method_async_with_retries,
+    get_scaler_name,
+)
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.queue.queue_type import QueueType
-from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.constants import NO_INSTANCE_RETRY_GENERATE_INTERVAL, WAIT_ALL_MIGRATIONS_DONE_INTERVAL
-from llumnix.scaler import Scaler
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.api_server_actor import APIServerActor
 
@@ -62,14 +76,19 @@ class Manager:
                  ) -> None:
         os.chdir(work_dir)
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
-        self.actor_name = get_manager_name()
         self.manager_args = manager_args
 
         # used in global launch
-        self.entrypoints_args = entrypoints_args
+        self.entrypoints_args = entrypoints_args # not used
         self.instance_args = instance_args
-        self.engine_args = engine_args
-        self.launch_args = launch_args
+        self.engine_args = engine_args # not used
+        self.launch_args = launch_args # not used
+
+        # scaling args
+        # avoid circular import
+        # pylint: disable=import-outside-toplevel
+        from llumnix.scaler import Scaler
+        self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
 
         # launch args
         if launch_args is not None:
@@ -79,39 +98,15 @@ class Manager:
         # migration args
         self.enable_migration = manager_args.enable_migration
         self.pair_migration_frequency = manager_args.pair_migration_frequency
+        self.is_group_kind_migration_backend = manager_args.is_group_kind_migration_backend
 
         # prefill-decode disaggregation args
         self.enable_pd_disagg = manager_args.enable_pd_disagg
 
-        # scaling args
-        self.enable_scaling = manager_args.enable_scaling
-        self.max_instances = manager_args.max_instances
-        self.min_instances = manager_args.min_instances
-        self.scaling_interval = manager_args.scaling_interval
-        self.scaling_policy = manager_args.scaling_policy
-        self.scale_up_threshold = manager_args.scale_up_threshold
-        self.scale_down_threshold = manager_args.scale_down_threshold
-
+        # scheduling states
         self.polling_interval = manager_args.polling_interval
-
-        self.is_group_kind_migration_backend = manager_args.is_group_kind_migration_backend
-
         global_scheduler_config = manager_args.create_global_scheduler_config()
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
-
-        pdd_config = manager_args.create_pdd_config()
-        node_id = ray.get_runtime_context().get_node_id()
-        self.scaler: Scaler = Scaler.from_args(entrypoints_args,
-                                               manager_args,
-                                               instance_args,
-                                               engine_args,
-                                               launch_args,
-                                               manager_args.enable_port_increment,
-                                               manager_args.enable_port_offset_store,
-                                               manager_args.load_registered_service,
-                                               manager_args.load_registered_service_path,
-                                               pdd_config,
-                                               node_id)
 
         # log args
         self.log_requests = not manager_args.disable_log_requests_manager
@@ -135,13 +130,6 @@ class Manager:
         self.num_instance_info_updates = 0
         self.migrating = False
 
-        # auto-scaling states
-        self.scale_up_time = -1
-        self.scale_down_time = -1
-        self.scaling_up = False
-        self.scaling_down = False
-        self.last_check_scale_time = time.time()
-
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
@@ -163,7 +151,8 @@ class Manager:
             asyncio.create_task(
                 asyncio_wait_for_with_timeout(
                     async_wrapper(
-                        self.instances[prefill_instance_id].generate.remote, request_id, server_info, request_expected_steps, *args, **kwargs
+                        self.instances[prefill_instance_id].generate.remote,
+                        request_id, server_info, request_expected_steps, *args, **kwargs
                     )
                 )
             )
@@ -186,34 +175,29 @@ class Manager:
                   instance_args: InstanceArgs,
                   engine_args: LlumnixEngineArgs,
                   launch_args: LaunchArgs,
+                  node_id: str,
                   ) -> "Manager":
-        manager_class = ray.remote(num_cpus=1,
-                                   max_restarts=-1,
-                                   name=get_manager_name(),
-                                   namespace="llumnix",
-                                   lifetime="detached")(cls)
-        manager = manager_class.remote(entrypoints_args,
-                                       manager_args,
-                                       instance_args,
-                                       engine_args,
-                                       launch_args,
-                                       os.getcwd())
-        return manager
-
-    async def init_instances(self,
-                             request_output_queue_type: QueueType,
-                             instance_args: InstanceArgs,
-                             engine_args: LlumnixEngineArgs,
-                             node_id: str
-                             ) -> Tuple[List[str], List[Llumlet]]:
-        # If Scaler dies, manager also dies.
-        return await execute_actor_method_async_with_retries(
-                self.scaler.init_instances.remote, "Scaler", "init_instances",
-                request_output_queue_type, instance_args, engine_args, node_id
+        manager_class = ray.remote(
+            num_cpus=1,
+            max_restarts=-1,
+            name=get_manager_name(),
+            namespace="llumnix",
+            lifetime="detached"
+        )(cls).options(
+            scheduling_strategy=NodeAffinitySchedulingStrategy(
+                node_id=node_id,
+                soft=False,
             )
-
-    def init_request_output_queue_server(self, ip: str, queue_type: QueueType) -> QueueServerBase:
-        return init_request_output_queue_server(ip, queue_type)
+        )
+        manager = manager_class.remote(
+            entrypoints_args,
+            manager_args,
+            instance_args,
+            engine_args,
+            launch_args,
+            os.getcwd()
+        )
+        return manager
 
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""
@@ -555,7 +539,8 @@ class Manager:
             .migration_filter.get_filter("migration_backend_init_filter")
         migration_filter.set_filter_condtition(
             src_filter=lambda instance_info: instance_info.instance_id in alive_instances,
-            dst_filter=lambda instance_info: instance_info.instance_id in alive_instances)
+            dst_filter=lambda instance_info: instance_info.instance_id in alive_instances,
+        )
 
         logger.info("Rebuild migration backend done, group_name: {}, alive instance ({}): {}."
             .format(group_name, len(alive_instances), alive_instances))
@@ -621,7 +606,8 @@ class Manager:
                     return_exceptions=True
                 )
                 task.add_done_callback(
-                    partial(connect_to_instance_done_callback, instance_id, instance_actor_handle))
+                    partial(connect_to_instance_done_callback, instance_id, instance_actor_handle)
+                )
                 tasks.append(task)
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
@@ -679,7 +665,8 @@ class Manager:
             'num_seqs',
             'num_blocks_first_waiting_request',
             'num_blocks_all_waiting_requests',
-            'waiting_time_first_waiting_request'])
+            'waiting_time_first_waiting_request',
+        ])
 
     def _log_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
         for instance_info in instance_infos:
@@ -709,5 +696,6 @@ class Manager:
                     instance_info.num_seqs,
                     instance_info.num_blocks_first_waiting_request,
                     instance_info.num_blocks_all_waiting_requests,
-                    instance_info.waiting_time_first_waiting_request])
+                    instance_info.waiting_time_first_waiting_request
+                ])
         self.instance_info_file.flush()

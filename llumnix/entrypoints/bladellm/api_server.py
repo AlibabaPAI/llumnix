@@ -15,6 +15,7 @@ import time
 import asyncio
 
 from aiohttp import web
+import ray
 
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.server import Entrypoint
@@ -122,7 +123,8 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
     if is_gpu_available():
         bladellm_engine_args = BladellmEngineArgs(engine_args)
         global llumnix_client
-        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
+        node_id = ray.get_runtime_context().get_node_id()
+        entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args, node_id)
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
 
     return llumnix_client

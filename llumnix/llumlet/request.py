@@ -15,6 +15,7 @@ from enum import Enum
 import math
 
 from llumnix.server_info import ServerInfo
+from llumnix.utils import RequestIDType
 
 
 class RequestInferenceType(str, Enum):
@@ -50,7 +51,7 @@ class RequestStatus(str, Enum):
 
 
 class LlumnixRequest:
-    def __init__(self, request_id: int, server_info: ServerInfo, expected_steps: int = math.inf) -> None:
+    def __init__(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int = math.inf) -> None:
         self.request_id = request_id
         self.server_info = server_info
 

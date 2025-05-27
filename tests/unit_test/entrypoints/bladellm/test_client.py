@@ -38,8 +38,8 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.entrypoint_id2llumnix_id = {}  # int32 -> int32
 
         self.request_stream: Dict[int, asyncio.Queue] = {}
-        self.request_stream_last_completion_tokens: Dict[str, int] = {}
-        self.request_stream_output_stash: Dict[str, list[GenerateStreamResponse]] = {}
+        self.request_stream_last_completion_tokens: Dict[int, int] = {}
+        self.request_stream_output_stash: Dict[int, list[GenerateStreamResponse]] = {}
         self.instance_num_requests: Dict[str, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True

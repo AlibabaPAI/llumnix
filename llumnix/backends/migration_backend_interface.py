@@ -14,9 +14,12 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from llumnix.utils import RequestIDType
+
+
 class MigrationBackendBase(ABC):
     @abstractmethod
-    def init_backend(self, group_name, world_size, rank) -> bool:
+    def init_backend(self, group_name: str, world_size: int, rank: int) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -32,7 +35,7 @@ class MigrationBackendBase(ABC):
                       src_handle: "ray.actor.ActorHandle",
                       src_blocks: List[int],
                       dst_blocks: List[int],
-                      request_id: str,
+                      request_id: RequestIDType,
                       is_last_stage: bool) -> None:
         raise NotImplementedError
 

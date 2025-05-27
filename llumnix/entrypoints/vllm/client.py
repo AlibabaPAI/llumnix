@@ -145,7 +145,7 @@ class LlumnixClientVLLM(LlumnixClient):
                     continue
                 self.request_stream[request_id].put(processed_output)
                 if request_output.finished:
-                    logger.info("Client finish request {}.".format(request_id))
+                    logger.info("Client finished request {}.".format(request_id))
                     self._clear_client_request_states(request_id)
 
     def _clear_client_request_states(self, request_id: str):
@@ -156,7 +156,7 @@ class LlumnixClientVLLM(LlumnixClient):
         else:
             logger.error("Request {} not found.".format(request_id))
 
-    def _process_output_order(self, request_id: int, request_output: RequestOutput) -> RequestOutput:
+    def _process_output_order(self, request_id: str, request_output: RequestOutput) -> RequestOutput:
         current_completion_tokens = None
         if hasattr(request_output, "outputs") and len(request_output.outputs) > 0:
             current_completion_tokens = len(request_output.outputs[-1].token_ids)

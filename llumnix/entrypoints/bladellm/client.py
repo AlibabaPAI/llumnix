@@ -45,18 +45,18 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                  loop: asyncio.AbstractEventLoop):
         MultiProcessingLLMClient.__init__(self, args, -1, -1)
 
-        self.entrypoint_id2llumnix_id = {} # int32 -> int32
-        self.llumnix_id2entrypoint_id = {} # int32 -> int32
+        self.entrypoint_req_id_to_llumnix_req_id = {} # int32 -> int32
+        self.llumnix_req_id_to_entrypoint_req_id = {} # int32 -> int32
 
         self.request_stream: Dict[int, asyncio.Queue] = {}
-        self.request_stream_output_stash: Dict[str, List[GenerateStreamResponse]] = {}
+        self.request_stream_output_stash: Dict[int, List[GenerateStreamResponse]] = {}
 
         self.timestamps_stream: Dict[int, asyncio.Queue] = {}
 
         LlumnixClient.__init__(self, entrypoints_context, loop)
 
-    def get_request_timestamps_generator(self, entrypoint_id: int) -> Optional[asyncio.Queue]:
-        return self.timestamps_stream.get(entrypoint_id, None)
+    def get_request_timestamps_generator(self, entrypoint_req_id: int) -> Optional[asyncio.Queue]:
+        return self.timestamps_stream.get(entrypoint_req_id, None)
 
     async def _add_request(self, request: ServerRequest) -> LLMResponse:
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
@@ -64,13 +64,13 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
         # To prevent different api_servers from generating the same request_id,
         # a random number is used to replace original req_id.
-        llumnix_id = random.randint(1, (1 << 31) - 1)
-        self.llumnix_id2entrypoint_id[llumnix_id] = request.id
-        self.entrypoint_id2llumnix_id[request.id] = llumnix_id
-        logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_id))
+        llumnix_req_id = random.randint(1, (1 << 31) - 1)
+        self.llumnix_req_id_to_entrypoint_req_id[llumnix_req_id] = request.id
+        self.entrypoint_req_id_to_llumnix_req_id[request.id] = llumnix_req_id
+        logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_req_id))
         internal_request = copy.deepcopy(request)
-        internal_request.id = llumnix_id
-        resp_stream = await self._generate(llumnix_id, internal_request.model_dump_json())
+        internal_request.id = llumnix_req_id
+        resp_stream = await self._generate(llumnix_req_id, internal_request.model_dump_json())
         return resp_stream
 
     async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
@@ -78,9 +78,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         results_queue = asyncio.Queue()
         self.request_stream[request_id] = results_queue
         if self.log_request_timestamps:
-            entrypoint_id = self.llumnix_id2entrypoint_id.get(request_id, None)
-            if entrypoint_id is not None:
-                self.timestamps_stream[entrypoint_id] = asyncio.Queue()
+            entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
+            if entrypoint_req_id is not None:
+                self.timestamps_stream[entrypoint_req_id] = asyncio.Queue()
         server_info_copy = copy.deepcopy(self.server_info)
 
         # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
@@ -133,8 +133,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 return await asyncio.create_task(self._generate(request_id, request))
 
     async def drop_request(self, req_id: int) -> None:
-        llumnix_id = self.entrypoint_id2llumnix_id.get(req_id, None)
-        await self._abort(llumnix_id)
+        llumnix_req_id = self.entrypoint_req_id_to_llumnix_req_id.get(req_id, None)
+        await self._abort(llumnix_req_id)
 
     async def get_request_outputs_loop(self):
         while True:
@@ -155,9 +155,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
                 if self.log_request_timestamps:
                     # Do not consider the out of order for request timestamp currently.
-                    entrypoint_id = self.llumnix_id2entrypoint_id.get(request_id, None)
-                    if entrypoint_id is not None:
-                        self.timestamps_stream[entrypoint_id].put_nowait(request_timestamp)
+                    entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
+                    if entrypoint_req_id is not None:
+                        self.timestamps_stream[entrypoint_req_id].put_nowait(request_timestamp)
 
                 processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
                 if not processed_output:
@@ -167,14 +167,14 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 last_output = processed_output[-1]
                 self.request_stream_last_completion_tokens[request_id] = last_output.usage.completion_tokens
                 if processed_output[-1].is_finished or not processed_output[-1].is_ok:
-                    logger.debug("Client finish request {}, is_ok: {}, err_info: {}.".format(
+                    logger.debug("Client finished request {}, is_ok: {}, err_info: {}.".format(
                         request_id, last_output.is_ok, last_output.error_info))
                     self._clear_client_request_states(request_id)
 
-    def _clear_client_request_states(self, request_id: str):
+    def _clear_client_request_states(self, request_id: int):
         super()._clear_client_request_states(request_id)
-        entrypoint_id = self.llumnix_id2entrypoint_id.pop(request_id, -1)
-        self.entrypoint_id2llumnix_id.pop(entrypoint_id, None)
+        entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.pop(request_id, -1)
+        self.entrypoint_req_id_to_llumnix_req_id.pop(entrypoint_req_id, None)
         self.request_stream.pop(request_id, None)
         self.request_stream_output_stash.pop(request_id, None)
 

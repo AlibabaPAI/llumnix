@@ -34,7 +34,7 @@ from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -127,7 +127,7 @@ class Llumlet:
         self_actor = ray.get_actor(name=self.actor_name, namespace="llumnix")
         ray.kill(self_actor)
 
-    async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[str]:
+    async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[RequestIDType]:
         # TODO(Failover): Currently, llumnix directly return if meeting exception during migration,
         # and handle migration exception through manager. In future, this should be handled by instance.
         try:
@@ -220,15 +220,15 @@ class Llumlet:
         await self.backend_engine.is_ready()
         return self.backend_engine.engine_disagg_inst_id
 
-    async def generate(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def generate(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
         await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
-    def abort(self, request_id: Union[str, int, Iterable[Union[str, int]]]) -> None:
+    async def abort(self, request_id: Union[RequestIDType, Iterable[RequestIDType]]) -> None:
         if isinstance(request_id, (str, int)):
             request_id = (request_id,)
         request_ids = set(request_id)
-        return self.backend_engine.abort_request(request_ids)
+        await self.backend_engine.abort_request(request_ids)
 
     async def clear_migration_states(self, is_migrate_in: bool) -> None:
         logger.info("Instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))

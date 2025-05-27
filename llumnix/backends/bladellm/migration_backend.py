@@ -49,6 +49,7 @@ logger = init_logger(__name__)
 
 
 # TODO(KuilongCui): Refactor this code, as there is a lot of duplicate code.
+# TODO(KuilongCui): Add more type hint for BladeLLM.
 
 class WorkerRequestSyncGroup:
     def __init__(self, request_group: Dict, request_tracker: Dict):

@@ -310,9 +310,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
             request_timestamps = None if not hasattr(request_output, "request_timestamps") else request_output.request_timestamps
-            llumnix_response = LlumnixRequestOuputVLLM(request_output.request_id, self.instance_id,
-                                                   request_output, request_timestamps)
-            server_request_outputs[server_id].append(llumnix_response)
+            llumnix_resquest_output = LlumnixRequestOuputVLLM(
+                request_output.request_id, self.instance_id, request_output, request_timestamps
+            )
+            server_request_outputs[server_id].append(llumnix_resquest_output)
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
         # TODO(s5u13b): Reduce the across-actor overhead.
@@ -424,7 +425,6 @@ class BackendVLLM(BackendInterface):
     async def execute_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
-    # Store the server information of each request to put the request outputs back to the corresponding api server correctly.
     async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         await self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
@@ -472,7 +472,7 @@ class BackendVLLM(BackendInterface):
     async def is_ready(self):
         return True
 
-    def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
+    async def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids = set(request_id)

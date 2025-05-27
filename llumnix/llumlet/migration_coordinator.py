@@ -18,7 +18,7 @@ from typing import List
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface, BackendType
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType
 
 logger = init_logger(__name__)
 
@@ -174,7 +174,7 @@ class MigrationCoordinator:
         return migration_status
 
     def migrate_in_pre_alloc(self,
-                             request_id: str,
+                             request_id: RequestIDType,
                              request_status: RequestStatus,
                              request_arrival_time: float,
                              block_num: int,
@@ -191,5 +191,5 @@ class MigrationCoordinator:
             self.free_dst_pre_alloc_cache(request_id)
         return pre_alloc_blocks
 
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
+    def free_dst_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
         self.backend_engine.free_dst_pre_alloc_cache(request_id)

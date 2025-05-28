@@ -66,7 +66,6 @@ class Llumlet:
         asyncio.create_task(self._check_engine_state_loop())
 
         if self.enable_migration:
-            self.migrating = False
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
                                                               llumnix_engine_args.backend_type,
                                                               instance_args.migration_last_stage_max_blocks,
@@ -130,17 +129,12 @@ class Llumlet:
         ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[RequestIDType]:
-        if self.migrating:
-            return []
-        self.migrating = True
-
         # TODO(Failover): Currently, llumnix directly return if meeting exception during migration,
         # and handle migration exception through manager. In future, this should be handled by instance.
         try:
             migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
 
             if len(migrate_out_requests) == 0:
-                self.migrating = False
                 return []
 
             for migrate_out_request in migrate_out_requests:
@@ -161,8 +155,6 @@ class Llumlet:
         except Exception as e:
             logger.exception("Failed to migrate out, unexpected exception: {}".format(e))
             raise
-
-        self.migrating = False
 
         return migrated_request_list
 
@@ -214,8 +206,6 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         instance_info: InstanceInfo = self.backend_engine.engine.instance_info
         instance_info.instance_type = self.instance_args.instance_type
-        if self.enable_migration:
-            instance_info.migrating = self.migrating
         self.instance_load_calculator.compute_instance_load(instance_info)
         return instance_info
 

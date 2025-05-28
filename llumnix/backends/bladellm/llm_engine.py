@@ -520,7 +520,7 @@ class BackendBladeLLM(BackendInterface):
         self.request_barriers: queue.Queue = queue.Queue()
         self._engine_ready_event = asyncio.Event()
 
-        self._reconfig_and_generate_args()
+        self._load_and_reconfig_engine_args()
         engine_cls = self._get_engine_cls()
         self.engine: AsyncLLMEngineLlumnixMixin = engine_cls(self.instance_id, self.placement_group,
                             self.request_output_queue_type, self.migration_config,
@@ -528,7 +528,7 @@ class BackendBladeLLM(BackendInterface):
 
         asyncio.create_task(self._start_engine())
 
-    def _reconfig_and_generate_args(self):
+    def _load_and_reconfig_engine_args(self):
         engine_disagg_inst_id: str = (
             os.environ.get(self.instance_args.engine_disagg_inst_id_env_var)
             if self.instance_args.engine_disagg_inst_id_env_var

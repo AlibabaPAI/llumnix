@@ -529,12 +529,12 @@ class BackendBladeLLM(BackendInterface):
         asyncio.create_task(self._start_engine())
 
     def _load_and_reconfig_engine_args(self):
-        engine_disagg_inst_id: str = (
+        self.engine_disagg_inst_id: str = (
             os.environ.get(self.instance_args.engine_disagg_inst_id_env_var)
             if self.instance_args.engine_disagg_inst_id_env_var
             else self.instance_id
         )
-        self.llumnix_engine_args.update_arg("engine_disagg_inst_id", engine_disagg_inst_id)
+        self.llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
         self.engine_args: ServingArgs = self.llumnix_engine_args.load_engine_args()
 
         # add instance_id to avoid path conflict when multi-engine running in a single pod

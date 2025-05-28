@@ -91,10 +91,10 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         return empty_pb2.Empty()
 
     # pylint: disable=unused-argument
-    def migrate_cache(self, request, context):
+    def recv_cache(self, request, context):
         try:
             start_time = time.time()
-            self.migration_backend.migrate_cache(request, request.src_blocks, request.dst_blocks)
+            self.migration_backend.recv_cache(request, request.src_blocks, request.dst_blocks)
             end_time = time.time()
             total_kv_cache_size = len(request.src_blocks) * self.single_block_bytes
             # pylint: disable=invalid-name

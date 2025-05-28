@@ -15,7 +15,7 @@
 
 import threading
 import time
-from typing import Dict, List
+from typing import List, Tuple
 
 import pickle
 import torch
@@ -41,7 +41,7 @@ from llumnix.utils import get_ip_address
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
-from llumnix.backends.bladellm.proto.migration_worker_pb2 import WorkerInfo, MigrateCacheRequest
+from llumnix.backends.bladellm.proto.migration_worker_pb2 import WorkerInfo, RecvCacheRequest
 from llumnix.logging.logger import init_logger
 from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH, NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION
 
@@ -52,7 +52,7 @@ logger = init_logger(__name__)
 # TODO(KuilongCui): Add more type hint for BladeLLM.
 
 class WorkerRequestSyncGroup:
-    def __init__(self, request_group: Dict, request_tracker: Dict):
+    def __init__(self, request_group, request_tracker):
         # TODO(KuilongCui): use rw lock to improve performance
         self.lock = threading.Lock()
         self.request_group = request_group # state_manager.request_group
@@ -103,8 +103,10 @@ class WorkerRequestSyncGroup:
 
 
 class GrpcMigrationBackend(MigrationBackendBase):
-    def __init__(self, migration_config: MigrationConfig,
-                 request_sync_group: WorkerRequestSyncGroup, state_manager: StateManagerBase):
+    def __init__(self,
+                 migration_config: MigrationConfig,
+                 request_sync_group: WorkerRequestSyncGroup,
+                 state_manager: StateManagerBase):
         self.request_sync_group: WorkerRequestSyncGroup = request_sync_group
         self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_server_port)
         self.state_manager = state_manager
@@ -167,7 +169,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
         else:
             raise RuntimeError("Unsupported state manager type: {}".format(type(state_manager)))
 
-    def init_backend(self, group_name, world_size, rank) -> bool:
+    def init_backend(self, group_name: str, world_size: int, rank: int) -> bool:
         logger.info("create grpc migration backend successfully.")
         return True
 
@@ -176,8 +178,8 @@ class GrpcMigrationBackend(MigrationBackendBase):
 
     def warmup(self) -> bool:
         self.state_manager.add_new_request(self._create_dummy_worker_request())
-        self.migrate_cache(
-            MigrateCacheRequest(
+        self.recv_cache(
+            RecvCacheRequest(
                 src_handlers=[WorkerInfo(ip_address=self.worker_migration_ip_addr)],
                 request_id=0,
                 is_last_stage=True,
@@ -191,10 +193,10 @@ class GrpcMigrationBackend(MigrationBackendBase):
         return True
 
     # pylint: disable=arguments-differ
-    def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
-        ip_address = src_handle.src_handlers[self.state_manager.rank].ip_address
-        src_blocks = src_handle.src_blocks
-        dst_blocks = src_handle.dst_blocks
+    def recv_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+        ip_address = src_worker_handle.src_handlers[self.state_manager.rank].ip_address
+        src_blocks = src_worker_handle.src_blocks
+        dst_blocks = src_worker_handle.dst_blocks
         with grpc.insecure_channel(ip_address, options=self.channel_options) as channel:
             stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
             tot_blocks = len(src_blocks)
@@ -202,14 +204,14 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
                 cur_src_blocks = src_blocks[start_idx:start_idx+offset]
                 cur_dst_blocks = dst_blocks[start_idx:start_idx+offset]
-                response = stub.do_send(migration_worker_pb2.SendKvCacheRequest(
-                    request_id=src_handle.request_id,
+                response = stub.do_send(migration_worker_pb2.SendKVCacheRequest(
+                    request_id=src_worker_handle.request_id,
                     src_blocks=cur_src_blocks,
-                    is_last_stage=(src_handle.is_last_stage and start_idx+offset==tot_blocks)))
+                    is_last_stage=(src_worker_handle.is_last_stage and start_idx+offset==tot_blocks)))
                 # TODO(KuilongCui): overlap stub.do_send and do_recv
                 self.do_recv(response, cur_dst_blocks)
 
-            if src_handle.is_last_stage:
+            if src_worker_handle.is_last_stage:
                 assert response.state_manager_data and len(response.state_manager_data) > 0, "Invalid state manager meta"
                 state_manager_data = pickle.loads(response.state_manager_data)
                 request_tracker_data = pickle.loads(response.request_tracker_data)
@@ -266,20 +268,20 @@ class GrpcMigrationBackend(MigrationBackendBase):
         return response
 
     # pylint: disable=unused-argument,arguments-differ
-    def do_recv(self, src_handle, blocks: List[int]):
+    def do_recv(self, src_worker_handle, blocks: List[int]) -> None:
         # use pin memory dummy_cache to speed up data transfer
         num_blocks = len(blocks)
         if isinstance(self.state_manager, PagedStateManager):
             recv_key_cache = self.dummy_key_cache[:, :num_blocks]
             recv_value_cache = self.dummy_value_cache[:, :num_blocks]
             recv_key_cache.copy_(torch.from_numpy(np.frombuffer(
-                src_handle.key, dtype=self.np_migration_cache_dtype).reshape(recv_key_cache.shape)))
+                src_worker_handle.key, dtype=self.np_migration_cache_dtype).reshape(recv_key_cache.shape)))
             recv_value_cache.copy_(torch.from_numpy(np.frombuffer(
-                src_handle.value, dtype=self.np_migration_cache_dtype).reshape(recv_value_cache.shape)))
+                src_worker_handle.value, dtype=self.np_migration_cache_dtype).reshape(recv_value_cache.shape)))
         elif isinstance(self.state_manager, RaggedFlashStateManager):
             recv_kv_cache = self.dummy_kv_cache[:, :num_blocks]
             recv_kv_cache.copy_(torch.from_numpy(np.frombuffer(
-                src_handle.kv, dtype=self.np_migration_cache_dtype).reshape(recv_kv_cache.shape)))
+                src_worker_handle.kv, dtype=self.np_migration_cache_dtype).reshape(recv_kv_cache.shape)))
         else:
             raise RuntimeError("Unsupported state manager type: {}".format(type(self.state_manager)))
 
@@ -301,7 +303,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 detoken_params=DetokenParams(cat_prompt=True),)
 
 
-def get_kv_tranfer_context(statemanager: RaggedFlashStateManager):
+def get_kv_tranfer_context(statemanager: RaggedFlashStateManager) -> Tuple[int, int]:
     assert isinstance(statemanager, RaggedFlashStateManager)
     kv_tranfer_unit = (
         statemanager.model_conf.num_attention_heads // statemanager.attn_head_tp_size
@@ -314,8 +316,14 @@ def get_kv_tranfer_context(statemanager: RaggedFlashStateManager):
 
 
 class KvTransferMigrationBackend(MigrationBackendBase):
-    def __init__(self, rank: int, instance_id: str, worker_id: int, migration_config: MigrationConfig,
-                 request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker, serving_args: ServingArgs,
+    def __init__(self,
+                 rank: int,
+                 instance_id: str,
+                 worker_id: int,
+                 migration_config: MigrationConfig,
+                 request_sync_group: WorkerRequestSyncGroup,
+                 base_worker: BaseWorker,
+                 serving_args: ServingArgs,
                  state_manager: StateManagerBase):
         nic_affinity.generate()
         self.instance_id = instance_id
@@ -343,12 +351,12 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             self.kv_transfer_instance_id = serving_args.disagg_options.inst_id
         if self.client_kv is None:
             self.client_kv = KVTransferClient(self.kv_transfer_instance_id, serving_args.tensor_parallel_size, worker_id, rank,
-                                        block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
-                                        [self.tranfer_type])
+                                              block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
+                                              [self.tranfer_type])
         if self.server_kv is None:
             self.server_kv = KVTransferServer(self.kv_transfer_instance_id, serving_args.tensor_parallel_size, worker_id, rank,
-                                        block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
-                                        [self.tranfer_type])
+                                              block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
+                                              [self.tranfer_type])
 
             kvt_info = BaseWorker.info(base_worker, kvt_worker_kind="server").kvt_info
             self._naming_client = connect_naming(self.instance_id, migration_config.kvtransfer_migration_backend_naming_url)
@@ -366,35 +374,35 @@ class KvTransferMigrationBackend(MigrationBackendBase):
     def warmup(self) -> bool:
         # CUDA_IPC does not support communication with itself, used only for RDMA_DIRECT warmup
         if self.tranfer_type == KVTransferProtocolType.RDMA_DIRECT:
-            self.migrate_cache(WorkerInfo(ip_address=self.worker_migration_ip_addr, instance_id=self.instance_id,
+            self.recv_cache(WorkerInfo(ip_address=self.worker_migration_ip_addr, instance_id=self.instance_id,
                 worker_id=self.worker_id), [0], [1])
         return True
 
     # pylint: disable=arguments-differ
-    def migrate_cache(self, src_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
-        ip_address = src_handle.src_handlers[self.state_manager.rank].ip_address
-        kv_transfer_instance_id = src_handle.src_handlers[self.state_manager.rank].kv_transfer_instance_id
-        worker_id = src_handle.src_handlers[self.state_manager.rank].worker_id
+    def recv_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+        ip_address = src_worker_handle.src_handlers[self.state_manager.rank].ip_address
+        kv_transfer_instance_id = src_worker_handle.src_handlers[self.state_manager.rank].kv_transfer_instance_id
+        worker_id = src_worker_handle.src_handlers[self.state_manager.rank].worker_id
         with grpc.insecure_channel(ip_address) as channel:
             stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
-            self.server_kv.submit_req_recv(kv_transfer_instance_id, worker_id, str(src_handle.request_id), dst_blocks)
+            self.server_kv.submit_req_recv(kv_transfer_instance_id, worker_id, str(src_worker_handle.request_id), dst_blocks)
             # Note: dst_instance_id must be set to kv_transfer_instance_id, not instance_id
-            response = stub.do_send(migration_worker_pb2.SendKvCacheRequest(
-                request_id=src_handle.request_id,
+            response = stub.do_send(migration_worker_pb2.SendKVCacheRequest(
+                request_id=src_worker_handle.request_id,
                 dst_kv_transfer_instance_id=self.kv_transfer_instance_id,
                 dst_worker_id=self.worker_id,
                 src_blocks=src_blocks,
                 dst_blocks=dst_blocks,
-                is_last_stage=src_handle.is_last_stage
+                is_last_stage=src_worker_handle.is_last_stage
             ))
 
-            if src_handle.is_last_stage:
+            if src_worker_handle.is_last_stage:
                 assert response.state_manager_data and len(response.state_manager_data) > 0, "Invalid state manager meta"
                 state_manager_data = pickle.loads(response.state_manager_data)
                 request_tracker_data = pickle.loads(response.request_tracker_data)
                 self.request_sync_group.add_new_request(
                     response.request_id, state_manager_data, request_tracker_data)
-            self.check_recv_done(kv_transfer_instance_id, worker_id, str(src_handle.request_id),
+            self.check_recv_done(kv_transfer_instance_id, worker_id, str(src_worker_handle.request_id),
                                  src_blocks, dst_blocks)
 
     # pylint: disable=unused-argument,arguments-differ
@@ -431,8 +439,8 @@ class KvTransferMigrationBackend(MigrationBackendBase):
     def do_recv(self, request, context):
         pass
 
-    def check_recv_done(self, src_instance_id, src_worker_id, kv_request_id: str,
-                        src_blocks: List[int], dst_blocks: List[int]):
+    def check_recv_done(self, src_instance_id: str, src_worker_id: int, kv_request_id: str,
+                        src_blocks: List[int], dst_blocks: List[int]) -> None:
         timeout_threshold_s = 30
         escape_time = 0
         while escape_time < timeout_threshold_s:
@@ -449,9 +457,14 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             self.worker_id, src_blocks, dst_blocks))
 
 
-def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration_config: MigrationConfig,
-                          request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker,
-                          state_manager: StateManagerBase, serving_args: ServingArgs) -> MigrationBackendBase:
+def get_migration_backend(instance_id: str,
+                          worker_id: int,
+                          rank: int,
+                          migration_config: MigrationConfig,
+                          request_sync_group: WorkerRequestSyncGroup,
+                          base_worker: BaseWorker,
+                          state_manager: StateManagerBase,
+                          serving_args: ServingArgs) -> MigrationBackendBase:
     assert migration_config.migration_backend in ['grpc', 'kvtransfer'], \
         "Only support grpc and kvtransfer migration backend for BladeLLM."
 

@@ -17,6 +17,7 @@ import asyncio
 import queue
 from typing import List, Dict
 
+import ray.actor
 from ray.util.placement_group import PlacementGroup
 
 from vllm.engine.arg_utils import EngineArgs
@@ -98,10 +99,10 @@ class BackendSimVLLM(BackendVLLM):
         return latency_mem
 
     # pylint: disable=unused-argument
-    async def send_blocks(self,
-                          dst_ray_actor: "ray.actor.ActorHandle",
-                          src_blocks: List[int],
-                          dst_blocks: List[int],
-                          request_id: str,
-                          is_last_stage: bool) -> None:
-        await self.engine.model_executor.send_blocks(len(src_blocks))
+    async def send_cache(self,
+                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         src_blocks: List[int],
+                         dst_blocks: List[int],
+                         request_id: str,
+                         is_last_stage: bool) -> None:
+        await self.engine.model_executor.send_cache(len(src_blocks))

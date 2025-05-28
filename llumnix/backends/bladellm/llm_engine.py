@@ -24,6 +24,7 @@ import queue
 import os
 
 import ray
+import ray.actor
 import grpc
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -56,7 +57,7 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
-from llumnix.backends.bladellm.proto.migration_worker_pb2 import MigrateCacheRequest, WorkerInfo
+from llumnix.backends.bladellm.proto.migration_worker_pb2 import RecvCacheRequest, WorkerInfo
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
@@ -693,29 +694,29 @@ class BackendBladeLLM(BackendInterface):
     def free_migrating_out_requests_last_stage(self, *args, **kwargs) -> List[Any]:
         return self.engine.scheduler.free_migrating_out_requests_last_stage(*args, **kwargs)
 
-    def pre_alloc(self, *args, **kwargs) -> List[int]:
-        return self.engine.scheduler.pre_alloc(*args, **kwargs)
+    def pre_alloc_cache(self, *args, **kwargs) -> List[int]:
+        return self.engine.scheduler.pre_alloc_cache(*args, **kwargs)
 
     def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.engine.trans_wrapper.add_request(backend_request.request_id, backend_request.server_info)
         self.engine._req_tracker.req_metrics_map[backend_request.request_id] = backend_request.req_metrics
         return self.engine.scheduler.add_running_request(backend_request)
 
-    def free_dst_pre_alloc_cache(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.free_dst_pre_alloc_cache(*args, **kwargs)
+    def free_pre_alloc_cache(self, *args, **kwargs) -> None:
+        return self.engine.scheduler.free_pre_alloc_cache(*args, **kwargs)
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         expired_step = self.engine.step_counter + 1
         self.engine.trans_wrapper.remove_request_server_info(backend_request.request_id, expired_step)
         return self.engine.scheduler.free_src_request(backend_request)
 
-    async def send_blocks(self,
-                          dst_ray_actor: ray.actor.ActorHandle,
-                          src_blocks: List[int],
-                          dst_blocks: List[int],
-                          request_id: int,
-                          is_last_stage: bool):
-        request = MigrateCacheRequest(
+    async def send_cache(self,
+                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         src_blocks: List[int],
+                         dst_blocks: List[int],
+                         request_id: int,
+                         is_last_stage: bool):
+        request = RecvCacheRequest(
             src_handlers=self.worker_infos,
             request_id=request_id,
             is_last_stage=is_last_stage,
@@ -723,8 +724,8 @@ class BackendBladeLLM(BackendInterface):
             dst_blocks=dst_blocks,
         )
         await asyncio_wait_for_with_timeout(
-            dst_ray_actor.execute_engine_method_async.remote(
-                "_run_workers", "migrate_cache", request
+            dst_llumlet_actor.execute_engine_method_async.remote(
+                "_run_workers", "recv_cache", request
             )
         )
 

@@ -474,13 +474,13 @@ class Manager:
         return prefill_instance_id_set, decode_instance_id_set
 
     async def _rebuild_migration_backend(self) -> None:
-        # Wait for all instances to finish migration
-        while any(self.instance_migrating.values()):
-            await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
-
         # During rebuilding migration backend, disable migration.
         origin_config = self.enable_migration
         self.enable_migration = False
+
+        # Wait for all instances to finish migration
+        while any(self.instance_migrating.values()):
+            await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
 
         async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):
             tasks = []
@@ -535,8 +535,8 @@ class Manager:
             self.pending_rebuild_migration_instances = 0
             group_name = None
 
-        migration_filter: CustomFilter = self.global_scheduler.migration_scheduler \
-            .migration_filter.get_filter("migration_backend_init_filter")
+        migration_filter: CustomFilter = \
+            self.global_scheduler.migration_scheduler.migration_filter.get_filter("migration_backend_init_filter")
         migration_filter.set_filter_condtition(
             src_filter=lambda instance_info: instance_info.instance_id in alive_instances,
             dst_filter=lambda instance_info: instance_info.instance_id in alive_instances,

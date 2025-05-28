@@ -11,13 +11,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Tuple, Optional, Callable
+from typing import List, Tuple, Optional, Callable, Any
 
 import torch
 from func_timeout import func_set_timeout
 import ray
 import ray.util.collective as col
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+import ray.actor
 
 from vllm.worker.cache_engine import CacheEngine
 
@@ -37,7 +38,7 @@ class ProxyActor:
         self.is_driver_worker = is_driver_worker
         self.use_ray_spmd_worker = use_ray_spmd_worker
 
-    def exec_method(self, handle, *args, **kwargs):
+    def exec_method(self, handle, *args, **kwargs) -> Any:
         if self.is_driver_worker and not self.use_ray_spmd_worker:
             ret = ray_get_with_timeout(
                 handle.execute_engine_method_async.remote(
@@ -61,7 +62,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
                  migration_config: MigrationConfig,
                  cache_engine: List[CacheEngine],
                  worker_rank: int,
-                 worker_handle_list: List["ray.actor.ActorHandle"],
+                 worker_handle_list: List[ray.actor.ActorHandle],
                  scheduling_strategy: PlacementGroupSchedulingStrategy,
                  is_driver_worker: bool,
                  gpu_cache: Optional[List[List[torch.Tensor]]],
@@ -75,7 +76,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
         self.worker_rank = worker_rank
         self.worker_handle_list = worker_handle_list
-        self.actor = ProxyActor.options(
+        self.proxy_actor = ProxyActor.options(
             scheduling_strategy=scheduling_strategy,
             name=f"ProxyActor_{self.instance_id}_{random_uuid()}").remote(
                 is_driver_worker, use_ray_spmd_worker
@@ -104,7 +105,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         )
         self.migration_stream = torch.cuda.Stream()
 
-    def init_backend(self, group_name, world_size, rank) -> bool:
+    def init_backend(self, group_name: str, world_size: int, rank: int) -> bool:
         logger.info("Create rayrpc migration backend successfully.")
         return True
 
@@ -115,7 +116,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
 
     def warmup(self) -> bool:
         ray_get_with_timeout(
-            self.actor.exec_method.remote(
+            self.proxy_actor.exec_method.remote(
                 self.worker_handle_list[self.worker_rank], "do_send", None, [0]
             )
         )
@@ -125,12 +126,12 @@ class RayRpcMigrationBackend(MigrationBackendBase):
     # The src actor will pack the kv-cache data layer by layer. Specifically, NumPy is used for the transfer
     # because, for a single node, Ray RPC can transfer NumPy arrays via shared memory. Then, the recv actor
     # first copies the data to a pinned-memory dummy cache before transferring it to the GPU to accelerate data transfer.
-    def migrate_cache(self,
-                      src_handle: "ray.actor.ActorHandle",
-                      src_blocks: List[int],
-                      dst_blocks: List[int],
-                      request_id: str,
-                      is_last_stage: bool) -> None:
+    def recv_cache(self,
+                   src_worker_handle: ray.actor.ActorHandle,
+                   src_blocks: List[int],
+                   dst_blocks: List[int],
+                   request_id: str,
+                   is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
         src_seq_group_metadata = None
@@ -139,9 +140,14 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             send_worker_metadata = self.use_ray_spmd_worker and is_last_stage and is_last_comm
-            ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
-                                                    None, send_blocks, request_id=request_id,
-                                                    send_worker_metadata=send_worker_metadata)
+            ray_obj = self.proxy_actor.exec_method.remote(
+                src_worker_handle,
+                "do_send",
+                None,
+                send_blocks,
+                request_id=request_id,
+                send_worker_metadata=send_worker_metadata
+            )
             if rpc_numpy_cache is not None:
                 self.do_recv(rpc_numpy_cache, recv_blocks)
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
@@ -155,7 +161,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         if src_seq_group_metadata:
             self.worker_stage_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 
-    def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
+    def do_send(self, dst_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         # src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
@@ -163,8 +169,8 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         for idx in range(num_blocks):
             src_to_dst.append((blocks[idx], idx))
         block_mapping_tensor = torch.tensor(src_to_dst,
-                                        dtype=torch.int64,
-                                        device="cpu", pin_memory=True).view(-1, 2)
+                                            dtype=torch.int64,
+                                            device="cpu", pin_memory=True).view(-1, 2)
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
                 self.cache_engine[virtuel_engine].attn_backend \
@@ -173,18 +179,18 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         return send_cache.to(self.rpc_dtype).numpy()
 
     # pylint: disable=arguments-differ
-    def do_recv(self, src_handle, blocks: List[int], virtuel_engine: int=0):
+    def do_recv(self, src_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         # src_to_dst = dict(enumerate(blocks))
         src_to_dst: List[Tuple[int, int]] = []
         for idx in range(num_blocks):
             src_to_dst.append((idx, blocks[idx]))
         block_mapping_tensor = torch.tensor(src_to_dst,
-                                        dtype=torch.int64,
-                                        device="cpu", pin_memory=True).view(-1, 2)
+                                            dtype=torch.int64,
+                                            device="cpu", pin_memory=True).view(-1, 2)
         recv_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         # use pin memory dummy_cache to speed up data transfer
-        recv_cache.copy_(torch.from_numpy(src_handle))
+        recv_cache.copy_(torch.from_numpy(src_worker_handle))
 
         with torch.cuda.stream(self.migration_stream):
             for layer_idx in range(self.num_layers):
@@ -236,9 +242,11 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.group_name = None
 
         self.local_rank = local_rank
-        self.actor = ProxyActor.options(scheduling_strategy=scheduling_strategy,
-                                        name=f"ProxyActor_{self.instance_id}_{random_uuid()}").remote(
-                                            is_driver_worker, use_ray_spmd_worker)
+        self.proxy_actor = ProxyActor.options(
+            scheduling_strategy=scheduling_strategy,
+            name=f"ProxyActor_{self.instance_id}_{random_uuid()}").remote(
+                is_driver_worker, use_ray_spmd_worker
+            )
         self.gpu_cache = gpu_cache
         self.use_ray_spmd_worker = use_ray_spmd_worker
         self.worker_stage_seq_group_metadata_callback = worker_stage_seq_group_metadata_callback
@@ -322,14 +330,14 @@ class RayColMigrationBackend(MigrationBackendBase):
 
     # Ray.collective is used to construct the gloo and nccl backends. The do_send/do_recv functions will transmit
     # data layer by layer. Take into consideration that col.send/recv are blocking operations.
-    def migrate_cache(self,
-                      src_handle: "ray.actor.ActorHandle",
-                      src_blocks: List[int],
-                      dst_blocks: List[int],
-                      request_id: str,
-                      is_last_stage: bool) -> None:
+    def recv_cache(self,
+                   src_worker_handle: ray.actor.ActorHandle,
+                   src_blocks: List[int],
+                   dst_blocks: List[int],
+                   request_id: str,
+                   is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
-        src_rank = ray_get_with_timeout(self.actor.exec_method.remote(src_handle, "get_global_rank"))
+        src_rank = ray_get_with_timeout(self.proxy_actor.exec_method.remote(src_worker_handle, "get_global_rank"))
 
         src_seq_group_metadata = None
         for start_idx in range(0, tot_blocks, self.num_migration_buffer_blocks):
@@ -338,24 +346,29 @@ class RayColMigrationBackend(MigrationBackendBase):
             send_blocks = src_blocks[start_idx:start_idx+offset]
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
             send_worker_metadata = self.use_ray_spmd_worker and is_last_stage and is_last_comm
-            ray_obj = self.actor.exec_method.remote(src_handle, "do_send",
-                                                    self.global_rank, send_blocks, request_id=request_id,
-                                                    send_worker_metadata=send_worker_metadata)
+            ray_obj = self.proxy_actor.exec_method.remote(
+                src_worker_handle,
+                "do_send",
+                self.global_rank,
+                send_blocks,
+                request_id=request_id,
+                send_worker_metadata=send_worker_metadata
+            )
             self.do_recv(src_rank, recv_blocks)
             if send_worker_metadata:
                 _, src_seq_group_metadata = ray_get_with_timeout(ray_obj)
         if src_seq_group_metadata:
             self.worker_stage_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 
-    def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
+    def do_send(self, dst_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst: List[Tuple[int, int]] = []
         for idx in range(num_blocks):
             src_to_dst.append((blocks[idx], idx))
         block_mapping_tensor = torch.tensor(src_to_dst,
-                                        dtype=torch.int64,
-                                        device="cpu", pin_memory=True).view(-1, 2)
+                                            dtype=torch.int64,
+                                            device="cpu", pin_memory=True).view(-1, 2)
         with self.migration_stream:
             for layer_idx in range(self.cache_engine[0].num_attention_layers):
                 cache_idx = layer_idx % self.migration_num_layers
@@ -363,24 +376,24 @@ class RayColMigrationBackend(MigrationBackendBase):
                     .swap_blocks(self.gpu_cache[virtuel_engine][layer_idx], send_cache[cache_idx], block_mapping_tensor)
                 if cache_idx + 1 == self.migration_num_layers or layer_idx + 1 == self.cache_engine[0].num_attention_layers:
                     # TODO(KuilongCui): check the error code if peer is dead
-                    col.send(send_cache, dst_handle, self.group_name)
+                    col.send(send_cache, dst_worker_handle, self.group_name)
         self.migration_stream.synchronize()
 
-    def do_recv(self, src_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int=0):
+    def do_recv(self, src_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         src_to_dst: List[Tuple[int, int]] = []
         for idx in range(num_blocks):
             src_to_dst.append((idx, blocks[idx]))
         block_mapping_tensor = torch.tensor(src_to_dst,
-                                        dtype=torch.int64,
-                                        device="cpu", pin_memory=True).view(-1, 2)
+                                            dtype=torch.int64,
+                                            device="cpu", pin_memory=True).view(-1, 2)
         recv_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
 
         with self.migration_stream:
             for layer_idx in range(self.cache_engine[0].num_attention_layers):
                 cache_idx = layer_idx % self.migration_num_layers
                 if cache_idx == 0:
-                    col.recv(recv_cache, src_handle, self.group_name)
+                    col.recv(recv_cache, src_worker_handle, self.group_name)
                 self.cache_engine[virtuel_engine].attn_backend \
                     .swap_blocks(recv_cache[cache_idx], self.gpu_cache[virtuel_engine][layer_idx], block_mapping_tensor)
         self.migration_stream.synchronize()
@@ -390,7 +403,7 @@ class RayColMigrationBackend(MigrationBackendBase):
 def get_migration_backend(instance_id: str,
                           migration_config: MigrationConfig,
                           cache_engine: List[CacheEngine],
-                          worker_handle_list: List["ray.actor.ActorHandle"],
+                          worker_handle_list: List[ray.actor.ActorHandle],
                           scheduling_strategy: PlacementGroupSchedulingStrategy,
                           is_driver_worker: bool,
                           gpu_cache: Optional[List[List[torch.Tensor]]],

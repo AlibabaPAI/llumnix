@@ -191,12 +191,12 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def pre_alloc(self,
-                  request_id: RequestIDType,
-                  request_status: RequestStatus,
-                  request_arrival_time: float,
-                  block_num: int,
-                  token_ids: List[int]) -> List[int]:
+    def pre_alloc_cache(self,
+                        request_id: RequestIDType,
+                        request_status: RequestStatus,
+                        request_arrival_time: float,
+                        block_num: int,
+                        token_ids: List[int]) -> List[int]:
         """Pre-allocate cache blocks for a migrating request.
 
         This method selects a specified number of free cache blocks to be reserved for an incoming
@@ -244,7 +244,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_dst_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
+    def free_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
         """Free pre-allocated blocks for a migrating request on the destination instance.
 
         This method is responsible for releasing any cache blocks and other resources that were
@@ -269,12 +269,12 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_blocks(self,
-                          dst_ray_actor: ray.actor.ActorHandle,
-                          src_blocks: List[int],
-                          dst_blocks: List[int],
-                          request_id: RequestIDType,
-                          is_last_stage: bool) -> None:
+    async def send_cache(self,
+                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         src_blocks: List[int],
+                         dst_blocks: List[int],
+                         request_id: RequestIDType,
+                         is_last_stage: bool) -> None:
         """
         Send cache blocks from the source instance to the destination instance.
 
@@ -283,9 +283,9 @@ class BackendInterface(ABC):
         the destination instance, where they are mapped according to the destination block table.
 
         Args:
-            dst_ray_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
-                           to be sent. This handle is used to reference the destination's execution context and manage
-                           the block transfer.
+            dst_llumlet_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
+                       to be sent. This handle is used to reference the destination's execution context and manage
+                       the block transfer.
             src_blocks: A list of integers representing the block indexs in the source instance's cache that need to be
                         sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's cache where the

@@ -51,6 +51,7 @@ class Llumlet:
         self.instance_id = instance_id
         logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, llumnix_engine_args.backend_type))
         self.instance_args: InstanceArgs = instance_args
+        self.enable_migration = instance_args.enable_migration
         self.actor_name = get_instance_name(instance_id)
         self.instance_load_calculator = InstanceLoadCalculator(
             dispatch_load_metric=instance_args.dispatch_load_metric,
@@ -64,13 +65,13 @@ class Llumlet:
                                                                     llumnix_engine_args)
         asyncio.create_task(self._check_engine_state_loop())
 
-        if self.instance_args.enable_migration:
+        if self.enable_migration:
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                            llumnix_engine_args.backend_type,
-                                                            instance_args.migration_last_stage_max_blocks,
-                                                            instance_args.migration_max_stages)
+                                                              llumnix_engine_args.backend_type,
+                                                              instance_args.migration_last_stage_max_blocks,
+                                                              instance_args.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(instance_args.request_migration_policy,
-                                                                self.backend_engine)
+                                                               self.backend_engine)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -186,11 +187,11 @@ class Llumlet:
         else: # ABORTED_SRC or ABORTED_DST
             migrate_out_request.reset_migration_args_src()
             migrate_out_request.reset_status()
-            # If src aborts itself, dst should free the pre allocated cache in migrate_in_pre_alloc.
+            # If src aborts itself, dst should free the pre allocated cache in pre_alloc_cache.
             if status == MigrationStatus.ABORTED_SRC:
                 await asyncio_wait_for_with_timeout(
                     dst_instance_actor_handle.execute_migration_method.remote(
-                        "free_dst_pre_alloc_cache", migrate_out_request.request_id
+                        "free_pre_alloc_cache", migrate_out_request.request_id
                     )
                 )
 
@@ -234,8 +235,8 @@ class Llumlet:
         logger.info("Instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
-            logger.info("clear_migration_states: free_dst_pre_alloc_cache")
-            self.backend_engine.free_dst_pre_alloc_cache()
+            logger.info("clear_migration_states: free_pre_alloc_cache")
+            self.backend_engine.free_pre_alloc_cache()
         else:
             # If migrate in instance dies during migration, migrate out instance should add the migrating out request in last stage.
             # back to the running request queue.

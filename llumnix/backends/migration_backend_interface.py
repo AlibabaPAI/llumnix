@@ -14,6 +14,8 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+import ray.actor
+
 from llumnix.utils import RequestIDType
 
 
@@ -31,18 +33,18 @@ class MigrationBackendBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def migrate_cache(self,
-                      src_handle: "ray.actor.ActorHandle",
-                      src_blocks: List[int],
-                      dst_blocks: List[int],
-                      request_id: RequestIDType,
-                      is_last_stage: bool) -> None:
+    def recv_cache(self,
+                   src_worker_handle: ray.actor.ActorHandle,
+                   src_blocks: List[int],
+                   dst_blocks: List[int],
+                   request_id: RequestIDType,
+                   is_last_stage: bool) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def do_send(self, dst_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int):
+    def do_send(self, dst_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int):
         raise NotImplementedError
 
     @abstractmethod
-    def do_recv(self, src_handle: "ray.actor.ActorHandle", blocks: List[int], virtuel_engine: int):
+    def do_recv(self, src_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int):
         raise NotImplementedError

@@ -65,12 +65,13 @@ class Llumlet:
         asyncio.create_task(self._check_engine_state_loop())
 
         if self.instance_args.enable_migration:
+            self.migrating = False
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
-                                                            llumnix_engine_args.backend_type,
-                                                            instance_args.migration_last_stage_max_blocks,
-                                                            instance_args.migration_max_stages)
+                                                              llumnix_engine_args.backend_type,
+                                                              instance_args.migration_last_stage_max_blocks,
+                                                              instance_args.migration_max_stages)
             self.migration_scheduler = LocalMigrationScheduler(instance_args.request_migration_policy,
-                                                                self.backend_engine)
+                                                               self.backend_engine)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -128,6 +129,10 @@ class Llumlet:
         ray.kill(self_actor)
 
     async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[RequestIDType]:
+        if self.migrating:
+            return []
+        self.migrating = True
+
         # TODO(Failover): Currently, llumnix directly return if meeting exception during migration,
         # and handle migration exception through manager. In future, this should be handled by instance.
         try:
@@ -154,6 +159,7 @@ class Llumlet:
         except Exception as e:
             logger.exception("Failed to migrate out, unexpected exception: {}".format(e))
             raise
+        self.migrating = False
 
         return migrated_request_list
 
@@ -205,6 +211,7 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         instance_info: InstanceInfo = self.backend_engine.engine.instance_info
         instance_info.instance_type = self.instance_args.instance_type
+        instance_info.migrating = self.migrating
         self.instance_load_calculator.compute_instance_load(instance_info)
         return instance_info
 

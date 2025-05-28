@@ -17,6 +17,7 @@ import asyncio
 import queue
 from typing import List, Dict
 
+import ray.actor
 from ray.util.placement_group import PlacementGroup
 
 from vllm.engine.arg_utils import EngineArgs
@@ -99,7 +100,7 @@ class BackendSimVLLM(BackendVLLM):
 
     # pylint: disable=unused-argument
     async def send_blocks(self,
-                          dst_ray_actor: "ray.actor.ActorHandle",
+                          dst_llumlet_actor: ray.actor.ActorHandle,
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: str,

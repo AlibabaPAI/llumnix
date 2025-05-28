@@ -34,6 +34,7 @@ class InstanceType(str, Enum):
 class InstanceInfo:
     instance_id: str = ""
     instance_type: InstanceType = None
+    migrating: bool = None
 
     step_id: int = None
     timestamp: float = None

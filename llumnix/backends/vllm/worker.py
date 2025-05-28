@@ -20,6 +20,7 @@ import torch
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 import ray.exceptions
+import ray.actor
 
 from vllm.utils import is_pin_memory_available
 from vllm.worker.worker import Worker
@@ -95,7 +96,7 @@ class MigrationWorker(Worker):
     def init_migration(self,
                        instance_id: str,
                        migration_config: MigrationConfig,
-                       src_worker_handle_list: List["ray.actor.ActorHandle"],
+                       src_worker_handle_list: List[ray.actor.ActorHandle],
                        placement_group: PlacementGroup) -> None:
         # for proxy actor
         scheduling_strategy = PlacementGroupSchedulingStrategy(
@@ -128,7 +129,7 @@ class MigrationWorker(Worker):
                                                                              worker_stage_seq_group_metadata_callback=self._stage_seq_group_metadata)
 
     def migrate_cache(self,
-                      src_worker_handle_list: List["ray.actor.ActorHandle"],
+                      src_worker_handle_list: List[ray.actor.ActorHandle],
                       src_blocks: List[int],
                       dst_blocks: List[int],
                       request_id: str,

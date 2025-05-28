@@ -24,6 +24,7 @@ import queue
 import os
 
 import ray
+import ray.actor
 import grpc
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -710,7 +711,7 @@ class BackendBladeLLM(BackendInterface):
         return self.engine.scheduler.free_src_request(backend_request)
 
     async def send_blocks(self,
-                          dst_ray_actor: ray.actor.ActorHandle,
+                          dst_llumlet_actor: ray.actor.ActorHandle,
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: int,
@@ -723,7 +724,7 @@ class BackendBladeLLM(BackendInterface):
             dst_blocks=dst_blocks,
         )
         await asyncio_wait_for_with_timeout(
-            dst_ray_actor.execute_engine_method_async.remote(
+            dst_llumlet_actor.execute_engine_method_async.remote(
                 "_run_workers", "migrate_cache", request
             )
         )

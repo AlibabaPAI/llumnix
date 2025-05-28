@@ -124,7 +124,7 @@ class Manager:
         self.servers: Dict[str, APIServerActor] = None
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
             self.servers = {}
-        self.instance_migrating: Dict[str, bool] = {}
+        self.all_instances_not_migrating = True
         self.pending_rebuild_migration_instances = 0
 
         # migration states
@@ -249,6 +249,7 @@ class Manager:
             if self.num_instance_info_updates % 1000 == 0:
                 logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
             self.num_instance_info_updates += 1
+            self._update_all_instances_not_migrating(instance_infos)
             # Push migrate when the instance_info have updated a certain number of times.
             if self.enable_migration and self.num_instance_info_updates != 0 \
                 and self.num_instance_info_updates % self.pair_migration_frequency == 0:
@@ -266,10 +267,6 @@ class Manager:
     async def _migrate(self, pair_migration_type: PairMigrationConstraints) -> None:
         # TODO(s5u13b): Remove the migration done callback through decentralized migration refactoring.
         async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
-            if migrate_instance_pair[0] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[0]] = False
-            if migrate_instance_pair[1] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[1]] = False
             if isinstance(ret, Exception):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):
@@ -311,10 +308,6 @@ class Manager:
             migration_tasks = []
             for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
                 src_instance_id, dst_instance_id = migrate_instance_pair
-                if self.instance_migrating[src_instance_id] or self.instance_migrating[dst_instance_id]:
-                    continue
-                self.instance_migrating[src_instance_id] = True
-                self.instance_migrating[dst_instance_id] = True
                 dst_instance_actor_handle = self.instances[dst_instance_id]
                 task = asyncio.gather(
                     asyncio_wait_for_with_timeout(
@@ -384,7 +377,6 @@ class Manager:
                 self.pgs[ins_id] = placement_groups[idx]
                 if self.servers is not None and servers is not None:
                     self.servers[ins_id] = servers[idx]
-                self.instance_migrating[ins_id] = False
                 if self.log_instance_info:
                     self.instance_last_logged_empty[ins_id] = False
                 self.pending_rebuild_migration_instances += 1
@@ -431,10 +423,6 @@ class Manager:
                             logger.warning("instance {} is not in servers".format(ins_id))
                 else:
                     logger.warning("instance {} is not in instances".format(ins_id))
-                if ins_id in self.instance_migrating:
-                    del self.instance_migrating[ins_id]
-                else:
-                    logger.warning("instance {} is not in instance_migrating".format(ins_id))
                 if self.log_instance_info:
                     if ins_id in self.instance_last_logged_empty:
                         del self.instance_last_logged_empty[ins_id]
@@ -474,13 +462,13 @@ class Manager:
         return prefill_instance_id_set, decode_instance_id_set
 
     async def _rebuild_migration_backend(self) -> None:
-        # Wait for all instances to finish migration
-        while any(self.instance_migrating.values()):
-            await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
-
         # During rebuilding migration backend, disable migration.
         origin_config = self.enable_migration
         self.enable_migration = False
+
+        # Wait for all instances to finish migration
+        while not self.all_instances_not_migrating:
+            await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
 
         async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):
             tasks = []
@@ -535,8 +523,8 @@ class Manager:
             self.pending_rebuild_migration_instances = 0
             group_name = None
 
-        migration_filter: CustomFilter = self.global_scheduler.migration_scheduler \
-            .migration_filter.get_filter("migration_backend_init_filter")
+        migration_filter: CustomFilter = \
+            self.global_scheduler.migration_scheduler.migration_filter.get_filter("migration_backend_init_filter")
         migration_filter.set_filter_condtition(
             src_filter=lambda instance_info: instance_info.instance_id in alive_instances,
             dst_filter=lambda instance_info: instance_info.instance_id in alive_instances,
@@ -548,8 +536,15 @@ class Manager:
         # Restore migrate config
         self.enable_migration = origin_config
 
+    def _update_all_instances_not_migrating(self, instance_infos: List[InstanceInfo]) -> None:
+        instance_migrating: Dict[str, bool] = {ins_info.instance_id: ins_info.migrating for ins_info in instance_infos}
+        self.all_instances_not_migrating = all(
+            instance_id in instance_migrating and instance_migrating[instance_id]
+                for instance_id in self.instances
+        )
+
     async def _connect_to_instances(self):
-        def connect_to_instance_done_callback(instance_id: str, instance_actor_handle: "ray.actor.ActorHandle", fut):
+        def connect_to_instance_done_callback(instance_id: str, instance_actor_handle: Llumlet, fut):
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
                 try:

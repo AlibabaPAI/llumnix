@@ -270,7 +270,7 @@ class BackendInterface(ABC):
 
     @abstractmethod
     async def send_blocks(self,
-                          dst_ray_actor: ray.actor.ActorHandle,
+                          dst_llumlet_actor: ray.actor.ActorHandle,
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: RequestIDType,
@@ -283,9 +283,9 @@ class BackendInterface(ABC):
         the destination instance, where they are mapped according to the destination block table.
 
         Args:
-            dst_ray_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
-                           to be sent. This handle is used to reference the destination's execution context and manage
-                           the block transfer.
+            dst_llumlet_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
+                       to be sent. This handle is used to reference the destination's execution context and manage
+                       the block transfer.
             src_blocks: A list of integers representing the block indexs in the source instance's cache that need to be
                         sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's cache where the

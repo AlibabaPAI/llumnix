@@ -22,6 +22,7 @@ import gc
 import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+import ray.actor
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
@@ -44,7 +45,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import make_async, ray_get_with_timeout
-from llumnix.ray_utils import get_instance_name
+from llumnix.ray_utils import get_instance_name, asyncio_wait_for_with_timeout
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_REMOTE_CALL_TIMEOUT
@@ -448,18 +449,22 @@ class BackendVLLM(BackendInterface):
             self.add_waiting_request(backend_request)
 
     async def send_blocks(self,
-                          dst_ray_actor: "ray.actor.ActorHandle",
+                          dst_llumlet_actor: ray.actor.ActorHandle,
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: str,
                           is_last_stage: bool) -> None:
-        await dst_ray_actor.execute_engine_method_async.remote("_run_workers_async",
-                                                               "migrate_cache",
-                                                               src_worker_handle_list=self.worker_handle_list,
-                                                               dst_blocks=dst_blocks,
-                                                               src_blocks=src_blocks,
-                                                               request_id=request_id,
-                                                               is_last_stage=is_last_stage)
+        await asyncio_wait_for_with_timeout(
+            dst_llumlet_actor.execute_engine_method_async.remote(
+                "_run_workers_async",
+                "migrate_cache",
+                src_worker_handle_list=self.worker_handle_list,
+                dst_blocks=dst_blocks,
+                src_blocks=src_blocks,
+                request_id=request_id,
+                is_last_stage=is_last_stage
+            )
+        )
 
     def _run_workers(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
         # pylint: disable=protected-access

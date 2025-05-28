@@ -51,6 +51,7 @@ class Llumlet:
         self.instance_id = instance_id
         logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, llumnix_engine_args.backend_type))
         self.instance_args: InstanceArgs = instance_args
+        self.enable_migration = instance_args.enable_migration
         self.actor_name = get_instance_name(instance_id)
         self.instance_load_calculator = InstanceLoadCalculator(
             dispatch_load_metric=instance_args.dispatch_load_metric,
@@ -64,7 +65,7 @@ class Llumlet:
                                                                     llumnix_engine_args)
         asyncio.create_task(self._check_engine_state_loop())
 
-        if self.instance_args.enable_migration:
+        if self.enable_migration:
             self.migrating = False
             self.migration_coordinator = MigrationCoordinator(self.backend_engine,
                                                               llumnix_engine_args.backend_type,
@@ -213,7 +214,8 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         instance_info: InstanceInfo = self.backend_engine.engine.instance_info
         instance_info.instance_type = self.instance_args.instance_type
-        instance_info.migrating = self.migrating
+        if self.enable_migration:
+            instance_info.migrating = self.migrating
         self.instance_load_calculator.compute_instance_load(instance_info)
         return instance_info
 

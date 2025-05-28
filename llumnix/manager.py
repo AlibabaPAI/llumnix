@@ -15,7 +15,7 @@ import asyncio
 import time
 import csv
 import os
-from typing import Dict, List, Tuple, Union, Iterable
+from typing import Dict, List, Tuple, Union, Iterable, Optional
 from functools import partial
 
 import ray
@@ -537,9 +537,9 @@ class Manager:
         self.enable_migration = origin_config
 
     def _update_all_instances_not_migrating(self, instance_infos: List[InstanceInfo]) -> None:
-        instance_migrating: Dict[str, bool] = {ins_info.instance_id: ins_info.migrating for ins_info in instance_infos}
-        self.all_instances_not_migrating = all(
-            instance_id in instance_migrating and instance_migrating[instance_id]
+        instance_migrating: Dict[str, Optional[bool]] = {ins_info.instance_id: ins_info.migrating for ins_info in instance_infos}
+        self.all_instances_not_migrating = not any(
+            instance_id not in instance_migrating or instance_migrating[instance_id]
                 for instance_id in self.instances
         )
 

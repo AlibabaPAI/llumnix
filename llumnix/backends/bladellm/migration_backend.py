@@ -103,10 +103,10 @@ class WorkerRequestSyncGroup:
 
 
 class GrpcMigrationBackend(MigrationBackendBase):
-    def __init__(self, rank: int, migration_config: MigrationConfig,
+    def __init__(self, migration_config: MigrationConfig,
                  request_sync_group: WorkerRequestSyncGroup, state_manager: StateManagerBase):
         self.request_sync_group: WorkerRequestSyncGroup = request_sync_group
-        self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_backend_server_port[rank])
+        self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_server_port)
         self.state_manager = state_manager
         self.num_migration_buffer_blocks = migration_config.migration_buffer_blocks
 
@@ -320,7 +320,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
         nic_affinity.generate()
         self.instance_id = instance_id
         self.worker_id = worker_id
-        self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_backend_server_port[rank])
+        self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_server_port)
         self.serving_args = serving_args
         self.state_manager = state_manager
         self.request_sync_group = request_sync_group
@@ -458,7 +458,7 @@ def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration
     target_migration_backend = None
     backend = migration_config.migration_backend
     if backend == 'grpc':
-        target_migration_backend = GrpcMigrationBackend(rank, migration_config, request_sync_group, state_manager)
+        target_migration_backend = GrpcMigrationBackend(migration_config, request_sync_group, state_manager)
     else:
         target_migration_backend = KvTransferMigrationBackend(rank, instance_id, worker_id, migration_config,
                                                               request_sync_group, base_worker, serving_args,

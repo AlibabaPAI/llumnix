@@ -19,6 +19,7 @@ import time
 from typing import List
 import gc
 
+import ray
 import grpc
 import torch
 from google.protobuf import empty_pb2
@@ -34,7 +35,7 @@ from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH
-from llumnix.utils import get_ip_address, convert_bytes
+from llumnix.utils import get_ip_address, convert_bytes, get_free_port, get_llumnix_env_vars
 
 logger = init_logger(__name__)
 
@@ -64,8 +65,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             migration_config.migration_buffer_blocks = grpc_limit_migration_num_blocks
         self.migration_backend = get_migration_backend(instance_id, rank, rank, migration_config,
                                                        request_sync_group, base_worker, state_manager, args)
-        self.migration_grpc_ip_addr = get_ip_address() + ":" + \
-            str(self.migration_config.grpc_migration_backend_server_port[self.rank])
+        self.migration_grpc_ip_addr = get_ip_address() + ":" + str(self.migration_config.grpc_migration_server_port)
 
         asyncio.create_task(self._launch_grpc_service())
 
@@ -128,18 +128,28 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
 
 # TODO(s5u13b): Adapt to RemoteWorker.
 class MigrationLocalWorker(LocalWorker, MigrationWorker):
-    def __init__(self, rank: int, serving_args: ServingArgs,
-                 instance_id: str, migration_config: MigrationConfig,) -> None:
+    def __init__(self, rank: int, serving_args: ServingArgs, instance_id: str,
+                 migration_config: MigrationConfig, worker_ray_name: str) -> None:
         LocalWorker.__init__(self, rank, serving_args)
-
         self.enable_migration = migration_config.enable_migration
         if self.enable_migration:
+            self.worker_ray_name = worker_ray_name
+            migration_config.grpc_migration_server_port = get_free_port()
+            logger.info("MigrationLocalWorker is going to use port {} for grpc migration service.".format(
+                migration_config.grpc_migration_server_port))
             self.request_sync_group = WorkerRequestSyncGroup(self._engine._state_manager._request_groups,
                                                                 self._req_tracker)
             MigrationWorker.__init__(self, self._engine._state_manager, instance_id, migration_config,
                                         self.request_sync_group, self, rank, serving_args)
+            self.report_grpc_migration_server_port(migration_config.grpc_migration_server_port)
         else:
             logger.info("Migration is disabled, skip migration initialization.")
+
+    def report_grpc_migration_server_port(self, port: int) -> None:
+        ray.init(address='auto', ignore_reinit_error=True, namespace="llumnix", log_to_driver=False,
+                 runtime_env={"env_vars": get_llumnix_env_vars()})
+        worker_actor = ray.get_actor(self.worker_ray_name, namespace="llumnix")
+        ray.get(worker_actor.set_worker_port.remote(port))
 
     # used for wait_worker_ready
     async def info(self, req: empty_pb2.Empty) -> str:

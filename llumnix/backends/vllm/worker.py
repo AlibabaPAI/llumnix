@@ -128,17 +128,17 @@ class MigrationWorker(Worker):
                                                                              use_ray_spmd_worker=self.use_ray_spmd_worker,
                                                                              worker_stage_seq_group_metadata_callback=self._stage_seq_group_metadata)
 
-    def migrate_cache(self,
-                      src_worker_handle_list: List[ray.actor.ActorHandle],
-                      src_blocks: List[int],
-                      dst_blocks: List[int],
-                      request_id: str,
-                      is_last_stage: bool = False) -> None:
+    def recv_cache(self,
+                   src_worker_handle_list: List[ray.actor.ActorHandle],
+                   src_blocks: List[int],
+                   dst_blocks: List[int],
+                   request_id: str,
+                   is_last_stage: bool = False) -> None:
         src_worker_handle = src_worker_handle_list[self.rank]
 
         start_time = time.time()
         try:
-            self.migration_backend.migrate_cache(src_worker_handle, src_blocks, dst_blocks, request_id, is_last_stage)
+            self.migration_backend.recv_cache(src_worker_handle, src_blocks, dst_blocks, request_id, is_last_stage)
         # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
         except ray.exceptions.RayActorError:
             logger.info("Failed to migrate cache, rank: {}, src worker {} is dead.".format(self.rank, src_worker_handle))
@@ -184,7 +184,7 @@ class MigrationWorker(Worker):
         self.migrating_out_seq_group_metadata[request_id] = seq_group_metadata
 
     def pop_migrating_out_seq_group_metadata(self, request_id: str) -> bool:
-        # If pop during last stage pre_alloc, the request id does not exist in the self.migrating_out_seq_group_metadata.
+        # If pop during last stage pre_alloc_cache, the request id does not exist in the self.migrating_out_seq_group_metadata.
         # If pop after migration finished, the request id does exist in the self.migrating_out_seq_group_metadata.
         seq_group_metadata = self.migrating_out_seq_group_metadata.pop(request_id, None)
         return seq_group_metadata is not None

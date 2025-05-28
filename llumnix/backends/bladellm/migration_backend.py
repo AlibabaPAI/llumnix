@@ -41,7 +41,7 @@ from llumnix.utils import get_ip_address
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
-from llumnix.backends.bladellm.proto.migration_worker_pb2 import WorkerInfo, MigrateCacheRequest
+from llumnix.backends.bladellm.proto.migration_worker_pb2 import WorkerInfo, RecvCacheRequest
 from llumnix.logging.logger import init_logger
 from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH, NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION
 
@@ -178,8 +178,8 @@ class GrpcMigrationBackend(MigrationBackendBase):
 
     def warmup(self) -> bool:
         self.state_manager.add_new_request(self._create_dummy_worker_request())
-        self.migrate_cache(
-            MigrateCacheRequest(
+        self.recv_cache(
+            RecvCacheRequest(
                 src_handlers=[WorkerInfo(ip_address=self.worker_migration_ip_addr)],
                 request_id=0,
                 is_last_stage=True,
@@ -193,7 +193,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
         return True
 
     # pylint: disable=arguments-differ
-    def migrate_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+    def recv_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         ip_address = src_worker_handle.src_handlers[self.state_manager.rank].ip_address
         src_blocks = src_worker_handle.src_blocks
         dst_blocks = src_worker_handle.dst_blocks
@@ -204,7 +204,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 offset = min(self.num_migration_buffer_blocks, tot_blocks - start_idx)
                 cur_src_blocks = src_blocks[start_idx:start_idx+offset]
                 cur_dst_blocks = dst_blocks[start_idx:start_idx+offset]
-                response = stub.do_send(migration_worker_pb2.SendKvCacheRequest(
+                response = stub.do_send(migration_worker_pb2.SendKVCacheRequest(
                     request_id=src_worker_handle.request_id,
                     src_blocks=cur_src_blocks,
                     is_last_stage=(src_worker_handle.is_last_stage and start_idx+offset==tot_blocks)))
@@ -374,12 +374,12 @@ class KvTransferMigrationBackend(MigrationBackendBase):
     def warmup(self) -> bool:
         # CUDA_IPC does not support communication with itself, used only for RDMA_DIRECT warmup
         if self.tranfer_type == KVTransferProtocolType.RDMA_DIRECT:
-            self.migrate_cache(WorkerInfo(ip_address=self.worker_migration_ip_addr, instance_id=self.instance_id,
+            self.recv_cache(WorkerInfo(ip_address=self.worker_migration_ip_addr, instance_id=self.instance_id,
                 worker_id=self.worker_id), [0], [1])
         return True
 
     # pylint: disable=arguments-differ
-    def migrate_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
+    def recv_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
         ip_address = src_worker_handle.src_handlers[self.state_manager.rank].ip_address
         kv_transfer_instance_id = src_worker_handle.src_handlers[self.state_manager.rank].kv_transfer_instance_id
         worker_id = src_worker_handle.src_handlers[self.state_manager.rank].worker_id
@@ -387,7 +387,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
             self.server_kv.submit_req_recv(kv_transfer_instance_id, worker_id, str(src_worker_handle.request_id), dst_blocks)
             # Note: dst_instance_id must be set to kv_transfer_instance_id, not instance_id
-            response = stub.do_send(migration_worker_pb2.SendKvCacheRequest(
+            response = stub.do_send(migration_worker_pb2.SendKVCacheRequest(
                 request_id=src_worker_handle.request_id,
                 dst_kv_transfer_instance_id=self.kv_transfer_instance_id,
                 dst_worker_id=self.worker_id,

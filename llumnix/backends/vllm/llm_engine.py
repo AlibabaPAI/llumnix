@@ -448,16 +448,16 @@ class BackendVLLM(BackendInterface):
         else: # WAITING_MIGRATING:
             self.add_waiting_request(backend_request)
 
-    async def send_blocks(self,
-                          dst_llumlet_actor: ray.actor.ActorHandle,
-                          src_blocks: List[int],
-                          dst_blocks: List[int],
-                          request_id: str,
-                          is_last_stage: bool) -> None:
+    async def send_cache(self,
+                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         src_blocks: List[int],
+                         dst_blocks: List[int],
+                         request_id: str,
+                         is_last_stage: bool) -> None:
         await asyncio_wait_for_with_timeout(
             dst_llumlet_actor.execute_engine_method_async.remote(
                 "_run_workers_async",
-                "migrate_cache",
+                "recv_cache",
                 src_worker_handle_list=self.worker_handle_list,
                 dst_blocks=dst_blocks,
                 src_blocks=src_blocks,
@@ -532,8 +532,8 @@ class BackendVLLM(BackendInterface):
             asyncio.create_task(self._run_workers_async("restore_migrating_out_seq_group_metadata"))
         return migrating_out_requests_last_stage
 
-    def pre_alloc(self, *args, **kwargs) -> List[int]:
-        return self.engine.scheduler[0].pre_alloc(*args, **kwargs)
+    def pre_alloc_cache(self, *args, **kwargs) -> List[int]:
+        return self.engine.scheduler[0].pre_alloc_cache(*args, **kwargs)
 
     def should_abort_migration(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].should_abort_migration(*args, **kwargs)
@@ -547,13 +547,13 @@ class BackendVLLM(BackendInterface):
     def is_request_running(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].is_request_running(*args, **kwargs)
 
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
-        # request is None when free_dst_pre_alloc_cache is called by clear_migration_states.
+    def free_pre_alloc_cache(self, request_id: str = None) -> None:
+        # request is None when free_pre_alloc_cache is called by clear_migration_states.
         # TODO(s5u13b): Only needed when migrating running request.
         if request_id is None and self.use_ray_spmd_worker:
             # pylint: disable=protected-access
             asyncio.create_task(self._run_workers_async("free_migrating_in_seq_group_metadata"))
-        return self.engine.scheduler[0].free_dst_pre_alloc_cache(request_id)
+        return self.engine.scheduler[0].free_pre_alloc_cache(request_id)
 
     def free_src_request(self, backend_request: SequenceGroup) -> None:
         return self.engine.scheduler[0].free_src_request(backend_request)

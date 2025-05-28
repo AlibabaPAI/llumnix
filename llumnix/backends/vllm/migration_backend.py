@@ -126,12 +126,12 @@ class RayRpcMigrationBackend(MigrationBackendBase):
     # The src actor will pack the kv-cache data layer by layer. Specifically, NumPy is used for the transfer
     # because, for a single node, Ray RPC can transfer NumPy arrays via shared memory. Then, the recv actor
     # first copies the data to a pinned-memory dummy cache before transferring it to the GPU to accelerate data transfer.
-    def migrate_cache(self,
-                      src_worker_handle: ray.actor.ActorHandle,
-                      src_blocks: List[int],
-                      dst_blocks: List[int],
-                      request_id: str,
-                      is_last_stage: bool) -> None:
+    def recv_cache(self,
+                   src_worker_handle: ray.actor.ActorHandle,
+                   src_blocks: List[int],
+                   dst_blocks: List[int],
+                   request_id: str,
+                   is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
         src_seq_group_metadata = None
@@ -330,12 +330,12 @@ class RayColMigrationBackend(MigrationBackendBase):
 
     # Ray.collective is used to construct the gloo and nccl backends. The do_send/do_recv functions will transmit
     # data layer by layer. Take into consideration that col.send/recv are blocking operations.
-    def migrate_cache(self,
-                      src_worker_handle: ray.actor.ActorHandle,
-                      src_blocks: List[int],
-                      dst_blocks: List[int],
-                      request_id: str,
-                      is_last_stage: bool) -> None:
+    def recv_cache(self,
+                   src_worker_handle: ray.actor.ActorHandle,
+                   src_blocks: List[int],
+                   dst_blocks: List[int],
+                   request_id: str,
+                   is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         src_rank = ray_get_with_timeout(self.proxy_actor.exec_method.remote(src_worker_handle, "get_global_rank"))
 

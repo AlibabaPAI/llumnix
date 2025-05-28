@@ -33,12 +33,12 @@ class MigrationBackendBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def migrate_cache(self,
-                      src_worker_handle: ray.actor.ActorHandle,
-                      src_blocks: List[int],
-                      dst_blocks: List[int],
-                      request_id: RequestIDType,
-                      is_last_stage: bool) -> None:
+    def recv_cache(self,
+                   src_worker_handle: ray.actor.ActorHandle,
+                   src_blocks: List[int],
+                   dst_blocks: List[int],
+                   request_id: RequestIDType,
+                   is_last_stage: bool) -> None:
         raise NotImplementedError
 
     @abstractmethod

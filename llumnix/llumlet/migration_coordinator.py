@@ -67,7 +67,7 @@ class MigrationCoordinator:
         self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
         dst_blocks = await asyncio_wait_for_with_timeout(
             migrate_in_actor.execute_migration_method.remote(
-                "migrate_in_pre_alloc",
+                "pre_alloc_cache",
                 migrate_out_request.request_id,
                 migrate_out_request.status,
                 migrate_out_request.request_arrival_time,
@@ -124,7 +124,7 @@ class MigrationCoordinator:
             stage_block_num = len(incremental_blocks) - 1
             dst_blocks = await asyncio_wait_for_with_timeout(
                 migrate_in_actor.execute_migration_method.remote(
-                    "migrate_in_pre_alloc",
+                    "pre_alloc_cache",
                     migrate_out_request.request_id,
                     migrate_out_request.status,
                     migrate_out_request.request_arrival_time,
@@ -144,7 +144,7 @@ class MigrationCoordinator:
             stage_block_num = len(incremental_blocks)
             dst_blocks = await asyncio_wait_for_with_timeout(
                 migrate_in_actor.execute_migration_method.remote(
-                    "migrate_in_pre_alloc",
+                    "pre_alloc_cache",
                     migrate_out_request.request_id,
                     migrate_out_request.status,
                     migrate_out_request.request_arrival_time,
@@ -166,8 +166,8 @@ class MigrationCoordinator:
         # do stage send/recv
         migrate_out_request.stage_timestamps.append(time.time())
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)
-        # TODO(ZeldaHuang): send_blocks in migrate_in_pre_alloc/migrate_in_last_stage
-        await self.backend_engine.send_blocks(migrate_in_actor, src_blocks, dst_blocks, migrate_out_request.request_id, is_last_stage)
+        # TODO(ZeldaHuang): send_cache in pre_alloc_cache/migrate_in_last_stage
+        await self.backend_engine.send_cache(migrate_in_actor, src_blocks, dst_blocks, migrate_out_request.request_id, is_last_stage)
 
         if not is_last_stage and migrate_out_request.should_abort_migration():
             # migrate-out request abort by scheduler during send/recv
@@ -175,23 +175,24 @@ class MigrationCoordinator:
 
         return migration_status
 
-    def migrate_in_pre_alloc(self,
-                             request_id: RequestIDType,
-                             request_status: RequestStatus,
-                             request_arrival_time: float,
-                             block_num: int,
-                             token_ids: List[int]) -> List[int]:
-        """prev alloc blocks to migrate in request
+    def pre_alloc_cache(self,
+                        request_id: RequestIDType,
+                        request_status: RequestStatus,
+                        request_arrival_time: float,
+                        block_num: int,
+                        token_ids: List[int]) -> List[int]:
         """
-        pre_alloc_blocks = self.backend_engine.pre_alloc(request_id,
-                                                         request_status,
-                                                         request_arrival_time,
-                                                         block_num,
-                                                         token_ids)
+            Pre-allocate blocks for migrate in request.
+        """
+        pre_alloc_blocks = self.backend_engine.pre_alloc_cache(request_id,
+                                                               request_status,
+                                                               request_arrival_time,
+                                                               block_num,
+                                                               token_ids)
         if len(pre_alloc_blocks) != block_num:
             # failed to alloc, abort request
-            self.free_dst_pre_alloc_cache(request_id)
+            self.free_pre_alloc_cache(request_id)
         return pre_alloc_blocks
 
-    def free_dst_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
-        self.backend_engine.free_dst_pre_alloc_cache(request_id)
+    def free_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
+        self.backend_engine.free_pre_alloc_cache(request_id)

@@ -134,12 +134,12 @@ class SchedulerLlumnix(Scheduler):
         self.migrating_out_request_last_stage.clear()
         return migrating_out_requests_last_stage
 
-    def pre_alloc(self,
-                  request_id: str,
-                  request_status: RequestStatus,
-                  request_arrival_time: float,
-                  block_num: int,
-                  token_ids: List[int]) -> List[int]:
+    def pre_alloc_cache(self,
+                        request_id: str,
+                        request_status: RequestStatus,
+                        request_arrival_time: float,
+                        block_num: int,
+                        token_ids: List[int]) -> List[int]:
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
@@ -189,7 +189,7 @@ class SchedulerLlumnix(Scheduler):
         for seq in seq_group.get_seqs(status=status_from):
             seq.status = status_to
 
-    def free_dst_pre_alloc_cache(self, request_id: str = None) -> None:
+    def free_pre_alloc_cache(self, request_id: str = None) -> None:
         if request_id:
             logger.info("free request {} pre_alloc_cache".format(request_id))
             block_table = self.pre_alloc_cache_dict.pop(request_id, None)

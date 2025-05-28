@@ -192,11 +192,11 @@ class Llumlet:
         else: # ABORTED_SRC or ABORTED_DST
             migrate_out_request.reset_migration_args_src()
             migrate_out_request.reset_status()
-            # If src aborts itself, dst should free the pre allocated cache in migrate_in_pre_alloc.
+            # If src aborts itself, dst should free the pre allocated cache in pre_alloc_cache.
             if status == MigrationStatus.ABORTED_SRC:
                 await asyncio_wait_for_with_timeout(
                     dst_instance_actor_handle.execute_migration_method.remote(
-                        "free_dst_pre_alloc_cache", migrate_out_request.request_id
+                        "free_pre_alloc_cache", migrate_out_request.request_id
                     )
                 )
 
@@ -241,8 +241,8 @@ class Llumlet:
         logger.info("Instance {} clear_migration_states, is_migrate_in: {}".format(self.instance_id, is_migrate_in))
         if is_migrate_in:
             # If migrate out instance dies during migration, migrate in instance directly free the pre-allocated cache of the migrating in request.
-            logger.info("clear_migration_states: free_dst_pre_alloc_cache")
-            self.backend_engine.free_dst_pre_alloc_cache()
+            logger.info("clear_migration_states: free_pre_alloc_cache")
+            self.backend_engine.free_pre_alloc_cache()
         else:
             # If migrate in instance dies during migration, migrate out instance should add the migrating out request in last stage.
             # back to the running request queue.

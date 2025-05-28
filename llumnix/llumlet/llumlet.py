@@ -139,6 +139,7 @@ class Llumlet:
             migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
 
             if len(migrate_out_requests) == 0:
+                self.migrating = False
                 return []
 
             for migrate_out_request in migrate_out_requests:
@@ -159,6 +160,7 @@ class Llumlet:
         except Exception as e:
             logger.exception("Failed to migrate out, unexpected exception: {}".format(e))
             raise
+
         self.migrating = False
 
         return migrated_request_list

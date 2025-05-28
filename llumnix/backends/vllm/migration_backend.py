@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Tuple, Optional, Callable
+from typing import List, Tuple, Optional, Callable, Any
 
 import torch
 from func_timeout import func_set_timeout
@@ -38,7 +38,7 @@ class ProxyActor:
         self.is_driver_worker = is_driver_worker
         self.use_ray_spmd_worker = use_ray_spmd_worker
 
-    def exec_method(self, handle, *args, **kwargs):
+    def exec_method(self, handle, *args, **kwargs) -> Any:
         if self.is_driver_worker and not self.use_ray_spmd_worker:
             ret = ray_get_with_timeout(
                 handle.execute_engine_method_async.remote(
@@ -161,7 +161,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         if src_seq_group_metadata:
             self.worker_stage_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 
-    def do_send(self, dst_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0):
+    def do_send(self, dst_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.num_layers, 2, num_blocks, self.migration_cache_size)
         # src_to_dst = {block_num: idx for idx, block_num in enumerate(blocks)}
@@ -179,7 +179,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         return send_cache.to(self.rpc_dtype).numpy()
 
     # pylint: disable=arguments-differ
-    def do_recv(self, src_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0):
+    def do_recv(self, src_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         # src_to_dst = dict(enumerate(blocks))
         src_to_dst: List[Tuple[int, int]] = []
@@ -360,7 +360,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         if src_seq_group_metadata:
             self.worker_stage_seq_group_metadata_callback(request_id, src_seq_group_metadata)
 
-    def do_send(self, dst_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0):
+    def do_send(self, dst_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         send_cache = self.dummy_cache[:num_blocks].view(self.migration_num_layers, 2, num_blocks, self.migration_cache_size)
         src_to_dst: List[Tuple[int, int]] = []
@@ -379,7 +379,7 @@ class RayColMigrationBackend(MigrationBackendBase):
                     col.send(send_cache, dst_worker_handle, self.group_name)
         self.migration_stream.synchronize()
 
-    def do_recv(self, src_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0):
+    def do_recv(self, src_worker_handle: ray.actor.ActorHandle, blocks: List[int], virtuel_engine: int=0) -> None:
         num_blocks = len(blocks)
         src_to_dst: List[Tuple[int, int]] = []
         for idx in range(num_blocks):

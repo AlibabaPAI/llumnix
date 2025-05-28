@@ -15,7 +15,7 @@
 
 import threading
 import time
-from typing import List
+from typing import List, Tuple
 
 import pickle
 import torch
@@ -103,8 +103,10 @@ class WorkerRequestSyncGroup:
 
 
 class GrpcMigrationBackend(MigrationBackendBase):
-    def __init__(self, migration_config: MigrationConfig,
-                 request_sync_group: WorkerRequestSyncGroup, state_manager: StateManagerBase):
+    def __init__(self,
+                 migration_config: MigrationConfig,
+                 request_sync_group: WorkerRequestSyncGroup,
+                 state_manager: StateManagerBase):
         self.request_sync_group: WorkerRequestSyncGroup = request_sync_group
         self.worker_migration_ip_addr = get_ip_address() + ":" + str(migration_config.grpc_migration_server_port)
         self.state_manager = state_manager
@@ -266,7 +268,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
         return response
 
     # pylint: disable=unused-argument,arguments-differ
-    def do_recv(self, src_worker_handle, blocks: List[int]):
+    def do_recv(self, src_worker_handle, blocks: List[int]) -> None:
         # use pin memory dummy_cache to speed up data transfer
         num_blocks = len(blocks)
         if isinstance(self.state_manager, PagedStateManager):
@@ -301,7 +303,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
                 detoken_params=DetokenParams(cat_prompt=True),)
 
 
-def get_kv_tranfer_context(statemanager: RaggedFlashStateManager):
+def get_kv_tranfer_context(statemanager: RaggedFlashStateManager) -> Tuple[int, int]:
     assert isinstance(statemanager, RaggedFlashStateManager)
     kv_tranfer_unit = (
         statemanager.model_conf.num_attention_heads // statemanager.attn_head_tp_size
@@ -314,8 +316,14 @@ def get_kv_tranfer_context(statemanager: RaggedFlashStateManager):
 
 
 class KvTransferMigrationBackend(MigrationBackendBase):
-    def __init__(self, rank: int, instance_id: str, worker_id: int, migration_config: MigrationConfig,
-                 request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker, serving_args: ServingArgs,
+    def __init__(self,
+                 rank: int,
+                 instance_id: str,
+                 worker_id: int,
+                 migration_config: MigrationConfig,
+                 request_sync_group: WorkerRequestSyncGroup,
+                 base_worker: BaseWorker,
+                 serving_args: ServingArgs,
                  state_manager: StateManagerBase):
         nic_affinity.generate()
         self.instance_id = instance_id
@@ -343,12 +351,12 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             self.kv_transfer_instance_id = serving_args.disagg_options.inst_id
         if self.client_kv is None:
             self.client_kv = KVTransferClient(self.kv_transfer_instance_id, serving_args.tensor_parallel_size, worker_id, rank,
-                                        block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
-                                        [self.tranfer_type])
+                                              block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
+                                              [self.tranfer_type])
         if self.server_kv is None:
             self.server_kv = KVTransferServer(self.kv_transfer_instance_id, serving_args.tensor_parallel_size, worker_id, rank,
-                                        block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
-                                        [self.tranfer_type])
+                                              block_bytes, token_bytes, naming_url, self.state_manager._kv_cache,
+                                              [self.tranfer_type])
 
             kvt_info = BaseWorker.info(base_worker, kvt_worker_kind="server").kvt_info
             self._naming_client = connect_naming(self.instance_id, migration_config.kvtransfer_migration_backend_naming_url)
@@ -432,7 +440,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
         pass
 
     def check_recv_done(self, src_instance_id: str, src_worker_id: int, kv_request_id: str,
-                        src_blocks: List[int], dst_blocks: List[int]):
+                        src_blocks: List[int], dst_blocks: List[int]) -> None:
         timeout_threshold_s = 30
         escape_time = 0
         while escape_time < timeout_threshold_s:
@@ -449,9 +457,14 @@ class KvTransferMigrationBackend(MigrationBackendBase):
             self.worker_id, src_blocks, dst_blocks))
 
 
-def get_migration_backend(instance_id: str, worker_id: int, rank: int, migration_config: MigrationConfig,
-                          request_sync_group: WorkerRequestSyncGroup, base_worker: BaseWorker,
-                          state_manager: StateManagerBase, serving_args: ServingArgs) -> MigrationBackendBase:
+def get_migration_backend(instance_id: str,
+                          worker_id: int,
+                          rank: int,
+                          migration_config: MigrationConfig,
+                          request_sync_group: WorkerRequestSyncGroup,
+                          base_worker: BaseWorker,
+                          state_manager: StateManagerBase,
+                          serving_args: ServingArgs) -> MigrationBackendBase:
     assert migration_config.migration_backend in ['grpc', 'kvtransfer'], \
         "Only support grpc and kvtransfer migration backend for BladeLLM."
 

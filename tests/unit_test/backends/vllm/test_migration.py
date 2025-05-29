@@ -41,6 +41,7 @@ from tests.unit_test.queue.utils import request_output_queue_server
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func
 from tests.utils import try_convert_to_local_path
+from tests.unit_test.llumlet.test_migration_coordinator import init_migration_coordinator
 
 from .test_llm_engine import MockEngine
 from .utils import create_dummy_prompt
@@ -114,6 +115,7 @@ class MockLlumlet(Llumlet):
     def __init__(self):
         self.instance_id = "0"
         self.backend_engine = MockBackendVLLM()
+        self.migration_coordinator = init_migration_coordinator(self.backend_engine)
 
 
 @ray.remote
@@ -358,7 +360,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
                 break
         id_rank_map = {"2": 0, "1": 1}
         ray.get([llumlet_2.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
-                    llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
+                 llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
         res = ray.get(llumlet_2.migrate_out.remote("1", llumlet_1))
         assert not res
 
@@ -457,13 +459,13 @@ async def test_clear_migration_states():
     llumlet.backend_engine.pre_alloc_cache("0", RequestStatus.RUNNING, 0.0, 1, range(4))
 
     await llumlet.clear_migration_states(is_migrate_in=True)
-    assert len(llumlet.backend_engine.pre_alloc_cache("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks, range(4*num_gpu_blocks))) == num_gpu_blocks
-    _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.RUNNING)
+    assert len(llumlet.backend_engine.pre_alloc_cache("0", RequestStatus.RUNNING, 0.0, num_gpu_blocks, range(4 * num_gpu_blocks))) == num_gpu_blocks
+    _, seq_group = create_dummy_prompt("0", 7, block_size, SequenceStatus.RUNNING)
     seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
     await llumlet.clear_migration_states(is_migrate_in=False)
     assert len(llumlet.backend_engine.get_running_queue()) == 1
-    _, seq_group = create_dummy_prompt("0",7,block_size,SequenceStatus.WAITING)
+    _, seq_group = create_dummy_prompt("0", 7, block_size, SequenceStatus.WAITING)
     seq_group.set_status(RequestStatus.WAITING_MIGRATING)
     llumlet.backend_engine.add_migrating_out_request_last_stage(seq_group)
     await llumlet.clear_migration_states(is_migrate_in=False)

@@ -406,7 +406,7 @@ class AsyncLLMEngineLlumnixMixin:
         await self._client.drop_request(req_id)
 
     # Only be used in migration method.
-    async def run_workers(self, worker_method: str, *args, **kwargs):
+    async def run_workers_async(self, worker_method: str, *args, **kwargs):
         coros = []
         for stub in self.worker_migration_stubs:
             method = getattr(stub, worker_method)
@@ -632,8 +632,8 @@ class BackendBladeLLM(BackendInterface):
 
     # -------------- migration related method --------------
 
-    async def _run_workers(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
-        return await self.engine.run_workers(*args, timeout=timeout, **kwargs)
+    async def _run_workers_async(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
+        return await self.engine.run_workers_async(*args, timeout=timeout, **kwargs)
 
     def get_running_queue(self):
         return self.engine.scheduler.get_running_queue()
@@ -724,13 +724,11 @@ class BackendBladeLLM(BackendInterface):
             dst_blocks=dst_blocks,
         )
         await asyncio_wait_for_with_timeout(
-            dst_llumlet_actor.execute_engine_method_async.remote(
-                "_run_workers", "recv_cache", request
-            )
+            dst_llumlet_actor.recv_cache.remote(request)
         )
 
     async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
-        assert len(backend_request.paged_reqs) == 1, "currently llumnix doesn't support multi-paged-req migration."
+        assert len(backend_request.paged_reqs) == 1, "Currently llumnix doesn't support multi-paged request migration."
 
         seq = backend_request.paged_reqs[0]
         seq.block_table_id = next(self.engine.scheduler.block_manager.block_table_counter)

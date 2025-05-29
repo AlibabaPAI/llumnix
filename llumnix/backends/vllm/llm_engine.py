@@ -423,7 +423,7 @@ class BackendVLLM(BackendInterface):
         self.engine.stop()
         logger.info("Engine stops, instance_id: {}".format(self.instance_id))
 
-    async def execute_worker_method_async(self, method, *args, **kwargs):
+    async def execute_driver_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
     async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
@@ -455,9 +455,7 @@ class BackendVLLM(BackendInterface):
                          request_id: str,
                          is_last_stage: bool) -> None:
         await asyncio_wait_for_with_timeout(
-            dst_llumlet_actor.execute_engine_method_async.remote(
-                "_run_workers_async",
-                "recv_cache",
+            dst_llumlet_actor.recv_cache.remote(
                 src_worker_handle_list=self.worker_handle_list,
                 dst_blocks=dst_blocks,
                 src_blocks=src_blocks,
@@ -470,9 +468,9 @@ class BackendVLLM(BackendInterface):
         # pylint: disable=protected-access
         return self.engine.model_executor._run_workers(*args, timeout=timeout, **kwargs)
 
-    async def _run_workers_async(self, *args, **kwargs):
+    async def _run_workers_async(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
         # pylint: disable=protected-access
-        return await make_async(self.engine.model_executor._run_workers)(*args, **kwargs)
+        return await make_async(self.engine.model_executor._run_workers)(*args, timeout=timeout, **kwargs)
 
     async def is_ready(self):
         return True

@@ -488,7 +488,7 @@ class Manager:
                 llumlet_handle = self.instances[instance_name]
                 tasks.append(
                     asyncio_wait_for_with_timeout(
-                        llumlet_handle.execute_engine_method.remote("_run_workers", task_name, *args, **kwargs),
+                        llumlet_handle.execute_engine_method_async.remote("_run_workers_async", task_name, *args, **kwargs),
                     )
                 )
             rets = await asyncio.gather(*tasks, return_exceptions=True)

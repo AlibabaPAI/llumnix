@@ -66,8 +66,6 @@ class BladellmEngineArgs(LlumnixEngineArgs):
         assert isinstance(engine_args, ServingArgs)
         revised_args: RevisedArgs = self.revised_args
         if engine_args.disagg_options:
-            if revised_args.disagg_options_token_port_offset:
-                engine_args.disagg_options.token_port += revised_args.disagg_options_token_port_offset
             if revised_args.disagg_options_inst_role:
                 engine_args.disagg_options.inst_role = revised_args.disagg_options_inst_role
             if revised_args.engine_disagg_inst_id:
@@ -81,9 +79,7 @@ class BladellmEngineArgs(LlumnixEngineArgs):
 
 @dataclass
 class RevisedArgs:
-    # TODO: Remove disagg_options_token_port_offset.
     # bladellm engine args need to revised
-    disagg_options_token_port_offset: int = field(default=None)
     disagg_options_inst_role: str = field(default=None)
     engine_disagg_inst_id: str = field(default=None)
 

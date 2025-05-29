@@ -74,6 +74,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             ('grpc.max_send_message_length', GRPC_MAX_MESSAGE_LENGTH),
             ('grpc.max_receive_message_length', GRPC_MAX_MESSAGE_LENGTH),
         ]
+
         self.migration_server = grpc.aio.server(migration_thread_pool=ThreadPoolExecutor(max_workers=2), options=options)
         migration_worker_pb2_grpc.add_MigrationWorkerServicer_to_server(self, self.migration_server)
         self.migration_server.add_insecure_port(self.migration_grpc_ip_addr)

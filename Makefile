@@ -62,9 +62,13 @@ vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctn
 .PHONY: bladellm_test
 bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_test bladellm_migration_test bladellm_service_test bladellm_server_test
 
+.PHONY: bladellm_unit_test
+bladellm_unit_test: check_pytest_installed
+	@pytest -v --ignore=third_party --disable-warnings ./tests/unit_test/**/bladellm/
+
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed
-	@pytest -v --ignore=third_party --ignore=tests/e2e_test --ignore-glob="tests/**/bladellm" --disable-warnings
+	@pytest -v --ignore=third_party --ignore-glob="tests/**/bladellm" --disable-warnings ./tests/unit_test/
 
 .PHONY: vllm_offline_test
 vllm_offline_test:
@@ -97,12 +101,12 @@ bladellm_migration_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_migration.py
 
 .PHONY: vllm_service_test
-vllm_service_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_service.py
+vllm_register_service_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_register_service.py
 
 .PHONY: bladellm_service_test
-bladellm_service_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_service.py
+bladellm_register_service_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_register_service.py
 
 .PHONY: bladellm_server_test
 bladellm_server_test: check_pytest_installed
@@ -155,6 +159,6 @@ check_pytest_installed:
 
 	@python3 -m pip show pytest-timeout > /dev/null 2>&1 || { \
 		echo "pytest-timeout is not installed. Installing pytest-timeout ..."; \
-		python3 -m pip install pytest-timeout; }
+		python3 -m pip install -i https://mirrors.aliyun.com/pypi/simple/ pytest-timeout; }
 
 ###################################### pytest end #######################################

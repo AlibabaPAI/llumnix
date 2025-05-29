@@ -175,12 +175,11 @@ def _get_port_by_pid(pid: int, start: int, end: int) -> int:
     return pid % (end - start) + start
 
 def get_free_port() -> int:
-    # try to find a free port based on pid in each 10000 length segment
-    # to avoid port conflict between multiple processes
+    # try to find a free port based on pid to avoid port conflict between multiple processes
     base_port = os.getpid()
     for i in range(20000, 60000, 500):
         port = _get_port_by_pid(base_port, i, i + 500)
-        if check_free_port(port=port):
+        if check_free_port(port=port) and check_free_port(port=port + 1):
             return port
     # fallback to random port if pid based port in all segments are occupied
     return _bind_and_close_port()

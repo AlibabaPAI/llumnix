@@ -46,7 +46,7 @@ from blade_llm.module.parallel import is_distributed_inference
 from blade_llm.service.communications import AsyncLLMEngineClient
 
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout,
+from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_free_port,
                            wait_port_free, run_coroutine_in_new_thread)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
@@ -444,7 +444,6 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                  serving_args: ServingArgs,
                  *args, **kwargs,
                  ) -> None:
-        setup_dist(serving_args)
         AsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(
             self,
@@ -468,7 +467,6 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
                  serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
-        setup_dist(serving_args)
         PrefillAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(
             self,
@@ -493,7 +491,6 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
                  serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
-        setup_dist(serving_args)
         DecodeAsyncLLMEngine.__init__(self, serving_args, *args, **kwargs)
         AsyncLLMEngineLlumnixMixin.__init__(
             self,
@@ -514,43 +511,55 @@ class BackendBladeLLM(BackendInterface):
                  instance_args: InstanceArgs,
                  llumnix_engine_args: LlumnixEngineArgs
                 ) -> None:
+        self.instance_id = instance_id
+        self.placement_group = placement_group
+        self.request_output_queue_type = request_output_queue_type
+        self.instance_args = instance_args
+        self.migration_config: MigrationConfig = instance_args.create_migration_config()
+        self.llumnix_engine_args = llumnix_engine_args
+        self.src_workers_migration_ip_addr_list = []
+        self.request_barriers: queue.Queue = queue.Queue()
+        self._engine_ready_event = asyncio.Event()
+
+        self._load_and_reconfig_engine_args()
+        engine_cls = self._get_engine_cls()
+        self.engine: AsyncLLMEngineLlumnixMixin = engine_cls(self.instance_id, self.placement_group,
+                            self.request_output_queue_type, self.migration_config,
+                            self.request_barriers, BackendType.BLADELLM, self.engine_args)
+
+        asyncio.create_task(self._start_engine())
+
+    def _load_and_reconfig_engine_args(self):
         self.engine_disagg_inst_id: str = (
-            os.environ.get(instance_args.engine_disagg_inst_id_env_var)
-            if instance_args.engine_disagg_inst_id_env_var
-            else instance_id
+            os.environ.get(self.instance_args.engine_disagg_inst_id_env_var)
+            if self.instance_args.engine_disagg_inst_id_env_var
+            else self.instance_id
         )
-        llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
-        engine_args: ServingArgs = llumnix_engine_args.load_engine_args()
-
-        init_metric(
-            engine_args.serving_metric_options.metric_export_interval_sec,
-            *engine_args.metric_exporters,
-            observability_options=engine_args.serving_observability_options,
-        )
-
-        if engine_args.host not in ("127.0.0.1", "0.0.0.0"):
-            engine_args.host = get_ip_address()
-        self._config_inner_engine_logger(engine_args)
-
-        if master_node_in_distributed_inference():
-            wait_port_free(engine_args.multi_node_hb_port())
+        self.llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
+        self.engine_args: ServingArgs = self.llumnix_engine_args.load_engine_args()
 
         # add instance_id to avoid path conflict when multi-engine running in a single pod
         # use instance_id[:5] to avoid the length of worker_socket_path exceeding the OS limit
         # Note that there is still a small probability that worker_socket_path will be repeated
-        engine_args.worker_socket_path = engine_args.worker_socket_path + "_" + str(instance_id)[:5]
-        self.instance_id = instance_id
-        self.engine_args = engine_args
-        self.migration_config: MigrationConfig = instance_args.create_migration_config()
-        self.src_workers_migration_ip_addr_list = []
+        self.engine_args.worker_socket_path = self.engine_args.worker_socket_path + "_" + \
+            str(self.instance_id)[:5]
 
-        self.request_barriers: queue.Queue = queue.Queue()
-        engine_cls = self._get_engine_cls()
-        self.engine = engine_cls(instance_id, placement_group, request_output_queue_type, self.migration_config,
-                                 self.request_barriers, BackendType.BLADELLM, engine_args)
+        init_metric(
+            self.engine_args.serving_metric_options.metric_export_interval_sec,
+            *self.engine_args.metric_exporters,
+            observability_options=self.engine_args.serving_observability_options,
+        )
+        if self.engine_args.host not in ("127.0.0.1", "0.0.0.0"):
+            self.engine_args.host = get_ip_address()
+        self._config_inner_engine_logger(self.engine_args)
 
-        self._engine_ready_event = asyncio.Event()
-        asyncio.create_task(self._start_engine())
+        if master_node_in_distributed_inference():
+            wait_port_free(self.engine_args.multi_node_hb_port())
+
+        setup_dist(self.engine_args)
+
+        if self.engine_args.enable_disagg:
+            self.engine_args.disagg_options.token_port = get_free_port()
 
     def _config_inner_engine_logger(self, engine_args: ServingArgs):
         loguru_logger.remove()
@@ -571,7 +580,6 @@ class BackendBladeLLM(BackendInterface):
             msg_server = EngineMsgServer(engine=self.engine, args=communication_args)
             await msg_server.async_start(asyncio.get_event_loop(), disable_frontend_multiprocessing=True,
                                          enable_disagg_pd=True)
-
         await self.engine.async_start(asyncio.get_event_loop())
 
         if self.migration_config.enable_migration:

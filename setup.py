@@ -11,18 +11,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import setup, find_packages
 import os
+import subprocess
 from typing import List
 
+from setuptools import setup, find_packages
+from setuptools.command.build_py import build_py
+
 ROOT_DIR = os.path.dirname(__file__)
+
 
 def get_path(*filepath) -> str:
     return os.path.join(ROOT_DIR, 'requirements', *filepath)
 
 def get_requirements(engine: str) -> List[str]:
     """Get Python package dependencies from requirements.txt."""
-    with open(get_path(f"requirements_{engine}.txt")) as f:
+    with open(get_path(f"requirements_{engine}.txt"), encoding="utf-8") as f:
         requirements = f.read().strip().split("\n")
     return requirements
 
@@ -30,6 +34,11 @@ def readme():
     with open('README.md', encoding='utf-8') as f:
         content = f.read()
     return content
+
+class CustomBuildCommand(build_py):
+    def run(self):
+        subprocess.check_call(['make', 'proto'], cwd=ROOT_DIR)
+        super().run()
 
 setup(
     name='llumnix',
@@ -48,10 +57,13 @@ setup(
     },
     platforms=["all"],
     classifiers=[
-          'Programming Language :: Python',
-          'Programming Language :: Python :: 3.9',
-          'Programming Language :: Python :: 3.10',
-          "License :: OSI Approved :: Apache Software License",
-          "Topic :: Scientific/Engineering :: Artificial Intelligence",
-      ],
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        "License :: OSI Approved :: Apache Software License",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    ],
+    cmdclass={
+        'build_py': CustomBuildCommand,
+    }
 )

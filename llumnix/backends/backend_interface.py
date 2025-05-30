@@ -13,13 +13,14 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Iterable, List, Union, Deque, Tuple
+from typing import Iterable, List, Union, Deque, Tuple, Any
 
 import ray.actor
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 from llumnix.utils import RequestIDType
+from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
 
 
 class EngineState(str, Enum):
@@ -54,7 +55,8 @@ class BackendInterface(ABC):
     @abstractmethod
     async def add_request(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int,
                           *args, **kwargs) -> None:
-        """Add a new inference request to the backend.
+        """
+        Add a new inference request to the backend.
 
         This method should capture all necessary metadata of an inference request
         such as request ID, arrival time, and any other related information.
@@ -75,7 +77,8 @@ class BackendInterface(ABC):
 
     @abstractmethod
     async def abort_request(self, request_id: Union[RequestIDType, Iterable[RequestIDType]]) -> None:
-        """Abort one or multiple requests of the backend.
+        """
+        Abort one or multiple requests of the backend.
 
         Args:
             request_id: A request ID or an iterable of request IDs to abort.
@@ -84,7 +87,8 @@ class BackendInterface(ABC):
 
     # Methods for migration
     async def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
-        """Get the incremental blocks and token ids for a given request.
+        """
+        Get the incremental blocks and token ids for a given request.
 
         This method is used to fetch a list of block numbers and a list of token ids that represent the
         incremental data associated with a particular backend request. It is typically called during a
@@ -197,7 +201,8 @@ class BackendInterface(ABC):
                         request_arrival_time: float,
                         block_num: int,
                         token_ids: List[int]) -> List[int]:
-        """Pre-allocate cache blocks for a migrating request.
+        """
+        Pre-allocate cache blocks for a migrating request.
 
         This method selects a specified number of free cache blocks to be reserved for an incoming
         migration request identified by the given request ID. It updates the pre-allocation cache
@@ -245,7 +250,8 @@ class BackendInterface(ABC):
 
     @abstractmethod
     def free_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
-        """Free pre-allocated blocks for a migrating request on the destination instance.
+        """
+        Free pre-allocated blocks for a migrating request on the destination instance.
 
         This method is responsible for releasing any cache blocks and other resources that were
         pre-allocated on the destination instance for a migrating request. This is typically called
@@ -258,7 +264,8 @@ class BackendInterface(ABC):
 
     @abstractmethod
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
-        """Free blocks associated with a migrating request on the source instance.
+        """
+        Free blocks associated with a migrating request on the source instance.
 
         Upon completion or cancellation of a migration process, this method is invoked to clean up and
         release any reserved resources such as block tables and other metadata on the source instance.
@@ -297,7 +304,8 @@ class BackendInterface(ABC):
 
     @abstractmethod
     async def commit_dst_request(self, backend_request: LlumnixRequest) -> None:
-        """Commit the migrating request to the destination instance.
+        """
+        Commit the migrating request to the destination instance.
 
         This method finalizes the migration process by transferring all necessary metadata and resource information
         (such as the block table) to the destination instance. Upon completion, the destination instance should have
@@ -305,5 +313,12 @@ class BackendInterface(ABC):
 
         Args:
             backend_request: An object representing the backend request.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def _run_workers_async(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs) -> Any:
+        """
+        Run all workers with the given method asynchronously.
         """
         raise NotImplementedError

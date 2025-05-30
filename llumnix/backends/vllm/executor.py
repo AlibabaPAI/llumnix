@@ -214,10 +214,10 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
                           max_parallel_loading_workers)
         if self.migration_config and self.migration_config.enable_migration:
             self._run_workers("reserve_memory_for_migration",
-                        migration_config=self.migration_config,
-                        model_config=self.model_config,
-                        cache_config=self.cache_config,
-                        parallel_config=self.parallel_config)
+                              migration_config=self.migration_config,
+                              model_config=self.model_config,
+                              cache_config=self.cache_config,
+                              parallel_config=self.parallel_config)
 
         if self.use_ray_spmd_worker:
             for pp_rank in range(self.parallel_config.pipeline_parallel_size):

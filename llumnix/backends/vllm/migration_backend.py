@@ -38,11 +38,11 @@ class ProxyActor:
         self.is_driver_worker = is_driver_worker
         self.use_ray_spmd_worker = use_ray_spmd_worker
 
-    def exec_method(self, handle, *args, **kwargs) -> Any:
+    def exec_method(self, handle: ray.actor.ActorHandle, *args, **kwargs) -> Any:
         if self.is_driver_worker and not self.use_ray_spmd_worker:
             ret = ray_get_with_timeout(
                 handle.execute_engine_method_async.remote(
-                    "execute_worker_method_async", *args, **kwargs
+                    "execute_driver_worker_method_async", *args, **kwargs
                 )
             )
         else:

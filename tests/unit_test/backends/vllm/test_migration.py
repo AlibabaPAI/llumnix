@@ -117,6 +117,9 @@ class MockLlumlet(Llumlet):
         self.backend_engine = MockBackendVLLM()
         self.migration_coordinator = init_migration_coordinator(self.backend_engine)
 
+    def clear_migration_states(self, *args, **kwargs):
+        return self.migration_coordinator.clear_migration_states(*args, **kwargs)
+
 
 @ray.remote
 class MockLlumletTestMigrationDoNotSchedule(Llumlet):

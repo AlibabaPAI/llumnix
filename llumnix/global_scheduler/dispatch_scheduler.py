@@ -38,7 +38,7 @@ class DispatchScheduler:
     ) -> str:
         self.total_num_requests += 1
         dispatch_instance_id = self.dispatch_policy.dispatch(
-            instance_num_requests, instance_info.values(), self.topk_random_dispatch
+            instance_num_requests, list(instance_info.values()), self.topk_random_dispatch
         )
 
         if self.total_num_requests % DISPATCH_LOG_FREQUENCY == 0:

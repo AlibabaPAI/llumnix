@@ -92,16 +92,19 @@ class Queue(DispatchPolicy):
 
 
 class RoundRobin(DispatchPolicy):
-    prev_instance_idx: int = -1
+    def __init__(self) -> None:
+        self.prev_instance_type_idx: Dict[str, int] = {}
 
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: List[InstanceInfo],
                  topk_random_dispatch: int) -> str:
+        instance_type: str = available_instance_infos[0].instance_type
+        prev_idx = self.prev_instance_type_idx.get(instance_type, -1)
         all_instance_ids = sorted(instance_num_requests.keys())
-        cur_instance_idx = (self.prev_instance_idx + 1) % len(all_instance_ids)
-        target_instance_id = all_instance_ids[cur_instance_idx]
-        self.prev_instance_idx = cur_instance_idx
+        cur_idx = (prev_idx + 1) % len(all_instance_ids)
+        target_instance_id = all_instance_ids[cur_idx]
+        self.prev_instance_type_idx[instance_type] = cur_idx
         return target_instance_id
 
 

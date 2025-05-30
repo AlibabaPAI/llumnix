@@ -455,7 +455,8 @@ class BackendVLLM(BackendInterface):
                          request_id: str,
                          is_last_stage: bool) -> None:
         await asyncio_wait_for_with_timeout(
-            dst_llumlet_actor.recv_cache.remote(
+            dst_llumlet_actor.execute_migration_method_async.remote(
+                "recv_cache",
                 src_worker_handle_list=self.worker_handle_list,
                 dst_blocks=dst_blocks,
                 src_blocks=src_blocks,

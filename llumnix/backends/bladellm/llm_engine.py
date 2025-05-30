@@ -724,7 +724,7 @@ class BackendBladeLLM(BackendInterface):
             dst_blocks=dst_blocks,
         )
         await asyncio_wait_for_with_timeout(
-            dst_llumlet_actor.recv_cache.remote(request)
+            dst_llumlet_actor.execute_migration_method_async.remote("recv_cache", request)
         )
 
     async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:

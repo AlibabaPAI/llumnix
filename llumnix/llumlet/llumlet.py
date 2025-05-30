@@ -27,7 +27,6 @@ from llumnix.backends.utils import init_backend_engine
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
-from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
@@ -157,34 +156,8 @@ class Llumlet:
         request_ids = set(request_id)
         await self.backend_engine.abort_request(request_ids)
 
-    async def migrate_out(self, dst_instance_id: str, dst_instance_actor_handle: ray.actor.ActorHandle) -> List[RequestIDType]:
-        return await self.migration_coordinator.migrate_out(dst_instance_id, dst_instance_actor_handle)
-
-    def pre_alloc_cache(self,
-                        request_id: RequestIDType,
-                        request_status: RequestStatus,
-                        request_arrival_time: float,
-                        block_num: int,
-                        token_ids: List[int]) -> List[int]:
-        return self.migration_coordinator.pre_alloc_cache(
-                    request_id,
-                    request_status,
-                    request_arrival_time,
-                    block_num,
-                    token_ids
-                )
-
-    def free_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
-        return self.migration_coordinator.free_pre_alloc_cache(request_id)
-
-    async def recv_cache(self, *args, **kwargs) -> None:
-        return await self.migration_coordinator.recv_cache(*args, **kwargs)
-
-    async def commit_dst_request(self, backend_request: LlumnixRequest) -> None:
-        return await self.migration_coordinator.commit_dst_request(backend_request)
-
-    async def clear_migration_states(self, is_migrate_in: bool) -> None:
-        return await self.migration_coordinator.clear_migration_states(is_migrate_in)
+    async def migrate_out(self, dst_instance_id: str, dst_instance_actor: ray.actor.ActorHandle) -> List[RequestIDType]:
+        return await self.migration_coordinator.migrate_out(dst_instance_id, dst_instance_actor)
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
@@ -192,4 +165,12 @@ class Llumlet:
 
     async def execute_engine_method_async(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
+        return await executor(*args, **kwargs)
+
+    def execute_migration_method(self, method, *args, **kwargs):
+        executor = getattr(self.migration_coordinator, method)
+        return executor(*args, **kwargs)
+
+    async def execute_migration_method_async(self, method, *args, **kwargs):
+        executor = getattr(self.migration_coordinator, method)
         return await executor(*args, **kwargs)

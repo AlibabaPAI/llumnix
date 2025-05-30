@@ -26,7 +26,7 @@ bladellm_install:
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed
-	@pylint --rcfile=.pylintrc -s n --jobs=128 ./llumnix
+	@pylint --rcfile=.pylintrc -s n --jobs=128 ./llumnix setup.py
 
 	@pylint --rcfile=.pylintrc \
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \

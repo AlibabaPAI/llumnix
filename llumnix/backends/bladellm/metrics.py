@@ -12,13 +12,12 @@
 # limitations under the License.
 
 from blade_llm.service.block_space_manager import BlockSpaceManager
-from llumnix.metrics.variable import Status, PassiveStatus
+from llumnix.metrics.metrics_types import Status, PassiveStatus
 
-from llumnix.metrics.base_metrics import LlumnixMetrics
+from llumnix.metrics.engine_metrics import EngineMetrics
 from llumnix.metrics.dumper import LoggerDumper
 
-
-class BladeLLMMetrics(LlumnixMetrics):
+class BladeLLMMetrics(EngineMetrics):
     def __init__(self):
         super().__init__()
         self.num_cached_request_ids = Status("num_cached_request_ids")

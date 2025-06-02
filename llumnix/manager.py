@@ -37,6 +37,7 @@ from llumnix.arg_utils import (
     LaunchArgs,
     LlumnixEngineArgs,
 )
+from llumnix.metrics.manager_metrics import ManagerMetrics
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (
@@ -46,6 +47,7 @@ from llumnix.utils import (
     ray_get_with_timeout,
     asyncio_wait_for_with_timeout,
     RequestIDType,
+    is_enable
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -59,6 +61,7 @@ from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NO_INSTANCE_RETRY_GENERATE_INTERVAL, WAIT_ALL_MIGRATIONS_DONE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -131,6 +134,10 @@ class Manager:
         self.num_instance_info_updates = 0
         self.migrating = False
 
+        # metrics
+        self.manager_metrics = ManagerMetrics()
+        self.enable_metrics = is_enable(llumnix_envs.ENABLE_MANAGER_METRICS)
+
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
@@ -140,10 +147,16 @@ class Manager:
             logger.warning("No instance available now, sleep {}s, "
                            "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
-        prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
+        with self.manager_metrics.dispatch_latency.observe_time(enabled=self.enable_metrics, labels={"instance_type":"prefill"}):
+            prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
+        if self.enable_metrics:
+            self.manager_metrics.dispatch_counter.observe(labels={"instance_id":  prefill_instance_id})
         if self.manager_args.enable_engine_pd_disagg:
             # Only used in bladellm now
-            decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
+            with self.manager_metrics.dispatch_latency.observe_time(enabled=self.enable_metrics, labels={"instance_type":"decode"}):
+                decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
+            if self.enable_metrics:
+                self.manager_metrics.dispatch_counter.observe(labels={"instance_id":  decode_instance_id})
             kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
                 decode_instance_id, None
             )
@@ -216,6 +229,11 @@ class Manager:
                 if ret is not None:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
+                    if self.enable_metrics:
+                        self.manager_metrics.dispatch_load.observe(
+                            value=ret.dispatch_load_metric,
+                            labels={"instance_id": ret.instance_id},
+                        )
             else:
                 if isinstance(ret, ray.exceptions.RayActorError):
                     logger.info("Instance {} is dead.".format(instance_id))

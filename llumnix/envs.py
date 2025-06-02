@@ -31,6 +31,10 @@ if TYPE_CHECKING:
     LLUMNIX_LOG_NODE_PATH: str = ""
     MODEL_PATH: str = ""
     DATASET_PATH: str = ""
+    METRICS_OUTPUT_TARGET:  str = "logger,eas"
+    ENABLE_ENGINE_METRICS:  str = "1"
+    ENABLE_MANAGER_METRICS:  str = "1"
+    ENABLE_LLUMNIX_CLIENT_METRICS:  str = "1"
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -74,6 +78,16 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", str(DEFAULT_SERVER_READY_TIMEOUT)),
     "INSTANCE_READY_TIMEOUT":
     lambda: os.getenv("LLUMNIX_INSTANCE_READY_TIMEOUT", str(DEFAULT_INSTANCE_READY_TIMEOUT)),
+
+    # metrics envs
+    "METRICS_OUTPUT_TARGET":
+    lambda: os.getenv("LLUMNIX_METRICS_OUTPUT_TARGET", "logger"),
+    "ENABLE_ENGINE_METRICS":
+    lambda: os.getenv("LLUMNIX_ENABLE_ENGINE_METRICS", ""),
+    "ENABLE_MANAGER_METRICS":
+    lambda: os.getenv("LLUMNIX_ENABLE_MANAGER_METRICS", ""),
+    "ENABLE_LLUMNIX_CLIENT_METRICS":
+    lambda: os.getenv("LLUMNIX_ENABLE_LLUMNIX_CLIENT_METRICS", ""),
 }
 
 

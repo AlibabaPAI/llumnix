@@ -32,9 +32,10 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.server_info import ServerInfo
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_with_timeout, is_enable
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.entrypoints.client import LlumnixClient
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -102,7 +103,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
-        if self.log_request_timestamps:
+        if self.log_request_timestamps or is_enable(llumnix_envs.ENABLE_MANAGER_METRICS):
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
@@ -138,12 +139,23 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         await self._abort(llumnix_req_id)
 
     async def get_request_outputs_loop(self):
+        running_tasks = set()
         while True:
             request_responses: List[LlumnixRequestOuputBladeLLM] = await self.request_output_queue.get()
             if request_responses is None:
                 continue
 
             for request_response in request_responses:
+                task = asyncio.create_task(
+                    self.llumnix_client_metrics.record_request_timestamps(
+                        request_timestamp=request_response.request_timestamps,
+                        instance_id=request_response.instance_id,
+                        server_id=self.server_info.server_id,
+                    )
+                )
+                running_tasks.add(task)
+                task.add_done_callback(running_tasks.discard) # avoid task be GC'ed before finished
+
                 request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
                 request_timestamp: RequestTimestamps = request_response.request_timestamps
                 set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())

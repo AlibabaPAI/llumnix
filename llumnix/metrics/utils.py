@@ -11,26 +11,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-from typing import List
-
-from llumnix.logging.logger import init_logger
-from llumnix.metrics.metrics_types import MetricEntry
-
-logger = init_logger(__name__)
+from llumnix import envs as llumnix_envs
+from llumnix.utils import is_enable
 
 
-class Dumper(ABC):
-    @abstractmethod
-    def dump(self, metrics: List[MetricEntry]) -> None:
-        ...
-
-
-class LoggerDumper(Dumper):
-    def dump(self, metrics: List[MetricEntry]) -> None:
-        logger.info("Metrics: {}".format(metrics))
-
-
-class DummyDumper(Dumper):
-    def dump(self, metrics: List[MetricEntry]) -> None:
-        pass
+def enable_any_metrics() -> bool:
+    """
+    Check if any metrics are enabled based on environment variables.
+    """
+    return (
+        is_enable(llumnix_envs.ENABLE_LLUMNIX_CLIENT_METRICS)
+        or is_enable(llumnix_envs.ENABLE_MANAGER_METRICS)
+        or is_enable(llumnix_envs.ENABLE_ENGINE_METRICS)
+    )

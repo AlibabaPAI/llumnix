@@ -20,6 +20,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--config-file CONFIG_FILE]
             [--initial-instances INITIAL_INSTANCES]
             [--dispatch-load-metric {remaining_steps,usage_ratio}]
+            [--dispatch-prefill-load-metric {remaining_steps,usage_ratio}]
+            [--dispatch-prefill-as-decode-load-metric {remaining_steps,usage_ratio,adaptive_decode}]
+            [--dispatch-decode-load-metric {remaining_steps,usage_ratio}]
+            [--dispatch-decode-as-prefill-load-metric {remaining_steps,usage_ratio}]
             [--migration-load-metric {remaining_steps,usage_ratio}]
             [--scaling-load-metric {remaining_steps,usage_ratio}]
             [--polling-interval POLLING_INTERVAL]
@@ -53,6 +57,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-max-stages MIGRATION_MAX_STAGES]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
             [--enable-pd-disagg]
+            [--enable-dynamic-pd-disagg]
             [--enable-engine-pd-disagg]
             [--pd-ratio PD_RATIO]
             [--load-registered-service]
@@ -119,6 +124,26 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: remaining_steps, usage_ratio
 - Default: "remaining_steps"
 
+`--dispatch-prefill-load-metric`
+- Instance dispatch load metric for prefill instance under prefill-decode disaggregation.
+- Possible choices: remaining_steps, usage_ratio
+- Default: "usage_ratio"
+
+`--dispatch-prefill-as-decode-load-metric`
+- Instance dispatch load metric for prefill instance when decoding under dynamic prefill-decode disaggregation.
+- Possible choices: remaining_steps, usage_ratio, adaptive_decode
+- Default: "adaptive_decode"
+
+`--dispatch-decode-load-metric`
+- Instance dispatch load metric for decode instance under prefill-decode disaggregation.
+- Possible choices: remaining_steps, usage_ratio
+- Default: "remaining_steps"
+
+`--dispatch-decode-as-prefill-load-metric`
+- Instance dispatch load metric for decode instance when prefilling under dynamic prefill-decode disaggregation.
+- Possible choices: remaining_steps, usage_ratio
+- Default: "usage_ratio"
+
 `--migration-load-metric`
 - Instance migration load metric.
 - Possible choices: remaining_steps, usage_ratio
@@ -135,7 +160,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--dispatch-policy`
 - Request dispatch policy.
-- Possible choices: balanced, load, queue, rr
+- Possible choices: balanced, load, queue, rr, dynamicpd
 - Default: "load"
 
 `--topk-random-dispatch`
@@ -247,6 +272,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--enable-pd-disagg`
 - Enable prefill decode disaggregation (for vLLM).
+
+`enable-dynamic-pd-disagg`
+- Enable dynamic prefill decode disaggregation (for vLLM).
 
 `--enable-engine-pd-disagg`
 - Enable engine-based prefill decode disaggregation (for BladeLLM).

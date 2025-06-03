@@ -16,6 +16,7 @@ import random
 from typing import Dict, Set
 from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
+from llumnix.load_computation import UsageRatioLoad, RemainingStepsLoad
 
 
 def init_dispatch_scheduler(policy='load'):
@@ -85,7 +86,7 @@ def test_dispatch_to_no_constraints_and_prefill():
     prefill_instance_num = instance_num
     for _ in range(prefill_instance_num * 2):
         instance_id = dispatch_scheduler.dispatch(
-            prefill_instance_info_dict, prefill_instnace_num_requests
+            InstanceType.PREFILL, prefill_instance_info_dict, prefill_instnace_num_requests
         )
         prefill_instnace_num_requests[instance_id] += 1
         instance_dispatch_info[instance_id] += 1
@@ -103,7 +104,9 @@ def test_dispatch_balanced():
         for instance_id in instance_id_set:
             instance_num_requests[instance_id] = random.randint(1, 10)
         min_instance_id = next(key for key, _ in sorted(instance_num_requests.items(), key=lambda item: item[1]))
-        instance_id = dispatch_scheduler.dispatch(instance_info=instance_info_dict,instance_num_requests=instance_num_requests)
+        instance_id = dispatch_scheduler.dispatch(
+            instance_type=InstanceType.PREFILL,
+            instance_info=instance_info_dict,instance_num_requests=instance_num_requests)
         instance_num_requests[instance_id] += 1
         assert min_instance_id == instance_id
 
@@ -131,6 +134,7 @@ def test_dispatch_balanced_decode_instance():
             )
         )
         instance_id = dispatch_scheduler.dispatch(
+            instance_type=InstanceType.DECODE,
             instance_info=decode_instance_info_dict,
             instance_num_requests=decode_instnace_num_requests,
         )
@@ -145,7 +149,9 @@ def test_dispatch_load():
         _, instance_info_dict, instance_num_requests, _ = init_instances()
         min_instance_id = next(key for key, _ in sorted(instance_info_dict.items(),
                                                             key=lambda item: item[1].dispatch_load_metric))
-        instance_id = dispatch_scheduler.dispatch(instance_info=instance_info_dict, instance_num_requests=instance_num_requests)
+        instance_id = dispatch_scheduler.dispatch(
+            instance_type=InstanceType.PREFILL,
+            instance_info=instance_info_dict, instance_num_requests=instance_num_requests)
         assert min_instance_id == instance_id
 
 def test_dispatch_queue():
@@ -156,7 +162,9 @@ def test_dispatch_queue():
 
         min_instance_id = next(key for key, _ in sorted(instance_info_dict.items(),
                                                             key=lambda item: item[1].num_waiting_requests))
-        instance_id = dispatch_scheduler.dispatch(instance_info=instance_info_dict, instance_num_requests=instance_num_requests)
+        instance_id = dispatch_scheduler.dispatch(
+            instance_type=InstanceType.PREFILL,
+            instance_info=instance_info_dict, instance_num_requests=instance_num_requests)
         assert instance_info_dict[min_instance_id].num_waiting_requests == instance_info_dict[instance_id].num_waiting_requests
 
 def test_dispatch_rr():
@@ -166,7 +174,9 @@ def test_dispatch_rr():
 
     num_request = 2 * instance_num + 1
     for idx in range(0, num_request):
-        instance_id = dispatch_scheduler.dispatch(instance_info=instance_info_dict, instance_num_requests=instance_num_requests)
+        instance_id = dispatch_scheduler.dispatch(
+            instance_type=InstanceType.PREFILL,
+            instance_info=instance_info_dict, instance_num_requests=instance_num_requests)
         target_instance_id = idx%instance_num
         assert instance_id == f'instance_prefill_{target_instance_id}'
 
@@ -178,5 +188,110 @@ def test_dispatch_topk_random_dispatch():
         _, instance_info_dict, instance_num_requests, _ = init_instances(instance_num)
         instance_id_set = set()
         for _ in range(num_tests):
-            instance_id_set.add(dispatch_scheduler.dispatch(instance_info=instance_info_dict, instance_num_requests=instance_num_requests))
+            instance_id_set.add(dispatch_scheduler.dispatch(
+                instance_type=InstanceType.PREFILL,
+                instance_info=instance_info_dict, instance_num_requests=instance_num_requests))
         assert len(instance_id_set) == topk_random_dispatch
+
+def test_dispatch_dynamicpd():
+    dispatch_scheduler = init_dispatch_scheduler('dynamicpd')
+    _, prefill_instance_info_dict, prefill_instance_num_requests, _ = init_instances(2, 0)
+    _, decode_instance_info_dict, decode_instance_num_requests, _ = init_instances(0, 2)
+
+    for load, instance_info in enumerate(prefill_instance_info_dict.values()):
+        instance_info.dispatch_load_metric = UsageRatioLoad(load)
+        instance_info.dispatch_prefill_as_decode_load_metric = UsageRatioLoad(load)
+    for load, instance_info in enumerate(decode_instance_info_dict.values()):
+        instance_info.dispatch_load_metric = RemainingStepsLoad(load)
+        instance_info.dispatch_decode_as_prefill_load_metric = RemainingStepsLoad(load)
+
+    # ----- choose prefill tests -----
+
+    # exist free prefill, choose prefill
+    UsageRatioLoad.BUSY_THRESHOLD = 10
+    instance_id = dispatch_scheduler.soft_dispatch(
+        instance_type=InstanceType.PREFILL,
+        prefill_instance_infos=prefill_instance_info_dict,
+        prefill_instance_num_requests=prefill_instance_num_requests,
+        decode_instance_infos=decode_instance_info_dict,
+        decode_instance_num_requests=decode_instance_num_requests,
+    )
+    lowest_load_prefill_instance_id = min(prefill_instance_info_dict,
+                                          key=lambda x: prefill_instance_info_dict[x].dispatch_load_metric)
+    assert instance_id == lowest_load_prefill_instance_id
+
+    # no free prefill, choose decode
+    UsageRatioLoad.BUSY_THRESHOLD = -1
+    RemainingStepsLoad.BUSY_THRESHOLD = -1
+    instance_id = dispatch_scheduler.soft_dispatch(
+        instance_type=InstanceType.PREFILL,
+        prefill_instance_infos=prefill_instance_info_dict,
+        prefill_instance_num_requests=prefill_instance_num_requests,
+        decode_instance_infos=decode_instance_info_dict,
+        decode_instance_num_requests=decode_instance_num_requests,
+    )
+    lowest_load_decode_instance_id = \
+        min(decode_instance_info_dict,
+            key=lambda x: decode_instance_info_dict[x].dispatch_decode_as_prefill_load_metric)
+    assert instance_id == lowest_load_decode_instance_id
+
+    # no free prefill, no free decode, choose busy prefill
+    UsageRatioLoad.BUSY_THRESHOLD = -1
+    RemainingStepsLoad.BUSY_THRESHOLD = 10
+    instance_id = dispatch_scheduler.soft_dispatch(
+        instance_type=InstanceType.PREFILL,
+        prefill_instance_infos=prefill_instance_info_dict,
+        prefill_instance_num_requests=prefill_instance_num_requests,
+        decode_instance_infos=decode_instance_info_dict,
+        decode_instance_num_requests=decode_instance_num_requests,
+    )
+    lowest_load_prefill_instance_id = min(prefill_instance_info_dict,
+                                          key=lambda x: prefill_instance_info_dict[x].dispatch_load_metric)
+    assert instance_id == lowest_load_prefill_instance_id
+    assert prefill_instance_info_dict[instance_id].dispatch_load_metric.is_busy()
+
+    # ----- choose decode tests -----
+
+    # exist free decode, choose decode
+    RemainingStepsLoad.BUSY_THRESHOLD = -1
+    instance_id = dispatch_scheduler.soft_dispatch(
+        instance_type=InstanceType.DECODE,
+        prefill_instance_infos=prefill_instance_info_dict,
+        prefill_instance_num_requests=prefill_instance_num_requests,
+        decode_instance_infos=decode_instance_info_dict,
+        decode_instance_num_requests=decode_instance_num_requests,
+    )
+    lowest_load_decode_instance_id = \
+        min(decode_instance_info_dict,
+            key=lambda x: decode_instance_info_dict[x].dispatch_decode_as_prefill_load_metric)
+    assert instance_id == lowest_load_decode_instance_id
+
+    # no free decode, choose prefill
+    UsageRatioLoad.BUSY_THRESHOLD = 10
+    RemainingStepsLoad.BUSY_THRESHOLD = 10
+    instance_id = dispatch_scheduler.soft_dispatch(
+        instance_type=InstanceType.DECODE,
+        prefill_instance_infos=prefill_instance_info_dict,
+        prefill_instance_num_requests=prefill_instance_num_requests,
+        decode_instance_infos=decode_instance_info_dict,
+        decode_instance_num_requests=decode_instance_num_requests,
+    )
+    lowest_load_prefill_instance_id = min(prefill_instance_info_dict,
+                                          key=lambda x: prefill_instance_info_dict[x].dispatch_load_metric)
+    assert instance_id == lowest_load_prefill_instance_id
+
+    # no free decode, no free prefill, choose busy decode
+    UsageRatioLoad.BUSY_THRESHOLD = -1
+    RemainingStepsLoad.BUSY_THRESHOLD = 10
+    instance_id = dispatch_scheduler.soft_dispatch(
+        instance_type=InstanceType.DECODE,
+        prefill_instance_infos=prefill_instance_info_dict,
+        prefill_instance_num_requests=prefill_instance_num_requests,
+        decode_instance_infos=decode_instance_info_dict,
+        decode_instance_num_requests=decode_instance_num_requests,
+    )
+    lowest_load_decode_instance_id = \
+        min(decode_instance_info_dict,
+            key=lambda x: decode_instance_info_dict[x].dispatch_decode_as_prefill_load_metric)
+    assert instance_id == lowest_load_decode_instance_id
+    assert decode_instance_info_dict[instance_id].dispatch_load_metric.is_busy()

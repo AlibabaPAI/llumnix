@@ -147,12 +147,18 @@ class Manager:
             kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
                 decode_instance_id, None
             )
+        elif self.manager_args.enable_engine_semi_pd:
+            decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
+            kwargs["semi_p_inst_id"] = self.instance_id_2_engine_disagg_inst_id.get(prefill_instance_id, None)
+            kwargs["semi_d_inst_id"] = self.instance_id_2_engine_disagg_inst_id.get(decode_instance_id, None)
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
+
+        target_instance_id = prefill_instance_id if not self.manager_args.enable_engine_semi_pd else decode_instance_id
         try:
             asyncio.create_task(
                 asyncio_wait_for_with_timeout(
                     async_wrapper(
-                        self.instances[prefill_instance_id].generate.remote,
+                        self.instances[target_instance_id].generate.remote,
                         request_id, server_info, request_expected_steps, *args, **kwargs
                     )
                 )
@@ -160,12 +166,12 @@ class Manager:
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Failed to generate request {} by instance {}, unexcepted exception: {}".format(
-                request_id, prefill_instance_id, e))
-            self.scale_down(prefill_instance_id)
+                request_id, target_instance_id, e))
+            self.scale_down(target_instance_id)
             await asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
         if self.log_requests:
             logger.info("manager receive request {}".format(request_id))
-            logger.info("dispath request {} to instance {}".format(request_id, prefill_instance_id))
+            logger.info("dispath request {} to instance {}".format(request_id, target_instance_id))
             if self.manager_args.enable_engine_pd_disagg:
                 logger.info("dispatch request {} to decode instance {}".format(request_id, decode_instance_id))
 
@@ -279,7 +285,7 @@ class Manager:
                         try:
                             # TODO(s5u13b): Fix the clear_migration_states to adapt to the many-to-many migration.
                             await asyncio_wait_for_with_timeout(
-                                self.instances[instance_id].execute_engine_method_async.remote(
+                                self.instances[instance_id].execute_migration_method_async.remote(
                                     "clear_migration_states", is_migrate_in=bool(i)
                                 )
                             )
@@ -364,7 +370,7 @@ class Manager:
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
                 instance_actor = instance_actor_handles[idx]
-                if self.manager_args.enable_engine_pd_disagg:
+                if self.manager_args.enable_engine_pd_disagg or self.manager_args.enable_engine_semi_pd:
                     try:
                         self.instance_id_2_engine_disagg_inst_id[ins_id] = \
                             ray_get_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())

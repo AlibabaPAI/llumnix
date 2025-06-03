@@ -21,7 +21,6 @@ import pickle
 from typing import List, Tuple, Union, Dict
 from abc import ABC, abstractmethod
 
-from llumnix.instance_info import InstanceType
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
@@ -84,7 +83,6 @@ class LlumnixEngineArgs(ABC):
 
 
 class LlumnixEngineArgsFactory:
-
     def __init__(
         self,
         load_registered_service: bool,
@@ -112,14 +110,16 @@ class LlumnixEngineArgsFactory:
                 )
 
     def gen_next_engine_args(
-        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
+        self, current_engine_args: LlumnixEngineArgs, next_instance_args: 'InstanceArgs'
     ) -> LlumnixEngineArgs:
+        instance_type = next_instance_args.instance_type
         if self.load_registered_service:
             current_engine_args = self.engine_args_dict[instance_type]
 
         # lazy import to avoid circular import
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
+        from llumnix.instance_info import InstanceType
 
         if isinstance(current_engine_args, BladellmEngineArgs):
             next_engine_args = BladellmEngineArgs(current_engine_args)
@@ -129,6 +129,11 @@ class LlumnixEngineArgsFactory:
                     if isinstance(instance_type, InstanceType)
                     else instance_type
                 )
+            if self.pdd_config.enable_engine_semi_pd and not self.load_registered_service:
+                if self.enable_port_increment:
+                    next_engine_args.revised_args.semi_pd_prefill_server_port = \
+                        next_instance_args.semi_pd_prefill_server_port
+
             return next_engine_args
 
         # pylint: disable=import-outside-toplevel
@@ -268,6 +273,7 @@ class ManagerArgs:
     enable_port_offset_store: bool = None
 
     enable_pd_disagg: bool = None
+    enable_dynamic_pd_disagg: bool = None
     pd_ratio: Union[str, List[int]] = None
     load_registered_service: bool = None
     load_registered_service_path: str = None
@@ -276,6 +282,7 @@ class ManagerArgs:
     # init from instance args
     is_group_kind_migration_backend: bool = None
     enable_engine_pd_disagg: bool = None
+    enable_engine_semi_pd: bool = None
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -316,10 +323,25 @@ class ManagerArgs:
                 "in global launch mode."
 
         if args.enable_pd_disagg:
-            assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
+            logger.warning("Migration must be enabled when enabling prefill-decode disaggregation (not engine-based).")
+            args.enable_migration = True
+
+        if args.enable_dynamic_pd_disagg and not args.enable_pd_disagg:
+            logger.warning("Dynamic prefill-decode disaggregation is only supported when prefill-decode disaggregation, "
+                           "Enable prefill-decode disaggregation now.")
+            args.enable_pd_disagg = True
+
+        if args.enable_dynamic_pd_disagg:
+            assert args.dispatch_policy in ["dynamicpd"], \
+                f"{args.dispatch_policy} is not supported when enabling dynamic prefill-decode disaggregation."
+
+        assert not (args.enable_engine_pd_disagg and args.enable_dynamic_pd_disagg), "Dynamic prefill-decode disaggregation \
+            is not supported when engine-based prefill-decode disaggregation is enabled."
 
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
+        self.enable_engine_pd_disagg = instance_args.enable_engine_pd_disagg
+        self.enable_engine_semi_pd = instance_args.enable_engine_semi_pd
 
     def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
         # Create the GlobalScheduler Configuration.
@@ -333,12 +355,14 @@ class ManagerArgs:
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
+                                                        self.enable_dynamic_pd_disagg,
                                                         self.is_group_kind_migration_backend)
         return global_scheduler_config
 
     def create_pdd_config(self) -> PDDConfig:
         pdd_config = PDDConfig(self.enable_pd_disagg,
                                self.enable_engine_pd_disagg,
+                               self.enable_engine_semi_pd,
                                self.pd_ratio,
                                self.enable_pdd_node_affinity_scheduling)
         return pdd_config
@@ -357,13 +381,14 @@ class ManagerArgs:
                             help='instance scaling load metric')
         parser.add_argument('--dispatch-policy',
                             type=str,
-                            choices=['balanced', 'load', 'queue', 'flood', 'rr'],
+                            choices=['balanced', 'load', 'queue', 'flood', 'rr', 'dynamicpd'],
                             help='The request dispatch policy.\n\n'
                             '* "balanced" dispatch request to the instance with minimum requests dispatched.\n'
                             '* "load" dispatch request to the instance with lowest instance load.\n'
                             '* "queue" dispatch request to the instance with minimum waiting request queue length.\n'
                             '* "flood" dispatch request to the instance with maximum requests dispatched.\n'
-                            '* "rr" dispatch requests with round-robin policy.\n')
+                            '* "rr" dispatch requests with round-robin policy.\n'
+                            '* "dynamicpd" dispatch requests to the instance with available capacity, not limited by instance type .\n')
         parser.add_argument('--topk-random-dispatch',
                             type=int,
                             help='number of candidate random dispatch instances for dispatch policy.\n\n'
@@ -427,6 +452,9 @@ class ManagerArgs:
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',
                             help='enable prefill-decode disaggregation')
+        parser.add_argument('--enable-dynamic-pd-disagg',
+                            action='store_true',
+                            help='enable dynamic prefill-decode disaggregation')
         parser.add_argument('--enable-engine-pd-disagg',
                             action='store_true',
                             help='enable engine-based prefill-decode disaggregation')
@@ -471,6 +499,10 @@ class InstanceArgs:
     profiling_result_file_path: str = None
 
     dispatch_load_metric: str = None
+    dispatch_prefill_load_metric: str = None
+    dispatch_prefill_as_decode_load_metric: str = None
+    dispatch_decode_load_metric: str = None
+    dispatch_decode_as_prefill_load_metric: str = None
     migration_load_metric: str = None
     enable_defrag: bool = None
     request_migration_policy: str = None
@@ -488,8 +520,12 @@ class InstanceArgs:
     # init from engine args
     enable_engine_pd_disagg: bool = None
 
+    enable_engine_semi_pd: bool = None
+    semi_pd_prefill_server_port: int = None
+
     # init from manager args
     enable_migration: bool = None
+    enable_dynamic_pd_disagg: bool = None
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -515,6 +551,8 @@ class InstanceArgs:
     def init_from_engine_args(self, engine_args, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
             self.enable_engine_pd_disagg = engine_args.enable_disagg
+            self.enable_engine_semi_pd = engine_args.enable_semi_pd_mode
+            self.semi_pd_prefill_server_port = engine_args.semi_pd_options.prefill_server_port
             # for local launch mode
             if self.enable_engine_pd_disagg:
                 self.instance_type = engine_args.disagg_options.inst_role
@@ -523,6 +561,7 @@ class InstanceArgs:
 
     def init_from_manager_args(self, manager_args: ManagerArgs):
         self.enable_migration = manager_args.enable_migration
+        self.enable_dynamic_pd_disagg = manager_args.enable_dynamic_pd_disagg
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.enable_migration,
@@ -563,6 +602,22 @@ class InstanceArgs:
                             type=str,
                             choices=['remaining_steps', 'usage_ratio'],
                             help='instance dispatch load metric')
+        parser.add_argument('--dispatch-prefill-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'usage_ratio'],
+                            help='prefill instance dispatch load metric')
+        parser.add_argument('--dispatch-prefill-as-decode-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'usage_ratio', 'adaptive_decode'],
+                            help='prefill instance dispatch load metric when decoding')
+        parser.add_argument('--dispatch-decode-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'usage_ratio'],
+                            help='decode instance dispatch load metric')
+        parser.add_argument('--dispatch-decode-as-prefill-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'usage_ratio'],
+                            help='decode instance dispatch load metric when prefilling')
         parser.add_argument('--migration-load-metric',
                             type=str,
                             choices=['remaining_steps', 'usage_ratio'],

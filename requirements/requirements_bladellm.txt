@@ -1,4 +1,4 @@
-ray[default]
+ray >= 2.45.0
 pyarrow  # Required for Ray data.
 aiohttp == 3.8.4
 aiohttp-cors == 0.7.0

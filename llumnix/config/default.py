@@ -71,6 +71,8 @@ _C.MANAGER.ENABLE_PORT_INCREMENT = False
 _C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
 # Enable prefill-decode disaggregation
 _C.MANAGER.ENABLE_PD_DISAGG = False
+# Enable adaptive prefill-decode disaggregation
+_C.MANAGER.ENABLE_ADAPTIVE_PD = False
 # Enable engine-based prefill-decode disaggregation
 _C.MANAGER.ENABLE_ENGINE_PD_DISAGG = False
 # The p:d ratio used in gloabl launch mode
@@ -134,6 +136,14 @@ _C.INSTANCE.REQUEST_OUTPUT_FORWARDING_MODE = "thread"
 # ------------------------- LOAD METRICS CONFIGURATION ------------------------
 # Instance dispatch load metric
 _C.INSTANCE.DISPATCH_LOAD_METRIC = 'remaining_steps'
+# Prefill instance dispatch load metric
+_C.INSTANCE.DISPATCH_PREFILL_LOAD_METRIC = 'block_demand_factor'
+# Prefill instance dispatch load metric when used for decoding
+_C.INSTANCE.DISPATCH_PREFILL_AS_DECODE_LOAD_METRIC = 'adaptive_decode'
+# Decode instance dispatch load metric
+_C.INSTANCE.DISPATCH_DECODE_LOAD_METRIC = 'remaining_steps'
+# Decode instance dispatch load metric when used for prefilling
+_C.INSTANCE.DISPATCH_DECODE_AS_PREFILL_LOAD_METRIC = 'block_demand_factor'
 # Instance migration load metric
 _C.INSTANCE.MIGRATION_LOAD_METRIC = 'remaining_steps'
 

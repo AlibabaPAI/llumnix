@@ -1,3 +1,5 @@
+# The field, once set to True in the config file, cannot be set to False via command-line arguments.
+
 SERVER:
   HOST: '127.0.0.1'
   PORT: 1234
@@ -8,7 +10,7 @@ SERVER:
 MANAGER:
   INITIAL_INSTANCES: 1
   DISPATCH_POLICY: 'load'
-  ENABLE_MIGRATION: True
+  ENABLE_MIGRATION: False
   ENABLE_SCALING: False
 
 INSTANCE:

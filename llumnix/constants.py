@@ -24,8 +24,8 @@ NUM_GPUS_VLLM_GPU_ACTOR = 0.5
 NUM_GPUS_BLADELLM_GPU_ACTOR = 0.25
 
 # examples/offline_inference.py, tests/*
-DEFAULT_MODEL_PATH: str = '/mnt/model'
-DEFAULT_DATASET_PATH: str = '/mnt/dataset'
+MODEL_PATH: str = '/mnt/model'
+DATASET_PATH: str = '/mnt/dataset'
 
 # llumnix/manager.py
 NO_INSTANCE_RETRY_GENERATE_INTERVAL: float = 1.0
@@ -34,8 +34,8 @@ AUTO_SCALE_UP_INTERVAL: float = 1.0
 WAIT_PLACEMENT_GROUP_TIMEOUT: float = 5.0
 CHECK_DEPLOYMENT_STATES_INTERVAL: float = 30.0
 WATCH_DEPLOYMENT_INTERVAL: float = 10.0
-DEFAULT_INSTANCE_READY_TIMEOUT: float = 300.0
-DEFAULT_SERVER_READY_TIMEOUT: float = 60.0
+INSTANCE_READY_TIMEOUT: float = 300.0
+SERVER_READY_TIMEOUT: float = 60.0
 
 # llumnix/global_scheduler/dispatch_scheduler.py
 DISPATCH_LOG_FREQUENCY: int = 100
@@ -94,3 +94,8 @@ SERVER_STOP_TIMEOUT: float = 10.0
 
 # llumnix/llumlet/migration_coordinator.py
 PENDING_MIGRATE_IN_TIMEOUT = 10.0
+
+# llumnix/load_computation.py
+BLOCKDEMANDFACTOR_BUSY_THRESHOLD: float = 1.0
+REMAININGSTEPS_BUSY_THRESHOLD: float = 10.0
+DECODE_COMPUTE_BOUND_BATCH_SIZE: float = 128

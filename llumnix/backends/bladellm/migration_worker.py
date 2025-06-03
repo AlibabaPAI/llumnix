@@ -92,7 +92,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         return empty_pb2.Empty()
 
     # pylint: disable=unused-argument
-    def recv_cache(self, request, context):
+    def recv_cache(self, request, context) -> bool:
         try:
             start_time = time.time()
             self.migration_backend.recv_cache(request, request.src_blocks, request.dst_blocks)
@@ -101,13 +101,16 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             # pylint: disable=invalid-name
             GB_bytes = 1024 * 1024 * 1024
             speed = total_kv_cache_size / GB_bytes / (end_time - start_time)
-            logger.info("Migrate kv cache done, blocks_num: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
-                        .format(len(request.src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
+            logger.info("Recv kv cache done, num_blocks: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
+                        .format(len(request.src_blocks), convert_bytes(total_kv_cache_size), end_time - start_time, speed))
+            return True
         except Exception as e: # pylint: disable=broad-except
-            logger.warning("Failed to migrate cache, request {}, exception: {}.".format(request, e))
-            raise
-
-        return empty_pb2.Empty()
+            # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
+            if isinstance(e, ray.exceptions.RayActorError):
+                logger.info("Failed to recv kv cache, src worker is dead, instance_id: {}, rank: {}.".format(self.instance_id, self.rank))
+            else:
+                logger.exception("Failed to recv kv cache, request_id: {}, unexpected exception: {}.".format(request.request_id, e))
+            return False
 
     def do_send(self, request, context):
         return self.migration_backend.do_send(request, context)

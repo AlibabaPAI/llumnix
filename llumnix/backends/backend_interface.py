@@ -20,7 +20,7 @@ import ray.actor
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 from llumnix.utils import RequestIDType
-from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
+from llumnix.constants import RAY_RPC_TIMEOUT
 
 
 class EngineState(str, Enum):
@@ -182,19 +182,6 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
-        """
-        Pop the list of migrating out requests in last stage.
-
-        This method pops the list of migrating out requests in last stage. This action is performed
-        to free migrating out requests in last stage when the migration encounters exception.
-
-        Returns:
-            The list of migrating out requests in last stage.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
     def pre_alloc_cache(self,
                         request_id: RequestIDType,
                         request_status: RequestStatus,
@@ -249,7 +236,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
+    def free_pre_alloc_cache(self, request_id: RequestIDType) -> None:
         """
         Free pre-allocated blocks for a migrating request on the destination instance.
 
@@ -277,11 +264,11 @@ class BackendInterface(ABC):
 
     @abstractmethod
     async def send_cache(self,
-                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         dst_instance_actor: ray.actor.ActorHandle,
                          src_blocks: List[int],
                          dst_blocks: List[int],
                          request_id: RequestIDType,
-                         is_last_stage: bool) -> None:
+                         is_last_stage: bool) -> bool:
         """
         Send cache blocks from the source instance to the destination instance.
 
@@ -290,20 +277,23 @@ class BackendInterface(ABC):
         the destination instance, where they are mapped according to the destination block table.
 
         Args:
-            dst_llumlet_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
-                       to be sent. This handle is used to reference the destination's execution context and manage
-                       the block transfer.
+            dst_instance_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
+                               to be sent. This handle is used to reference the destination's execution context and manage
+                               the block transfer.
             src_blocks: A list of integers representing the block indexs in the source instance's cache that need to be
                         sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's cache where the
                         incoming blocks should be stored.
             request_id: Request ID.
             is_last_stage: A boolean indicating whether this is the last stage of the migration.
+
+        Returns:
+            A boolean indicating whether the cache transfer is successful.
         """
         raise NotImplementedError
 
     @abstractmethod
-    async def commit_dst_request(self, backend_request: LlumnixRequest) -> None:
+    async def commit_dst_request(self, backend_request: LlumnixRequest) -> bool:
         """
         Commit the migrating request to the destination instance.
 
@@ -313,6 +303,16 @@ class BackendInterface(ABC):
 
         Args:
             backend_request: An object representing the backend request.
+
+        Returns:
+            A boolean indicating whether the commit is successful.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def _run_workers_async(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs) -> List[Any]:
+        """
+        Run all workers with the given method asynchronously.
         """
         raise NotImplementedError
 

@@ -34,10 +34,10 @@ class MigrationBackendBase(ABC):
 
     @abstractmethod
     def recv_cache(self,
+                   request_id: RequestIDType,
                    src_worker_handle: ray.actor.ActorHandle,
                    src_blocks: List[int],
                    dst_blocks: List[int],
-                   request_id: RequestIDType,
                    is_last_stage: bool) -> None:
         raise NotImplementedError
 

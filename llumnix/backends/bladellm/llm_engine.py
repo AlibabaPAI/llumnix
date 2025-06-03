@@ -60,7 +60,7 @@ from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
 from llumnix.backends.bladellm.proto.migration_worker_pb2 import RecvCacheRequest, WorkerInfo
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
-from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
+from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
@@ -406,7 +406,7 @@ class AsyncLLMEngineLlumnixMixin:
         await self._client.drop_request(req_id)
 
     # Only be used in migration method.
-    async def run_workers_async(self, worker_method: str, *args, **kwargs):
+    async def run_workers_async(self, worker_method: str, *args, **kwargs) -> List[Any]:
         coros = []
         for stub in self.worker_migration_stubs:
             method = getattr(stub, worker_method)
@@ -640,7 +640,7 @@ class BackendBladeLLM(BackendInterface):
 
     # -------------- migration related method --------------
 
-    async def _run_workers_async(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
+    async def _run_workers_async(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs) -> List[Any]:
         return await self.engine.run_workers_async(*args, timeout=timeout, **kwargs)
 
     def get_running_queue(self):
@@ -699,9 +699,6 @@ class BackendBladeLLM(BackendInterface):
     def pop_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
         return self.engine.scheduler.pop_migrating_out_request_last_stage(*args, **kwargs)
 
-    def free_migrating_out_requests_last_stage(self, *args, **kwargs) -> List[Any]:
-        return self.engine.scheduler.free_migrating_out_requests_last_stage(*args, **kwargs)
-
     def pre_alloc_cache(self, *args, **kwargs) -> List[int]:
         return self.engine.scheduler.pre_alloc_cache(*args, **kwargs)
 
@@ -719,11 +716,11 @@ class BackendBladeLLM(BackendInterface):
         return self.engine.scheduler.free_src_request(backend_request)
 
     async def send_cache(self,
-                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         dst_instance_actor: ray.actor.ActorHandle,
                          src_blocks: List[int],
                          dst_blocks: List[int],
                          request_id: int,
-                         is_last_stage: bool):
+                         is_last_stage: bool) -> bool:
         request = RecvCacheRequest(
             src_handlers=self.worker_infos,
             request_id=request_id,
@@ -731,11 +728,11 @@ class BackendBladeLLM(BackendInterface):
             src_blocks=src_blocks,
             dst_blocks=dst_blocks,
         )
-        await asyncio_wait_for_with_timeout(
-            dst_llumlet_actor.execute_migration_method_async.remote("recv_cache", request)
+        return await asyncio_wait_for_with_timeout(
+            dst_instance_actor.execute_migration_method_async.remote("recv_cache", request)
         )
 
-    async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
+    async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> bool:
         assert len(backend_request.paged_reqs) == 1, "Currently llumnix doesn't support multi-paged request migration."
 
         seq = backend_request.paged_reqs[0]
@@ -751,3 +748,5 @@ class BackendBladeLLM(BackendInterface):
         self.engine.scheduler.llumnix_metrics.scheduler_step_metrics(self.engine.scheduler)
         if self.engine._migration_semaphore.locked():
             self.engine._migration_semaphore.release()
+
+        return True

@@ -129,11 +129,6 @@ class SchedulerLlumnix(Scheduler):
             f"the request id {request_id} of migrating out request in last stage should exist in migrating out request last stage"
         self.migrating_out_request_last_stage.pop(request_id)
 
-    def free_migrating_out_requests_last_stage(self) -> List[SequenceGroupLlumnix]:
-        migrating_out_requests_last_stage = list(self.migrating_out_request_last_stage.values())
-        self.migrating_out_request_last_stage.clear()
-        return migrating_out_requests_last_stage
-
     def pre_alloc_cache(self,
                         request_id: str,
                         request_status: RequestStatus,
@@ -189,21 +184,11 @@ class SchedulerLlumnix(Scheduler):
         for seq in seq_group.get_seqs(status=status_from):
             seq.status = status_to
 
-    def free_pre_alloc_cache(self, request_id: str = None) -> None:
-        if request_id:
-            logger.info("free request {} pre_alloc_cache".format(request_id))
-            block_table = self.pre_alloc_cache_dict.pop(request_id, None)
-            if block_table:
-                block_table.free()
-        else:
-            # TODO(s5u13b): Only effective with one-to-one migration restriction.
-            # Clear all pre-allocated cache of dst instance when src instance encounters exception.
-            request_ids = list(self.pre_alloc_cache_dict.keys())
-            for req_id in request_ids:
-                logger.info("free request {} pre_alloc_cache".format(req_id))
-                block_table = self.pre_alloc_cache_dict.pop(req_id, None)
-                if block_table:
-                    block_table.free()
+    def free_pre_alloc_cache(self, request_id: str) -> None:
+        logger.info("free request {} pre_alloc_cache".format(request_id))
+        block_table = self.pre_alloc_cache_dict.pop(request_id, None)
+        if block_table:
+            block_table.free()
 
     def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]

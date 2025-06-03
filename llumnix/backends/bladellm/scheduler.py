@@ -175,8 +175,12 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self.migrating_out_request_last_stage.pop(backend_request.request_id)
 
     # pylint: disable=unused-argument
-    def pre_alloc_cache(self, request_id: int, request_status: RequestStatus, request_arrival_time: float,
-                        block_num: int, token_ids: List[int]) -> List[int]:
+    def pre_alloc_cache(self,
+                        request_id: int,
+                        request_status: RequestStatus,
+                        request_arrival_time: float,
+                        block_num: int,
+                        token_ids: List[int]) -> List[int]:
         if request_status == RequestStatus.WAITING_MIGRATING:
             if (self.waiting and request_arrival_time > self.waiting[0].arrival_time):
                 return []
@@ -199,23 +203,10 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self._free_req(backend_request)
         self._finished_req_to_remove.append(FinishedInfo(request_id=backend_request.request_id, pos=0))
 
-    def free_pre_alloc_cache(self, request_id: int = None) -> None:
-        if request_id:
-            blocks = self.pre_alloc_cache_dict.pop(request_id, [])
-            # pylint: disable=protected-access
-            self.block_manager._free_block_table(blocks)
-        else:
-            # Clear all pre-allocated cache of dst instance when src instance encounters exception.
-            request_ids = list(self.pre_alloc_cache_dict.keys())
-            for req_id in request_ids:
-                blocks = self.pre_alloc_cache_dict.pop(req_id, [])
-                # pylint: disable=protected-access
-                self.block_manager._free_block_table(blocks)
-
-    def free_migrating_out_requests_last_stage(self) -> List[GenerationGroupStateLlumnix]:
-        migrating_out_requests_last_stage = list(self.migrating_out_request_last_stage.values())
-        self.migrating_out_request_last_stage.clear()
-        return migrating_out_requests_last_stage
+    def free_pre_alloc_cache(self, request_id: int) -> None:
+        blocks = self.pre_alloc_cache_dict.pop(request_id, [])
+        # pylint: disable=protected-access
+        self.block_manager._free_block_table(blocks)
 
     def add_block_table(self, block_table: BlockTable, block_table_id: int) -> None:
         self.block_manager.block_tables[block_table_id] = block_table

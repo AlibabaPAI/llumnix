@@ -11,15 +11,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+import math
+import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock
 
-import math
 import ray
 import pytest
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.llumlet.migration_coordinator import MigrationStatus
+from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
+from llumnix.utils import random_uuid
+from llumnix.llumlet.request import RequestStatus
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -30,11 +35,14 @@ from .test_local_migration_scheduler import MockRequest
 def ray_remote_call(ret):
     return ret
 
+async def async_return(ret):
+    return ret
+
 def init_migration_coordinator(backend_engine,
                                migration_last_stage_max_blocks=1,
                                migration_max_stages=3):
     # Create an instance of MigrationCoordinator
-    coordinator = MigrationCoordinator(
+    migration_coordinator = MigrationCoordinator(
         "0",
         backend_engine,
         BackendType.VLLM,
@@ -42,7 +50,7 @@ def init_migration_coordinator(backend_engine,
         migration_last_stage_max_blocks=migration_last_stage_max_blocks,
         migration_max_stages=migration_max_stages,
     )
-    return coordinator
+    return migration_coordinator
 
 @pytest.mark.asyncio
 async def test_migrate_out_onestage(ray_env):
@@ -50,9 +58,10 @@ async def test_migrate_out_onestage(ray_env):
     backend_engine = MagicMock(spec=BackendInterface)
     dst_instance_actor = MagicMock()
     migrate_out_request = MagicMock()
-    coordinator = init_migration_coordinator(backend_engine)
+    migration_coordinator = init_migration_coordinator(backend_engine)
+    migrate_out_request.request_id = "0"
 
-    # Mock method return values and test data
+    # Test normal migration scenario
     src_blocks = [1, 2, 3]
     dst_blocks = [1, 2]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks, [], False
@@ -60,9 +69,8 @@ async def test_migrate_out_onestage(ray_env):
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = False
     dst_instance_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-
-    # Test normal migration scenario
-    status = await coordinator._migrate_out_onestage(dst_instance_actor, migrate_out_request)
+    migration_coordinator.pending_migrate_in_requests["0"] = time.time()
+    status = await migration_coordinator._migrate_out_onestage(dst_instance_actor, "0", migrate_out_request, True)
     assert status == MigrationStatus.RUNNING
 
     # Test the last stage of migration
@@ -75,11 +83,14 @@ async def test_migrate_out_onestage(ray_env):
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = False
     dst_instance_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = await coordinator._migrate_out_onestage(dst_instance_actor, migrate_out_request)
+    migration_coordinator.pending_migrate_in_requests["0"] = time.time()
+    status = await migration_coordinator._migrate_out_onestage(dst_instance_actor, "0", migrate_out_request, True)
     assert status == MigrationStatus.FINISHED
 
-    migrate_out_request = MagicMock()
     # Test migration dst aborted scenario
+
+    # 1: dst aborted in pre_alloc
+    migrate_out_request = MagicMock()
     src_blocks = [1, 2, 3]
     dst_blocks = []
     backend_engine.get_request_incremental_blocks.return_value = src_blocks, [], False
@@ -87,19 +98,35 @@ async def test_migrate_out_onestage(ray_env):
     migrate_out_request.should_abort_migration.return_value = False
     migrate_out_request.blocking_migration = False
     dst_instance_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = await coordinator._migrate_out_onestage(dst_instance_actor, migrate_out_request)
+    migration_coordinator.pending_migrate_in_requests["0"] = time.time()
+    status = await migration_coordinator._migrate_out_onestage(dst_instance_actor, "0", migrate_out_request, True)
+    assert status == MigrationStatus.ABORTED_DST
+
+    # 2: dst aborted in send_cache
+    migrate_out_request = MagicMock()
+    src_blocks = [1, 2, 3]
+    dst_blocks = [1, 2, 3]
+    backend_engine.get_request_incremental_blocks.return_value = src_blocks, [], False
+    migrate_out_request.n_blocks = 3
+    migrate_out_request.should_abort_migration.return_value = False
+    migrate_out_request.blocking_migration = False
+    dst_instance_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
+    backend_engine.send_cache.return_value = False
+    migration_coordinator.pending_migrate_in_requests["0"] = time.time()
+    status = await migration_coordinator._migrate_out_onestage(dst_instance_actor, "0", migrate_out_request, True)
     assert status == MigrationStatus.ABORTED_DST
 
     # Test migration src aborted scenario
     migrate_out_request = MagicMock()
     src_blocks = [1, 2, 3]
-    dst_blocks = [1, 2]
+    dst_blocks = [1, 2, 3]
     backend_engine.get_request_incremental_blocks.return_value = src_blocks, [], False
     migrate_out_request.n_blocks = 3
     migrate_out_request.should_abort_migration.return_value = True
     migrate_out_request.blocking_migration = False
     dst_instance_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = await coordinator._migrate_out_onestage(dst_instance_actor, migrate_out_request)
+    migration_coordinator.pending_migrate_in_requests["0"] = time.time()
+    status = await migration_coordinator._migrate_out_onestage(dst_instance_actor, "0", migrate_out_request, True)
     assert status == MigrationStatus.ABORTED_SRC
 
 # ray_env should be passed after _migrate_out_onestage
@@ -110,26 +137,24 @@ async def test_migrate_out_running_request(_, ray_env):
     backend_engine = MagicMock(spec=BackendInterface)
     dst_instance_actor = MagicMock()
     migrate_out_request = MockRequest("1", 1, math.inf)
-
-    # Create an instance of MigrationCoordinator
     migration_max_stages = 3
-    coordinator = init_migration_coordinator(backend_engine, migration_max_stages=migration_max_stages)
-    dst_instance_actor = MagicMock()
+    migration_coordinator = init_migration_coordinator(backend_engine, migration_max_stages=migration_max_stages)
+
+    # Test FINISHED
     dst_instance_actor.execute_engine_method = MagicMock()
     dst_instance_actor.execute_engine_method.remote = MagicMock()
     dst_instance_actor.execute_engine_method.remote.return_value = ray_remote_call.remote([1])
     dst_instance_actor.execute_migration_method.remote.return_value = ray_remote_call.remote([1])
-    coordinator._migrate_out_onestage.side_effect = [MigrationStatus.FINISHED]
-    status = await coordinator._migrate_out_running_request(dst_instance_actor, migrate_out_request)
-    assert coordinator._migrate_out_onestage.call_count == 1
+    migration_coordinator._migrate_out_onestage.side_effect = [MigrationStatus.FINISHED]
+    status = await migration_coordinator._migrate_out_running_request(dst_instance_actor, "0", migrate_out_request)
+    assert migration_coordinator._migrate_out_onestage.call_count == 1
     assert status == MigrationStatus.FINISHED
 
-    coordinator._migrate_out_onestage.side_effect = [MigrationStatus.RUNNING,
-                                                     MigrationStatus.RUNNING,
-                                                     MigrationStatus.RUNNING,
-                                                     MigrationStatus.RUNNING]
-    status = await coordinator._migrate_out_running_request(dst_instance_actor, migrate_out_request)
-    assert coordinator._migrate_out_onestage.call_count == migration_max_stages + 1
+    # Test ABORTED_SRC
+    migration_coordinator._migrate_out_onestage.side_effect = [
+        MigrationStatus.RUNNING, MigrationStatus.RUNNING, MigrationStatus.RUNNING, MigrationStatus.RUNNING]
+    status = await migration_coordinator._migrate_out_running_request(dst_instance_actor, "0", migrate_out_request)
+    assert migration_coordinator._migrate_out_onestage.call_count == migration_max_stages + 1
     assert status == MigrationStatus.ABORTED_SRC
 
 @pytest.mark.asyncio
@@ -138,9 +163,7 @@ async def test_migrate_out_waiting_request():
     backend_engine = MagicMock(spec=BackendInterface)
     dst_instance_actor = MagicMock()
     migrate_out_request = MagicMock()
-
-    # Create an instance of MigrationCoordinator
-    coordinator = init_migration_coordinator(backend_engine)
+    migration_coordinator = init_migration_coordinator(backend_engine)
 
     # Test FINISHED
     migrate_out_request.prefill_num_blocks = 3
@@ -149,10 +172,100 @@ async def test_migrate_out_waiting_request():
     dst_instance_actor.execute_engine_method.remote = MagicMock()
     dst_instance_actor.execute_engine_method.remote.return_value = ray_remote_call.remote(dst_blocks)
     dst_instance_actor.execute_migration_method.remote.return_value = ray_remote_call.remote(dst_blocks)
-    status = await coordinator._migrate_out_waiting_request(dst_instance_actor, migrate_out_request)
+    status = await migration_coordinator._migrate_out_waiting_request(dst_instance_actor, "0", migrate_out_request)
     assert status == MigrationStatus.FINISHED
 
-    # Test FINISHED_ABORTED
+    # Test ABORTED_DST
     migrate_out_request.prefill_num_blocks = 2
-    status = await coordinator._migrate_out_waiting_request(dst_instance_actor, migrate_out_request)
+    status = await migration_coordinator._migrate_out_waiting_request(dst_instance_actor, "0", migrate_out_request)
     assert status == MigrationStatus.ABORTED_DST
+
+@pytest.mark.asyncio
+async def test_migrate_out_one_request():
+    # Create mock objects
+    backend_engine = MagicMock(spec=BackendInterface)
+    dst_instance_actor = MagicMock()
+    migrate_out_request = MagicMock()
+    request_id = random_uuid()
+    migration_coordinator = init_migration_coordinator(backend_engine)
+    migration_coordinator._migrate_out_running_request = MagicMock()
+    migration_coordinator._dst_commit_dst_request = MagicMock()
+    migrate_out_request.request_id = request_id
+    migrate_out_request.status = RequestStatus.RUNNING
+    migration_coordinator._dst_free_pre_alloc_cache = MagicMock()
+
+    # setting the return value for each _migrate_out_running_request call, because different coroutines are required.
+    migration_coordinator._migrate_out_running_request.side_effect = \
+        [async_return(MigrationStatus.FINISHED), async_return(MigrationStatus.FINISHED),
+         async_return(MigrationStatus.ABORTED_SRC), async_return(MigrationStatus.ABORTED_DST)]
+
+    # 1: dst_commit_dst_request success
+    migration_coordinator._dst_commit_dst_request.return_value = async_return(True)
+    migrated_request = await migration_coordinator._migrate_out_one_request(dst_instance_actor, request_id, migrate_out_request)
+    assert len(migrated_request) == 1 and migrated_request[0] == request_id
+    # 2: dst_commit_dst_request not success
+    migration_coordinator._dst_commit_dst_request.return_value = async_return(False)
+    migrated_request = await migration_coordinator._migrate_out_one_request(dst_instance_actor, request_id, migrate_out_request)
+    assert len(migrated_request) == 0
+
+    assert migration_coordinator._dst_free_pre_alloc_cache.call_count == 0
+    migration_coordinator._dst_free_pre_alloc_cache.return_value = async_return(True)
+    migrated_request = await migration_coordinator._migrate_out_one_request(dst_instance_actor, request_id, migrate_out_request)
+    assert migration_coordinator._dst_free_pre_alloc_cache.call_count == 1
+
+    migrated_request = await migration_coordinator._migrate_out_one_request(dst_instance_actor, request_id, migrate_out_request)
+    assert migration_coordinator._dst_free_pre_alloc_cache.call_count == 1
+
+@pytest.mark.asyncio
+async def test_pending_migrate_in_timeout():
+     # Create mock objects
+    backend_engine = MagicMock(spec=BackendInterface)
+    migrate_out_request = MagicMock()
+    migration_coordinator = init_migration_coordinator(backend_engine)
+    request_id = random_uuid()
+    migrate_out_request.request_id = request_id
+
+    backend_engine.free_pre_alloc_cache.return_value = None
+
+    # test first_stage pre_alloc_cache timeout
+    backend_engine.pre_alloc_cache.return_value = [0, 1, 2]
+    assert backend_engine.free_pre_alloc_cache.call_count == 0
+    ret = migration_coordinator.pre_alloc_cache(request_id, "running_migrating", 0.0, 3, [], True)
+    assert ret == [0, 1, 2]
+    assert request_id in migration_coordinator.pending_migrate_in_requests
+    await asyncio.sleep(PENDING_MIGRATE_IN_TIMEOUT + 6.0)
+    assert backend_engine.free_pre_alloc_cache.call_count == 1
+    assert request_id not in migration_coordinator.pending_migrate_in_requests
+
+    # test recv_cache timeout
+    backend_engine._run_workers_async.return_value = [True]
+    result = await migration_coordinator.recv_cache(request_id)
+    assert result is False
+    migration_coordinator.pending_migrate_in_requests[request_id] = time.time()
+    result = await migration_coordinator.recv_cache(request_id)
+    assert result is True
+    assert request_id in migration_coordinator.pending_migrate_in_requests
+    await asyncio.sleep(PENDING_MIGRATE_IN_TIMEOUT + 6.0)
+    assert backend_engine.free_pre_alloc_cache.call_count == 2
+
+    # test non-first_stage pre_alloc_cache timeout
+    backend_engine.pre_alloc_cache.return_value = [0, 1, 2]
+    assert request_id not in migration_coordinator.pending_migrate_in_requests
+    ret = migration_coordinator.pre_alloc_cache(request_id, "running_migrating", 0.0, 3, [], False)
+    assert ret == []
+    migration_coordinator.pending_migrate_in_requests[request_id] = time.time()
+    ret = migration_coordinator.pre_alloc_cache(request_id, "running_migrating", 0.0, 3, [], False)
+    assert ret == [0, 1, 2]
+    assert request_id in migration_coordinator.pending_migrate_in_requests
+    await asyncio.sleep(PENDING_MIGRATE_IN_TIMEOUT + 6.0)
+    assert backend_engine.free_pre_alloc_cache.call_count == 3
+    assert request_id not in migration_coordinator.pending_migrate_in_requests
+
+    # test commit_dst_request_timeout
+    result = await migration_coordinator.commit_dst_request(migrate_out_request)
+    assert result is False
+    migration_coordinator.pending_migrate_in_requests[request_id] = time.time()
+    backend_engine.commit_dst_request.return_value = True
+    result = await migration_coordinator.commit_dst_request(migrate_out_request)
+    assert result is True
+    assert request_id not in migration_coordinator.pending_migrate_in_requests

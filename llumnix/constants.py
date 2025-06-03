@@ -14,7 +14,7 @@
 import torch
 
 
-RAY_REMOTE_CALL_TIMEOUT: float = 10.0
+RAY_RPC_TIMEOUT: float = 10.0
 
 # llumnix/llumlet.py, llumnix/backends/vllm/executor.py
 # Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
@@ -82,8 +82,15 @@ RETRIES_INTERVAL: float = 5.0
 # llumnix/backends/*/migration_backend.py, llumnix/backends/*/migration_worker.py
 GRPC_MAX_MESSAGE_LENGTH = 1 << 31 - 1
 NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION = [torch.float32, torch.float16]
+KVTRANSFER_RPC_TIMEOUT = 10.0
+KVTRANSFER_MIGRATION_TIMEOUT = 100.0
+GRPC_MIGRATION_TIMEOUT = 100.0
+RAYRPC_MIGRATION_TIMEOUT = 100.0
 
 # llumnix/entrypoints/api_server_actor.py
 SERVER_GRACEFUL_SHUTDOWN_TIMEOUT: float = 10.0
 SERVER_START_TIMEOUT: float = 10.0
 SERVER_STOP_TIMEOUT: float = 10.0
+
+# llumnix/llumlet/migration_coordinator.py
+PENDING_MIGRATE_IN_TIMEOUT = 10.0

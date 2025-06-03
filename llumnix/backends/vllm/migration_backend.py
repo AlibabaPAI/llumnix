@@ -25,7 +25,10 @@ from vllm.worker.cache_engine import CacheEngine
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.logging.logger import init_logger
-from llumnix.constants import NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION
+from llumnix.constants import (
+    NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION,
+    RAYRPC_MIGRATION_TIMEOUT,
+)
 from llumnix.utils import random_uuid, ray_get_with_timeout
 
 logger = init_logger(__name__)
@@ -127,10 +130,10 @@ class RayRpcMigrationBackend(MigrationBackendBase):
     # because, for a single node, Ray RPC can transfer NumPy arrays via shared memory. Then, the recv actor
     # first copies the data to a pinned-memory dummy cache before transferring it to the GPU to accelerate data transfer.
     def recv_cache(self,
+                   request_id: str,
                    src_worker_handle: ray.actor.ActorHandle,
                    src_blocks: List[int],
                    dst_blocks: List[int],
-                   request_id: str,
                    is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         rpc_numpy_cache = None
@@ -153,7 +156,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             recv_blocks = dst_blocks[start_idx:start_idx+offset]
 
             if send_worker_metadata:
-                rpc_numpy_cache, src_seq_group_metadata = ray_get_with_timeout(ray_obj)
+                rpc_numpy_cache, src_seq_group_metadata = ray_get_with_timeout(ray_obj, timeout=RAYRPC_MIGRATION_TIMEOUT)
             else:
                 rpc_numpy_cache = ray_get_with_timeout(ray_obj)
 
@@ -331,10 +334,10 @@ class RayColMigrationBackend(MigrationBackendBase):
     # Ray.collective is used to construct the gloo and nccl backends. The do_send/do_recv functions will transmit
     # data layer by layer. Take into consideration that col.send/recv are blocking operations.
     def recv_cache(self,
+                   request_id: str,
                    src_worker_handle: ray.actor.ActorHandle,
                    src_blocks: List[int],
                    dst_blocks: List[int],
-                   request_id: str,
                    is_last_stage: bool) -> None:
         tot_blocks = len(src_blocks)
         src_rank = ray_get_with_timeout(self.proxy_actor.exec_method.remote(src_worker_handle, "get_global_rank"))
@@ -354,6 +357,9 @@ class RayColMigrationBackend(MigrationBackendBase):
                 request_id=request_id,
                 send_worker_metadata=send_worker_metadata
             )
+            # Ray collective communication does not have timeout parameters,
+            # and run this method in another thread to set timeout will also cause cuda stream device mismatch error,
+            # so recv cache does not have timeout only when the migration backend is ray collective.
             self.do_recv(src_rank, recv_blocks)
             if send_worker_metadata:
                 _, src_seq_group_metadata = ray_get_with_timeout(ray_obj)

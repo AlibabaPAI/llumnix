@@ -36,11 +36,12 @@ class DispatchScheduler:
         instance_info: Dict[str, InstanceInfo],
         instance_num_requests: Dict[str, int]
     ) -> str:
-        instance_type = list(instance_info.values())[0].instance_type
+        instance_infos = list(instance_info.values())
+        instance_type = instance_infos[0].instance_type
         num_requests = self.instance_type_num_requests.get(instance_type, 0) + 1
         self.instance_type_num_requests[instance_type] = num_requests
         dispatch_instance_id = self.dispatch_policy.dispatch(
-            instance_num_requests, list(instance_info.values()), self.topk_random_dispatch
+            instance_num_requests, instance_infos, self.topk_random_dispatch
         )
 
         if num_requests % DISPATCH_LOG_FREQUENCY == 0:

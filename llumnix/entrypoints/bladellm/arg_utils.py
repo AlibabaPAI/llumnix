@@ -71,6 +71,11 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
             if revised_args.engine_disagg_inst_id:
                 engine_args.disagg_options.inst_id = revised_args.engine_disagg_inst_id
             engine_args.disagg_options.select_decode_policy = DecodeRoutingPolicy.EXTERNAL_ROUTE
+        if engine_args.enable_semi_pd_mode:
+            if revised_args.semi_pd_inst_id:
+                engine_args.semi_pd_options.inst_id = revised_args.semi_pd_inst_id
+            if revised_args.semi_pd_prefill_server_port:
+                engine_args.semi_pd_options.prefill_server_port = revised_args.semi_pd_prefill_server_port
         return engine_args
 
     def get_world_size(self):
@@ -82,6 +87,8 @@ class RevisedArgs:
     # bladellm engine args need to revised
     disagg_options_inst_role: str = field(default=None)
     engine_disagg_inst_id: str = field(default=None)
+    semi_pd_prefill_server_port: int = field(default=None)
+    semi_pd_inst_id: str = field(default=None)
 
 
 def add_cli_args(parser: LlumnixArgumentParser, add_engine_args: bool = True) -> LlumnixArgumentParser:

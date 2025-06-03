@@ -99,7 +99,6 @@ class Scaler:
         self.load_registered_service = manager_args.load_registered_service
         self.load_registered_service_path = manager_args.load_registered_service_path
         self.pdd_config: PDDConfig = manager_args.create_pdd_config()
-
         self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
         self.manager = Manager.from_args(
             entrypoints_args=entrypoints_args,
@@ -476,8 +475,14 @@ class Scaler:
         next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
             backend_type=backend_type,
             current_engine_args=engine_args,
-            instance_type=next_instance_args.instance_type,
+            next_instance_args=next_instance_args,
         )
+
+        if self.enable_port_increment:
+            self.port_offset += 1
+            if self.enable_port_offset_store:
+                put_data_to_ray_internal_kv("scaler.port_offset", self.port_offset)
+
         instance = self._init_instance(
             instance_id,
             next_instance_args,
@@ -646,12 +651,13 @@ class Scaler:
             not self.enable_port_increment
             and not self.pdd_config.enable_pd_disagg
             and not self.pdd_config.enable_engine_pd_disagg
+            and not self.pdd_config.enable_engine_semi_pd
         ):
             return instance_args
 
         next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
 
-        if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg:
+        if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd:
             # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
             cur_num_prefill_instances, cur_num_decode_instances = \
                 await execute_actor_method_async_with_retries(
@@ -661,6 +667,9 @@ class Scaler:
             next_instance_args.instance_type = self._get_next_instance_type(
                 cur_num_prefill_instances, cur_num_decode_instances, self.pdd_config.pd_ratio, instance_type,)
 
+            if self.pdd_config.enable_engine_semi_pd and self.enable_port_increment:
+                next_instance_args.semi_pd_prefill_server_port += self.port_offset
+
         return next_instance_args
 
     def _get_next_entrypoints_args(self, entrypoints_args: EntrypointsArgs) -> EntrypointsArgs:
@@ -669,9 +678,6 @@ class Scaler:
 
         next_entrypoints_args = copy.deepcopy(entrypoints_args)
         next_entrypoints_args.port += self.port_offset
-        self.port_offset += 1
-        if self.enable_port_offset_store:
-            put_data_to_ray_internal_kv("scaler.port_offset", self.port_offset)
 
         return next_entrypoints_args
 
@@ -683,7 +689,8 @@ class Scaler:
         if instance_type:
             return instance_type
 
-        if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg:
+        if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg \
+            and not self.pdd_config.enable_engine_semi_pd:
             return InstanceType.NO_CONSTRAINTS
 
         # There are no instances simultaneously in inflight_num_prefill_instances and cur_num_prefill_instances

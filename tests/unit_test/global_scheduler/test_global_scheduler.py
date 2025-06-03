@@ -20,13 +20,14 @@ from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
 from llumnix.utils import random_uuid
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
+from llumnix.arg_utils import InstanceArgs
 
 from .test_manager import get_instance_info_migrate_in, get_instance_info_migrate_out
 
 
 def init_global_scheduler():
     global_scheduler_config = GlobalSchedulerConfig(0, 'load', 1, 'defrag', 3.0,
-                                                    'avg_load', 'remaining_steps', 10, 60, False, False)
+                                                    'avg_load', 'remaining_steps', 10, 60, False, False, False)
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler
 
@@ -232,7 +233,10 @@ def test_pair_migration(global_scheduler):
     instance_ids = [instance_id, instance_id_1]
     instance_info_migrate_in = get_instance_info_migrate_in(instance_id)
     instance_info_migrate_out = get_instance_info_migrate_out(instance_id_1)
-    instance_load_calculator = InstanceLoadCalculator("remaining_steps", "remaining_steps", False)
+    instance_args = InstanceArgs(dispatch_load_metric="remaining_steps",
+                                 migration_load_metric="remaining_steps",
+                                 enable_defrag=False)
+    instance_load_calculator = InstanceLoadCalculator(instance_args)
     instance_load_calculator.compute_instance_load(instance_info_migrate_in)
     instance_load_calculator.compute_instance_load(instance_info_migrate_out)
     instance_infos = [instance_info_migrate_in, instance_info_migrate_out]

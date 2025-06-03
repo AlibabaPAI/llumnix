@@ -279,7 +279,7 @@ class Manager:
                         try:
                             # TODO(s5u13b): Fix the clear_migration_states to adapt to the many-to-many migration.
                             await asyncio_wait_for_with_timeout(
-                                self.instances[instance_id].execute_engine_method_async.remote(
+                                self.instances[instance_id].execute_migration_method_async.remote(
                                     "clear_migration_states", is_migrate_in=bool(i)
                                 )
                             )

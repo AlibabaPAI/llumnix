@@ -20,6 +20,8 @@ Implementing P-D disaggregation in Llumnix has the following benefits.
 <img src="./pdd_design.png" align="center" width=80%/>
 </div>
 
+<!-- TODO(KuilongCui): add dynamic pd description -->
+
 ## Supported Features
 1. Requests can be **automatically migrated** from prefill instance to decode instances.
 

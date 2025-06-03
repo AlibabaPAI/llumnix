@@ -57,6 +57,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
             [--enable-adaptive-pd]
             [--enable-pd-disagg]
+            [--enable-dynamic-pd-disagg]
             [--enable-engine-pd-disagg]
             [--pd-ratio PD_RATIO]
             [--load-registered-service]
@@ -159,7 +160,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--dispatch-policy`
 - Request dispatch policy.
-- Possible choices: balanced, load, queue, rr
+- Possible choices: balanced, load, queue, rr, dynamicpd
 - Default: "load"
 
 `--topk-random-dispatch`
@@ -268,6 +269,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--enable-pd-disagg`
 - Enable prefill decode disaggregation (for vLLM).
+
+`enable-dynamic-pd-disagg`
+- Enable dynamic prefill decode disaggregation (for vLLM).
 
 `--enable-engine-pd-disagg`
 - Enable engine-based prefill decode disaggregation (for BladeLLM).

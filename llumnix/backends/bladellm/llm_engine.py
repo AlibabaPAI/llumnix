@@ -16,13 +16,13 @@
 import sys
 import time
 from functools import partial
-import json
 from typing import List, Optional, Tuple, Union, Iterable, Dict, Any
 from collections import defaultdict
 import asyncio
 import queue
 import os
 
+import msgspec
 import ray
 import ray.actor
 import grpc
@@ -34,7 +34,7 @@ from google.protobuf import empty_pb2
 from blade_llm.utils.constants import LOGGER_FORMAT
 from blade_llm.service.engine import AsyncLLMEngine
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
 from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
 from blade_llm.service.communications.engine_msg_server import EngineMsgServer
@@ -99,7 +99,7 @@ class AsyncBackQueueWrapper:
             placement_group_capture_child_tasks=True,
         )
         self.instance_id = instance_id
-        self.async_put_queue_actor = ray.remote(
+        self.async_put_queue_actor: AsyncPutQueueActor = ray.remote(
             num_cpus=1,
             num_gpus=NUM_GPUS_BLADELLM_GPU_ACTOR,
             scheduling_strategy=scheduling_strategy,
@@ -137,7 +137,7 @@ class AsyncBackQueueWrapper:
                 self.backup_dangling_request_server_info.pop(req_id, None)
 
     async def _put_request_outputs_loop(self):
-        async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
+        async def get_engine_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
             resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
             while isinstance(resp, int):
                 self.get_current_step_counter_queue.put_nowait(resp)
@@ -155,23 +155,21 @@ class AsyncBackQueueWrapper:
         self.current_step_metrics: RequestTimestamps = None
         while True:
             request_outputs, server_info_outputs = [], []
-
-            resp, server_info = await get_single_response()
+            resp, server_info = await get_engine_response()
             request_outputs.append(resp)
             server_info_outputs.append(server_info)
 
             if self.put_queue_args_queue.qsize() > 0:
                 output_size = self.put_queue_args_queue.qsize()
                 for _ in range(output_size):
-                    resp, server_info = await get_single_response()
+                    resp, server_info = await get_engine_response()
                     request_outputs.append(resp)
                     server_info_outputs.append(server_info)
 
             await self._put_request_outputs_to_server(request_outputs, server_info_outputs)
 
-    async def _put_request_outputs_to_server(self,
-                                             request_outputs: List[GenerateStreamResponse],
-                                             server_infos: List[ServerInfo]) -> None:
+    async def _put_request_outputs_to_server(self, request_outputs: List[GenerateStreamResponse],
+                                       server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in order to put request output to queue in batch at one time.
@@ -189,9 +187,8 @@ class AsyncBackQueueWrapper:
                             self.current_step_metrics.engine_step_postprocess_timestamp_end)
                 set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
                             self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
-
             llumnix_request_output = LlumnixRequestOuputBladeLLM(
-                request_output.req_id, self.instance_id, request_output.model_dump_json(), request_timestamps
+                request_output.req_id, self.instance_id, msgspec.msgpack.encode(request_output), request_timestamps
             )
             server_id = server_info.server_id
             server_request_outputs[server_id].append(llumnix_request_output)
@@ -272,6 +269,7 @@ class AsyncLLMEngineLlumnixMixin:
 
     async def step(self):
         self.step_counter += 1
+        self.handle_request_barriers()
         await super().step()
 
     async def async_start(self, loop: asyncio.AbstractEventLoop):
@@ -292,7 +290,7 @@ class AsyncLLMEngineLlumnixMixin:
             self.worker_migration_channels = [grpc.aio.insecure_channel(worker) for worker in self.src_workers_migration_ip_addr_list]
             self.worker_migration_stubs = [migration_worker_pb2_grpc.MigrationWorkerStub(channel) for channel in self.worker_migration_channels]
 
-    def inject_request_barriers(self):
+    def handle_request_barriers(self):
         async def finish_callback(resp_list, request_barriers: List[RequestBarrier]):
             for request_barrier in request_barriers:
                 request_barrier.notify()
@@ -396,7 +394,7 @@ class AsyncLLMEngineLlumnixMixin:
         await super()._handle_reset()
         self.trans_wrapper.clear()
 
-    async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
+    async def add_request_wrapper(self, server_info: ServerInfo, server_request: ServerRequest):
         logger.debug("Engine {} add request {}:{}.".format(self.instance_id, server_request.id, server_request.external_id))
         self.log_request_timestamps = self.log_request_timestamps or hasattr(server_info, 'request_timestamps')
         set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
@@ -538,7 +536,10 @@ class BackendBladeLLM(BackendInterface):
             if self.instance_args.engine_disagg_inst_id_env_var
             else self.instance_id
         )
-        self.llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
+        if self.instance_args.enable_engine_pd_disagg:
+            self.llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
+        elif self.instance_args.enable_engine_semi_pd:
+            self.llumnix_engine_args.update_arg("semi_pd_inst_id", self.engine_disagg_inst_id)
         self.engine_args: ServingArgs = self.llumnix_engine_args.load_engine_args()
         self.engine_args.decoding_parallelism = min(max(get_cpu_number() // 2, 1), 2)
 
@@ -630,10 +631,14 @@ class BackendBladeLLM(BackendInterface):
 
     async def add_request(self, request_id: int, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
-        server_request = ServerRequest(**json.loads(kwargs["server_request"]))
+        server_request: ServerRequest = msgspec.msgpack.decode(kwargs["server_request"], type=ServerRequest)
         # The instance ID of the decode instance. If provided, engine will skip dispatch decode instance after prefilling.
-        server_request.decode_instances = [kwargs.get("decode_instance_id", ""),]
-        await self.engine.add_request(server_info, server_request)
+        if self.engine_args.enable_disagg:
+            server_request.decode_instances = [kwargs.get("decode_instance_id", ""),]
+        if self.engine_args.enable_semi_pd_mode:
+            server_request.semi_p_inst_id = kwargs.get("semi_p_inst_id", None)
+            server_request.semi_d_inst_id = kwargs.get("semi_d_inst_id", None)
+        await self.engine.add_request_wrapper(server_info, server_request)
 
     async def abort_request(self, request_id: Union[int, Iterable[int]]) -> None:
         if isinstance(request_id, int):
@@ -664,7 +669,8 @@ class BackendBladeLLM(BackendInterface):
         if is_last_stage:
             request_barrier = RequestBarrier(backend_request.request_id)
             self.request_barriers.put_nowait(request_barrier)
-            self.engine.inject_request_barriers()
+            if self.engine._migration_semaphore.locked():
+                self.engine._migration_semaphore.release()
             await request_barrier.wait()
 
             if backend_request.should_abort_migration() or self.engine.scheduler.is_hunger():

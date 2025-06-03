@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
+from llumnix.load_computation import DummyLoad
 from llumnix.global_scheduler.migration_filter import MigrationInstanceFilter, MigrationFilterConfig, CustomFilter
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints, PairMigrationPolicyFactory
 
@@ -28,6 +29,7 @@ class MigrationScheduler:
         filter_config = MigrationFilterConfig(migrate_out_load_threshold=migrate_out_load_threshold)
         self.migration_filter = MigrationInstanceFilter(filter_config)
         self._register_migration_backend_init_filter(is_group_kind_migration_backend)
+        self._register_new_instance_filter()
 
         self.pair_migration_policy = PairMigrationPolicyFactory.get_policy(
             pair_migration_policy, migrate_out_load_threshold=migrate_out_load_threshold)
@@ -41,8 +43,18 @@ class MigrationScheduler:
             dst_filter=lambda _: not is_group_kind_migration_backend)
         self.migration_filter.register_filter("migration_backend_init_filter", migration_backend_init_filter)
 
+    def _register_new_instance_filter(self) -> None:
+        # instances that have just been launched should be refused for migration due to the absence of load information.
+        new_instance_filter = CustomFilter()
+        new_instance_filter.set_filter_condtition(
+            src_filter=lambda instance_info: not isinstance(instance_info.migration_load_metric, DummyLoad),
+            dst_filter=lambda instance_info: not isinstance(instance_info.migration_load_metric, DummyLoad))
+        self.migration_filter.register_filter("new_instance_filter", new_instance_filter)
+
     # migration_filter must ensure that the specific instance_info does not appear in both src and dst simultaneously
     def pair_migration(self, instance_info: Dict[str, InstanceInfo], pair_migration_type: PairMigrationConstraints) -> List[Tuple[str, str]]:
         src_instance_infos, dst_instance_infos = self.migration_filter.filter_instances(
             instance_info.values(), pair_migration_type)
+        assert set(src_instance_infos).isdisjoint(dst_instance_infos), \
+            f"src and dst migration instance should not overlap, but got overlap {set(src_instance_infos).intersection(dst_instance_infos)}"
         return self.pair_migration_policy.pair_migration(src_instance_infos, dst_instance_infos)

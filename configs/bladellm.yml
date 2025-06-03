@@ -1,3 +1,5 @@
+# The field, once set to True in the config file, cannot be set to False via command-line arguments.
+
 SERVER:
   HOST: '127.0.0.1'
   PORT: 1234
@@ -6,7 +8,7 @@ SERVER:
   LAUNCH_RAY_CLUSTER: False
 
 MANAGER:
-  ENABLE_MIGRATION: True
+  ENABLE_MIGRATION: False
   MIGRATE_OUT_THRESHOLD: -3.0
   DISPATCH_POLICY: 'load'
   PAIR_MIGRATION_POLICY: 'defrag'

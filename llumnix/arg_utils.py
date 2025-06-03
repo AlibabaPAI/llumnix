@@ -21,7 +21,6 @@ import pickle
 from typing import List, Tuple, Union, Dict
 from abc import ABC, abstractmethod
 
-from llumnix.instance_info import InstanceType
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
@@ -104,7 +103,6 @@ class LlumnixEngineArgs(ABC):
 
 
 class LlumnixEngineArgsFactory:
-
     def __init__(
         self,
         load_registered_service: bool,
@@ -132,7 +130,7 @@ class LlumnixEngineArgsFactory:
                 )
 
     def gen_next_engine_args(
-        self, backend_type: BackendType, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
+        self, backend_type: BackendType, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, 'InstanceType']
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
             current_engine_args = self.engine_args_dict[instance_type]
@@ -140,6 +138,8 @@ class LlumnixEngineArgsFactory:
         if backend_type == BackendType.BLADELLM:
             # pylint: disable=import-outside-toplevel
             from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
+            from llumnix.instance_info import InstanceType
+
             next_engine_args = BladeLLMEngineArgs(current_engine_args)
             if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
                 next_engine_args.revised_args.disagg_options_inst_role = (
@@ -244,9 +244,6 @@ class EntrypointsArgs:
                             type=str,
                             choices=['rayqueue', 'zmq'],
                             help='queue type for request output queue')
-        parser.add_argument("--request-output-queue-port",
-                            type=int,
-                            help='port number for the zmq request output queue')
         parser.add_argument('--disable-log-requests-server',
                             action='store_true',
                             help='disable logging requests in server')
@@ -281,12 +278,12 @@ class ManagerArgs:
     scale_up_threshold: float = None
     scale_down_threshold: float = None
 
-    disable_log_requests_manager: bool = None
     log_instance_info: bool = None
     log_filename: str = None
     enable_port_increment: bool = None
     enable_port_offset_store: bool = None
 
+    enable_adaptive_pd: bool = None
     enable_pd_disagg: bool = None
     pd_ratio: Union[str, List[int]] = None
     load_registered_service: bool = None
@@ -338,6 +335,17 @@ class ManagerArgs:
         if args.enable_pd_disagg:
             assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
 
+        if args.enable_adaptive_pd:
+            assert args.enable_pd_disagg or args.enable_engine_pd_disagg, \
+                "Adaptive prefill-decode disaggregation is only supported when prefill-decode disaggregation, " \
+                "set --enable-pd-disagg or --enable-engine-pd-disagg to enable prefill-decode disaggregation."
+
+        assert not (args.enable_engine_pd_disagg and args.enable_adaptive_pd), "Adaptive prefill-decode disaggregation \
+            is not supported when engine-based prefill-decode disaggregation is enabled."
+
+        assert not (args.enable_engine_pd_disagg and args.enable_pd_disagg), "Engine-based prefill-decode disaggregation and \
+            Llumnix-based prefill-decode disaggregation are mutually exclusive."
+
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
 
@@ -353,6 +361,8 @@ class ManagerArgs:
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
+                                                        self.enable_engine_pd_disagg,
+                                                        self.enable_adaptive_pd,
                                                         self.is_group_kind_migration_backend)
         return global_scheduler_config
 
@@ -373,7 +383,7 @@ class ManagerArgs:
                             help='time interval(s) to update instance info and pair migration')
         parser.add_argument('--scaling-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
                             help='instance scaling load metric')
         parser.add_argument('--dispatch-policy',
                             type=str,
@@ -390,7 +400,6 @@ class ManagerArgs:
                             'The candidate instances are first selected according to the load'
                             '(including factors such as load, queue size, etc.) based on the dispatch policy,'
                             'and then one of them is randomly chosen to receive the request for better load balancing.')
-
         parser.add_argument('--enable-migration',
                             action='store_true',
                             help='enable migrate requests between instances')
@@ -429,9 +438,6 @@ class ManagerArgs:
         parser.add_argument('--scale-down-threshold',
                             type=float,
                             help='scale down threshold')
-        parser.add_argument('--disable-log-requests-manager',
-                            action='store_true',
-                            help='disable logging requests in manager')
         parser.add_argument('--log-instance-info',
                             action='store_true',
                             help='enable logging instance info')
@@ -447,6 +453,9 @@ class ManagerArgs:
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',
                             help='enable prefill-decode disaggregation')
+        parser.add_argument('--enable-adaptive-pd',
+                            action='store_true',
+                            help='[Experimental] enable adaptive prefill-decode disaggregation')
         parser.add_argument('--enable-engine-pd-disagg',
                             action='store_true',
                             help='enable engine-based prefill-decode disaggregation')
@@ -491,6 +500,10 @@ class InstanceArgs:
     profiling_result_file_path: str = None
 
     dispatch_load_metric: str = None
+    dispatch_prefill_load_metric: str = None
+    dispatch_prefill_as_decode_load_metric: str = None
+    dispatch_decode_load_metric: str = None
+    dispatch_decode_as_prefill_load_metric: str = None
     migration_load_metric: str = None
     enable_defrag: bool = None
     request_migration_policy: str = None
@@ -512,6 +525,7 @@ class InstanceArgs:
 
     # init from manager args
     enable_migration: bool = None
+    enable_adaptive_pd: bool = None
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -545,6 +559,7 @@ class InstanceArgs:
 
     def init_from_manager_args(self, manager_args: ManagerArgs):
         self.enable_migration = manager_args.enable_migration
+        self.enable_adaptive_pd = manager_args.enable_adaptive_pd
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.enable_migration,
@@ -583,11 +598,32 @@ class InstanceArgs:
                             help='enable simulator mode')
         parser.add_argument('--dispatch-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
-                            help='instance dispatch load metric')
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='instance dispatch load metric.\n\n'
+                            '* "remaining_steps" refers to the number of steps the remaining KV cache can support for all \
+                            running and some waiting requests to proceed.\n'
+                            '* "kv_blocks_ratio" refers to the total number of KV cache blocks required by all running \
+                            and waiting requests.\n'
+                            )
+        parser.add_argument('--dispatch-prefill-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='prefill instance dispatch load metric')
+        parser.add_argument('--dispatch-prefill-as-decode-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio', 'adaptive_decode'],
+                            help='[Experimental] prefill instance dispatch load metric when decoding')
+        parser.add_argument('--dispatch-decode-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='decode instance dispatch load metric')
+        parser.add_argument('--dispatch-decode-as-prefill-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='[Experimental] decode instance dispatch load metric when prefilling')
         parser.add_argument('--migration-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
                             help='instance migration load metric')
         parser.add_argument('--enable-defrag',
                             type=bool,

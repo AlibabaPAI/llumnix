@@ -19,9 +19,13 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--log-request-timestamps]
             [--config-file CONFIG_FILE]
             [--initial-instances INITIAL_INSTANCES]
-            [--dispatch-load-metric {remaining_steps,usage_ratio}]
-            [--migration-load-metric {remaining_steps,usage_ratio}]
-            [--scaling-load-metric {remaining_steps,usage_ratio}]
+            [--dispatch-load-metric {remaining_steps,kv_blocks_ratio}]
+            [--dispatch-prefill-load-metric {remaining_steps,kv_blocks_ratio}]
+            [--dispatch-prefill-as-decode-load-metric {remaining_steps,kv_blocks_ratio,adaptive_decode}]
+            [--dispatch-decode-load-metric {remaining_steps,kv_blocks_ratio}]
+            [--dispatch-decode-as-prefill-load-metric {remaining_steps,kv_blocks_ratio}]
+            [--migration-load-metric {remaining_steps,kv_blocks_ratio}]
+            [--scaling-load-metric {remaining_steps,kv_blocks_ratio}]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue,rr}]
             [--topk-random-dispatch TOPK_RANDOM_DISPATCH]
@@ -38,7 +42,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--scaling-policy {max_load,avg_load}]
             [--scale-up-threshold SCALE_UP_THRESHOLD]
             [--scale-down-threshold SCALE_DOWN_THRESHOLD]
-            [--disable-log-requests-manager]
             [--log-instance-info]
             [--log-filename LOG_FILENAME]
             [--simulator-mode]
@@ -52,6 +55,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--kvtransfer-migration-backend-naming-url KVTRANSFER_MIGRATION_BACKEND_NAMING_URL]
             [--migration-max-stages MIGRATION_MAX_STAGES]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
+            [--enable-adaptive-pd]
             [--enable-pd-disagg]
             [--enable-engine-pd-disagg]
             [--pd-ratio PD_RATIO]
@@ -117,17 +121,37 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--dispatch-load-metric`
 - Instance dispatch load metric.
-- Possible choices: remaining_steps, usage_ratio
+- Possible choices: remaining_steps, kv_blocks_ratio
 - Default: "remaining_steps"
+
+`--dispatch-prefill-load-metric`
+- Instance dispatch load metric for prefill instance under prefill-decode disaggregation.
+- Possible choices: remaining_steps, kv_blocks_ratio
+- Default: "kv_blocks_ratio"
+
+`--dispatch-prefill-as-decode-load-metric`
+- [Experimental] Instance dispatch load metric for prefill instance when decoding under adaptive prefill-decode disaggregation.
+- Possible choices: remaining_steps, kv_blocks_ratio, adaptive_decode
+- Default: "adaptive_decode"
+
+`--dispatch-decode-load-metric`
+- Instance dispatch load metric for decode instance under prefill-decode disaggregation.
+- Possible choices: remaining_steps, kv_blocks_ratio
+- Default: "remaining_steps"
+
+`--dispatch-decode-as-prefill-load-metric`
+- [Experimental] Instance dispatch load metric for decode instance when prefilling under adaptive prefill-decode disaggregation.
+- Possible choices: remaining_steps, kv_blocks_ratio
+- Default: "kv_blocks_ratio"
 
 `--migration-load-metric`
 - Instance migration load metric.
-- Possible choices: remaining_steps, usage_ratio
+- Possible choices: remaining_steps, kv_blocks_ratio
 - Default: "remaining_steps"
 
 `--scaling-load-metric`
 - Instance scaling load metric.
-- Possible choices: remaining_steps, usage_ratio
+- Possible choices: remaining_steps, kv_blocks_ratio
 - Default: "remaining_steps"
 
 `--polling-interval`
@@ -195,9 +219,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Scale down threshold.
 - Default: 60
 
-`--disable-log-requests-manager`
-- Disable logging requests in manager.
-
 `--log-instance-info`
 - Enable logging instance info.
 
@@ -251,6 +272,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--enable-engine-pd-disagg`
 - Enable engine-based prefill decode disaggregation (for BladeLLM).
+
+`--enable-adaptive-pd`
+- [Experimental] Enable adaptive prefill decode disaggregation.
 
 `--pd-ratio`
 - The p:d ratio used in gloabl launch mode.

@@ -27,6 +27,8 @@ class GlobalSchedulerConfig:
             scale_up_threshold: float,
             scale_down_threshold: float,
             enable_pd_disagg: bool,
+            enable_engine_pd_disagg: bool,
+            enable_adaptive_pd: bool,
             is_group_kind_migration_backend: bool) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy
@@ -41,6 +43,8 @@ class GlobalSchedulerConfig:
         self.scale_down_threshold = scale_down_threshold
 
         self.enable_pd_disagg = enable_pd_disagg
+        self.enable_engine_pd_disagg = enable_engine_pd_disagg
+        self.enable_adaptive_pd = enable_adaptive_pd
         self.is_group_kind_migration_backend = is_group_kind_migration_backend
 
 

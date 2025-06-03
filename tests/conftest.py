@@ -54,7 +54,7 @@ def ray_stop(max_retries=5, delay=5):
 
     attempt = 0
     while attempt <= max_retries:
-        subprocess.run(["ray", "stop"], check=False, stdout=subprocess.DEVNULL)
+        subprocess.run(["ray", "stop", "--force"], check=False, stdout=subprocess.DEVNULL)
         if not is_ray_running():
             print("Ray has been successfully stopped.")
             return

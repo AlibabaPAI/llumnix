@@ -16,7 +16,7 @@ import subprocess
 from typing import List
 
 from setuptools import setup, find_packages
-from setuptools.command.build_py import build_py
+from wheel.bdist_wheel import bdist_wheel
 
 ROOT_DIR = os.path.dirname(__file__)
 
@@ -35,7 +35,7 @@ def readme():
         content = f.read()
     return content
 
-class CustomBuildCommand(build_py):
+class BuildWheelOverride(bdist_wheel):
     def run(self):
         subprocess.check_call(['make', 'proto'], cwd=ROOT_DIR)
         super().run()
@@ -64,6 +64,6 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={
-        'build_py': CustomBuildCommand,
+        'bdist_wheel': BuildWheelOverride,
     }
 )

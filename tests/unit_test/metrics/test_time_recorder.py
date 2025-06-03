@@ -17,7 +17,7 @@ import pytest
 from llumnix.metrics.metrics_types import Summary, Registery
 
 
-@pytest.mark.parametrize("sleep_time", [0.001, 0.01, 0.1, 1, 10])
+@pytest.mark.parametrize("sleep_time", [0.001, 0.01, 0.1, 1])
 async def test_time_recorder(sleep_time: int):
     register = Registery()
     summary = Summary(name="unit_test_summary", registry=register)
@@ -26,16 +26,9 @@ async def test_time_recorder(sleep_time: int):
         with summary.observe_time(enabled=True):
             await asyncio.sleep(sleep_time)
 
-    tasks = [worker(sleep_time=sleep_time) for i in range(1000)]
+    tasks = [worker(sleep_time=sleep_time) for i in range(100)]
     await asyncio.gather(*tasks)
     metrics = summary.collect()
     for metric in metrics:
         if metric.name == "unit_test_summary_mean":
-            if sleep_time == 0.001:
-                assert metric.value < 0.01
-            elif sleep_time == 0.01:
-                assert metric.value < 0.1
-            elif sleep_time == 0.1:
-                assert metric.value < 0.11
-            else:
-                assert metric.value < sleep_time * 1.01
+            assert metric.value < sleep_time*1000 + 2

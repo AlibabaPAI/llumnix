@@ -62,11 +62,12 @@ class EASExporter(_BaseExporter):
             request = urllib.request.Request(
                 self._url, data=encoded_data, method="POST"
             )
-            response = urllib.request.urlopen(request)
-            _ = response.read()
+            with urllib.request.urlopen(request) as response:
+                _ = response.read()
+        # pylint: disable=broad-except
         except Exception as e:
             self._failed_cnt += 1
-            logger.warning("Failed to export metric to EAS sidecar, error: {}", e)
+            logger.warning("Failed to export metric to EAS sidecar, error: {}".format(e))
             if self._failed_cnt == EASExporter.FAILURE_LIMIT:
                 logger.warning(
                     "Stop exporting metric to EAS sidecar due to too many failures."

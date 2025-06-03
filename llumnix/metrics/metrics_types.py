@@ -46,8 +46,6 @@ class TimeRecorder:
             return
         self._end_time = time.perf_counter()
         cost_time = (self._end_time - self._start_time) * 1000  # record in millisecond
-        if not self.metrics:
-            return cost_time
         self.metrics.observe(value=cost_time, labels=self.labels)
 
 
@@ -59,9 +57,9 @@ class MetricEntry:
 
     def __str__(self):
         if self.labels:
-            return f"{self.name}{{{self.labels}}}: {self.value}."
-        else:
-            return f"{self.name}{{}}: {self.value}."
+            return f"{self.name}{{{self.labels}}}: {self.value}."\
+
+        return f"{self.name}{{}}: {self.value}."
 
     def __repr__(self):
         return self.__str__()
@@ -116,13 +114,16 @@ class MetricWrapperBase(ABC):
             _REGISTRY.register(name, self)
 
     @abstractmethod
-    def collect(self) -> List[MetricEntry]: ...
+    def collect(self) -> List[MetricEntry]:
+        ...
 
     @abstractmethod
-    def collect_without_labels(self) -> List[MetricEntry]: ...
+    def collect_without_labels(self) -> List[MetricEntry]:
+        ...
 
     @abstractmethod
-    def observe(self, value: Any, labels: Dict[str, str] = None) -> None: ...
+    def observe(self, value: Any, labels: Dict[str, str] = None) -> None:
+        ...
 
     @property
     def name(self) -> str:

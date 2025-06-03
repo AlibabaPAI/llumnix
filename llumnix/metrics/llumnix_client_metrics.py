@@ -86,7 +86,7 @@ class LlumnixClientMetrics(BaseMetrics):
     ):
         # some manager metrics or engine metrics may passed by timestamps,
         # so we record them here
-        if enable_any_metrics():
+        if enable_any_metrics() and request_timestamp:
             self.record_latency_if_exist(
                 timestamp_end=request_timestamp.manager_generate_timestamp,
                 timestamp_begin=request_timestamp.api_server_generate_timestamp,

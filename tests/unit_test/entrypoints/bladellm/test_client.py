@@ -23,6 +23,7 @@ from unittest.mock import MagicMock
 from blade_llm.protocol import GenerateStreamResponse, Token, TokenUsage
 
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
+from llumnix.server_info import ServerInfo
 from llumnix.utils import random_uuid
 from llumnix.ray_utils import get_instance_name
 from llumnix.request_output import LlumnixRequestOuput
@@ -44,6 +45,11 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.num_finished_requests = 0
         self.manager_available = True
         self.log_request_timestamps = False
+        self.server_info = ServerInfo( server_id="server_id",
+                 request_output_queue_type='zmq',
+                 request_output_queue=None,
+                 request_output_queue_ip='127.0.0.1',
+                 request_output_queue_port=12345)
 
         self.request_output_queue = asyncio.Queue()
         self.llumnix_req_id_to_entrypoint_req_id = {}

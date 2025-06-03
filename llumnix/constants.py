@@ -38,7 +38,7 @@ DEFAULT_INSTANCE_READY_TIMEOUT: float = 300.0
 DEFAULT_SERVER_READY_TIMEOUT: float = 60.0
 
 # llumnix/global_scheduler/dispatch_scheduler.py
-DISPATCH_LOG_FREQUENCY: int = 101  # Use odd numbers to avoid only print prefill instance log
+DISPATCH_LOG_FREQUENCY: int = 100
 
 # llumnix/entrypoints/setup.py
 MAX_RAY_RESTART_TIMES: int = 10

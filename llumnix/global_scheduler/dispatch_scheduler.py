@@ -29,20 +29,22 @@ class DispatchScheduler:
         self.topk_random_dispatch = topk_random_dispatch
 
         # statistics
-        self.total_num_requests = 0
+        self.instance_type_num_requests: Dict[str, int] = {}
 
     def dispatch(
         self,
         instance_info: Dict[str, InstanceInfo],
         instance_num_requests: Dict[str, int]
     ) -> str:
-        self.total_num_requests += 1
+        instance_type = list(instance_info.values())[0].instance_type
+        num_requests = self.instance_type_num_requests.get(instance_type, 0) + 1
+        self.instance_type_num_requests[instance_type] = num_requests
         dispatch_instance_id = self.dispatch_policy.dispatch(
             instance_num_requests, list(instance_info.values()), self.topk_random_dispatch
         )
 
-        if self.total_num_requests % DISPATCH_LOG_FREQUENCY == 0:
-            logger.info("dispatch scheduler total_dispatched_requests: {}".format(self.total_num_requests))
+        if num_requests % DISPATCH_LOG_FREQUENCY == 0:
+            logger.info("dispatch scheduler total_dispatched_requests: {}".format(num_requests))
             for instance_id, num_requests in instance_num_requests.items():
                 logger.info("instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
         return dispatch_instance_id

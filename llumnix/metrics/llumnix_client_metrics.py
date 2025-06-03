@@ -73,7 +73,6 @@ class LlumnixClientMetrics(BaseMetrics):
         labels: dict = None,
     ) -> bool:
         if timestamp_begin > 0.0 and timestamp_end > 0.0:
-            logger.info(f"{metrics_name}: {timestamp_end - timestamp_begin}")
             self.register.get(metrics_name).observe(
                 value=(timestamp_end - timestamp_begin) * 1000,
                 labels=labels,

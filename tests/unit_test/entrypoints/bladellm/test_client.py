@@ -26,6 +26,8 @@ from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.utils import random_uuid
 from llumnix.ray_utils import get_instance_name
 from llumnix.request_output import LlumnixRequestOuput
+from llumnix.metrics.llumnix_client_metrics import LlumnixClientMetrics
+
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -48,6 +50,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.entrypoint_req_id_to_llumnix_req_id = {}
         self.request_instance = {}
         self.global_instances = {}
+        self.llumnix_client_metrics = LlumnixClientMetrics()
         if loop:
             loop.create_task(self.get_request_outputs_loop())
 

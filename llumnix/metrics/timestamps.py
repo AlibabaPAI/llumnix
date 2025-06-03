@@ -31,7 +31,7 @@ def get_timestamp(item: Any, timestamp_attr: str):
         item.request_timestamps, timestamp_attr
     ):
         return getattr(item.request_timestamps, timestamp_attr)
-    elif hasattr(item, timestamp_attr):
+    if hasattr(item, timestamp_attr):
         return getattr(item, timestamp_attr)
     return False
 

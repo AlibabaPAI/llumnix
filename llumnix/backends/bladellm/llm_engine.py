@@ -45,6 +45,7 @@ from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 from blade_llm.service.communications import AsyncLLMEngineClient
 from blade_llm.service.communications.protocol import Stats
+from blade_llm.utils.hardware_util import get_cpu_number
 
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_free_port,
@@ -539,6 +540,7 @@ class BackendBladeLLM(BackendInterface):
         )
         self.llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
         self.engine_args: ServingArgs = self.llumnix_engine_args.load_engine_args()
+        self.engine_args.decoding_parallelism = min(max(get_cpu_number() // 2, 1), 2)
 
         # add instance_id to avoid path conflict when multi-engine running in a single pod
         # use instance_id[:5] to avoid the length of worker_socket_path exceeding the OS limit

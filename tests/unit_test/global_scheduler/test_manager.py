@@ -156,11 +156,11 @@ def test_init_llumlet(ray_env, llumlet):
     assert llumlet is not None
     ray.get(llumlet.is_ready.remote())
 
-def test_scale_up_and_down(ray_env, manager):
+def test_scale_up_and_down(ray_env, manager: Manager):
     initial_instances = 4
     instance_ids, instances = init_instances(initial_instances)
     num_instances = ray.get(manager.scale_up.remote(instance_ids, instances, [InstanceType("no_constraints")]*initial_instances,
-                                                    [None]*initial_instances))
+                                                    [None]*initial_instances, [None]*initial_instances))
     assert num_instances == initial_instances
     instance_ids_1, _ = init_instances(initial_instances)
     num_instances = ray.get(manager.scale_down.remote(instance_ids_1))
@@ -171,6 +171,7 @@ def test_scale_up_and_down(ray_env, manager):
             instance_ids_2,
             instances_2,
             [InstanceType("no_constraints")] * initial_instances,
+            [None] * initial_instances,
             [None] * initial_instances,
         )
     )
@@ -187,14 +188,14 @@ def test_connect_to_instances(ray_env):
     manager = init_manager()
     instance_ids_1, instances_1 = init_instances(initial_instances)
     num_instances = ray.get(manager.scale_up.remote(instance_ids_1, instances_1, [InstanceType("no_constraints")]*initial_instances,
-                                                    [None]*initial_instances))
+                                                    [None]*initial_instances, [None]*initial_instances))
     assert num_instances == initial_instances * 2
     num_instances = ray.get(manager.scale_down.remote(instance_ids))
     assert num_instances == initial_instances
 
-def test_generate(ray_env, manager, llumlet):
+def test_generate(ray_env, manager: Manager, llumlet):
     instance_id = ray.get(llumlet.get_instance_id.remote())
-    ray.get(manager.scale_up.remote(instance_id, llumlet, InstanceType("no_constraints"), [None]))
+    ray.get(manager.scale_up.remote(instance_id, llumlet, InstanceType("no_constraints"), None))
     request_id = random_uuid()
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
@@ -208,7 +209,8 @@ def get_instance_info_migrate_in(instance_id):
     instance_info = InstanceInfo(
         instance_id=instance_id,
         instance_type=InstanceType.NO_CONSTRAINTS,
-        num_available_gpu_blocks=np.inf,
+        num_total_gpu_blocks=np.inf,
+        num_used_gpu_blocks=0,
         num_running_requests=1,
         num_blocks_first_waiting_request=0,
         num_killed_requests=0
@@ -220,14 +222,15 @@ def get_instance_info_migrate_out(instance_id):
     instance_info = InstanceInfo(
         instance_id=instance_id,
         instance_type=InstanceType.NO_CONSTRAINTS,
-        num_available_gpu_blocks=0,
+        num_total_gpu_blocks=0,
+        num_used_gpu_blocks=0,
         num_running_requests=1,
         num_blocks_first_waiting_request=np.inf,
         num_killed_requests=np.inf
     )
     return instance_info
 
-def test_poll_instance_info_loop_and_migrate(ray_env, manager):
+def test_poll_instance_info_loop_and_migrate(ray_env, manager: Manager):
     num_instances = 5
     instance_ids, instances = init_instances(num_instances)
 

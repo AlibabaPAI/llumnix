@@ -152,6 +152,9 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                     is with tensor parallelism set to 1, and global launch mode."
 
     if "vLLM" in engine:
+        if enable_pd_disagg:
+            enable_migration = True
+
         if migration_backend not in ['rayrpc', 'gloo', 'nccl']:
             conftest.SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
 

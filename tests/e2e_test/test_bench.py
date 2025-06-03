@@ -82,16 +82,12 @@ def parse_log_file(title: str):
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception,
-                                enable_pd_disagg, model, request_output_queue_type, engine):
+                                model, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
     num_prompts = 500
-
-    if "vLLM" in engine and enable_pd_disagg:
-        conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
 
     if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
         pytest.skip(conftest.SKIP_REASON)
@@ -124,6 +120,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             ip=ip,
                                             port=base_port,
                                             model=model,
+                                            enable_migration=True,
                                             request_output_queue_type=request_output_queue_type,
                                             max_instances=num_instances)
     subprocess.run(serve_command, shell=True, check=True)

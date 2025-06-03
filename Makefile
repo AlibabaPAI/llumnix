@@ -39,7 +39,7 @@ clean: proto-clean
 
 .PHONY: proto
 proto:
-	@find . -type d -name "proto" | while read dir; do \
+	@find . -type d -name "proto" -not -path "./build/*" | while read dir; do \
 	    dir_base=$$(dirname $$dir); \
 	    find $$dir -name "*.proto" | while read proto_file; do \
 	        echo "Compiling $$proto_file"; \

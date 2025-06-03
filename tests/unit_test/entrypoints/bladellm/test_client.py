@@ -20,7 +20,7 @@ import pytest
 import ray
 from unittest.mock import MagicMock
 
-from blade_llm.protocol import GenerateStreamResponse, Token, TokenUsage
+from blade_llm.protocol_msgspec import GenerateStreamResponse, Token, TokenUsage
 
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.utils import random_uuid

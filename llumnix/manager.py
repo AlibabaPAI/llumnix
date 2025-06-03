@@ -106,7 +106,7 @@ class Manager:
         # scheduling states
         self.polling_interval = manager_args.polling_interval
         global_scheduler_config = manager_args.create_global_scheduler_config()
-        self.global_scheduler = GlobalScheduler(global_scheduler_config)
+        self.global_scheduler = GlobalScheduler(self, global_scheduler_config)
 
         # log args
         self.log_instance_info = manager_args.log_instance_info
@@ -142,6 +142,7 @@ class Manager:
         kwargs.update(addition_dispatch_kwargs)
 
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
+
         try:
             asyncio.create_task(
                 asyncio_wait_for_with_timeout(
@@ -241,72 +242,9 @@ class Manager:
             # Push migrate when the instance_info have updated a certain number of times.
             if self.enable_migration and self.num_instance_info_updates != 0 \
                 and self.num_instance_info_updates % self.pair_migration_frequency == 0:
-                asyncio.create_task(self._push_migrations())
+                asyncio.create_task(self.global_scheduler.push_migrations())
             if self.log_instance_info:
                 self._log_instance_infos_to_csv(instance_infos)
-
-    async def _push_migrations(self) -> None:
-        if self.enable_pd_disagg:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODE))
-            asyncio.create_task(self._migrate(PairMigrationConstraints.DECODE_2_DECODE))
-        else:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS))
-
-    async def _migrate(self, pair_migration_type: PairMigrationConstraints) -> None:
-        # TODO(s5u13b): Remove the migration done callback through decentralized migration refactoring.
-        async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
-            if migrate_instance_pair[0] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[0]] = False
-            if migrate_instance_pair[1] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[1]] = False
-            if isinstance(ret, Exception):
-                has_error_pair = await self._check_instance_error(migrate_instance_pair)
-                for i, has_error in enumerate(has_error_pair):
-                    if has_error:
-                        instance_id = migrate_instance_pair[i]
-                        await self.scale_down(instance_id)
-            else:
-                migrate_out_request_ids = ret
-                if not self.enable_pd_disagg:
-                    logger.info("Instance {}->{} migrate done, migrate request {}".format(
-                        migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
-
-        def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
-            ret = fut.result()[0]
-            loop = asyncio.get_event_loop()
-            loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
-
-        # If encounter error during migration, to make manager keep running, we do not raise exception.
-        try:
-            migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
-            migration_tasks = []
-            for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
-                src_instance_id, dst_instance_id = migrate_instance_pair
-                if self.instance_migrating[src_instance_id] or self.instance_migrating[dst_instance_id]:
-                    continue
-                self.instance_migrating[src_instance_id] = True
-                self.instance_migrating[dst_instance_id] = True
-                dst_instance_actor = self.instances[dst_instance_id]
-                task = asyncio.gather(
-                    asyncio_wait_for_with_timeout(
-                        self.instances[src_instance_id].migrate_out.remote(
-                            dst_instance_actor, dst_instance_id
-                        )
-                    ),
-                    return_exceptions=True
-                )
-                task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
-                migration_tasks.append(task)
-            if len(migration_tasks) > 0 and not self.enable_pd_disagg:
-                logger.info("{} migration tasks starts.".format(len(migration_tasks)))
-            await asyncio.gather(*migration_tasks, return_exceptions=True)
-            if len(migration_tasks) > 0 and not self.enable_pd_disagg:
-                logger.info("{} migration tasks ends.".format(len(migration_tasks)))
-        # pylint: disable=W0703
-        except Exception as e:
-            logger.exception("Error during migrate, unexpected exception: {}".format(e))
-            logger.critical("Manager encouters error during migrate, manager keeps running, "
-                            "please check the cause as soon as possible!")
 
     async def scale_up(self,
                  instance_id: Union[str, Iterable[str]],

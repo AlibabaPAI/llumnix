@@ -46,7 +46,8 @@ class Llumlet:
                  llumnix_engine_args: LlumnixEngineArgs) -> None:
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
-        logger.info("Llumlet(instance_id={}, backend_type={})".format(self.instance_id, llumnix_engine_args.backend_type))
+        logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
+            self.instance_id, llumnix_engine_args.backend_type, instance_args.instance_type))
         self.instance_args: InstanceArgs = instance_args
         self.enable_migration = instance_args.enable_migration
         self.actor_name = get_instance_name(instance_id)

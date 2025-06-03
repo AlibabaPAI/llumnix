@@ -14,7 +14,6 @@
 from typing import List, Tuple
 from abc import ABC, abstractmethod
 from enum import Enum
-import numpy as np
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
@@ -68,7 +67,7 @@ class Balanced(PairMigrationPolicy):
             if right_load_after_mig > self.migrate_out_load_threshold:
                 continue
             load_diff_after_mig = left_load_after_mig - right_load_after_mig
-            if (0 < load_diff_after_mig < load_diff_before_mig) or (sorted_dst_instance_infos[i].migration_load_metric == -np.inf):
+            if 0 < load_diff_after_mig < load_diff_before_mig:
                 migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id,
                                                sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
@@ -86,11 +85,28 @@ class Defrag(PairMigrationPolicy):
             migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
+class AggrateDynamicPrefill(PairMigrationPolicy):
+    def pair_migration(self,
+                       src_instance_infos: List[InstanceInfo],
+                       dst_instance_infos: List[InstanceInfo],
+                       ) -> List[Tuple[str, str]]:
+        if min(len(src_instance_infos), len(dst_instance_infos)) <= 1:
+            return []
+
+        # sort by instance id
+        sorted_src_instance_infos = sorted(src_instance_infos, descending=True)
+        sorted_dst_instance_infos = sorted(dst_instance_infos, descending=False)
+        migrate_instance_pairs = []
+        for i in range(min(len(sorted_src_instance_infos), len(sorted_dst_instance_infos))):
+            migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
+
+        return migrate_instance_pairs
 
 class PairMigrationPolicyFactory:
     _POLICY_REGISTRY = {
         'balanced': Balanced,
         'defrag': Defrag,
+        'aggrate_dynamic_prefill': AggrateDynamicPrefill,
     }
 
     @classmethod

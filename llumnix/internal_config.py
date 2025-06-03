@@ -82,9 +82,14 @@ class PDDConfig:
             self,
             enable_pd_disagg: bool,
             enable_engine_pd_disagg: bool,
+            enable_engine_semi_pd: bool,
             pd_ratio: Union[str, List[int]],
             enable_pdd_node_affinity_scheduling: bool) -> None:
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
+        self.enable_engine_semi_pd = enable_engine_semi_pd
         self.pd_ratio = pd_ratio
         self.enable_pdd_node_affinity_scheduling = enable_pdd_node_affinity_scheduling
+
+        assert not (enable_engine_pd_disagg and enable_engine_semi_pd), \
+            "Cannot enable both engine_pd_disagg and engine_semi_pd"

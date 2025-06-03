@@ -34,7 +34,9 @@ logger = init_logger(__name__)
 
 
 class GlobalScheduler:
-    def __init__(self, global_scheduler_config: GlobalSchedulerConfig) -> None:
+    def __init__(self,
+                 manager: 'Manager',
+                 global_scheduler_config: GlobalSchedulerConfig) -> None:
         self.global_scheduler_config = global_scheduler_config
         self.num_instances = 0
 
@@ -56,9 +58,13 @@ class GlobalScheduler:
                                                     global_scheduler_config.enable_engine_pd_disagg,
                                                     global_scheduler_config.enable_adaptive_pd)
 
-        self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
+        self.migration_scheduler = MigrationScheduler(manager,
+                                                      global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
-                                                      global_scheduler_config.is_group_kind_migration_backend)
+                                                      global_scheduler_config.is_group_kind_migration_backend,
+                                                      global_scheduler_config.enable_pd_disagg,
+                                                      global_scheduler_config.enable_engine_pd_disagg,
+                                                      global_scheduler_config.enable_adaptive_pd)
 
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,
@@ -141,12 +147,8 @@ class GlobalScheduler:
 
         return target_instance_id, request_expected_steps, addition_dispatch_info
 
-    def pair_migration(
-        self, pair_migration_type: PairMigrationConstraints
-    ) -> List[Tuple[str, str]]:
-        migrate_instance_pairs = self.migration_scheduler.pair_migration(
-            instance_info=self.instance_info, pair_migration_type=pair_migration_type
-        )
+    def push_migrations(self,) -> List[Tuple[str, str]]:
+        migrate_instance_pairs = self.migration_scheduler.push_migrations(instance_info=self.instance_info)
         return migrate_instance_pairs
 
     def check_scale(self) -> Tuple[str, str]:

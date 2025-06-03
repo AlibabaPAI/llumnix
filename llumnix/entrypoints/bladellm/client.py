@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import time
 import asyncio
 import copy
@@ -19,11 +18,13 @@ import random
 from typing import Dict, List, Tuple, Optional
 
 import ray
+import msgspec
 
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
+from blade_llm.service.communications.protocol_msgspec import Stats
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.metrics.timestamps import RequestTimestamps
@@ -71,7 +72,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_req_id))
         internal_request = copy.deepcopy(request)
         internal_request.id = llumnix_req_id
-        resp_stream = await self._generate(llumnix_req_id, internal_request.model_dump_json())
+        resp_stream = await self._generate(llumnix_req_id, internal_request)
         return resp_stream
 
     async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
@@ -108,7 +109,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
         # await to catch exception
         await asyncio_wait_for_with_timeout(
-            self.manager.generate.remote(str(request_id), server_info, server_request=request)
+            self.manager.generate.remote(str(request_id), server_info,
+                                         server_request=msgspec.msgpack.encode(request))
         )
 
     # pylint: disable=arguments-differ
@@ -118,7 +120,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 await asyncio_wait_for_with_timeout(
-                    self.instances[instance_id].generate.remote(request_id, server_info, -1, server_request=request)
+                    self.instances[instance_id].generate.remote(request_id, server_info, -1, msgspec.msgpack.encode(request))
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
@@ -144,7 +146,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 continue
 
             for request_response in request_responses:
-                request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
+                request_output = msgspec.msgpack.decode(request_response.get_engine_output(), type=GenerateStreamResponse)
                 request_timestamp: RequestTimestamps = request_response.request_timestamps
                 set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
                 request_id = request_output.req_id

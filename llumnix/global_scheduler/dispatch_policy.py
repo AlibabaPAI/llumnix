@@ -11,8 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List
-from abc import ABC, abstractmethod
+from typing import Dict, List, Optional
+from abc import ABC
 import random
 
 from llumnix.logging.logger import init_logger
@@ -118,6 +118,58 @@ class RoundRobin(DispatchPolicy):
         target_instance_id = all_instance_ids[cur_idx]
         self.prev_instance_type_idx[instance_type] = cur_idx
         return target_instance_id
+
+
+class DynamicPD(DispatchPolicy):
+    def soft_dispatch(self,
+                      instance_type: InstanceType,
+                      prefill_instance_infos: Dict[str, InstanceInfo],
+                      prefill_instance_num_requests: Dict[str, int],
+                      decode_instance_infos: Dict[str, InstanceInfo],
+                      decode_instance_num_requests: Dict[str, int]) -> int:
+        if instance_type == InstanceType.PREFILL:
+            # if prefill loads are not busy, dispatch to prefill instance
+            prefill_sorted_instance_infos: List[InstanceInfo] = \
+                self.sort_instance_infos(prefill_instance_infos.values(), 'dispatch_load_metric')
+            if not prefill_sorted_instance_infos[0].dispatch_load_metric.is_busy():
+                return self.random_choice_from_top_k(prefill_sorted_instance_infos).instance_id
+
+            # all prefills are busy, dispatch to decode instances
+            available_decode_instance_infos = []
+            for decode_instance_info in decode_instance_infos.values():
+                if not decode_instance_info.dispatch_load_metric.is_busy():
+                    available_decode_instance_infos.append(decode_instance_info)
+            if len(available_decode_instance_infos) > 0:
+                sorted_available_decode_instance_infos = self.sort_instance_infos(
+                    available_decode_instance_infos,
+                    'dispatch_decode_as_prefill_load_metric')
+                return self.random_choice_from_top_k(sorted_available_decode_instance_infos).instance_id
+
+            # fallback to prefill instances
+            return self.random_choice_from_top_k(prefill_sorted_instance_infos).instance_id
+
+        if instance_type == InstanceType.DECODE:
+            # choose decode instance first
+            decode_sorted_instance_infos: List[InstanceInfo] = self.sort_instance_infos(decode_instance_infos.values(),
+                                                                                        'dispatch_load_metric')
+            if not decode_sorted_instance_infos[0].dispatch_load_metric.is_busy():
+                return self.random_choice_from_top_k(decode_sorted_instance_infos).instance_id
+
+            # try to dispatch to prefill instances
+            available_prefill_instance_infos = []
+            for prefill_instance_info in prefill_instance_infos.values():
+                if not prefill_instance_info.dispatch_load_metric.is_busy():
+                    available_prefill_instance_infos.append(prefill_instance_info)
+            if len(available_prefill_instance_infos) > 0:
+                sorted_available_prefill_instance_infos = self.sort_instance_infos(
+                    available_prefill_instance_infos,
+                    'dispatch_prefill_as_decode_load_metric')
+                return self.random_choice_from_top_k(sorted_available_prefill_instance_infos).instance_id
+
+            # fallback to decode instances
+            return self.random_choice_from_top_k(decode_sorted_instance_infos).instance_id
+
+        raise RuntimeError(f"Invalid instance type {instance_type} for dynamic pd dispatch policy.")
 
 
 class DispatchPolicyFactory:

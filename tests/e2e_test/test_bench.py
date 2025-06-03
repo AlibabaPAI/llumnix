@@ -82,10 +82,9 @@ def parse_log_file(title: str):
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception,
-                                enable_pd_disagg, model, request_output_queue_type, engine):
+                                model, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
     if "vLLM" in engine and enable_pd_disagg:

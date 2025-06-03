@@ -315,10 +315,3 @@ class BackendInterface(ABC):
         Run all workers with the given method asynchronously.
         """
         raise NotImplementedError
-
-    @abstractmethod
-    async def _run_workers_async(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs) -> Any:
-        """
-        Run all workers with the given method asynchronously.
-        """
-        raise NotImplementedError

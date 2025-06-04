@@ -66,6 +66,7 @@ from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
+from llumnix.utils import RequestIDType
 
 logger = init_logger(__name__)
 
@@ -721,16 +722,33 @@ class BackendBladeLLM(BackendInterface):
                          dst_blocks: List[int],
                          request_id: int,
                          is_last_stage: bool) -> bool:
+        return await asyncio_wait_for_with_timeout(
+            dst_instance_actor.execute_migration_method_async.remote(
+                "recv_cache",
+                request_id=request_id,
+                src_worker_handle_list=self.worker_infos,
+                dst_blocks=dst_blocks,
+                src_blocks=src_blocks,
+                is_last_stage=is_last_stage
+            )
+        )
+
+    async def recv_cache(self,
+                         request_id: RequestIDType,
+                         src_worker_handle_list: List[Any],
+                         src_blocks: List[int],
+                         dst_blocks: List[int],
+                         is_last_stage: bool) -> bool:
         request = RecvCacheRequest(
-            src_handlers=self.worker_infos,
+            src_worker_handle_list=src_worker_handle_list,
             request_id=request_id,
             is_last_stage=is_last_stage,
             src_blocks=src_blocks,
             dst_blocks=dst_blocks,
         )
-        return await asyncio_wait_for_with_timeout(
-            dst_instance_actor.execute_migration_method_async.remote("recv_cache", request)
-        )
+        responses = await self._run_workers_async("recv_cache", request)
+        results = [response.is_ok for response in responses]
+        return all(results)
 
     async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> bool:
         assert len(backend_request.paged_reqs) == 1, "Currently llumnix doesn't support multi-paged request migration."
@@ -740,7 +758,7 @@ class BackendBladeLLM(BackendInterface):
         pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
         self.engine.scheduler.add_block_table(pre_alloc_blocks, seq.block_table_id)
 
-        backend_request.reset_migration_args_dst()
+        backend_request.reset_migration_states_dst()
         self.engine._back_queue[backend_request.request_id] = self.engine.resp_queue
         self.engine._req_tracker.req_metrics_map[backend_request.request_id] = backend_request.req_metrics
         self.add_running_request(backend_request)

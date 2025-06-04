@@ -51,6 +51,7 @@ from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
+from llumnix.utils import RequestIDType
 
 logger = init_logger(__name__)
 
@@ -459,13 +460,23 @@ class BackendVLLM(BackendInterface):
         return await asyncio_wait_for_with_timeout(
             dst_instance_actor.execute_migration_method_async.remote(
                 "recv_cache",
-                src_worker_handle_list=self.worker_handle_list,
-                dst_blocks=dst_blocks,
-                src_blocks=src_blocks,
                 request_id=request_id,
+                src_worker_handle_list=self.worker_handle_list,
+                src_blocks=src_blocks,
+                dst_blocks=dst_blocks,
                 is_last_stage=is_last_stage
             )
         )
+
+    async def recv_cache(self,
+                         request_id: RequestIDType,
+                         src_worker_handle_list: List[ray.actor.ActorHandle],
+                         src_blocks: List[int],
+                         dst_blocks: List[int],
+                         is_last_stage: bool) -> bool:
+        results = await self._run_workers_async(
+            "recv_cache", request_id, src_worker_handle_list, src_blocks, dst_blocks, is_last_stage)
+        return all(results)
 
     def _run_workers(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
         # pylint: disable=protected-access

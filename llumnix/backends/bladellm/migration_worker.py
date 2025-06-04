@@ -92,9 +92,11 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         return empty_pb2.Empty()
 
     # pylint: disable=unused-argument
-    def recv_cache(self, request, context) -> bool:
+    def recv_cache(self, request, context):
+        resp = migration_worker_pb2.RecvCacheResponse(is_ok=True)
         try:
             start_time = time.time()
+            # TODO(KuilongCui): Refine migration worker and migration backend codes of BladeLLM.
             self.migration_backend.recv_cache(request, request.src_blocks, request.dst_blocks)
             end_time = time.time()
             total_kv_cache_size = len(request.src_blocks) * self.single_block_bytes
@@ -103,14 +105,14 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             speed = total_kv_cache_size / GB_bytes / (end_time - start_time)
             logger.info("Recv kv cache done, num_blocks: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
                         .format(len(request.src_blocks), convert_bytes(total_kv_cache_size), end_time - start_time, speed))
-            return True
         except Exception as e: # pylint: disable=broad-except
             # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
             if isinstance(e, ray.exceptions.RayActorError):
                 logger.info("Failed to recv kv cache, src worker is dead, instance_id: {}, rank: {}.".format(self.instance_id, self.rank))
             else:
                 logger.exception("Failed to recv kv cache, request_id: {}, unexpected exception: {}.".format(request.request_id, e))
-            return False
+            resp.is_ok = False
+        return resp
 
     def do_send(self, request, context):
         return self.migration_backend.do_send(request, context)
@@ -126,7 +128,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         # pylint: disable=broad-except
         except Exception as e:
             resp.is_ok = False
-            resp.error_msg = f"Warmup failed, unexpected exception: {e}"
+            logger.exception("Warmup failed, unexpected exception: {}".format(e))
         return resp
 
 

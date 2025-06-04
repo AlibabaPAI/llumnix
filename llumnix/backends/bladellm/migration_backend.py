@@ -186,7 +186,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
         self.state_manager.add_new_request(self._create_dummy_worker_request())
         self.recv_cache(
             RecvCacheRequest(
-                src_handlers=[WorkerInfo(ip_address=self.worker_migration_ip_addr)],
+                src_worker_handle_list=[WorkerInfo(ip_address=self.worker_migration_ip_addr)],
                 request_id=0,
                 is_last_stage=True,
                 src_blocks=[0],
@@ -200,7 +200,7 @@ class GrpcMigrationBackend(MigrationBackendBase):
 
     # pylint: disable=arguments-differ
     def recv_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
-        ip_address = src_worker_handle.src_handlers[self.state_manager.rank].ip_address
+        ip_address = src_worker_handle.src_worker_handle_list[self.state_manager.rank].ip_address
         src_blocks = src_worker_handle.src_blocks
         dst_blocks = src_worker_handle.dst_blocks
         with grpc.insecure_channel(ip_address, options=self.channel_options) as channel:
@@ -385,15 +385,22 @@ class KvTransferMigrationBackend(MigrationBackendBase):
     def warmup(self) -> bool:
         # CUDA_IPC does not support communication with itself, used only for RDMA_DIRECT warmup
         if self.tranfer_type == KVTransferProtocolType.RDMA_DIRECT:
-            self.recv_cache(WorkerInfo(ip_address=self.worker_migration_ip_addr, instance_id=self.instance_id,
-                worker_id=self.worker_id), [0], [1])
+            self.recv_cache(
+                WorkerInfo(
+                    ip_address=self.worker_migration_ip_addr,
+                    instance_id=self.instance_id,
+                    worker_id=self.worker_id
+                ),
+                [0],
+                [1],
+            )
         return True
 
     # pylint: disable=arguments-differ
     def recv_cache(self, src_worker_handle, src_blocks: List[int], dst_blocks: List[int]) -> None:
-        ip_address = src_worker_handle.src_handlers[self.state_manager.rank].ip_address
-        kv_transfer_instance_id = src_worker_handle.src_handlers[self.state_manager.rank].kv_transfer_instance_id
-        worker_id = src_worker_handle.src_handlers[self.state_manager.rank].worker_id
+        ip_address = src_worker_handle.src_worker_handle_list[self.state_manager.rank].ip_address
+        kv_transfer_instance_id = src_worker_handle.src_worker_handle_list[self.state_manager.rank].kv_transfer_instance_id
+        worker_id = src_worker_handle.src_worker_handle_list[self.state_manager.rank].worker_id
         with grpc.insecure_channel(ip_address) as channel:
             stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
             self.server_kv.submit_req_recv(kv_transfer_instance_id, worker_id, str(src_worker_handle.request_id), dst_blocks)

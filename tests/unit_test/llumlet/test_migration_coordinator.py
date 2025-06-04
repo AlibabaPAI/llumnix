@@ -238,7 +238,7 @@ async def test_pending_migrate_in_timeout():
     assert request_id not in migration_coordinator.pending_migrate_in_requests
 
     # test recv_cache timeout
-    backend_engine._run_workers_async.return_value = [True]
+    backend_engine.recv_cache.return_value = True
     result = await migration_coordinator.recv_cache(request_id)
     assert result is False
     migration_coordinator.pending_migrate_in_requests[request_id] = time.time()

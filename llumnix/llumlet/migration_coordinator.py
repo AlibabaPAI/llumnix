@@ -376,7 +376,7 @@ class MigrationCoordinator:
             return False
         del self.pending_migrate_in_requests[request_id]
         # pylint: disable=protected-access
-        result = all(await self.backend_engine._run_workers_async("recv_cache", request_id, *args, **kwargs))
+        result = await self.backend_engine.recv_cache(request_id, *args, **kwargs)
         if result is True:
             self.pending_migrate_in_requests[request_id] = time.time()
         return result

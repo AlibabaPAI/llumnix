@@ -326,7 +326,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def commit_dst_request(self, backend_request: LlumnixRequest) -> MigrationResponse:
+    async def commit_dst_request(self, request_id: RequestIDType, backend_request: LlumnixRequest) -> MigrationResponse:
         """
         Commit the migrating request to the destination instance.
 
@@ -335,6 +335,7 @@ class BackendInterface(ABC):
         all the required data to resume and handle the request as if it originated there natively.
 
         Args:
+            request_id: Request ID.
             backend_request: An object representing the backend request.
 
         Returns:

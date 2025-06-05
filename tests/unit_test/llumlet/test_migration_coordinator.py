@@ -266,10 +266,10 @@ async def test_pending_migrate_in_timeout():
     assert request_id not in migration_coordinator.pending_migrate_in_request_time
 
     # test commit_dst_request_timeout
-    response = await migration_coordinator.commit_dst_request(migrate_out_request)
+    response = await migration_coordinator.commit_dst_request(request_id, migrate_out_request)
     assert response.success is False
     migration_coordinator.pending_migrate_in_request_time[request_id] = time.time()
     backend_engine.commit_dst_request.return_value = MigrationResponse(success=True, return_value=None)
-    response = await migration_coordinator.commit_dst_request(migrate_out_request)
+    response = await migration_coordinator.commit_dst_request(request_id, migrate_out_request)
     assert response.success is True
     assert request_id not in migration_coordinator.pending_migrate_in_request_time

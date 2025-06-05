@@ -13,8 +13,10 @@
 
 import time
 import enum
-from typing import List, Dict
+from typing import List, Dict, Callable
 import asyncio
+import functools
+import inspect
 
 import ray.actor
 import ray.exceptions
@@ -43,6 +45,81 @@ class MigrationStatus(enum.Enum):
             MigrationStatus.ABORTED_SRC,
             MigrationStatus.FINISHED
         ]
+
+
+def update_pending_migrate_in_requests_time(func: Callable):
+    def inspect_is_start(func: Callable, self, *args, **kwargs):
+        if func.__name__ != "pre_alloc_cache":
+            return False
+        sig = inspect.signature(func)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+        is_first_stage = bound_args.arguments.get("is_first_stage")
+        return is_first_stage
+
+    def inspect_is_stop(func: Callable):
+        return func.__name__ == "commit_dst_request"
+
+    def inspect_request_id(func: Callable, self, *args, **kwargs):
+        sig = inspect.signature(func)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+        request_id = bound_args.arguments.get("request_id")
+        return request_id
+
+    def pre_process_pending_migrate_in_request_time(
+        is_start: bool,
+        request_id: RequestIDType,
+        pending_migrate_in_request_time: Dict[RequestIDType, float]
+    ) -> bool:
+        if not is_start:
+            if request_id not in pending_migrate_in_request_time:
+                return False
+            del pending_migrate_in_request_time[request_id]
+        return True
+
+    def post_process_pending_migrate_in_request_time(
+        response: MigrationResponse,
+        is_stop: bool,
+        request_id: RequestIDType,
+        pending_migrate_in_request_time: Dict[RequestIDType, float]
+    ) -> None:
+        if response.success and not is_stop:
+            pending_migrate_in_request_time[request_id] = time.time()
+
+    @functools.wraps(func)
+    async def async_wrapper(self, *args, **kwargs):
+        is_start = inspect_is_start(func, self, *args, **kwargs)
+        is_stop = inspect_is_stop(func)
+        request_id = inspect_request_id(func, self, *args, **kwargs)
+        if not pre_process_pending_migrate_in_request_time(
+            is_start, request_id, self.pending_migrate_in_request_time
+        ):
+            return MigrationResponse(success=False, return_value=None)
+        response = await func(self, *args, **kwargs)
+        post_process_pending_migrate_in_request_time(
+            response, is_stop, request_id, self.pending_migrate_in_request_time
+        )
+        return response
+
+    @functools.wraps(func)
+    def sync_wrapper(self, *args, **kwargs):
+        is_start = inspect_is_start(func, self, *args, **kwargs)
+        is_stop = inspect_is_stop(func)
+        request_id = inspect_request_id(func, self, *args, **kwargs)
+        if not pre_process_pending_migrate_in_request_time(
+            is_start, request_id, self.pending_migrate_in_request_time
+        ):
+            return MigrationResponse(success=False, return_value=None)
+        response = func(self, *args, **kwargs)
+        post_process_pending_migrate_in_request_time(
+            response, is_stop, request_id, self.pending_migrate_in_request_time
+        )
+        return response
+
+    if asyncio.iscoroutinefunction(func):
+        return async_wrapper
+    return sync_wrapper
 
 
 class MigrationCoordinator:
@@ -267,6 +344,8 @@ class MigrationCoordinator:
 
         return migration_status
 
+    # pylint: disable=unused-argument
+    @update_pending_migrate_in_requests_time
     def pre_alloc_cache(self,
                         request_id: RequestIDType,
                         request_status: RequestStatus,
@@ -274,11 +353,6 @@ class MigrationCoordinator:
                         block_num: int,
                         token_ids: List[int],
                         is_first_stage: bool) -> List[int]:
-        if not is_first_stage:
-            if request_id not in self.pending_migrate_in_request_time:
-                return MigrationResponse(success=False, return_value=None)
-            del self.pending_migrate_in_request_time[request_id]
-
         response = self.backend_engine.pre_alloc_cache(request_id,
                                                        request_status,
                                                        request_arrival_time,
@@ -287,8 +361,6 @@ class MigrationCoordinator:
         if not response.success:
             # failed to alloc, abort request
             self.free_pre_alloc_cache(request_id)
-        else:
-            self.pending_migrate_in_request_time[request_id] = time.time()
 
         return response
 
@@ -371,21 +443,14 @@ class MigrationCoordinator:
                     "unexpected exception: {}".format(dst_instance_id, request_id, e))
             return MigrationResponse(success=False, return_value=None)
 
+    @update_pending_migrate_in_requests_time
     async def recv_cache(self, request_id: RequestIDType, *args, **kwargs) -> MigrationResponse:
-        if request_id not in self.pending_migrate_in_request_time:
-            return MigrationResponse(success=False, return_value=None)
-        del self.pending_migrate_in_request_time[request_id]
         # pylint: disable=protected-access
-        response = await self.backend_engine.recv_cache(request_id, *args, **kwargs)
-        if response.success:
-            self.pending_migrate_in_request_time[request_id] = time.time()
-        return response
+        return await self.backend_engine.recv_cache(request_id, *args, **kwargs)
 
-    async def commit_dst_request(self, backend_request: LlumnixRequest) -> MigrationResponse:
-        if backend_request.request_id not in self.pending_migrate_in_request_time:
-            return MigrationResponse(success=False, return_value=None)
-        del self.pending_migrate_in_request_time[backend_request.request_id]
-        return await self.backend_engine.commit_dst_request(backend_request)
+    @update_pending_migrate_in_requests_time
+    async def commit_dst_request(self, request_id: RequestIDType, backend_request: LlumnixRequest) -> MigrationResponse:
+        return await self.backend_engine.commit_dst_request(request_id, backend_request)
 
     async def _dst_commit_dst_request(self,
                                       dst_instance_actor: ray.actor.ActorHandle,
@@ -393,7 +458,9 @@ class MigrationCoordinator:
                                       migrate_out_request: LlumnixRequest) -> MigrationResponse:
         try:
             return await asyncio_wait_for_with_timeout(
-                dst_instance_actor.execute_migration_method_async.remote("commit_dst_request", migrate_out_request)
+                dst_instance_actor.execute_migration_method_async.remote(
+                    "commit_dst_request", migrate_out_request.request_id, migrate_out_request
+                )
             )
         # pylint: disable=W0703
         except Exception as e:

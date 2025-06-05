@@ -430,14 +430,16 @@ class BackendVLLM(BackendInterface):
     async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         await self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
-    async def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> MigrationResponse:
+    async def commit_dst_request(self,
+                                 request_id: RequestIDType,
+                                 backend_request: SequenceGroupLlumnix) -> MigrationResponse:
         if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
-            await self._run_workers_async("commit_seq_group_metadata", backend_request.request_id)
+            await self._run_workers_async("commit_seq_group_metadata", request_id)
 
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
-        logger.info("pop request {} from pre_alloc_cache_dict".format(backend_request.request_id))
-        pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(backend_request.request_id)
+        logger.info("pop request {} from pre_alloc_cache_dict".format(request_id))
+        pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(request_id)
         self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_states_dst()
         assert RequestStatus.is_migrating(backend_request.status), \

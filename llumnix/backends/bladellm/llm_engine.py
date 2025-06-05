@@ -750,17 +750,19 @@ class BackendBladeLLM(BackendInterface):
         is_ok_list = [response.is_ok for response in responses]
         return MigrationResponse(success=all(is_ok_list), return_value=None)
 
-    async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> MigrationResponse:
+    async def commit_dst_request(self,
+                                 request_id: RequestIDType,
+                                 backend_request: GenerationGroupStateLlumnix) -> MigrationResponse:
         assert len(backend_request.paged_reqs) == 1, "Currently llumnix doesn't support multi-paged request migration."
 
         seq = backend_request.paged_reqs[0]
         seq.block_table_id = next(self.engine.scheduler.block_manager.block_table_counter)
-        pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(backend_request.request_id)
+        pre_alloc_blocks = self.engine.scheduler.pre_alloc_cache_dict.pop(request_id)
         self.engine.scheduler.add_block_table(pre_alloc_blocks, seq.block_table_id)
 
         backend_request.reset_migration_states_dst()
-        self.engine._back_queue[backend_request.request_id] = self.engine.resp_queue
-        self.engine._req_tracker.req_metrics_map[backend_request.request_id] = backend_request.req_metrics
+        self.engine._back_queue[request_id] = self.engine.resp_queue
+        self.engine._req_tracker.req_metrics_map[request_id] = backend_request.req_metrics
         self.add_running_request(backend_request)
 
         self.engine.scheduler.llumnix_metrics.scheduler_step_metrics(self.engine.scheduler)

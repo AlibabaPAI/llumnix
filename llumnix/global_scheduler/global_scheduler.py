@@ -38,14 +38,13 @@ class GlobalScheduler:
         self.decode_instance_info: Dict[str, InstanceInfo] = {}
         self.decode_instance_num_requests: Dict[str, int] = {}
 
-        # dispatch args
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
                                                     global_scheduler_config.topk_random_dispatch)
-        # migrate args
+
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
                                                       global_scheduler_config.is_group_kind_migration_backend)
-        # auto-scaling args
+
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,
                                                   global_scheduler_config.scaling_policy,
@@ -62,25 +61,41 @@ class GlobalScheduler:
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
     def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
-        if instance_type == InstanceType.PREFILL:
-            instance_id = self.dispatch_scheduler.dispatch(
-                instance_info=self.prefill_instance_info,
-                instance_num_requests=self.prefill_instance_num_requests,
+        if self.global_scheduler_config.enable_dynamic_pd_disagg:
+            instance_id = self.dispatch_scheduler.soft_dispatch(
+                instance_type=instance_type,
+                prefill_instance_infos=self.prefill_instance_info,
+                prefill_instance_num_requests=self.prefill_instance_num_requests,
+                decode_instance_infos=self.decode_instance_info,
+                decode_instance_num_requests=self.decode_instance_num_requests
             )
-            self.prefill_instance_num_requests[instance_id] += 1
-        elif instance_type == InstanceType.DECODE:
-            instance_id = self.dispatch_scheduler.dispatch(
-                instance_info=self.decode_instance_info,
-                instance_num_requests=self.decode_instance_num_requests,
-            )
-            self.decode_instance_num_requests[instance_id] += 1
+            if instance_id in self.prefill_instance_num_requests:
+                self.prefill_instance_num_requests[instance_id] += 1
+            else:
+                self.decode_instance_num_requests[instance_id] += 1
         else:
-            logger.error("instance_type {} is not supported".format(instance_type))
-            raise TypeError("instance_type {} is not supported".format(instance_type))
-        if self.global_scheduler_config.enable_pd_disagg and instance_type == InstanceType.PREFILL:
-            request_expected_steps = 1
-        else:
-            request_expected_steps = math.inf
+            if instance_type == InstanceType.PREFILL:
+                instance_id = self.dispatch_scheduler.dispatch(
+                    instance_type=instance_type,
+                    instance_info=self.prefill_instance_info,
+                    instance_num_requests=self.prefill_instance_num_requests,
+                )
+                self.prefill_instance_num_requests[instance_id] += 1
+            elif instance_type == InstanceType.DECODE:
+                instance_id = self.dispatch_scheduler.dispatch(
+                    instance_type=instance_type,
+                    instance_info=self.decode_instance_info,
+                    instance_num_requests=self.decode_instance_num_requests,
+                )
+                self.decode_instance_num_requests[instance_id] += 1
+            else:
+                raise TypeError("instance_type {} is not supported.".format(instance_type))
+
+        request_expected_steps = math.inf
+        if self.global_scheduler_config.enable_pd_disagg:
+            if instance_type == InstanceType.PREFILL and instance_id in self.prefill_instance_info:
+                request_expected_steps = 1
+
         return instance_id, request_expected_steps
 
     def pair_migration(

@@ -11,101 +11,168 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List
-from abc import ABC, abstractmethod
+from typing import Dict, List, Optional
+from abc import ABC
 import random
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceType
 
 
 logger = init_logger(__name__)
 
 
-def sort_instance_infos(available_instance_infos: List[InstanceInfo],
-                        key_attr: str,
-                        descending: bool = False) -> None:
-    return sorted(
-        available_instance_infos,
-        key=lambda instance_info: getattr(instance_info, key_attr),
-        reverse=descending
-    )
-
-def random_choice_from_top_k(sorted_instance_infos: List[InstanceInfo],
-                             topk_random_dispatch: int):
-    k = min(topk_random_dispatch, len(sorted_instance_infos))
-    top_k_instance_infos = sorted_instance_infos[:k]
-    return random.choice(top_k_instance_infos)
-
-
 class DispatchPolicy(ABC):
-    @abstractmethod
+    def __init__(self, topk_random_dispatch: Optional[int] = None) -> None:
+        self.topk_random_dispatch = topk_random_dispatch
+
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo],
-                 topk_random_dispatch: int) -> int:
-        pass
+                 available_instance_infos: List[InstanceInfo]) -> int:
+        raise NotImplementedError
+
+    def soft_dispatch(self,
+                      instance_type: InstanceType,
+                      prefill_instance_infos: Dict[str, InstanceInfo],
+                      prefill_instance_num_requests: Dict[str, int],
+                      decode_instance_infos: Dict[str, InstanceInfo],
+                      decode_instance_num_requests: Dict[str, int]) -> int:
+        raise NotImplementedError
+
+    def random_choice_from_top_k(self, sorted_instance_infos: List[InstanceInfo],):
+        k = min(self.topk_random_dispatch, len(sorted_instance_infos))
+        top_k_instance_infos = sorted_instance_infos[:k]
+        return random.choice(top_k_instance_infos)
+
+    @classmethod
+    def sort_instance_infos(cls, available_instance_infos: List[InstanceInfo],
+                        key_attr: str,
+                        descending: bool = False) -> None:
+        return sorted(
+            available_instance_infos,
+            key=lambda instance_info: getattr(instance_info, key_attr),
+            reverse=descending
+        )
 
 
 # Dispatch all requests to a single instance, used only for testing
 class Flood(DispatchPolicy):
+    def __init__(self, topk_random_dispatch):
+        super().__init__(topk_random_dispatch)
+
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo],
-                 topk_random_dispatch: int) -> str:
+                 available_instance_infos: List[InstanceInfo]) -> str:
         instance_id = max(instance_num_requests, key=instance_num_requests.get)
         return instance_id
 
 
 class Balanced(DispatchPolicy):
+    def __init__(self, topk_random_dispatch):
+        super().__init__(topk_random_dispatch)
+
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo],
-                 topk_random_dispatch: int) -> str:
-        # dispatch request according to the number of requests dispatched to instance by manager
+                 available_instance_infos: List[InstanceInfo]) -> str:
         instance_id = min(instance_num_requests, key=instance_num_requests.get)
         return instance_id
 
 
 class Load(DispatchPolicy):
+    def __init__(self, topk_random_dispatch):
+        super().__init__(topk_random_dispatch)
+
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo],
-                 topk_random_dispatch: int) -> str:
-        sorted_instance_infos = sort_instance_infos(available_instance_infos, 'dispatch_load_metric')
-        instance_info_chosen = random_choice_from_top_k(sorted_instance_infos, topk_random_dispatch)
+                 available_instance_infos: List[InstanceInfo]) -> str:
+        sorted_instance_infos = self.sort_instance_infos(available_instance_infos, 'dispatch_load_metric')
+        instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
         instance_id = instance_info_chosen.instance_id
         logger.info("dispatch to {}, load: {}".format(instance_id, instance_info_chosen.dispatch_load_metric))
         return instance_id
 
 
 class Queue(DispatchPolicy):
+    def __init__(self, topk_random_dispatch):
+        super().__init__(topk_random_dispatch)
+
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo],
-                 topk_random_dispatch: int) -> str:
-        sorted_instance_infos = sort_instance_infos(available_instance_infos, 'num_waiting_requests')
-        instance_info_chosen = random_choice_from_top_k(sorted_instance_infos, topk_random_dispatch)
+                 available_instance_infos: List[InstanceInfo]) -> str:
+        sorted_instance_infos = self.sort_instance_infos(available_instance_infos, 'num_waiting_requests')
+        instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
         instance_id = instance_info_chosen.instance_id
         logger.info("dispatch to {}, queue size: {}".format(instance_id, instance_info_chosen.num_waiting_requests))
         return instance_id
 
 
 class RoundRobin(DispatchPolicy):
-    def __init__(self) -> None:
+    def __init__(self, topk_random_dispatch) -> None:
         self.prev_instance_type_idx: Dict[str, int] = {}
+        super().__init__(topk_random_dispatch)
 
     def dispatch(self,
                  instance_num_requests: Dict[str, int],
-                 available_instance_infos: List[InstanceInfo],
-                 topk_random_dispatch: int) -> str:
-        instance_type: str = available_instance_infos[0].instance_type
+                 available_instance_infos: List[InstanceInfo]) -> str:
+        instance_type: str = next(iter(available_instance_infos)).inference_type
         prev_idx = self.prev_instance_type_idx.get(instance_type, -1)
         all_instance_ids = sorted(instance_num_requests.keys())
         cur_idx = (prev_idx + 1) % len(all_instance_ids)
         target_instance_id = all_instance_ids[cur_idx]
         self.prev_instance_type_idx[instance_type] = cur_idx
         return target_instance_id
+
+
+class DynamicPD(DispatchPolicy):
+    def soft_dispatch(self,
+                      instance_type: InstanceType,
+                      prefill_instance_infos: Dict[str, InstanceInfo],
+                      prefill_instance_num_requests: Dict[str, int],
+                      decode_instance_infos: Dict[str, InstanceInfo],
+                      decode_instance_num_requests: Dict[str, int]) -> int:
+        if instance_type == InstanceType.PREFILL:
+            # if prefill loads are not busy, dispatch to prefill instance
+            prefill_sorted_instance_infos: List[InstanceInfo] = \
+                self.sort_instance_infos(prefill_instance_infos.values(), 'dispatch_load_metric')
+            if not prefill_sorted_instance_infos[0].dispatch_load_metric.is_busy():
+                return self.random_choice_from_top_k(prefill_sorted_instance_infos).instance_id
+
+            # all prefills are busy, dispatch to decode instances
+            available_decode_instance_infos = []
+            for decode_instance_info in decode_instance_infos.values():
+                if not decode_instance_info.dispatch_load_metric.is_busy():
+                    available_decode_instance_infos.append(decode_instance_info)
+            if len(available_decode_instance_infos) > 0:
+                sorted_available_decode_instance_infos = self.sort_instance_infos(
+                    available_decode_instance_infos,
+                    'dispatch_decode_as_prefill_load_metric')
+                return self.random_choice_from_top_k(sorted_available_decode_instance_infos).instance_id
+
+            # fallback to prefill instances
+            return self.random_choice_from_top_k(prefill_sorted_instance_infos).instance_id
+
+        if instance_type == InstanceType.DECODE:
+            # choose decode instance first
+            decode_sorted_instance_infos: List[InstanceInfo] = self.sort_instance_infos(decode_instance_infos.values(),
+                                                                                        'dispatch_load_metric')
+            if not decode_sorted_instance_infos[0].dispatch_load_metric.is_busy():
+                return self.random_choice_from_top_k(decode_sorted_instance_infos).instance_id
+
+            # try to dispatch to prefill instances
+            available_prefill_instance_infos = []
+            for prefill_instance_info in prefill_instance_infos.values():
+                if not prefill_instance_info.dispatch_load_metric.is_busy():
+                    available_prefill_instance_infos.append(prefill_instance_info)
+            if len(available_prefill_instance_infos) > 0:
+                sorted_available_prefill_instance_infos = self.sort_instance_infos(
+                    available_prefill_instance_infos,
+                    'dispatch_prefill_as_decode_load_metric')
+                return self.random_choice_from_top_k(sorted_available_prefill_instance_infos).instance_id
+
+            # fallback to decode instances
+            return self.random_choice_from_top_k(decode_sorted_instance_infos).instance_id
+
+        raise RuntimeError(f"Invalid instance type {instance_type} for dynamic pd dispatch policy.")
 
 
 class DispatchPolicyFactory:
@@ -115,6 +182,7 @@ class DispatchPolicyFactory:
         'load': Load,
         'queue': Queue,
         'rr': RoundRobin,
+        'dynamicpd': DynamicPD
     }
 
     @classmethod

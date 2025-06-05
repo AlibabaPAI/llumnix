@@ -227,7 +227,7 @@ def test_dispatch_decode(global_scheduler):
     assert decode_instance_id in decode_instance_ids or decode_instance_id in instance_ids
     assert request_expected_steps == math.inf
 
-def test_pair_migration(global_scheduler):
+def test_pair_migration(global_scheduler: GlobalScheduler):
     instance_id = random_uuid()
     instance_id_1 = random_uuid()
     instance_ids = [instance_id, instance_id_1]

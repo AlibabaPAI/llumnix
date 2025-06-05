@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+import llumnix.envs as llumnix_envs
 
 class BaseLoad(ABC):
     @abstractmethod
@@ -49,13 +50,16 @@ class DummyLoad(BaseLoad):
     def __lt__(self, other: "DummyLoad") -> bool:
         return True
 
+    def __repr__(self):
+        return "DummyLoad"
+
     @classmethod
     def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "DummyLoad":
         return DummyLoad()
 
 
 class UsageRatioLoad(BaseLoad):
-    BUSY_THRESHOLD = 1.0
+    BUSY_THRESHOLD = float(llumnix_envs.USAGERATIO_BUSY_THRESHOLD)
 
     def __init__(self, usage_ratio: float = 0.0) -> None:
         self.usage_ratio = usage_ratio
@@ -79,7 +83,7 @@ class UsageRatioLoad(BaseLoad):
 
 
 class RemainingStepsLoad(BaseLoad):
-    BUSY_THRESHOLD = 0.0
+    BUSY_THRESHOLD = float(llumnix_envs.REMAININGSTEPS_BUSY_THRESHOLD)
 
     def __init__(self, remaining_steps: float = 0.0) -> None:
         self.remaining_steps = remaining_steps

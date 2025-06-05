@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
 
 from llumnix.logging.logger import init_logger
@@ -58,7 +58,7 @@ class MigrationInstanceFilter:
         return self.registered_filters.get(filter_name, None)
 
     def filter_instances(self, instance_infos: List[InstanceInfo],
-                         pair_migration_type: PairMigrationConstraints) -> Dict[str, InstanceInfo]:
+                         pair_migration_type: PairMigrationConstraints) -> Tuple[List[InstanceInfo], List[InstanceInfo]]:
         src_filter_conditions = [filter.filter_src_condition(self.filter_config, pair_migration_type)
                                  for filter in self.registered_filters.values()]
         dst_filter_conditions = [filter.filter_dst_condition(self.filter_config, pair_migration_type)

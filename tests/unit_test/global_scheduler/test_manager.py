@@ -208,7 +208,8 @@ def get_instance_info_migrate_in(instance_id):
     instance_info = InstanceInfo(
         instance_id=instance_id,
         instance_type=InstanceType.NO_CONSTRAINTS,
-        num_available_gpu_blocks=np.inf,
+        num_total_gpu_blocks=np.inf,
+        num_used_gpu_blocks=0,
         num_running_requests=1,
         num_blocks_first_waiting_request=0,
         num_killed_requests=0
@@ -220,7 +221,8 @@ def get_instance_info_migrate_out(instance_id):
     instance_info = InstanceInfo(
         instance_id=instance_id,
         instance_type=InstanceType.NO_CONSTRAINTS,
-        num_available_gpu_blocks=0,
+        num_total_gpu_blocks=0,
+        num_used_gpu_blocks=0,
         num_running_requests=1,
         num_blocks_first_waiting_request=np.inf,
         num_killed_requests=np.inf

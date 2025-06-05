@@ -85,6 +85,8 @@ class InstanceInfo:
         self.num_available_gpu_blocks = self.num_total_gpu_blocks - self.num_used_gpu_blocks
         self.num_available_gpu_blocks_waiting = self.num_available_gpu_blocks - self.num_blocks_all_waiting_requests
 
+    def __hash__(self):
+        return hash(self.instance_id)
 
 class InstanceLoadCalculator:
     def __init__(self, instance_args: InstanceArgs) -> None:

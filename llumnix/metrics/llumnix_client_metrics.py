@@ -60,10 +60,13 @@ class LlumnixClientMetrics(BaseMetrics):
             self.start_metrics_export_loop()
 
     def increase_request_index_and_check_need_sample(self):
+        if self.metrics_sampling_interval <= 0:
+            # disable meitrics
+            return False
         self.curr_reqeust_index = (
             self.curr_reqeust_index + 1
         ) % self.metrics_sampling_interval
-        return self.metrics_sampling_interval == 0
+        return self.curr_reqeust_index == 0
 
     # record qps, ttft and tpot
     def add_request(self, reqeust_id: str):
@@ -78,6 +81,9 @@ class LlumnixClientMetrics(BaseMetrics):
             logger.warning('Request id {} not in dict request_pre_chunk_received_timestamp, skip del.'.format(request_id))
 
     def observe_tpot_and_ttft(self, request_id: str):
+        if request_id not in self.request_received_timestamps:
+            # not sample
+            return
         if request_id not in self.request_pre_chunk_received_timestamp:
             # first chunk, record ttft
             curr_timestamp = time.time()

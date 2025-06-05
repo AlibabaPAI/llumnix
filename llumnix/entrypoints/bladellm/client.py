@@ -35,7 +35,6 @@ from llumnix.server_info import ServerInfo
 from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.entrypoints.client import LlumnixClient
-from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 

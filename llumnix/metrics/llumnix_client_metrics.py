@@ -12,11 +12,13 @@
 # limitations under the License.
 
 
+import time
+from typing import Dict
 from llumnix.metrics.base_metrics import BaseMetrics
-from llumnix.metrics.metrics_types import Registery, Summary
+from llumnix.metrics.metrics_types import Registery, Summary, TimeAveragedCounter
 from llumnix.logging.logger import init_logger
-from llumnix.metrics.timestamps import RequestTimestamps
-from llumnix.metrics.utils import enable_any_metrics
+from llumnix.metrics.utils import is_metrics_enabled
+from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -25,141 +27,70 @@ class LlumnixClientMetrics(BaseMetrics):
     def __init__(self):
         super().__init__()
         self.register = Registery()
+        self.metrics_sampling_interval = int(
+            llumnix_envs.LLUMNIX_CLIENT_METRICS_SAMPLING_INTERVAL
+        )
+        self.curr_reqeust_index = -1
+        self.request_received_timestamps: Dict[str, float] = {}
+        self.request_pre_chunk_received_timestamp: Dict[str, float] = {}
 
-        self.across_manager_latency = Summary(
-            "across_manager_latency", registry=self.register
-        )
-        self.across_llumlet_latency = Summary(
-            "across_llumlet_latency", registry=self.register
-        )
-        self.across_engine_latency = Summary(
-            "across_engine_latency", registry=self.register
-        )
-        self.process_model_outputs_latency = Summary(
-            "process_model_outputs_latency", registry=self.register
-        )
-        self.engine_step_latency = Summary(
-            "engine_step_latency", registry=self.register
-        )
-        self.step_postprocess_latency = Summary(
-            "step_postprocess_latency", registry=self.register
-        )
-        self.across_async_put_queue_thread_latency = Summary(
-            "across_async_put_queue_thread_latency", registry=self.register
-        )
-        self.across_async_put_queue_actor_latency = Summary(
-            "across_async_put_queue_actor_latency", registry=self.register
-        )
-        self.across_queue_client_latency = Summary(
-            "across_queue_client_latency", registry=self.register
-        )
-        self.queue_rpc_latency = Summary("queue_rpc_latency", registry=self.register)
-        self.api_server_get_queue_latency = Summary(
-            "api_server_get_queue_latency", registry=self.register
-        )
-        self.across_request_streams_latency = Summary(
-            "across_request_streams_latency", registry=self.register
+        self.llumnix_client_request_qps = TimeAveragedCounter(
+            name="llumnix_client_request_qps",
+            registry=self.register,
+            metrics_sampling_interval=self.metrics_sampling_interval,
         )
 
-        self.enable_metrics = enable_any_metrics()
+        # reqeust in llumnix client is all is_stream=True
+        self.llumnix_client_token_ttft = Summary(
+            name="llumnix_client_token_ttft",
+            registry=self.register,
+            metrics_sampling_interval=1,  # special check before observe, so use 1 here
+        )
+
+        self.llumnix_client_token_tpot = Summary(
+            name="llumnix_client_token_tpot",
+            registry=self.register,
+            metrics_sampling_interval=1,  # special check before observe, so use 1 here
+        )
+
+        self.enable_metrics = is_metrics_enabled(
+            llumnix_envs.LLUMNIX_CLIENT_METRICS_SAMPLING_INTERVAL
+        )
         if self.enable_metrics:
             self.start_metrics_export_loop()
 
-    def record_latency_if_exist(
-        self,
-        timestamp_begin: float,
-        timestamp_end: float,
-        metrics_name: str,
-        labels: dict = None,
-    ) -> bool:
-        if timestamp_begin > 0.0 and timestamp_end > 0.0:
-            self.register.get(metrics_name).observe(
-                value=(timestamp_end - timestamp_begin) * 1000,
-                labels=labels,
-            )
+    def increase_request_index_and_check_need_sample(self):
+        self.curr_reqeust_index = (
+            self.curr_reqeust_index + 1
+        ) % self.metrics_sampling_interval
+        return self.metrics_sampling_interval == 0
 
-    async def record_request_timestamps(
-        self,
-        request_timestamp: RequestTimestamps,
-        server_id: str,
-        instance_id: str = "unknown",
-    ):
-        # some manager metrics or engine metrics may passed by timestamps,
-        # so we record them here
-        if enable_any_metrics() and request_timestamp:
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.manager_generate_timestamp,
-                timestamp_begin=request_timestamp.api_server_generate_timestamp,
-                metrics_name="across_manager_latency",
-                labels={"server_id": server_id},
-            )
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.llumlet_generate_timestamp,
-                timestamp_begin=request_timestamp.manager_generate_timestamp,
-                metrics_name="across_llumlet_latency",
-                labels={"instance_id": instance_id},
-            )
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.engine_add_request_timestamp,
-                timestamp_begin=request_timestamp.llumlet_generate_timestamp,
-                metrics_name="across_engine_latency",
-                labels={"instance_id": instance_id},
-            )
+    # record qps, ttft and tpot
+    def add_request(self, reqeust_id: str):
+        self.llumnix_client_request_qps.increase()
+        if self.increase_request_index_and_check_need_sample():
+            self.request_received_timestamps[reqeust_id] = time.time()
 
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.engine_process_model_outputs_timestamp_end,
-                timestamp_begin=request_timestamp.engine_process_model_outputs_timestamp_begin,
-                metrics_name="process_model_outputs_latency",
-                labels={"instance_id": instance_id},
-            )
+    def remove_request(self, request_id: str):
+        if not self.request_received_timestamps.pop(request_id, None):
+            logger.warning('Request id {} not in dict request_received_timestamps, skip del.'.format(request_id))
+        if not self.request_pre_chunk_received_timestamp.pop(request_id, None):
+            logger.warning('Request id {} not in dict request_pre_chunk_received_timestamp, skip del.'.format(request_id))
 
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.engine_step_timestamp_end,
-                timestamp_begin=request_timestamp.engine_step_timestamp_begin,
-                metrics_name="engine_step_latency",
-                labels={"instance_id": instance_id},
-            )
-
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.engine_step_postprocess_timestamp_end,
-                timestamp_begin=request_timestamp.engine_step_timestamp_end,
-                metrics_name="step_postprocess_latency",
-                labels={"instance_id": instance_id},
-            )
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.engine_thread_put_queue_timestamp,
-                timestamp_begin=request_timestamp.engine_put_queue_timestamp,
-                metrics_name="across_async_put_queue_thread_latency",
-                labels={"instance_id": instance_id},
-            )
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.engine_actor_put_queue_timestamp,
-                timestamp_begin=request_timestamp.engine_thread_put_queue_timestamp,
-                metrics_name="across_async_put_queue_actor_latency",
-                labels={"instance_id": instance_id},
-            )
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.queue_client_send_timestamp,
-                timestamp_begin=request_timestamp.engine_actor_put_queue_timestamp,
-                metrics_name="across_queue_client_latency",
-                labels={"instance_id": instance_id},
-            )
-
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.queue_server_receive_timestamp,
-                timestamp_begin=request_timestamp.queue_client_send_timestamp,
-                metrics_name="queue_rpc_latency",
-                labels={"instance_id": instance_id},
-            )
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.api_server_get_queue_timestamp,
-                timestamp_begin=request_timestamp.queue_server_receive_timestamp,
-                metrics_name="api_server_get_queue_latency",
-                labels={"instance_id": instance_id},
-            )
-            self.record_latency_if_exist(
-                timestamp_end=request_timestamp.api_server_generate_timestamp_end,
-                timestamp_begin=request_timestamp.api_server_get_queue_timestamp,
-                metrics_name="across_request_streams_latency",
-                labels={"instance_id": instance_id},
-            )
+    def observe_tpot_and_ttft(self, request_id: str):
+        if request_id not in self.request_pre_chunk_received_timestamp:
+            # first chunk, record ttft
+            curr_timestamp = time.time()
+            self.request_pre_chunk_received_timestamp[request_id] = curr_timestamp
+            ttft_ms = (
+                curr_timestamp - self.request_received_timestamps[request_id]
+            ) * 1000
+            self.llumnix_client_token_ttft.observe(value=ttft_ms)
+        else:
+            # not first chunk, record tpot
+            curr_timestamp = time.time()
+            tpot_ms = (
+                curr_timestamp - self.request_pre_chunk_received_timestamp[request_id]
+            ) * 1000
+            self.request_pre_chunk_received_timestamp[request_id] = curr_timestamp
+            self.llumnix_client_token_tpot.observe(value=tpot_ms)

@@ -128,19 +128,9 @@ class LlumnixClientVLLM(LlumnixClient):
                 request_id, instance_id, instance))
 
     async def get_request_outputs_loop(self):
-        running_tasks = set()
         while True:
             request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
             for request_response in request_responses:
-                task = asyncio.create_task(
-                    self.llumnix_client_metrics.record_request_timestamps(
-                        request_timestamp=request_response.request_timestamps,
-                        instance_id=request_response.instance_id,
-                        server_id=self.server_info.server_id,
-                    )
-                )
-                running_tasks.add(task)
-                task.add_done_callback(running_tasks.discard) # avoid task be GC'ed before finished
                 request_output: RequestOutput = request_response.get_engine_output()
                 set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
                 request_id = request_response.request_id

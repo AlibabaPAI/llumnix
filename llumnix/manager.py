@@ -46,8 +46,7 @@ from llumnix.utils import (
     async_wrapper,
     ray_get_with_timeout,
     asyncio_wait_for_with_timeout,
-    RequestIDType,
-    is_enable
+    RequestIDType
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -136,27 +135,29 @@ class Manager:
 
         # metrics
         self.manager_metrics = ManagerMetrics()
-        self.enable_metrics = is_enable(llumnix_envs.ENABLE_MANAGER_METRICS)
 
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
+        self.manager_metrics.call_manager_generate_qps.increase(
+            labels={"server_id": server_info.server_id}
+        )
         while self.num_instances == 0:
             logger.warning("No instance available now, sleep {}s, "
                            "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
-        with self.manager_metrics.dispatch_latency.observe_time(enabled=self.enable_metrics, labels={"instance_type":"prefill"}):
+        with self.manager_metrics.dispatch_latency.observe_time(labels={"instance_type":"prefill"}):
             prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
         if self.enable_metrics:
-            self.manager_metrics.dispatch_counter.observe(labels={"instance_id":  prefill_instance_id})
+            self.manager_metrics.dispatch_counter.increase(labels={"instance_id":  prefill_instance_id})
         if self.manager_args.enable_engine_pd_disagg:
             # Only used in bladellm now
-            with self.manager_metrics.dispatch_latency.observe_time(enabled=self.enable_metrics, labels={"instance_type":"decode"}):
+            with self.manager_metrics.dispatch_latency.observe_time(labels={"instance_type":"decode"}):
                 decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
             if self.enable_metrics:
-                self.manager_metrics.dispatch_counter.observe(labels={"instance_id":  decode_instance_id})
+                self.manager_metrics.dispatch_counter.increase(labels={"instance_id":  decode_instance_id})
             kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
                 decode_instance_id, None
             )

@@ -32,7 +32,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.server_info import ServerInfo
-from llumnix.utils import asyncio_wait_for_with_timeout, is_enable
+from llumnix.utils import asyncio_wait_for_with_timeout
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.entrypoints.client import LlumnixClient
 from llumnix import envs as llumnix_envs
@@ -61,6 +61,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         return self.timestamps_stream.get(entrypoint_req_id, None)
 
     async def _add_request(self, request: ServerRequest) -> LLMResponse:
+        self.llumnix_client_metrics.add_request(reqeust_id=request.id)
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
             return error_resp(request.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
 
@@ -103,7 +104,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
-        if self.log_request_timestamps or is_enable(llumnix_envs.ENABLE_MANAGER_METRICS):
+        if self.log_request_timestamps:
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
@@ -136,30 +137,21 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     async def drop_request(self, req_id: int) -> None:
         llumnix_req_id = self.entrypoint_req_id_to_llumnix_req_id.get(req_id, None)
+        self.llumnix_client_metrics.remove_request(request_id=req_id)
         await self._abort(llumnix_req_id)
 
     async def get_request_outputs_loop(self):
-        running_tasks = set()
         while True:
             request_responses: List[LlumnixRequestOuputBladeLLM] = await self.request_output_queue.get()
             if request_responses is None:
                 continue
 
             for request_response in request_responses:
-                task = asyncio.create_task(
-                    self.llumnix_client_metrics.record_request_timestamps(
-                        request_timestamp=request_response.request_timestamps,
-                        instance_id=request_response.instance_id,
-                        server_id=self.server_info.server_id,
-                    )
-                )
-                running_tasks.add(task)
-                task.add_done_callback(running_tasks.discard) # avoid task be GC'ed before finished
-
                 request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
+                request_id = request_output.req_id
+                self.llumnix_client_metrics.observe_tpot_and_ttft(request_id=request_id)
                 request_timestamp: RequestTimestamps = request_response.request_timestamps
                 set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
-                request_id = request_output.req_id
                 # Request could be dispatched twice when manager is dead, the first request will free
                 # the request_streams when finished. Or the request is dropped already.
                 if request_id not in self.request_stream:
@@ -190,6 +182,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.entrypoint_req_id_to_llumnix_req_id.pop(entrypoint_req_id, None)
         self.request_stream.pop(request_id, None)
         self.request_stream_output_stash.pop(request_id, None)
+        self.llumnix_client_metrics.remove_request(request_id=entrypoint_req_id)
 
     def _process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
         current_completion_tokens = None

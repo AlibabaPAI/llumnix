@@ -31,6 +31,12 @@ if TYPE_CHECKING:
     LLUMNIX_LOG_NODE_PATH: str = ""
     MODEL_PATH: str = ""
     DATASET_PATH: str = ""
+    METRICS_OUTPUT_TARGET:  str = "logger,eas"
+    ENGINE_METRICS_SAMPLING_INTERVAL:  str = "1" # every n requests record one request matrics, 0 means disabel metrics
+    MANAGER_METRICS_SAMPLING_INTERVAL:  str = "1"
+    LLUMNIX_CLIENT_METRICS_SAMPLING_INTERVAL:  str = "1"
+    LLUMLET_METRICS_SAMPLING_INTERVAL: str = "1"
+    LLUMNIX_METRICS_EXPORT_INTERVAL_SEC : str = "15"
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -74,6 +80,20 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", str(DEFAULT_SERVER_READY_TIMEOUT)),
     "INSTANCE_READY_TIMEOUT":
     lambda: os.getenv("LLUMNIX_INSTANCE_READY_TIMEOUT", str(DEFAULT_INSTANCE_READY_TIMEOUT)),
+
+    # metrics envs
+    "METRICS_OUTPUT_TARGET":
+    lambda: os.getenv("LLUMNIX_METRICS_OUTPUT_TARGET", "logger"),
+    "ENGINE_METRICS_SAMPLING_INTERVAL":
+    lambda: os.getenv("LLUMNIX_ENGINE_METRICS_SAMPLING_INTERVAL", "0"),
+    "MANAGER_METRICS_SAMPLING_INTERVAL":
+    lambda: os.getenv("LLUMNIX_MANAGER_METRICS_SAMPLING_INTERVAL", "0"),
+    "LLUMNIX_CLIENT_METRICS_SAMPLING_INTERVAL":
+    lambda: os.getenv("LLUMNIX_CLIENT_METRICS_SAMPLING_INTERVAL", "0"),
+    "LLUMLET_METRICS_SAMPLING_INTERVAL":
+    lambda: os.getenv("LLUMNIX_LLUMLET_METRICS_SAMPLING_INTERVAL", "0"),
+    "LLUMNIX_METRICS_EXPORT_INTERVAL_SEC":
+    lambda: os.getenv("LLUMNIX_METRICS_EXPORT_INTERVAL_SEC", "15"),
 }
 
 

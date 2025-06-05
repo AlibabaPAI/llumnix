@@ -245,3 +245,7 @@ def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, *
 
 async def async_wrapper(ray_call, *args, **kwargs):
     return await ray_call(*args, **kwargs)
+
+@staticmethod
+def is_enable(value: str) -> bool:
+    return value.lower() in ("true", "1", "yes")

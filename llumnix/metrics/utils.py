@@ -15,12 +15,5 @@ from llumnix import envs as llumnix_envs
 from llumnix.utils import is_enable
 
 
-def enable_any_metrics() -> bool:
-    """
-    Check if any metrics are enabled based on environment variables.
-    """
-    return (
-        is_enable(llumnix_envs.ENABLE_LLUMNIX_CLIENT_METRICS)
-        or is_enable(llumnix_envs.ENABLE_MANAGER_METRICS)
-        or is_enable(llumnix_envs.ENABLE_ENGINE_METRICS)
-    )
+def is_metrics_enabled(metrics_sampling_interval: int=0) -> bool:
+    return metrics_sampling_interval > 0

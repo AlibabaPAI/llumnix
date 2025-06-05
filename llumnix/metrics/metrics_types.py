@@ -35,11 +35,14 @@ class TimeRecorder:
         return self._end_time
 
     def __enter__(self):
-        if self.enabled:
-            self._start_time = time.perf_counter()
+        self.start()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         return self.done()
+
+    def start(self):
+        if self.enabled:
+            self._start_time = time.perf_counter()
 
     def done(self) -> Optional[float]:
         if not self.enabled:
@@ -106,12 +109,18 @@ _REGISTRY = Registery()
 
 
 class MetricWrapperBase(ABC):
-    def __init__(self, name: str, registry: Registery = None):
+    def __init__(self, name: str, registry: Registery = None, metrics_sampling_interval: int = 0):
         self._name: str = name
+        self.metrics_sampling_interval: int = metrics_sampling_interval
+        self.curr_metrics_index: int = -1
         if registry:
             registry.register(name, self)
         else:
             _REGISTRY.register(name, self)
+
+    def increase_index_and_check_need_sample(self, increase_count: int =1):
+        self.curr_metrics_index = (self.curr_metrics_index + increase_count) % self.curr_metrics_index
+        return self.curr_metrics_index == 0
 
     @abstractmethod
     def collect(self) -> List[MetricEntry]:
@@ -132,9 +141,9 @@ class MetricWrapperBase(ABC):
 
 class Status(MetricWrapperBase):
     def __init__(
-        self, name: str, registry: Registery = None, initial_value: Any = None
+        self, name: str, registry: Registery = None, initial_value: Any = None, metrics_sampling_interval: int = 0
     ):
-        super().__init__(name, registry)
+        super().__init__(name, registry, metrics_sampling_interval)
         self._value: Any = initial_value
         self._label_values: Dict[str, int] = {} # count groups by label
         self._label_hashs: Dict[str, str] = {}
@@ -156,6 +165,8 @@ class Status(MetricWrapperBase):
         return [MetricEntry(name=self.name, value=self._value)]
 
     def observe(self, value: Any, labels: Dict[str, str] = None) -> None:
+        if not self.increase_index_and_check_need_sample():
+            return
         self._value = value
         if labels is not None:
             label_hash = hash(frozenset(labels.items()))
@@ -187,8 +198,8 @@ class PassiveStatus(MetricWrapperBase):
 
 
 class Counter(MetricWrapperBase):
-    def __init__(self, name, registry: Registery = None):
-        super().__init__(name, registry)
+    def __init__(self, name, registry: Registery = None, metrics_sampling_interval=1):
+        super().__init__(name, registry, metrics_sampling_interval)
         self._count: int = 0
         self._label_counts: Dict[str, int] = {} # count groups by label
         self._label_hashs: Dict[str, str] = {}
@@ -209,8 +220,13 @@ class Counter(MetricWrapperBase):
     def collect_without_labels(self):
         return [MetricEntry(name=self.name, value=self._count)]
 
-    # pylint: disable=arguments-renamed
-    def observe(self, increase_count: int = 1, labels: Dict[str, str] = None) -> None:
+    def observe(self, value: float, labels: Dict[str, str] = None):
+        self.increase(increase_count=value,labels=labels)
+
+    def increase(self, increase_count: int = 1, labels: Dict[str, str] = None) -> None:
+        if self.metrics_sampling_interval <= 0:
+            # Counter type metrics only support enable or disable
+            return
         self._count += increase_count
         if labels is not None:
             label_hash = hash(frozenset(labels.items()))
@@ -219,14 +235,65 @@ class Counter(MetricWrapperBase):
                 self._label_counts.get(label_hash, 0) + increase_count
             )
 
+class TimeAveragedCounter(MetricWrapperBase):
+    """
+    A counter which produce sum value devided by time in seconds between each collect invocation.
+    Note: It's not simply the sum of each sample.
+    Used for qps.
+    """
+
+    def __init__(self, name, registry: Registery = None, metrics_sampling_interval=0):
+        super().__init__(name, registry, metrics_sampling_interval)
+        self._reset()
+
+    def _reset(self):
+        self._count: int = 0
+        self._label_counts: Dict[str, int] = {} # count groups by label
+        self._label_hashs: Dict[str, str] = {}
+        self._create_time = time.perf_counter()
+
+    def observe(self, value: float, labels: Dict[str, str] = None):
+        self.increase(increase_count=value, labels=labels)
+
+    # pylint: disable=arguments-renamed
+    def increase(self, increase_count: int = 1, labels: Dict[str, str] = None) -> None:
+        if self.metrics_sampling_interval <= 0:
+            # Counter type metrics only support enable or disable
+            return
+        self._count += increase_count
+        if labels is not None:
+            label_hash = hash(frozenset(labels.items()))
+            self._label_hashs[label_hash] = labels
+            self._label_counts[label_hash] = (
+                self._label_counts.get(label_hash, 0) + increase_count
+            )
+
+    def collect(self) -> List[MetricEntry]:
+        res = []
+        time_sec = time.perf_counter() - self._create_time
+        for label_hash, count in self._label_counts.items():
+            res.append(
+                MetricEntry(
+                    name=self.name,
+                    value=count / time_sec,
+                    labels=self._label_hashs.get(label_hash),
+                )
+            )
+        res.append(MetricEntry(name=self.name, value=self._count))
+        return res
+
+    def collect_without_labels(self):
+        time_sec = time.perf_counter() - self._create_time
+        return [MetricEntry(name=self.name, value=self._count / time_sec)]
+
 
 class Summary(MetricWrapperBase):
     """
     Record a seriase of value, compute several statistics value of collected values.
     """
 
-    def __init__(self, name: str, registry: Registery = None):
-        super().__init__(name, registry)
+    def __init__(self, name: str, registry: Registery = None, metrics_sampling_interval: int = 0):
+        super().__init__(name, registry, metrics_sampling_interval)
         self.reset()
 
     def reset(self):
@@ -236,6 +303,8 @@ class Summary(MetricWrapperBase):
 
     def observe(self, value: float, labels: Dict[str, str] = None):
         """Record a value"""
+        if not self.increase_index_and_check_need_sample():
+            return
         if labels:
             label_hash = hash(frozenset(labels.items()))
             if label_hash not in self.label_hashs:
@@ -244,9 +313,10 @@ class Summary(MetricWrapperBase):
             self.label_samples[label_hash].append(value)
         self._samples.append(value)
 
-    def observe_time(self, enabled: bool = False, labels: Dict[str, str] = None):
+    def observe_time(self, labels: Dict[str, str] = None):
         """Return a Timer context object to record excution time of a scope."""
-        return TimeRecorder(metrics=self, enabled=enabled, labels=labels)
+
+        return TimeRecorder(metrics=self, enabled=self.increase_index_and_check_need_sample(), labels=labels)
 
     def collect(self) -> List[MetricEntry]:
         res = []

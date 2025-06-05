@@ -19,47 +19,82 @@ from llumnix.metrics.base_metrics import BaseMetrics
 from llumnix.metrics.metrics_types import _REGISTRY, Status, MetricEntry
 from llumnix.metrics.exporters import MultiExporter
 from llumnix.metrics.dumper import Dumper, DummyDumper
+from llumnix.metrics.utils import is_metrics_enabled
 from llumnix import envs as llumnix_envs
 from llumnix.instance_info import InstanceInfo
 from llumnix.logging.logger import init_logger
-from llumnix.utils import is_enable
 logger = init_logger(__name__)
 
 class EngineMetrics(BaseMetrics):
+
     def __init__(self):
         super().__init__()
-        self.instance_id = Status("instance_id")
+
+        # This Metrics class also used for instance report info to manager, so it should always be enabled
+        self.metrics_sampling_interval = 1
+
+        self.instance_id = Status(
+            name="instance_id", metrics_sampling_interval=self.metrics_sampling_interval
+        )
 
         # used for dispatch and migration
-        self.num_total_gpu_blocks = Status("num_total_gpu_blocks")
-        self.num_used_gpu_blocks = Status("num_used_gpu_blocks")
-        self.num_running_requests = Status("num_running_requests")
-        self.num_waiting_requests = Status("num_waiting_requests")
+        self.num_total_gpu_blocks = Status(
+            name="num_total_gpu_blocks",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
+        self.num_used_gpu_blocks = Status(
+            name="num_used_gpu_blocks",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
+        self.num_running_requests = Status(
+            name="num_running_requests",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
+        self.num_waiting_requests = Status(
+            name="num_waiting_requests",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
 
         # used for dispatch
-        self.num_blocks_all_waiting_requests = Status("num_blocks_all_waiting_requests")
+        self.num_blocks_all_waiting_requests = Status(
+            name="num_blocks_all_waiting_requests",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
 
         # used for migration
-        self.num_blocks_last_running_request = Status("num_blocks_last_running_request")
-        self.num_blocks_first_waiting_request = Status("num_blocks_first_waiting_request")
+        self.num_blocks_last_running_request = Status(
+            name="num_blocks_last_running_request",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
+        self.num_blocks_first_waiting_request = Status(
+            name="num_blocks_first_waiting_request",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
 
         # stastics
-        self.num_watermark_blocks = Status("num_watermark_blocks")
-        self.num_killed_requests = Status("num_killed_requests")
+        self.num_watermark_blocks = Status(
+            name="num_watermark_blocks",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
+        self.num_killed_requests = Status(
+            name="num_killed_requests",
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
 
         self.dumper: Dumper = None
         self._init_dumper()
 
-        self.enable_metrics = is_enable(llumnix_envs.ENABLE_ENGINE_METRICS)
-        if self.enable_metrics:
+        self.enable_export_metrics = is_metrics_enabled(
+            llumnix_envs.ENGINE_METRICS_SAMPLING_INTERVAL
+        )
+        if self.enable_export_metrics:
             self.start_metrics_export_loop()
-
 
     def start_metrics_export_loop(self):
         def _worker():
             multi_exporter = MultiExporter()
             while True:
-                time.sleep(15)
+                time.sleep(self.export_interval_sec)
                 metrics: List[MetricEntry] = _REGISTRY.describe()
                 label_instance: Dict[str, Any] = {"instance_id": self.instance_id.collect()[0].value}
                 for metric in metrics:

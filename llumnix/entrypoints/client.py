@@ -33,9 +33,8 @@ from llumnix.ray_utils import (
     execute_actor_method_async_with_retries,
     asyncio_wait_for_with_timeout,
 )
-from llumnix import envs as llumnix_envs
 from llumnix.logging.logger import init_logger
-from llumnix.utils import RequestIDType, is_enable
+from llumnix.utils import RequestIDType
 
 logger = init_logger(__name__)
 
@@ -66,7 +65,6 @@ class LlumnixClient(ABC):
 
         # metrics
         self.llumnix_client_metrics = LlumnixClientMetrics()
-        self.enable_metrics = is_enable(llumnix_envs.ENABLE_LLUMNIX_CLIENT_METRICS)
 
         loop.create_task(self.get_request_outputs_loop())
         loop.create_task(self.request_output_queue.run_server_loop())

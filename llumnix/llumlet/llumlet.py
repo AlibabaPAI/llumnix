@@ -31,6 +31,7 @@ from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import RequestIDType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
@@ -69,6 +70,7 @@ class Llumlet:
                 instance_args.migration_last_stage_max_blocks,
                 instance_args.migration_max_stages,
             )
+        self.llumlet_metrics = LlumletMetrics()
 
         asyncio.create_task(self._check_engine_state_loop())
 
@@ -148,7 +150,12 @@ class Llumlet:
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
-        await self.backend_engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+        self.llumlet_metrics.call_llumlet_generate_qps.increase(
+            labels={"instance_id": self.instance_id}
+        )
+        await self.backend_engine.add_request(
+            request_id, server_info, expected_steps, *args, **kwargs
+        )
 
     async def abort(self, request_id: Union[RequestIDType, Iterable[RequestIDType]]) -> None:
         if isinstance(request_id, (str, int)):

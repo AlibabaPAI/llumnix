@@ -98,7 +98,7 @@ class Registery:
     # reset summary metrics value
     def reset(self):
         for _, metric in self._metrics.items():
-            if isinstance(metric, Summary):
+            if isinstance(metric, Summary) or isinstance(metric, TimeAveragedCounter):
                 metric.reset()
 
     def remove(self, key) -> None:
@@ -247,9 +247,9 @@ class TimeAveragedCounter(MetricWrapperBase):
 
     def __init__(self, name, registry: Registery = None, metrics_sampling_interval=0):
         super().__init__(name, registry, metrics_sampling_interval)
-        self._reset()
+        self.reset()
 
-    def _reset(self):
+    def reset(self):
         self._count: int = 0
         self._label_counts: Dict[str, int] = {} # count groups by label
         self._label_hashs: Dict[str, str] = {}
@@ -282,7 +282,7 @@ class TimeAveragedCounter(MetricWrapperBase):
                     labels=self._label_hashs.get(label_hash),
                 )
             )
-        res.append(MetricEntry(name=self.name, value=self._count))
+        res.append(MetricEntry(name=self.name, value=self._count / time_sec))
         return res
 
     def collect_without_labels(self):

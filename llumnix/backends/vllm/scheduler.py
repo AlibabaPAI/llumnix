@@ -33,18 +33,17 @@ logger = init_logger(__name__)
 
 # TODO(ZeldaHuang): adapt prefix cache and sliding window, now use v1 manager
 class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
-    def get_free_blocks(self, num_required_blocks: int, token_ids: List[int]) -> BlockTable:
+    def get_free_blocks(self, num_required_blocks: int, token_ids: List[int]) -> Optional[BlockTable]:
         num_free_gpu_blocks = self.block_allocator.get_num_free_blocks(device=Device.GPU)
-        block_table = BlockTable(
-            block_size=self.block_size,
-            block_allocator=self.block_allocator,
-            max_block_sliding_window=self.max_block_sliding_window,
-        )
-        if (num_free_gpu_blocks - num_required_blocks >=
-                self.watermark_blocks):
+        if num_free_gpu_blocks - num_required_blocks >= self.watermark_blocks:
+            block_table = BlockTable(
+                block_size=self.block_size,
+                block_allocator=self.block_allocator,
+                max_block_sliding_window=self.max_block_sliding_window,
+            )
             block_table.allocate(token_ids)
-
-        return block_table
+            return block_table
+        return None
 
     def add_block_table(self, block_table: BlockTable, seq_id: int) -> None:
         self.block_tables[seq_id] = block_table
@@ -139,17 +138,23 @@ class SchedulerLlumnix(Scheduler):
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
             if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
-                return MigrationResponse(success=False, return_value=[])
+                return MigrationResponse(success=False, return_value=None)
+
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
-        if not block_table:
+        if block_table is None:
             block_table = self.block_manager.get_free_blocks(block_num, token_ids)
+            if block_table is None:
+                return MigrationResponse(success=False, return_value=None)
             self.pre_alloc_cache_dict[request_id] = block_table
-        elif self.block_manager.get_num_free_gpu_blocks() >= block_num:
-            block_table.append_token_ids(token_ids)
+        else:
+            if self.block_manager.get_num_free_gpu_blocks() >= block_num:
+                block_table.append_token_ids(token_ids)
+            else:
+                return MigrationResponse(success=False, return_value=None)
 
         if len(block_table.blocks) == self.block_manager.max_block_sliding_window:
             # abort migration due to sliding window
-            return MigrationResponse(success=False, return_value=[])
+            return MigrationResponse(success=False, return_value=None)
 
         return MigrationResponse(success=True, return_value=block_table.physical_block_ids[-block_num:])
 

@@ -59,7 +59,7 @@ class MigrationCoordinator:
         self.migration_scheduler = LocalMigrationScheduler(request_migration_policy, self.backend_engine)
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages
-        self.pending_migrate_in_requests: Dict[str, float] = {}
+        self.pending_migrate_in_request_time: Dict[str, float] = {}
         asyncio.create_task(self._watch_pending_migrate_in_requests_loop())
 
     async def migrate_out(self, dst_instance_actor: ray.actor.ActorHandle, dst_instance_id: str) -> List[RequestIDType]:
@@ -275,9 +275,9 @@ class MigrationCoordinator:
                         token_ids: List[int],
                         is_first_stage: bool) -> List[int]:
         if not is_first_stage:
-            if request_id not in self.pending_migrate_in_requests:
-                return MigrationResponse(success=False, return_value=[])
-            del self.pending_migrate_in_requests[request_id]
+            if request_id not in self.pending_migrate_in_request_time:
+                return MigrationResponse(success=False, return_value=None)
+            del self.pending_migrate_in_request_time[request_id]
 
         response = self.backend_engine.pre_alloc_cache(request_id,
                                                        request_status,
@@ -288,7 +288,7 @@ class MigrationCoordinator:
             # failed to alloc, abort request
             self.free_pre_alloc_cache(request_id)
         else:
-            self.pending_migrate_in_requests[request_id] = time.time()
+            self.pending_migrate_in_request_time[request_id] = time.time()
 
         return response
 
@@ -324,7 +324,7 @@ class MigrationCoordinator:
                     "unexpected exception: {}".format(dst_instance_id, request_id, e))
             # Once return False response, the migration status will become ABORTED_DST,
             # which will stop and clear the migration.
-            return MigrationResponse(success=False, return_value=[])
+            return MigrationResponse(success=False, return_value=None)
 
     def free_pre_alloc_cache(self, request_id: RequestIDType) -> None:
         return self.backend_engine.free_pre_alloc_cache(request_id)
@@ -372,19 +372,19 @@ class MigrationCoordinator:
             return MigrationResponse(success=False, return_value=None)
 
     async def recv_cache(self, request_id: RequestIDType, *args, **kwargs) -> MigrationResponse:
-        if request_id not in self.pending_migrate_in_requests:
+        if request_id not in self.pending_migrate_in_request_time:
             return MigrationResponse(success=False, return_value=None)
-        del self.pending_migrate_in_requests[request_id]
+        del self.pending_migrate_in_request_time[request_id]
         # pylint: disable=protected-access
         response = await self.backend_engine.recv_cache(request_id, *args, **kwargs)
         if response.success:
-            self.pending_migrate_in_requests[request_id] = time.time()
+            self.pending_migrate_in_request_time[request_id] = time.time()
         return response
 
     async def commit_dst_request(self, backend_request: LlumnixRequest) -> MigrationResponse:
-        if backend_request.request_id not in self.pending_migrate_in_requests:
+        if backend_request.request_id not in self.pending_migrate_in_request_time:
             return MigrationResponse(success=False, return_value=None)
-        del self.pending_migrate_in_requests[backend_request.request_id]
+        del self.pending_migrate_in_request_time[backend_request.request_id]
         return await self.backend_engine.commit_dst_request(backend_request)
 
     async def _dst_commit_dst_request(self,
@@ -411,10 +411,10 @@ class MigrationCoordinator:
             await asyncio.sleep(PENDING_MIGRATE_IN_TIMEOUT / 2)
             curr_time = time.time()
             new_pending_migrate_in_requests: Dict[str, float] = {}
-            for request_id, last_migrate_in_stop_time in self.pending_migrate_in_requests.items():
+            for request_id, last_migrate_in_stop_time in self.pending_migrate_in_request_time.items():
                 if curr_time - last_migrate_in_stop_time > PENDING_MIGRATE_IN_TIMEOUT:
                     logger.error("Pending migrate in request {} timeout after {} seconds.".format(request_id, PENDING_MIGRATE_IN_TIMEOUT))
                     self.backend_engine.free_pre_alloc_cache(request_id)
                 else:
                     new_pending_migrate_in_requests[request_id] = last_migrate_in_stop_time
-            self.pending_migrate_in_requests = new_pending_migrate_in_requests
+            self.pending_migrate_in_request_time = new_pending_migrate_in_requests

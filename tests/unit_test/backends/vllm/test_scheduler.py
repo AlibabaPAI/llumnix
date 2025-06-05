@@ -172,7 +172,7 @@ def test_scheduler_pre_alloc():
     assert len(scheduler.pre_alloc_cache_dict["1"].physical_block_ids) == 6
     response = scheduler.pre_alloc_cache("2,", RequestStatus.RUNNING, 0.0, 4, range(4*4))
     blocks = response.return_value
-    assert len(blocks) == 0
+    assert blocks is None
 
 def test_schedule_running():
     scheduler = initialize_scheduler()
@@ -213,7 +213,7 @@ def test_schedule_running():
     response = scheduler.pre_alloc_cache(
         "3", RequestStatus.WAITING_MIGRATING, after_arrival, 2, range(2*4))
     blocks = response.return_value
-    assert len(blocks) == 0
+    assert blocks is None
     response = scheduler.pre_alloc_cache(
         "4", RequestStatus.WAITING_MIGRATING, before_arrival, 2, range(2*4))
     blocks = response.return_value

@@ -60,7 +60,6 @@ from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NO_INSTANCE_RETRY_GENERATE_INTERVAL, WAIT_ALL_MIGRATIONS_DONE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.api_server_actor import APIServerActor
-from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -150,14 +149,12 @@ class Manager:
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
         with self.manager_metrics.dispatch_latency.observe_time(labels={"instance_type":"prefill"}):
             prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
-        if self.enable_metrics:
-            self.manager_metrics.dispatch_counter.increase(labels={"instance_id":  prefill_instance_id})
+        self.manager_metrics.dispatch_counter.increase(labels={"instance_id":  prefill_instance_id})
         if self.manager_args.enable_engine_pd_disagg:
             # Only used in bladellm now
             with self.manager_metrics.dispatch_latency.observe_time(labels={"instance_type":"decode"}):
                 decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
-            if self.enable_metrics:
-                self.manager_metrics.dispatch_counter.increase(labels={"instance_id":  decode_instance_id})
+            self.manager_metrics.dispatch_counter.increase(labels={"instance_id":  decode_instance_id})
             kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
                 decode_instance_id, None
             )
@@ -230,11 +227,10 @@ class Manager:
                 if ret is not None:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
-                    if self.enable_metrics:
-                        self.manager_metrics.dispatch_load.observe(
-                            value=ret.dispatch_load_metric,
-                            labels={"instance_id": ret.instance_id},
-                        )
+                    self.manager_metrics.dispatch_load.observe(
+                        value=ret.dispatch_load_metric,
+                        labels={"instance_id": ret.instance_id},
+                    )
             else:
                 if isinstance(ret, ray.exceptions.RayActorError):
                     logger.info("Instance {} is dead.".format(instance_id))

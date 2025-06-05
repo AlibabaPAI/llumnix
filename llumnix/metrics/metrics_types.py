@@ -119,7 +119,10 @@ class MetricWrapperBase(ABC):
             _REGISTRY.register(name, self)
 
     def increase_index_and_check_need_sample(self, increase_count: int =1):
-        self.curr_metrics_index = (self.curr_metrics_index + increase_count) % self.curr_metrics_index
+        if self.metrics_sampling_interval <= 0:
+            # disable metrics
+            return False
+        self.curr_metrics_index = (self.curr_metrics_index + increase_count) % self.metrics_sampling_interval
         return self.curr_metrics_index == 0
 
     @abstractmethod

@@ -30,7 +30,7 @@ from blade_llm.service.worker import worker_main, WorkerProcesses
 from llumnix.logging.logger import init_logger
 from llumnix.utils import (get_ip_address, update_environment_variables,
                            ray_get_with_timeout)
-from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
+from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.utils import random_uuid
 from llumnix.ray_utils import log_actor_ray_info
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
@@ -328,7 +328,7 @@ class WorkerProcessesRay(WorkerProcesses):
             self,
             method: str,
             *args,
-            timeout: float = RAY_REMOTE_CALL_TIMEOUT,
+            timeout: float = RAY_RPC_TIMEOUT,
             **kwargs,
         ) -> Any:
         ray_worker_outputs = [

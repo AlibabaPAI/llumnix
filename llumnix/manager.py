@@ -273,26 +273,6 @@ class Manager:
             if isinstance(ret, Exception):
                 has_error_pair = await self._check_instance_error(migrate_instance_pair)
                 for i, has_error in enumerate(has_error_pair):
-                    # Instance without error should clear migration states.
-                    instance_id = migrate_instance_pair[i]
-                    if not has_error:
-                        try:
-                            # TODO(s5u13b): Fix the clear_migration_states to adapt to the many-to-many migration.
-                            await asyncio_wait_for_with_timeout(
-                                self.instances[instance_id].execute_engine_method_async.remote(
-                                    "clear_migration_states", is_migrate_in=bool(i)
-                                )
-                            )
-                        except Exception as e: # pylint: disable=broad-except
-                            if isinstance(e, ray.exceptions.RayActorError):
-                                logger.info("Instance {} is dead.".format(instance_id))
-                            elif isinstance(e, asyncio.TimeoutError):
-                                logger.error("Instance {} is hang, please check the cause.".format(instance_id))
-                            else:
-                                logger.exception("Failed to clear migration states of instance {}, "
-                                                 "unexpected exception: {}".format(instance_id, e))
-                            has_error = True
-                for i, has_error in enumerate(has_error_pair):
                     if has_error:
                         instance_id = migrate_instance_pair[i]
                         await self.scale_down(instance_id)
@@ -321,7 +301,7 @@ class Manager:
                 task = asyncio.gather(
                     asyncio_wait_for_with_timeout(
                         self.instances[src_instance_id].migrate_out.remote(
-                            dst_instance_id, dst_instance_actor
+                            dst_instance_actor, dst_instance_id
                         )
                     ),
                     return_exceptions=True

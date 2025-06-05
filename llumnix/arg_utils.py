@@ -35,6 +35,8 @@ logger = init_logger(__name__)
 # All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None for default.
 
 class LlumnixArgumentParser(argparse.ArgumentParser):
+    _deprecated: set[argparse.Action] = set()
+    
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -43,13 +45,31 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
         self.cur_namespace = namespace
 
     def add_argument(self, *args, **kwargs):
+        # Compatible with vllm v0.9.0 FlexibleArgumentParser
+        deprecated = kwargs.pop("deprecated", False)
         if self.cur_namespace == 'llumnix' and "--help" not in args:
             assert 'default' not in kwargs or kwargs['default'] is None, \
                 f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
                 f"The default value will be retrieved from config/default.py in get_llumnix_config."
             if kwargs.get('action') == 'store_true':
                 kwargs['default'] = None
-        super().add_argument(*args, **kwargs)
+        action = super().add_argument(*args, **kwargs)
+        if deprecated:
+            self._deprecated.add(action)
+        return action
+        
+    class _LlumnixArgumentGroup(argparse._ArgumentGroup):
+        def add_argument(self, *args, **kwargs):
+            # Compatible with vllm v0.9.0 FlexibleArgumentParser
+            deprecated = kwargs.pop("deprecated", False)
+            action = super().add_argument(*args, **kwargs)
+            if deprecated:
+                LlumnixArgumentParser._deprecated.add(action)
+            return action
+            
+    def add_argument_group(self, *args, **kwargs):
+        group = self._LlumnixArgumentGroup(self, *args, **kwargs)
+        return group
 
 
 class LlumnixEngineArgs(ABC):

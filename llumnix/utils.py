@@ -17,11 +17,12 @@ import time
 import uuid
 import asyncio
 import threading
-from typing import Callable, Awaitable, TypeVar, Coroutine, Dict, Optional, Union
+from typing import Callable, Awaitable, TypeVar, Coroutine, Dict, Optional, Union, Any
 import socket
 from functools import partial
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 import psutil
 from typing_extensions import ParamSpec
@@ -40,6 +41,12 @@ P = ParamSpec('P')
 T = TypeVar("T")
 
 RequestIDType = Union[str, int]
+
+@dataclass
+class MigrationResponse:
+    success: bool = True
+    return_value: Any = None
+
 
 logger = init_logger(__name__)
 

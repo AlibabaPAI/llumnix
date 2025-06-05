@@ -19,7 +19,7 @@ import ray.actor
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
-from llumnix.utils import RequestIDType
+from llumnix.utils import RequestIDType, MigrationResponse
 from llumnix.constants import RAY_RPC_TIMEOUT
 
 
@@ -86,7 +86,9 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     # Methods for migration
-    async def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
+    async def get_request_incremental_blocks(self,
+                                             backend_request: LlumnixRequest,
+                                             pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         """
         Get the incremental blocks and token ids for a given request.
 
@@ -187,7 +189,7 @@ class BackendInterface(ABC):
                         request_status: RequestStatus,
                         request_arrival_time: float,
                         block_num: int,
-                        token_ids: List[int]) -> List[int]:
+                        token_ids: List[int]) -> MigrationResponse:
         """
         Pre-allocate cache blocks for a migrating request.
 
@@ -204,8 +206,10 @@ class BackendInterface(ABC):
             request_arrival_time: The arrival time of the request.
             block_num: The number of cache blocks that need to be pre-allocated for the request.
             token_ids: The token IDs of the request.
+
         Returns:
-            A list of integers where each integer represents the block table reserved for the migration request.
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 
@@ -268,7 +272,7 @@ class BackendInterface(ABC):
                          src_blocks: List[int],
                          dst_blocks: List[int],
                          request_id: RequestIDType,
-                         is_last_stage: bool) -> bool:
+                         is_last_stage: bool) -> MigrationResponse:
         """
         Send cache blocks from the source instance to the destination instance.
 
@@ -287,7 +291,8 @@ class BackendInterface(ABC):
             is_last_stage: A boolean indicating whether this is the last stage of the migration.
 
         Returns:
-            A boolean indicating whether the cache transfer is successful.
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 
@@ -297,7 +302,7 @@ class BackendInterface(ABC):
                          src_worker_handle_list: List[Any],
                          src_blocks: List[int],
                          dst_blocks: List[int],
-                         is_last_stage: bool) -> bool:
+                         is_last_stage: bool) -> MigrationResponse:
         """
         Recv cache blocks from the source instance to the destination instance.
 
@@ -315,12 +320,13 @@ class BackendInterface(ABC):
             is_last_stage: A boolean indicating whether this is the last stage of the migration.
 
         Returns:
-            A boolean indicating whether the cache transfer is successful.
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 
     @abstractmethod
-    async def commit_dst_request(self, backend_request: LlumnixRequest) -> bool:
+    async def commit_dst_request(self, backend_request: LlumnixRequest) -> MigrationResponse:
         """
         Commit the migrating request to the destination instance.
 
@@ -332,7 +338,8 @@ class BackendInterface(ABC):
             backend_request: An object representing the backend request.
 
         Returns:
-            A boolean indicating whether the commit is successful.
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 

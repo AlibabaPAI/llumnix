@@ -31,6 +31,7 @@ from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.llumlet.request import RequestStatus
 from llumnix.backends.bladellm.llm_engine import AsyncBackQueueWrapper
 from llumnix.server_info import ServerInfo
+from llumnix.utils import MigrationResponse
 
 
 class PagedSchedulerLlumnix(PagedScheduler):
@@ -180,14 +181,15 @@ class PagedSchedulerLlumnix(PagedScheduler):
                         request_status: RequestStatus,
                         request_arrival_time: float,
                         block_num: int,
-                        token_ids: List[int]) -> List[int]:
+                        token_ids: List[int]) -> MigrationResponse:
         if request_status == RequestStatus.WAITING_MIGRATING:
             if (self.waiting and request_arrival_time > self.waiting[0].arrival_time):
-                return []
+                return MigrationResponse(success=False, return_value=None)
+
+        if not self.block_manager.can_allocate_num_blocks(block_num):
+            return MigrationResponse(success=False, return_value=None)
 
         blocks = []
-        if not self.block_manager.can_allocate_num_blocks(block_num):
-            return blocks
         for _ in range(block_num):
             block = self.block_manager.gpu_allocator.allocate()
             block.ref_count = 1
@@ -196,7 +198,8 @@ class PagedSchedulerLlumnix(PagedScheduler):
         pre_blocks.extend(blocks)
         self.pre_alloc_cache_dict[request_id] = pre_blocks
         blocks = [block.block_number for block in blocks]
-        return blocks
+
+        return MigrationResponse(success=True, return_value=blocks)
 
     def free_src_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         assert backend_request.paged_reqs[0].block_table_id in self.block_manager.block_tables, "block table not found"

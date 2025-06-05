@@ -66,7 +66,7 @@ from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
-from llumnix.utils import RequestIDType
+from llumnix.utils import RequestIDType, MigrationResponse
 
 logger = init_logger(__name__)
 
@@ -700,7 +700,7 @@ class BackendBladeLLM(BackendInterface):
     def pop_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
         return self.engine.scheduler.pop_migrating_out_request_last_stage(*args, **kwargs)
 
-    def pre_alloc_cache(self, *args, **kwargs) -> List[int]:
+    def pre_alloc_cache(self, *args, **kwargs) -> MigrationResponse:
         return self.engine.scheduler.pre_alloc_cache(*args, **kwargs)
 
     def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
@@ -721,7 +721,7 @@ class BackendBladeLLM(BackendInterface):
                          src_blocks: List[int],
                          dst_blocks: List[int],
                          request_id: int,
-                         is_last_stage: bool) -> bool:
+                         is_last_stage: bool) -> MigrationResponse:
         return await asyncio_wait_for_with_timeout(
             dst_instance_actor.execute_migration_method_async.remote(
                 "recv_cache",
@@ -738,7 +738,7 @@ class BackendBladeLLM(BackendInterface):
                          src_worker_handle_list: List[Any],
                          src_blocks: List[int],
                          dst_blocks: List[int],
-                         is_last_stage: bool) -> bool:
+                         is_last_stage: bool) -> MigrationResponse:
         request = RecvCacheRequest(
             src_worker_handle_list=src_worker_handle_list,
             request_id=request_id,
@@ -747,10 +747,10 @@ class BackendBladeLLM(BackendInterface):
             dst_blocks=dst_blocks,
         )
         responses = await self._run_workers_async("recv_cache", request)
-        results = [response.is_ok for response in responses]
-        return all(results)
+        is_ok_list = [response.is_ok for response in responses]
+        return MigrationResponse(success=all(is_ok_list), return_value=None)
 
-    async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> bool:
+    async def commit_dst_request(self, backend_request: GenerationGroupStateLlumnix) -> MigrationResponse:
         assert len(backend_request.paged_reqs) == 1, "Currently llumnix doesn't support multi-paged request migration."
 
         seq = backend_request.paged_reqs[0]
@@ -767,4 +767,4 @@ class BackendBladeLLM(BackendInterface):
         if self.engine._migration_semaphore.locked():
             self.engine._migration_semaphore.release()
 
-        return True
+        return MigrationResponse(success=True, return_value=None)

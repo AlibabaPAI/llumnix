@@ -26,7 +26,7 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
-
+from llumnix.utils import MigrationResponse
 
 logger = init_logger(__name__)
 
@@ -134,12 +134,12 @@ class SchedulerLlumnix(Scheduler):
                         request_status: RequestStatus,
                         request_arrival_time: float,
                         block_num: int,
-                        token_ids: List[int]) -> List[int]:
+                        token_ids: List[int]) -> MigrationResponse:
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
             if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
-                return []
+                return MigrationResponse(success=False, return_value=[])
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
         if not block_table:
             block_table = self.block_manager.get_free_blocks(block_num, token_ids)
@@ -149,9 +149,9 @@ class SchedulerLlumnix(Scheduler):
 
         if len(block_table.blocks) == self.block_manager.max_block_sliding_window:
             # abort migration due to sliding window
-            return []
+            return MigrationResponse(success=False, return_value=[])
 
-        return block_table.physical_block_ids[-block_num:]
+        return MigrationResponse(success=True, return_value=block_table.physical_block_ids[-block_num:])
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
         self._set_status(backend_request, status_to=SequenceStatus.RUNNING)

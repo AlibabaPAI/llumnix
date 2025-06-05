@@ -51,7 +51,7 @@ from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
-from llumnix.utils import RequestIDType
+from llumnix.utils import RequestIDType, MigrationResponse
 
 logger = init_logger(__name__)
 
@@ -430,7 +430,7 @@ class BackendVLLM(BackendInterface):
     async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         await self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
 
-    async def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> bool:
+    async def commit_dst_request(self, backend_request: SequenceGroupLlumnix) -> MigrationResponse:
         if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
             await self._run_workers_async("commit_seq_group_metadata", backend_request.request_id)
 
@@ -449,14 +449,14 @@ class BackendVLLM(BackendInterface):
         else: # WAITING_MIGRATING:
             self.add_waiting_request(backend_request)
 
-        return True
+        return MigrationResponse(success=True, return_value=None)
 
     async def send_cache(self,
                          dst_instance_actor: ray.actor.ActorHandle,
                          src_blocks: List[int],
                          dst_blocks: List[int],
                          request_id: str,
-                         is_last_stage: bool) -> bool:
+                         is_last_stage: bool) -> MigrationResponse:
         return await asyncio_wait_for_with_timeout(
             dst_instance_actor.execute_migration_method_async.remote(
                 "recv_cache",
@@ -473,10 +473,10 @@ class BackendVLLM(BackendInterface):
                          src_worker_handle_list: List[ray.actor.ActorHandle],
                          src_blocks: List[int],
                          dst_blocks: List[int],
-                         is_last_stage: bool) -> bool:
-        results = await self._run_workers_async(
+                         is_last_stage: bool) -> MigrationResponse:
+        success_list = await self._run_workers_async(
             "recv_cache", request_id, src_worker_handle_list, src_blocks, dst_blocks, is_last_stage)
-        return all(results)
+        return MigrationResponse(success=all(success_list), return_value=None)
 
     def _run_workers(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
         # pylint: disable=protected-access
@@ -533,7 +533,7 @@ class BackendVLLM(BackendInterface):
     def pop_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         return self.engine.scheduler[0].pop_migrating_out_request_last_stage(backend_request.request_id)
 
-    def pre_alloc_cache(self, *args, **kwargs) -> List[int]:
+    def pre_alloc_cache(self, *args, **kwargs) -> MigrationResponse:
         return self.engine.scheduler[0].pre_alloc_cache(*args, **kwargs)
 
     def should_abort_migration(self, *args, **kwargs) -> bool:

@@ -22,7 +22,7 @@ import ray.exceptions
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface, BackendType
-from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType
+from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType, MigrationResponse
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
 
@@ -111,8 +111,8 @@ class MigrationCoordinator:
             return migrated_request
 
         if status == MigrationStatus.FINISHED:
-            success = await self._dst_commit_dst_request(dst_instance_actor, dst_instance_id, migrate_out_request)
-            if success:
+            response = await self._dst_commit_dst_request(dst_instance_actor, dst_instance_id, migrate_out_request)
+            if response.success:
                 self.backend_engine.free_src_request(migrate_out_request)
                 self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
@@ -148,7 +148,7 @@ class MigrationCoordinator:
         if not found:
             return MigrationStatus.ABORTED_SRC
         self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
-        dst_blocks = await self._dst_pre_alloc_cache(
+        response = await self._dst_pre_alloc_cache(
                         dst_instance_actor,
                         dst_instance_id,
                         migrate_out_request.request_id,
@@ -158,7 +158,7 @@ class MigrationCoordinator:
                         migrate_out_request.token_ids,
                         is_first_stage=True,
                     )
-        if len(dst_blocks) != migrate_out_request.prefill_num_blocks:
+        if not response.success:
             self.backend_engine.add_waiting_request(migrate_out_request)
             self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
             return MigrationStatus.ABORTED_DST
@@ -206,7 +206,7 @@ class MigrationCoordinator:
             if len(incremental_token_ids) > 0:
                 incremental_token_ids = incremental_token_ids[:len(src_blocks)*migrate_out_request.block_size]
             stage_block_num = len(incremental_blocks) - 1
-            dst_blocks = await self._dst_pre_alloc_cache(
+            response = await self._dst_pre_alloc_cache(
                             dst_instance_actor,
                             dst_instance_id,
                             migrate_out_request.request_id,
@@ -226,7 +226,7 @@ class MigrationCoordinator:
             self.backend_engine.add_migrating_out_request_last_stage(migrate_out_request)
             src_blocks = incremental_blocks[:]
             stage_block_num = len(incremental_blocks)
-            dst_blocks = await self._dst_pre_alloc_cache(
+            response = await self._dst_pre_alloc_cache(
                             dst_instance_actor,
                             dst_instance_id,
                             migrate_out_request.request_id,
@@ -237,7 +237,7 @@ class MigrationCoordinator:
                             is_first_stage,
                         )
 
-        if len(dst_blocks) != len(src_blocks):
+        if not response.success:
             # migrate in instance failed to pre alloc
             if is_last_stage:
                 self.backend_engine.add_running_request(migrate_out_request)
@@ -248,13 +248,14 @@ class MigrationCoordinator:
             return MigrationStatus.ABORTED_SRC
 
         # do stage send/recv
+        dst_blocks = response.return_value
         migrate_out_request.stage_timestamps.append(time.time())
         migrate_out_request.stage_num_blocks_list.append(stage_block_num)
         # TODO(ZeldaHuang): send_cache in pre_alloc_cache/migrate_in_last_stage
-        success = await self._send_cache(
+        response = await self._send_cache(
             dst_instance_actor, dst_instance_id, src_blocks, dst_blocks, migrate_out_request.request_id, is_last_stage
         )
-        if not success:
+        if not response.success:
             if is_last_stage:
                 self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
@@ -275,22 +276,21 @@ class MigrationCoordinator:
                         is_first_stage: bool) -> List[int]:
         if not is_first_stage:
             if request_id not in self.pending_migrate_in_requests:
-                return []
+                return MigrationResponse(success=False, return_value=[])
             del self.pending_migrate_in_requests[request_id]
 
-        pre_alloc_blocks = self.backend_engine.pre_alloc_cache(request_id,
-                                                               request_status,
-                                                               request_arrival_time,
-                                                               block_num,
-                                                               token_ids)
-        if len(pre_alloc_blocks) != block_num:
+        response = self.backend_engine.pre_alloc_cache(request_id,
+                                                       request_status,
+                                                       request_arrival_time,
+                                                       block_num,
+                                                       token_ids)
+        if not response.success:
             # failed to alloc, abort request
             self.free_pre_alloc_cache(request_id)
-            return pre_alloc_blocks
+        else:
+            self.pending_migrate_in_requests[request_id] = time.time()
 
-        self.pending_migrate_in_requests[request_id] = time.time()
-
-        return pre_alloc_blocks
+        return response
 
     async def _dst_pre_alloc_cache(self,
                                    dst_instance_actor: ray.actor.ActorHandle,
@@ -300,7 +300,7 @@ class MigrationCoordinator:
                                    request_arrival_time: float,
                                    block_num: int,
                                    token_ids: List[int],
-                                   is_first_stage: bool) -> List[int]:
+                                   is_first_stage: bool) -> MigrationResponse:
         try:
             return await asyncio_wait_for_with_timeout(
                 dst_instance_actor.execute_migration_method.remote(
@@ -322,9 +322,9 @@ class MigrationCoordinator:
             else:
                 logger.exception("Failed to call dst instance {} to pre-allocate cache for request {}, "
                     "unexpected exception: {}".format(dst_instance_id, request_id, e))
-            # Once return empty list, the migration status will become ABORTED_DST,
+            # Once return False response, the migration status will become ABORTED_DST,
             # which will stop and clear the migration.
-            return []
+            return MigrationResponse(success=False, return_value=[])
 
     def free_pre_alloc_cache(self, request_id: RequestIDType) -> None:
         return self.backend_engine.free_pre_alloc_cache(request_id)
@@ -355,7 +355,7 @@ class MigrationCoordinator:
                           src_blocks: List[int],
                           dst_blocks: List[int],
                           request_id: RequestIDType,
-                          is_last_stage: bool) -> bool:
+                          is_last_stage: bool) -> MigrationResponse:
         try:
             return await self.backend_engine.send_cache(
                 dst_instance_actor, src_blocks, dst_blocks, request_id, is_last_stage
@@ -369,28 +369,28 @@ class MigrationCoordinator:
             else:
                 logger.exception("Failed to send cache to instance {} for request {}, "
                     "unexpected exception: {}".format(dst_instance_id, request_id, e))
-            return False
+            return MigrationResponse(success=False, return_value=None)
 
-    async def recv_cache(self, request_id: RequestIDType, *args, **kwargs) -> bool:
+    async def recv_cache(self, request_id: RequestIDType, *args, **kwargs) -> MigrationResponse:
         if request_id not in self.pending_migrate_in_requests:
-            return False
+            return MigrationResponse(success=False, return_value=None)
         del self.pending_migrate_in_requests[request_id]
         # pylint: disable=protected-access
-        result = await self.backend_engine.recv_cache(request_id, *args, **kwargs)
-        if result is True:
+        response = await self.backend_engine.recv_cache(request_id, *args, **kwargs)
+        if response.success:
             self.pending_migrate_in_requests[request_id] = time.time()
-        return result
+        return response
 
-    async def commit_dst_request(self, backend_request: LlumnixRequest) -> bool:
+    async def commit_dst_request(self, backend_request: LlumnixRequest) -> MigrationResponse:
         if backend_request.request_id not in self.pending_migrate_in_requests:
-            return False
+            return MigrationResponse(success=False, return_value=None)
         del self.pending_migrate_in_requests[backend_request.request_id]
         return await self.backend_engine.commit_dst_request(backend_request)
 
     async def _dst_commit_dst_request(self,
                                       dst_instance_actor: ray.actor.ActorHandle,
                                       dst_instance_id: str,
-                                      migrate_out_request: LlumnixRequest) -> bool:
+                                      migrate_out_request: LlumnixRequest) -> MigrationResponse:
         try:
             return await asyncio_wait_for_with_timeout(
                 dst_instance_actor.execute_migration_method_async.remote("commit_dst_request", migrate_out_request)
@@ -404,7 +404,7 @@ class MigrationCoordinator:
             else:
                 logger.exception("Failed to call dst instance {} to commit dst request {}, "
                     "unexpected exception: {}".format(dst_instance_id, migrate_out_request.request_id, e))
-            return False
+            return MigrationResponse(success=False, return_value=None)
 
     async def _watch_pending_migrate_in_requests_loop(self):
         while True:

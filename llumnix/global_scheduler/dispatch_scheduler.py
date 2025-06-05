@@ -42,7 +42,8 @@ class DispatchScheduler:
         dispatch_instance_id = self.dispatch_policy.dispatch(
             instance_num_requests, instance_info.values()
         )
-        assert instance_info[dispatch_instance_id].instance_type == instance_type
+        assert instance_info[dispatch_instance_id].instance_type == instance_type \
+            or instance_info[dispatch_instance_id].instance_type == InstanceType.NO_CONSTRAINTS
 
         if num_requests % DISPATCH_LOG_FREQUENCY == 0:
             logger.info("dispatch scheduler total_dispatched_requests: {}".format(num_requests))

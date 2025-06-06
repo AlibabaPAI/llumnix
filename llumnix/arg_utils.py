@@ -36,7 +36,7 @@ logger = init_logger(__name__)
 
 class LlumnixArgumentParser(argparse.ArgumentParser):
     _deprecated: set[argparse.Action] = set()
-    
+
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -57,16 +57,16 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
         if deprecated:
             self._deprecated.add(action)
         return action
-        
-    class _LlumnixArgumentGroup(argparse._ArgumentGroup):
+
+    class _LlumnixArgumentGroup(argparse._ArgumentGroup):  # pylint: disable=protected-access
         def add_argument(self, *args, **kwargs):
             # Compatible with vllm v0.9.0 FlexibleArgumentParser
             deprecated = kwargs.pop("deprecated", False)
             action = super().add_argument(*args, **kwargs)
             if deprecated:
-                LlumnixArgumentParser._deprecated.add(action)
+                LlumnixArgumentParser._deprecated.add(action)  # pylint: disable=protected-access
             return action
-            
+
     def add_argument_group(self, *args, **kwargs):
         group = self._LlumnixArgumentGroup(self, *args, **kwargs)
         return group

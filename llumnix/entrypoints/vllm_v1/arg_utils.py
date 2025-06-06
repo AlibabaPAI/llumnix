@@ -15,7 +15,7 @@ from typing import Tuple, Union
 import copy
 
 from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
-from vllm.config import EngineConfig, ParallelConfig
+from vllm.config import VllmConfig, ParallelConfig
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.backend_interface import BackendType
@@ -73,7 +73,7 @@ def detect_unsupported_engine_feature(engine_args: EngineArgs) -> None:
         unsupported_feature = "automatic prefix caching"
     elif engine_args.enable_chunked_prefill:
         unsupported_feature = "chunked prefill"
-    elif engine_args.speculative_model:
+    elif engine_args.speculative_config:
         unsupported_feature = "speculative decoding"
     elif engine_args.pipeline_parallel_size > 1:
         unsupported_feature = "pipeline parallel"
@@ -86,11 +86,9 @@ def detect_unsupported_engine_feature(engine_args: EngineArgs) -> None:
 def check_engine_args(engine_args: AsyncEngineArgs) -> None:
     detect_unsupported_engine_feature(engine_args)
 
-    assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
-
 def check_instance_args(instance_args: InstanceArgs, engine_args: AsyncEngineArgs) -> None:
     migration_config: MigrationConfig = instance_args.create_migration_config()
-    engine_config: EngineConfig = engine_args.create_engine_config()
+    engine_config: VllmConfig = engine_args.create_engine_config()
     parallel_config: ParallelConfig = engine_config.parallel_config
 
     assert instance_args.migration_backend in ['rayrpc', 'gloo', 'nccl'], \

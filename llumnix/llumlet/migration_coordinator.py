@@ -47,7 +47,16 @@ class MigrationStatus(enum.Enum):
         ]
 
 
-def update_pending_migrate_in_requests_time(func: Callable):
+# This wrapper is used by migrate in related functions. This wrapper watch migrate in request,
+# once one migrate in function (pre_alloc_cache, recv_cache, commit_dst_request) for a migrate in request is executed successfully,
+# it means that this migrate in request is waiting for next migrate in function to be called.
+# And this wrapper records the time for the migrate in request when the migrate in function is executed successfully,
+# and remove the recorded migrate in request when next migrate in function for the migrate in request is called.
+# In the migration coordinator, there is a backgroud loop continuously watching the recorded migrate in request,
+# if the recorded migrate in request is not removed after PENDING_MIGRATE_IN_TIMEOUT seconds,
+# it indicates that the migrate out instance is dead, and next migrate in function will not be called.
+# And therefore, the backgroud loop remove the recorded migrate in request and clear the migration states of the migrate in request.
+def watch_migrate_in_request_wrapper(func: Callable):
     def inspect_is_start(func: Callable, self, *args, **kwargs):
         if func.__name__ != "pre_alloc_cache":
             return False
@@ -345,7 +354,7 @@ class MigrationCoordinator:
         return migration_status
 
     # pylint: disable=unused-argument
-    @update_pending_migrate_in_requests_time
+    @watch_migrate_in_request_wrapper
     def pre_alloc_cache(self,
                         request_id: RequestIDType,
                         request_status: RequestStatus,
@@ -443,12 +452,12 @@ class MigrationCoordinator:
                     "unexpected exception: {}".format(dst_instance_id, request_id, e))
             return MigrationResponse(success=False, return_value=None)
 
-    @update_pending_migrate_in_requests_time
+    @watch_migrate_in_request_wrapper
     async def recv_cache(self, request_id: RequestIDType, *args, **kwargs) -> MigrationResponse:
         # pylint: disable=protected-access
         return await self.backend_engine.recv_cache(request_id, *args, **kwargs)
 
-    @update_pending_migrate_in_requests_time
+    @watch_migrate_in_request_wrapper
     async def commit_dst_request(self, request_id: RequestIDType, backend_request: LlumnixRequest) -> MigrationResponse:
         return await self.backend_engine.commit_dst_request(request_id, backend_request)
 

@@ -46,7 +46,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import (
     GRPC_MAX_MESSAGE_LENGTH,
     NUMPY_SUPPORTED_DTYPES_FOR_MIGRATION,
-    KVTRANSFER_RPC_TIMEOUT,
+    GRPC_TIMEOUT,
     KVTRANSFER_MIGRATION_TIMEOUT,
     GRPC_MIGRATION_TIMEOUT,
 )
@@ -414,7 +414,7 @@ class KvTransferMigrationBackend(MigrationBackendBase):
                     dst_blocks=dst_blocks,
                     is_last_stage=src_worker_handle.is_last_stage
                 ),
-                timeout=KVTRANSFER_RPC_TIMEOUT
+                timeout=GRPC_TIMEOUT
             )
             if src_worker_handle.is_last_stage:
                 assert response.state_manager_data and len(response.state_manager_data) > 0, "Invalid state manager meta"

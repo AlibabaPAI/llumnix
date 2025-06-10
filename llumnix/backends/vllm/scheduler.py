@@ -35,6 +35,7 @@ logger = init_logger(__name__)
 class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
     def get_free_blocks(self, num_required_blocks: int, token_ids: List[int]) -> Optional[BlockTable]:
         num_free_gpu_blocks = self.block_allocator.get_num_free_blocks(device=Device.GPU)
+        block_table = None
         if num_free_gpu_blocks - num_required_blocks >= self.watermark_blocks:
             block_table = BlockTable(
                 block_size=self.block_size,
@@ -42,8 +43,7 @@ class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
                 max_block_sliding_window=self.max_block_sliding_window,
             )
             block_table.allocate(token_ids)
-            return block_table
-        return None
+        return block_table
 
     def add_block_table(self, block_table: BlockTable, seq_id: int) -> None:
         self.block_tables[seq_id] = block_table
@@ -190,7 +190,7 @@ class SchedulerLlumnix(Scheduler):
             seq.status = status_to
 
     def free_pre_alloc_cache(self, request_id: str) -> None:
-        logger.info("free request {} pre_alloc_cache".format(request_id))
+        logger.info("free request {} pre-allocated cache".format(request_id))
         block_table = self.pre_alloc_cache_dict.pop(request_id, None)
         if block_table:
             block_table.free()

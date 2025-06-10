@@ -133,7 +133,7 @@ class Manager:
 
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
-        asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
+        # asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
         while self.num_instances == 0:

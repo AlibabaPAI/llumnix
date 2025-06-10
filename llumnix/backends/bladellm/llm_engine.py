@@ -66,6 +66,7 @@ from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
+from llumnix.queue.zmq_client import ZmqClient
 
 logger = init_logger(__name__)
 
@@ -102,6 +103,9 @@ class AsyncBackQueueWrapper:
             scheduling_strategy=scheduling_strategy,
             name=f"AsyncPutQueueActor_{instance_id}"
         )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type, backend_type)
+        self.actor_zmq_port = ray.get(self.async_put_queue_actor.get_zmq_server_port.remote())
+        self.actor_zmq_ip = get_ip_address()
+        self.zmq_client = ZmqClient()
         self.put_queue_args_queue: asyncio.Queue = resp_queue
         self.metrics_queue: asyncio.Queue = metrics_queue
 
@@ -196,9 +200,10 @@ class AsyncBackQueueWrapper:
                 server_info_dict[server_id] = server_info
 
         if server_info_dict:
-            await self.async_put_queue_actor.put_nowait_to_servers.remote(
-                server_request_outputs, server_info_dict
-            )
+            # await self.async_put_queue_actor.put_nowait_to_servers.remote(
+            #     server_request_outputs, server_info_dict
+            # )
+            await self.zmq_client.put_nowait_to_actor(self.actor_zmq_ip, self.actor_zmq_port,server_request_outputs, server_info_dict)
 
     def remove_request_server_info(self, request_id: int, expired_step: int) -> None:
         self.dangling_request_server_info[request_id] = expired_step

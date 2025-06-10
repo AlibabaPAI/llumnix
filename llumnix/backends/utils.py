@@ -24,11 +24,12 @@ from llumnix.backends.backend_interface import BackendInterface, BackendType
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.queue.utils import init_request_output_queue_client
+from llumnix.queue.zmq_server import ZmqServer
 from llumnix.server_info import ServerInfo
 from llumnix.logging.logger import init_logger
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_with_timeout, get_ip_address
 from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)
@@ -42,6 +43,9 @@ class AsyncPutQueueActor:
         self.request_output_queue_client: QueueClientBase = init_request_output_queue_client(request_output_queue_type)
         self.engine_actor_handle = None
         self.backend_type = backend_type
+        self.zmq_server = ZmqServer(ip=get_ip_address())
+        self.zmq_server.put_nowait_to_servers = self.put_nowait_to_servers
+        asyncio.create_task(self.zmq_server.run_server_loop())
 
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
@@ -80,6 +84,9 @@ class AsyncPutQueueActor:
     def stop(self):
         if self.request_output_queue_type == QueueType.ZMQ:
             self.request_output_queue_client.close()
+
+    def get_zmq_server_port(self):
+        return self.zmq_server.port
 
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,

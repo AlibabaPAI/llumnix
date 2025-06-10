@@ -30,6 +30,7 @@ from llumnix.queue.zmq_utils import (
     RPCUtilityRequest,
     RPCPutNoWaitQueueRequest,
     RPCPutNoWaitBatchQueueRequest,
+    RPCPutNoWaitQueueRequestToActor,
     get_open_zmq_ipc_path,
     get_zmq_socket_name,
 )
@@ -136,6 +137,13 @@ class ZmqClient(QueueClientBase):
                         request=RPCPutNoWaitQueueRequest(item=item),
                         ip=server_info.request_output_queue_ip,
                         port=server_info.request_output_queue_port,
+                        error_message="Unable to put items into queue.")
+
+    async def put_nowait_to_actor(self, server_ip, server_port, item: Any, server_info_dict:Dict[ str ,ServerInfo]):
+        await self._send_one_way_rpc_request(
+                        request=RPCPutNoWaitQueueRequestToActor(item=item, server_info_dict=server_info_dict),
+                        ip=server_ip,
+                        port=server_port,
                         error_message="Unable to put items into queue.")
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):

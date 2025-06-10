@@ -22,7 +22,7 @@ import cloudpickle
 
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
-                                     RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest,
+                                     RPCPutNoWaitBatchQueueRequest, RPCUtilityRequest,RPCPutNoWaitQueueRequestToActor,
                                      get_open_zmq_ipc_path)
 from llumnix.logging.logger import init_logger
 from llumnix.constants import (RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RETRY_BIND_ADDRESS_INTERVAL,
@@ -62,6 +62,7 @@ class ZmqServer(QueueServerBase):
         self.context.set(zmq.constants.MAX_SOCKETS, socket_limit)
         self.socket = self.context.socket(zmq.ROUTER)
         self.socket.set_hwm(RPC_ZMQ_HWM)
+        self.put_nowait_to_servers = None
 
         for attempt in range(MAX_BIND_ADDRESS_RETRY_TIMES):
             try:
@@ -140,6 +141,8 @@ class ZmqServer(QueueServerBase):
             return self._put_nowait(identity, request)
         if isinstance(request, RPCPutNoWaitBatchQueueRequest):
             return self._put_nowait_batch(identity, request)
+        if isinstance(request, RPCPutNoWaitQueueRequestToActor):
+            return self._put_nowait_to_actor(identity, request)
 
         raise ValueError(f"Unknown RPCRequest type: {request}")
 
@@ -163,6 +166,34 @@ class ZmqServer(QueueServerBase):
             item = put_nowait_queue_request.item
             set_timestamp(item, 'queue_server_receive_timestamp', time.time())
             self.put_nowait(item)
+            await asyncio.wait_for(
+                self.socket.send_multipart(
+                    [identity, cloudpickle.dumps(RPC_SUCCESS_STR)]
+                ),
+                timeout=ZMQ_RPC_TIMEOUT
+            )
+        # pylint: disable=broad-except
+        except Exception as e:
+            self._log_exception(e)
+            try:
+                await asyncio.wait_for(
+                    self.socket.send_multipart(
+                        [identity, cloudpickle.dumps(e)]
+                    ),
+                    timeout=ZMQ_RPC_TIMEOUT
+                )
+            # pylint: disable=broad-except
+            except Exception as e:
+                self._log_exception(e)
+
+    async def _put_nowait_to_actor(self, identity, put_nowait_queue_request_to_actor: RPCPutNoWaitQueueRequestToActor):
+        # Server does not die when encoutering exception during sending message to client.
+        # Server handles exception inside,
+        # while client raises exception to outside (but AsyncPutQueueActor will not die).
+        try:
+            item = put_nowait_queue_request_to_actor.item
+            server_info_dict = put_nowait_queue_request_to_actor.server_info_dict
+            await self.put_nowait_to_servers(item, server_info_dict)
             await asyncio.wait_for(
                 self.socket.send_multipart(
                     [identity, cloudpickle.dumps(RPC_SUCCESS_STR)]

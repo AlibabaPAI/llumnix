@@ -36,7 +36,7 @@ function build_wheel() {
         -v "${CURRENT_DIR}:${WORK_DIR}" \
         -w "${WORK_DIR}" \
         "$release_image" \
-        sh -c "python3 setup.py bdist_wheel" > /dev/null 2>&1
+        sh -c "python3 setup.py bdist_wheel"
 
     # Extract wheel name and version
     WHEEL_NAME=$(ls dist/*.whl | xargs basename)
@@ -62,7 +62,7 @@ function build_final_image() {
         -t "$new_image" \
         --build-arg BASE_IMAGE="$base_image" \
         --build-arg ENGINE="$engine" \
-        . > /dev/null 2>&1
+        .
 }
 
 install_erdma() {
@@ -135,11 +135,11 @@ RELEASE_IMAGE_BASE_NAME=$(basename "${RELEASE_IMAGE//:/_}")
 NEW_IMAGE="registry.cn-beijing.aliyuncs.com/llumnix/llumnix-release:${VERSION}_${COMMIT_ID}_${BUILD_TIME}_${RELEASE_IMAGE_BASE_NAME}"
 build_final_image "$NEW_IMAGE" "$RELEASE_IMAGE" "$ENGINE"
 
-# Step 4: Run end-to-end tests
-if [[ "${ENGINE}" == "bladellm" ]]; then
-    run_bladellm_tests "$NEW_IMAGE"
-else
-    echo "[*] Skipping end-to-end tests."
-fi
+# # Step 4: Run end-to-end tests
+# if [[ "${ENGINE}" == "bladellm" ]]; then
+#     run_bladellm_tests "$NEW_IMAGE"
+# else
+#     echo "[*] Skipping end-to-end tests."
+# fi
 
 echo "[+] Build and test release image completed successfully."

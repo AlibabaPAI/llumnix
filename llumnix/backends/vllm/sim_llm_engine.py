@@ -100,9 +100,10 @@ class BackendSimVLLM(BackendVLLM):
 
     # pylint: disable=unused-argument
     async def send_cache(self,
-                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         dst_instance_actor: ray.actor.ActorHandle,
                          src_blocks: List[int],
                          dst_blocks: List[int],
                          request_id: str,
-                         is_last_stage: bool) -> None:
+                         is_last_stage: bool) -> bool:
         await self.engine.model_executor.send_cache(len(src_blocks))
+        return True

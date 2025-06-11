@@ -19,7 +19,6 @@ import "google/protobuf/empty.proto";
 
 message WarmupResponse {
   bool is_ok = 1;
-  string error_msg = 2;
 }
 
 message WorkerInfo {
@@ -30,7 +29,7 @@ message WorkerInfo {
 }
 
 message RecvCacheRequest {
-  repeated WorkerInfo src_handlers = 1;
+  repeated WorkerInfo src_worker_handle_list = 1;
   int32 request_id = 2;
   bool is_last_stage = 3;
   repeated int32 src_blocks = 4;
@@ -38,9 +37,7 @@ message RecvCacheRequest {
 }
 
 message RecvCacheResponse {
-  int32 request_id = 1;
-  int32 num_output_token = 2;
-  int32 num_in_token = 3;
+  bool is_ok = 1;
 }
 
 message SendKVCacheRequest {

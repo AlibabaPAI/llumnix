@@ -26,24 +26,23 @@ from llumnix.instance_info import InstanceInfo
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
-
+from llumnix.utils import MigrationResponse
 
 logger = init_logger(__name__)
 
 
 # TODO(ZeldaHuang): adapt prefix cache and sliding window, now use v1 manager
 class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
-    def get_free_blocks(self, num_required_blocks: int, token_ids: List[int]) -> BlockTable:
+    def get_free_blocks(self, num_required_blocks: int, token_ids: List[int]) -> Optional[BlockTable]:
         num_free_gpu_blocks = self.block_allocator.get_num_free_blocks(device=Device.GPU)
-        block_table = BlockTable(
-            block_size=self.block_size,
-            block_allocator=self.block_allocator,
-            max_block_sliding_window=self.max_block_sliding_window,
-        )
-        if (num_free_gpu_blocks - num_required_blocks >=
-                self.watermark_blocks):
+        block_table = None
+        if num_free_gpu_blocks - num_required_blocks >= self.watermark_blocks:
+            block_table = BlockTable(
+                block_size=self.block_size,
+                block_allocator=self.block_allocator,
+                max_block_sliding_window=self.max_block_sliding_window,
+            )
             block_table.allocate(token_ids)
-
         return block_table
 
     def add_block_table(self, block_table: BlockTable, seq_id: int) -> None:
@@ -129,34 +128,35 @@ class SchedulerLlumnix(Scheduler):
             f"the request id {request_id} of migrating out request in last stage should exist in migrating out request last stage"
         self.migrating_out_request_last_stage.pop(request_id)
 
-    def free_migrating_out_requests_last_stage(self) -> List[SequenceGroupLlumnix]:
-        migrating_out_requests_last_stage = list(self.migrating_out_request_last_stage.values())
-        self.migrating_out_request_last_stage.clear()
-        return migrating_out_requests_last_stage
-
     def pre_alloc_cache(self,
                         request_id: str,
                         request_status: RequestStatus,
                         request_arrival_time: float,
                         block_num: int,
-                        token_ids: List[int]) -> List[int]:
+                        token_ids: List[int]) -> MigrationResponse:
         # Only migrate waiting request when the waiting request is the earliest arrival one
         # among the requests of dst instance's waiting queue.
         if request_status == RequestStatus.WAITING_MIGRATING:
             if self.waiting and request_arrival_time > self.waiting[0].arrival_time:
-                return []
+                return MigrationResponse(success=False, return_value=None)
+
         block_table = self.pre_alloc_cache_dict.get(request_id, None)
-        if not block_table:
+        if block_table is None:
             block_table = self.block_manager.get_free_blocks(block_num, token_ids)
+            if block_table is None:
+                return MigrationResponse(success=False, return_value=None)
             self.pre_alloc_cache_dict[request_id] = block_table
-        elif self.block_manager.get_num_free_gpu_blocks() >= block_num:
-            block_table.append_token_ids(token_ids)
+        else:
+            if self.block_manager.get_num_free_gpu_blocks() >= block_num:
+                block_table.append_token_ids(token_ids)
+            else:
+                return MigrationResponse(success=False, return_value=None)
 
         if len(block_table.blocks) == self.block_manager.max_block_sliding_window:
             # abort migration due to sliding window
-            return []
+            return MigrationResponse(success=False, return_value=None)
 
-        return block_table.physical_block_ids[-block_num:]
+        return MigrationResponse(success=True, return_value=block_table.physical_block_ids[-block_num:])
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
         self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
@@ -189,21 +189,11 @@ class SchedulerLlumnix(Scheduler):
         for seq in seq_group.get_seqs(status=status_from):
             seq.status = status_to
 
-    def free_pre_alloc_cache(self, request_id: str = None) -> None:
-        if request_id:
-            logger.info("free request {} pre_alloc_cache".format(request_id))
-            block_table = self.pre_alloc_cache_dict.pop(request_id, None)
-            if block_table:
-                block_table.free()
-        else:
-            # TODO(s5u13b): Only effective with one-to-one migration restriction.
-            # Clear all pre-allocated cache of dst instance when src instance encounters exception.
-            request_ids = list(self.pre_alloc_cache_dict.keys())
-            for req_id in request_ids:
-                logger.info("free request {} pre_alloc_cache".format(req_id))
-                block_table = self.pre_alloc_cache_dict.pop(req_id, None)
-                if block_table:
-                    block_table.free()
+    def free_pre_alloc_cache(self, request_id: str) -> None:
+        logger.info("free request {} pre-allocated cache".format(request_id))
+        block_table = self.pre_alloc_cache_dict.pop(request_id, None)
+        if block_table:
+            block_table.free()
 
     def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]

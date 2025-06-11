@@ -17,10 +17,12 @@ import time
 import uuid
 import asyncio
 import threading
-from typing import Callable, Awaitable, TypeVar, Coroutine, Dict, Optional, Union
+from typing import Callable, Awaitable, TypeVar, Coroutine, Dict, Optional, Union, Any
 import socket
 from functools import partial
 import warnings
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 import psutil
 from typing_extensions import ParamSpec
@@ -28,7 +30,7 @@ import ray
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
-from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
+from llumnix.constants import RAY_RPC_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -39,6 +41,12 @@ P = ParamSpec('P')
 T = TypeVar("T")
 
 RequestIDType = Union[str, int]
+
+@dataclass
+class MigrationResponse:
+    success: bool = True
+    return_value: Any = None
+
 
 logger = init_logger(__name__)
 
@@ -237,11 +245,19 @@ def update_environment_variables(envs: Dict[str, str]):
             logger.warning("Overwriting environment variable {} from '{}' to '{}'".format(k, os.environ[k], v))
         os.environ[k] = v
 
-def ray_get_with_timeout(object_refs, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
+def ray_get_with_timeout(object_refs, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
     return ray.get(object_refs, *args, timeout=timeout, **kwargs)
 
-def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs):
+def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
     return asyncio.wait_for(fut, *args, timeout=timeout, **kwargs)
 
 async def async_wrapper(ray_call, *args, **kwargs):
     return await ray_call(*args, **kwargs)
+
+def execute_method_with_timeout(method, timeout, *args, **kwargs):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(method, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout)
+        except TimeoutError as e:
+            raise TimeoutError(f"Method {method.__name__} timed out after {timeout} seconds") from e

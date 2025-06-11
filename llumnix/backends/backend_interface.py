@@ -19,8 +19,8 @@ import ray.actor
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
-from llumnix.utils import RequestIDType
-from llumnix.constants import RAY_REMOTE_CALL_TIMEOUT
+from llumnix.utils import RequestIDType, MigrationResponse
+from llumnix.constants import RAY_RPC_TIMEOUT
 
 
 class EngineState(str, Enum):
@@ -86,7 +86,9 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     # Methods for migration
-    async def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
+    async def get_request_incremental_blocks(self,
+                                             backend_request: LlumnixRequest,
+                                             pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         """
         Get the incremental blocks and token ids for a given request.
 
@@ -182,25 +184,12 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_migrating_out_requests_last_stage(self) -> List[LlumnixRequest]:
-        """
-        Pop the list of migrating out requests in last stage.
-
-        This method pops the list of migrating out requests in last stage. This action is performed
-        to free migrating out requests in last stage when the migration encounters exception.
-
-        Returns:
-            The list of migrating out requests in last stage.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
     def pre_alloc_cache(self,
                         request_id: RequestIDType,
                         request_status: RequestStatus,
                         request_arrival_time: float,
                         block_num: int,
-                        token_ids: List[int]) -> List[int]:
+                        token_ids: List[int]) -> MigrationResponse:
         """
         Pre-allocate cache blocks for a migrating request.
 
@@ -217,8 +206,10 @@ class BackendInterface(ABC):
             request_arrival_time: The arrival time of the request.
             block_num: The number of cache blocks that need to be pre-allocated for the request.
             token_ids: The token IDs of the request.
+
         Returns:
-            A list of integers where each integer represents the block table reserved for the migration request.
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 
@@ -249,7 +240,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_pre_alloc_cache(self, request_id: RequestIDType = None) -> None:
+    def free_pre_alloc_cache(self, request_id: RequestIDType) -> None:
         """
         Free pre-allocated blocks for a migrating request on the destination instance.
 
@@ -277,11 +268,11 @@ class BackendInterface(ABC):
 
     @abstractmethod
     async def send_cache(self,
-                         dst_llumlet_actor: ray.actor.ActorHandle,
+                         dst_instance_actor: ray.actor.ActorHandle,
                          src_blocks: List[int],
                          dst_blocks: List[int],
                          request_id: RequestIDType,
-                         is_last_stage: bool) -> None:
+                         is_last_stage: bool) -> MigrationResponse:
         """
         Send cache blocks from the source instance to the destination instance.
 
@@ -290,20 +281,52 @@ class BackendInterface(ABC):
         the destination instance, where they are mapped according to the destination block table.
 
         Args:
-            dst_llumlet_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
-                       to be sent. This handle is used to reference the destination's execution context and manage
-                       the block transfer.
+            dst_instance_actor: A handle to the Ray actor representing the destination instance where the cache blocks are
+                                to be sent.
             src_blocks: A list of integers representing the block indexs in the source instance's cache that need to be
                         sent to the destination.
             dst_blocks: A list of integers representing the block indexs in the destination instance's cache where the
                         incoming blocks should be stored.
             request_id: Request ID.
             is_last_stage: A boolean indicating whether this is the last stage of the migration.
+
+        Returns:
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 
     @abstractmethod
-    async def commit_dst_request(self, backend_request: LlumnixRequest) -> None:
+    async def recv_cache(self,
+                         request_id: RequestIDType,
+                         src_worker_handle_list: List[Any],
+                         src_blocks: List[int],
+                         dst_blocks: List[int],
+                         is_last_stage: bool) -> MigrationResponse:
+        """
+        Recv cache blocks from the source instance to the destination instance.
+
+        This method orchestrates the physical transfer of cache blocks between instances by Ray. It is responsible
+        for ensuring that the specified blocks from the source instance's cache are sent to and properly received by
+        the destination instance, where they are mapped according to the destination block table.
+
+        Args:
+            request_id: Request ID.
+            src_worker_handle_list: The handle list of workers in the source instance.
+            src_blocks: A list of integers representing the block indexs in the source instance's cache that need to be
+                        sent to the destination.
+            dst_blocks: A list of integers representing the block indexs in the destination instance's cache where the
+                        incoming blocks should be stored.
+            is_last_stage: A boolean indicating whether this is the last stage of the migration.
+
+        Returns:
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def commit_dst_request(self, request_id: RequestIDType, backend_request: LlumnixRequest) -> MigrationResponse:
         """
         Commit the migrating request to the destination instance.
 
@@ -312,12 +335,17 @@ class BackendInterface(ABC):
         all the required data to resume and handle the request as if it originated there natively.
 
         Args:
+            request_id: Request ID.
             backend_request: An object representing the backend request.
+
+        Returns:
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 
     @abstractmethod
-    async def _run_workers_async(self, *args, timeout=RAY_REMOTE_CALL_TIMEOUT, **kwargs) -> Any:
+    async def _run_workers_async(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs) -> List[Any]:
         """
         Run all workers with the given method asynchronously.
         """

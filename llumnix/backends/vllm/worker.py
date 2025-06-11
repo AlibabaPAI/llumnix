@@ -129,30 +129,30 @@ class MigrationWorker(Worker):
                                                                              worker_stage_seq_group_metadata_callback=self._stage_seq_group_metadata)
 
     def recv_cache(self,
+                   request_id: str,
                    src_worker_handle_list: List[ray.actor.ActorHandle],
                    src_blocks: List[int],
                    dst_blocks: List[int],
-                   request_id: str,
-                   is_last_stage: bool = False) -> None:
+                   is_last_stage: bool = False) -> bool:
         src_worker_handle = src_worker_handle_list[self.rank]
-
-        start_time = time.time()
         try:
-            self.migration_backend.recv_cache(src_worker_handle, src_blocks, dst_blocks, request_id, is_last_stage)
-        # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
-        except ray.exceptions.RayActorError:
-            logger.info("Failed to migrate cache, rank: {}, src worker {} is dead.".format(self.rank, src_worker_handle))
+            start_time = time.time()
+            self.migration_backend.recv_cache(request_id, src_worker_handle, src_blocks, dst_blocks, is_last_stage)
+            end_time = time.time()
+            total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
+                self.cache_config, self.model_config, self.parallel_config)
+            speed = total_kv_cache_size / GiB_bytes / (end_time - start_time)
+            logger.info("Recv kv cache done, num_blocks: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
+                        .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time - start_time, speed))
+            return True
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Failed to migrate cache, unexpected exception: {}".format(e))
-            raise
-        end_time = time.time()
-
-        total_kv_cache_size = len(src_blocks) * CacheEngine.get_cache_block_size(
-            self.cache_config, self.model_config, self.parallel_config)
-        speed = total_kv_cache_size / GiB_bytes / (end_time - start_time)
-        logger.info("Migrate kv cache done, blocks_num: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
-                    .format(len(src_blocks), convert_bytes(total_kv_cache_size), end_time-start_time, speed))
+            # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
+            if isinstance(e, ray.exceptions.RayActorError):
+                logger.info("Failed to recv kv cache, src worker is dead, instance_id: {}, rank: {}.".format(self.instance_id, self.rank))
+            else:
+                logger.exception("Failed to recv kv cache, request_id: {}, unexpected exception: {}".format(request_id, e))
+            return False
 
     def do_recv(self, *args, **kwargs):
         return self.migration_backend.do_recv(*args, **kwargs)
@@ -184,18 +184,17 @@ class MigrationWorker(Worker):
         self.migrating_out_seq_group_metadata[request_id] = seq_group_metadata
 
     def pop_migrating_out_seq_group_metadata(self, request_id: str) -> bool:
-        # If pop during last stage pre_alloc_cache, the request id does not exist in the self.migrating_out_seq_group_metadata.
-        # If pop after migration finished, the request id does exist in the self.migrating_out_seq_group_metadata.
         seq_group_metadata = self.migrating_out_seq_group_metadata.pop(request_id, None)
         return seq_group_metadata is not None
 
     def free_migrating_in_seq_group_metadata(self) -> None:
         self.migrating_in_seq_group_metadata.clear()
 
-    def restore_migrating_out_seq_group_metadata(self) -> None:
-        for request_id, seq_group_metadata in self.migrating_out_seq_group_metadata.items():
+    def restore_migrating_out_seq_group_metadata(self, request_id: str) -> None:
+        seq_group_metadata = self.migrating_out_seq_group_metadata.pop(request_id, None)
+        if seq_group_metadata is not None:
             self._seq_group_metadata_cache[request_id] = seq_group_metadata
-        self.migrating_out_seq_group_metadata.clear()
+        return seq_group_metadata is not None
 
     def _execute_model_spmd(self, execute_model_req: ExecuteModelRequest, *args, **kwargs):
         if execute_model_req is not None:

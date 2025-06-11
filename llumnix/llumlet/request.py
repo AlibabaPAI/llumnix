@@ -58,7 +58,7 @@ class LlumnixRequest:
         # strict pre-migration args
         self.expected_steps = expected_steps
 
-        # migration args
+        # migration states
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
@@ -70,7 +70,7 @@ class LlumnixRequest:
         # end-of-migration, for multiple requests migration
         self.eom = False
 
-    def reset_migration_args_dst(self):
+    def reset_migration_states_dst(self):
         # By default, there is no limit on the number of steps expected for the request.
         self.expected_steps = math.inf
 
@@ -81,7 +81,7 @@ class LlumnixRequest:
         self.migration_start_time = None
         self.is_migrating = False
 
-    def reset_migration_args_src(self):
+    def reset_migration_states_src(self):
         self.last_preemption_time = None
         self.stage_timestamps = []
         self.stage_num_blocks_list = []

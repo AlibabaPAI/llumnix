@@ -156,8 +156,8 @@ class Llumlet:
         request_ids = set(request_id)
         await self.backend_engine.abort_request(request_ids)
 
-    async def migrate_out(self, dst_instance_id: str, dst_instance_actor: ray.actor.ActorHandle) -> List[RequestIDType]:
-        return await self.migration_coordinator.migrate_out(dst_instance_id, dst_instance_actor)
+    async def migrate_out(self, dst_instance_actor: ray.actor.ActorHandle, dst_instance_id: str) -> List[RequestIDType]:
+        return await self.migration_coordinator.migrate_out(dst_instance_actor, dst_instance_id)
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

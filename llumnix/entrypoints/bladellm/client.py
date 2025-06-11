@@ -85,17 +85,19 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
         # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
-        try:
-            await self._generate_by_manager(request_id, server_info_copy, request)
-            self.manager_available = True
-        # pylint: disable=broad-except
-        except Exception as e:
-            self._handle_generate_by_manager_error(request_id, e)
-            # Do not re-generate the request to avoid duplicate requests.
-            if self.manager_available:
-                self.manager_available = False
-                return LLMResponse(request_id, resp_queue=results_queue)
-            await self._generate_by_instance(request_id, server_info_copy, request)
+        # try:
+        #     await self._generate_by_manager(request_id, server_info_copy, request)
+        #     self.manager_available = True
+        # # pylint: disable=broad-except
+        # except Exception as e:
+        #     self._handle_generate_by_manager_error(request_id, e)
+        #     # Do not re-generate the request to avoid duplicate requests.
+        #     if self.manager_available:
+        #         self.manager_available = False
+        #         return LLMResponse(request_id, resp_queue=results_queue)
+        #     await self._generate_by_instance(request_id, server_info_copy, request)
+
+        await self._generate_by_instance(request_id, server_info_copy, request)
 
         return LLMResponse(request_id, resp_queue=results_queue)
 

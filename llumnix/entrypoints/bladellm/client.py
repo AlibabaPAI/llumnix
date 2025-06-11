@@ -119,7 +119,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 await asyncio_wait_for_with_timeout(
-                    self.instances[instance_id].generate.remote(request_id, server_info, -1, request)
+                    self.instances[instance_id].generate.remote(request_id, server_info, -1, server_request=request)
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))

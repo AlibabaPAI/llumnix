@@ -28,12 +28,14 @@ from typing import Any, cast
 # pylint: disable=consider-using-from-import
 import llumnix.envs as envs
 
-try:
-    # import vllm logger first avoid other logger being disabled
-    # pylint: disable=unused-import
-    import vllm.logger
-except ImportError:
-    pass
+# TODO(s5u13b): Disable the import codes temporarily, because vllm v1 needs gpu environment,
+# importing vllm in non-gpu actor will raise error.
+# try:
+#     # import vllm logger first avoid other logger being disabled
+#     # pylint: disable=unused-import
+#     import vllm.logger
+# except ImportError:
+#     pass
 
 LLUMNIX_CONFIGURE_LOGGING = envs.LLUMNIX_CONFIGURE_LOGGING
 LLUMNIX_LOGGING_CONFIG_PATH = envs.LLUMNIX_LOGGING_CONFIG_PATH

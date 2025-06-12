@@ -18,8 +18,9 @@ import copy
 import random
 from typing import Dict, List, Tuple, Optional
 
+import ray
+
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
-from blade_llm.service.communications.protocol import Stats
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
 from blade_llm.protocol import ServerRequest, GenerateStreamResponse
@@ -228,17 +229,18 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
     def close(self):
         pass
 
-    async def get_stats(self) -> Stats:
-        pass
-
     async def get_metrics(self) -> str:
-        pass
+        instance = self.instances[list(self.instances.keys())[0]]
+        metrics = ray.get(instance.execute_engine_method.remote("get_metrics"))
+        return metrics
 
     def support_beam_search(self) -> Tuple[bool, str]:
-        return False, "Unsupported feature: multiple sequence decoding in Llumnix."
+        return False, "Llumnix does not support multiple sequences decoding."
 
     async def start_profiler(self) -> None:
-        pass
+        instance = self.instances[list(self.instances.keys())[0]]
+        return await instance.execute_engine_method_async.remote("start_profiler")
 
     async def stop_profiler(self) -> None:
-        pass
+        instance = self.instances[list(self.instances.keys())[0]]
+        return await instance.execute_engine_method_async.remote("start_profiler")

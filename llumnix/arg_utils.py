@@ -148,7 +148,7 @@ class LlumnixEngineArgsFactory:
                 )
             return next_engine_args
 
-        if backend_type == BackendType.VLLM:
+        if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
             # pylint: disable=import-outside-toplevel
             from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
             next_engine_args = VLLMEngineArgs(current_engine_args, current_engine_args.backend_type)

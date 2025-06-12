@@ -19,6 +19,7 @@ from llumnix.arg_utils import LlumnixEngineArgsFactory, LlumnixEngineArgs
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
+from llumnix.backends.backend_interface import BackendType
 
 
 # pylint: disable=unused-argument
@@ -53,7 +54,7 @@ def test_gen_next_engine_args_vllm():
         )
     )
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.NO_CONSTRAINTS.value
+        BackendType.VLLM, engine_args, InstanceType.NO_CONSTRAINTS.value
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(engine_args.engine_args)
@@ -70,7 +71,7 @@ def test_gen_next_engine_args_vllm_from_registered_service():
 
     engine_args = None
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.PREFILL.value
+        BackendType.VLLM, engine_args, InstanceType.PREFILL.value
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(
@@ -78,7 +79,7 @@ def test_gen_next_engine_args_vllm_from_registered_service():
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.DECODE.value
+        BackendType.VLLM, engine_args, InstanceType.DECODE.value
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(

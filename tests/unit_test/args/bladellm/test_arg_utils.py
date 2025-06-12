@@ -20,6 +20,7 @@ from llumnix.arg_utils import LlumnixEngineArgsFactory, LlumnixEngineArgs
 from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
 from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
+from llumnix.backends.backend_interface import BackendType
 
 
 # pylint: disable=unused-argument
@@ -44,7 +45,7 @@ def test_gen_next_engine_args_baldellm():
     )
     engine_args = BladeLLMEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.NO_CONSTRAINTS.value
+        BackendType.BLADELLM, engine_args, InstanceType.NO_CONSTRAINTS.value
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.load_engine_args()) == asdict(
@@ -63,7 +64,7 @@ def test_gen_next_engine_args_baldellm_from_registered_service():
 
     engine_args = None
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.PREFILL.value
+        BackendType.BLADELLM, engine_args, InstanceType.PREFILL.value
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.load_engine_args()) == asdict(
@@ -73,7 +74,7 @@ def test_gen_next_engine_args_baldellm_from_registered_service():
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.DECODE.value
+        BackendType.BLADELLM, engine_args, InstanceType.DECODE.value
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.load_engine_args()) == asdict(
@@ -97,10 +98,7 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
     )
     engine_args = BladeLLMEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.PREFILL.value
-    )
-    next_engine_args2 = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.PREFILL.value
+        BackendType.BLADELLM, engine_args, InstanceType.PREFILL.value
     )
     assert next_engine_args is not engine_args
     assert (
@@ -122,7 +120,7 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
     )
     engine_args = BladeLLMEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.PREFILL.value
+        BackendType.BLADELLM, engine_args, InstanceType.PREFILL.value
     )
     assert next_engine_args is not engine_args
     assert (
@@ -131,7 +129,7 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceType.DECODE.value
+        BackendType.BLADELLM, engine_args, InstanceType.DECODE.value
     )
     assert next_engine_args is not engine_args
     assert (

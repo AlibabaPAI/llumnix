@@ -239,8 +239,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     async def start_profiler(self) -> None:
         instance = self.instances[list(self.instances.keys())[0]]
-        return ray.get(instance.execute_engine_method_async.remote("start_profiler"))
+        return await instance.execute_engine_method_async.remote("start_profiler")
 
     async def stop_profiler(self) -> None:
         instance = self.instances[list(self.instances.keys())[0]]
-        return ray.get(instance.execute_engine_method_async.remote("start_profiler"))
+        return await instance.execute_engine_method_async.remote("start_profiler")

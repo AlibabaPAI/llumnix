@@ -742,3 +742,29 @@ async def test_http_oai_completions_drop_request(server, is_chat: bool):
         waiting_request_ids = ray.get(instance.execute_engine_method.remote("get_waiting_queue"))
         # check that all requests are dropped
         assert len(running_request_ids) == 0 and len(waiting_request_ids) == 0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("server", ["server"], indirect=True)
+@pytest.mark.parametrize("api", ["", "start_profiler", "stop_profiler", "metric"])
+async def test_get_api(server, api):
+    assert server is not None
+    url = f"http://{server.addr}/{api}"
+    response = requests.get(url)
+    assert response.status_code == 200
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("server", ["server"], indirect=True)
+async def test_generate_benchmark(server):
+    assert server is not None
+    url = f"http://{server.addr}/generate_benchmark"
+    req_dict = {
+        'messages': [
+            {'role': 'system', 'content': 'You are a helpful assistant.'},
+            {'role': 'user', 'content': 'hello'},
+        ],
+        'stream': False,
+        'max_tokens': 16,
+        'ignore_eos': True,
+    }
+    response = requests.post(url, json=req_dict)
+    assert response.status_code == 200

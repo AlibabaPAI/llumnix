@@ -44,6 +44,7 @@ from blade_llm.module.parallel import setup_dist_environ, master_node_in_distrib
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
 from blade_llm.service.communications import AsyncLLMEngineClient
+from blade_llm.service.communications.protocol import Stats
 
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_free_port,
@@ -770,3 +771,14 @@ class BackendBladeLLM(BackendInterface):
             self.engine._migration_semaphore.release()
 
         return MigrationResponse(success=True, return_value=None)
+    def get_stats(self) -> Stats:
+        return self.engine.get_stats()
+
+    def get_metrics(self) -> str:
+        return self.engine.get_metrics()
+
+    async def start_profiler(self):
+        return await self.engine.start_profiler()
+
+    async def stop_profiler(self):
+        return await self.engine.stop_profiler()

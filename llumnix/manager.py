@@ -134,25 +134,22 @@ class Manager:
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
-
+    
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
         while self.num_instances == 0:
-            logger.warning("No instance available now, sleep {}s, "
-                           "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
+            logger.warning("No instance available now, sleep {}s, and regenerate request {}.".format(
+                NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
-        prefill_instance_id, request_expected_steps = self.global_scheduler.dispatch(InstanceType.PREFILL)
-        if self.manager_args.enable_engine_pd_disagg:
-            # Only used in bladellm now
-            decode_instance_id, _ = self.global_scheduler.dispatch(InstanceType.DECODE)
-            kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
-                decode_instance_id, None
-            )
+
+        instance_id, request_expected_steps, addition_dispatch_info = self.global_scheduler.dispatch(request_id)
+        kwargs.update(addition_dispatch_info)
+
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         try:
             asyncio.create_task(
                 asyncio_wait_for_with_timeout(
                     async_wrapper(
-                        self.instances[prefill_instance_id].generate.remote,
+                        self.instances[instance_id].generate.remote,
                         request_id, server_info, request_expected_steps, *args, **kwargs
                     )
                 )
@@ -160,14 +157,9 @@ class Manager:
         # pylint: disable=broad-except
         except Exception as e:
             logger.exception("Failed to generate request {} by instance {}, unexcepted exception: {}".format(
-                request_id, prefill_instance_id, e))
-            self.scale_down(prefill_instance_id)
+                request_id, instance_id, e))
+            self.scale_down(instance_id)
             await asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
-        if self.log_requests:
-            logger.info("manager receive request {}".format(request_id))
-            logger.info("dispath request {} to instance {}".format(request_id, prefill_instance_id))
-            if self.manager_args.enable_engine_pd_disagg:
-                logger.info("dispatch request {} to decode instance {}".format(request_id, decode_instance_id))
 
     @classmethod
     def from_args(cls,

@@ -14,7 +14,7 @@
 import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Tuple
+from typing import Iterable, List, Tuple
 
 from llumnix.logging.logger import init_logger
 from llumnix.load_computation import LoadCalculatorFactory, BaseLoad, DummyLoad
@@ -28,6 +28,8 @@ class InstanceType(str, Enum):
     NO_CONSTRAINTS = "no_constraints"
     PREFILL = "prefill"
     DECODE = "decode"
+    PREFILL_AS_DECODE = "prefill_as_decode"
+    DECODE_AS_PREFILL = "decode_as_prefill"
 
 
 @dataclass
@@ -87,6 +89,15 @@ class InstanceInfo:
 
     def __hash__(self):
         return hash(self.instance_id)
+
+def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
+                        key_attr: str,
+                        descending: bool = False) -> List[InstanceInfo]:
+    return sorted(
+        available_instance_infos,
+        key=lambda instance_info: getattr(instance_info, key_attr),
+        reverse=descending
+    )
 
 class InstanceLoadCalculator:
     def __init__(self, instance_args: InstanceArgs) -> None:

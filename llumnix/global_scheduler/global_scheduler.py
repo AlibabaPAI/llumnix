@@ -21,6 +21,7 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
+from llumnix.utils import RequestIDType
 
 logger = init_logger(__name__)
 
@@ -29,8 +30,10 @@ class GlobalScheduler:
     def __init__(self, global_scheduler_config: GlobalSchedulerConfig) -> None:
         self.global_scheduler_config = global_scheduler_config
         self.num_instances = 0
+
         self.instance_id_set: Set[str] = set()
         self.instance_info: Dict[str, InstanceInfo] = {}
+        self.instance_num_requests: Dict[str, int] = {}
 
         self.prefill_instance_info: Dict[str, InstanceInfo] = {}
         self.prefill_instance_num_requests: Dict[str, int] = {}
@@ -55,12 +58,32 @@ class GlobalScheduler:
         for instance_info in instance_infos:
             if instance_info.instance_id in self.instance_id_set:
                 self.instance_info[instance_info.instance_id] = instance_info
-                if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+                if instance_info.instance_type in (InstanceType.PREFILL):
                     self.prefill_instance_info[instance_info.instance_id] = instance_info
                 if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
-    def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
+    def dispatch(self, request_id: RequestIDType) -> str:
+        no_constrains_instance_id, prefill_instance_id, decode_instance_id = self.dispatch_scheduler.dispatch(
+            request_id,
+            self.instance_info,
+            self.instance_num_requests,
+            self.prefill_instance_info,
+            self.prefill_instance_num_requests,
+            self.decode_instance_info,
+            self.decode_instance_num_requests
+        )
+        
+        target_instance_id: str = no_constrains_instance_id
+        if self.global_scheduler_config.enable_pd_disagg or self.global_scheduler_config.enable_engine_pd_disagg:
+            target_instance_id = prefill_instance_id
+
+            
+
+            kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
+                decode_instance_id, None
+            )
+
         if self.global_scheduler_config.enable_dynamic_pd_disagg:
             instance_id = self.dispatch_scheduler.soft_dispatch(
                 instance_type=instance_type,
@@ -95,6 +118,12 @@ class GlobalScheduler:
         if self.global_scheduler_config.enable_pd_disagg:
             if instance_type == InstanceType.PREFILL and instance_id in self.prefill_instance_info:
                 request_expected_steps = 1
+
+        if self.log_requests:
+            logger.info("manager receive request {}".format(request_id))
+            logger.info("dispath request {} to instance {}".format(request_id, instance_id))
+            if self.manager_args.enable_engine_pd_disagg:
+                logger.info("dispatch request {} to decode instance {}".format(request_id, instance_id))
 
         return instance_id, request_expected_steps
 

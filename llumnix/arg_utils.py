@@ -347,6 +347,7 @@ class ManagerArgs:
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
+                                                        self.enable_engine_pd_disagg,
                                                         self.enable_dynamic_pd_disagg,
                                                         self.is_group_kind_migration_backend)
         return global_scheduler_config

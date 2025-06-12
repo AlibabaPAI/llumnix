@@ -235,7 +235,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         return metrics
 
     def support_beam_search(self) -> Tuple[bool, str]:
-        return False, logger.error("Llumnix does not support multiple sequences decoding.")
+        return False, "Llumnix does not support multiple sequences decoding."
 
     async def start_profiler(self) -> None:
         instance = self.instances[list(self.instances.keys())[0]]

@@ -27,9 +27,9 @@ from llumnix import (
     EntrypointsArgs,
     LaunchMode,
     RayQueueServer,
-    VllmEngineArgs,
     LlumnixRequestOuputVLLM,
 )
+from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
 
 from tests.utils import try_convert_to_local_path
 from tests.conftest import cleanup_ray_env_func

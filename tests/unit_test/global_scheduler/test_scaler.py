@@ -296,7 +296,7 @@ def test_load_registered_service(ray_env, load_registered_service, enable_pd_dis
     _ = DummyScaler.options(name=get_scaler_name()).remote()
     scaler = Scaler(None, manager_args, None, None, None)
     for instance_type in instance_type_list:
-        get_engine_args = scaler.llumnix_engine_args_factory.gen_next_engine_args(engine_args, instance_type)
+        get_engine_args = scaler.llumnix_engine_args_factory.gen_next_engine_args(BackendType.VLLM, engine_args, instance_type)
         if load_registered_service:
             assert get_engine_args.load_engine_args().model == instance_type
         else:

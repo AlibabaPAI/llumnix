@@ -12,7 +12,7 @@ from vllm import EngineArgs
 
 from llumnix.arg_utils import ManagerArgs, InstanceArgs, EntrypointsArgs, LaunchArgs
 from llumnix.queue.queue_type import QueueType
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.ray_utils import get_scaler_name
 from llumnix.scaler import Scaler
 from llumnix.entrypoints.utils import LaunchMode
@@ -80,7 +80,7 @@ def is_placement_group_exists(pg_name):
         return False
 
 def test_init_instances(ray_env, scaler):
-    engine_args = VllmEngineArgs(
+    engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
@@ -99,7 +99,7 @@ def test_init_instances_sim(ray_env, scaler):
     # pylint: disable=import-outside-toplevel
     # cannot catch by pytest.raises
     try:
-        engine_args = VllmEngineArgs(
+        engine_args = VLLMEngineArgs(
             engine_args=EngineArgs(
                 model=try_convert_to_local_path("facebook/opt-125m"),
                 download_dir="/mnt/model",
@@ -127,7 +127,7 @@ def init_scaler_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio="
                                enable_pdd_node_affinity_scheduling=enable_pdd_node_affinity_scheduling)
     instance_args = InstanceArgs(migration_backend="rayrpc")
     entrypoints_args = EntrypointsArgs(host="127.0.0.1", port=8000)
-    engine_args = VllmEngineArgs(
+    engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
@@ -270,7 +270,7 @@ def test_pd_disagg_gloal_launch_instance_type(ray_env):
 @pytest.mark.parametrize("load_registered_service", [False, True])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 def test_load_registered_service(ray_env, load_registered_service, enable_pd_disagg):
-    engine_args = VllmEngineArgs(engine_args=EngineArgs(model="no_constraints"))
+    engine_args = VLLMEngineArgs(engine_args=EngineArgs(model="no_constraints"))
     save_path = 'test'
     save_key = "test"
     load_registered_service_path = os.path.join(save_path, save_key)
@@ -366,7 +366,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_pd_disagg_deployment_states(ray_env):
     manager_args = ManagerArgs(enable_migration=True, enable_pd_disagg=True, pd_ratio="1:2")
-    engine_args = VllmEngineArgs(
+    engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",

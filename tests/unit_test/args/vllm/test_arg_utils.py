@@ -16,14 +16,14 @@ from unittest.mock import patch
 from vllm import EngineArgs
 
 from llumnix.arg_utils import LlumnixEngineArgsFactory, LlumnixEngineArgs
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
 
 
 # pylint: disable=unused-argument
 def mocked_load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
-    return VllmEngineArgs(
+    return VLLMEngineArgs(
         engine_args=EngineArgs(
             model=engine_type,
             download_dir="/mnt/model",
@@ -42,7 +42,7 @@ def test_gen_next_engine_args_vllm():
         load_registered_service_path="",
         pdd_config=None,
     )
-    engine_args = VllmEngineArgs(
+    engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             model="facebook/opt-125m",
             download_dir="/mnt/model",

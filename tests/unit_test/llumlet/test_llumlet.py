@@ -25,7 +25,7 @@ from llumnix.arg_utils import InstanceArgs
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
 
@@ -59,7 +59,7 @@ class MockLlumlet(Llumlet):
 
 
 def init_llumlet(actor_name):
-    engine_args = VllmEngineArgs(
+    engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",

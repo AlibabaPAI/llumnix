@@ -25,7 +25,7 @@ from vllm.sampling_params import SamplingParams
 
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
-from llumnix.entrypoints.vllm_v1.arg_utils import add_cli_args, get_args, VllmEngineArgs
+from llumnix.entrypoints.vllm_v1.arg_utils import add_cli_args, get_args, VLLMV1EngineArgs
 from llumnix.entrypoints.vllm_v1.client import LlumnixClientVLLM
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, cli_args)
     backend_type = BackendType.VLLM_V1 if not instance_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=backend_type)
-    vllm_engine_args: VllmEngineArgs = VllmEngineArgs(engine_args, backend_type)
+    vllm_engine_args: VLLMV1EngineArgs = VLLMV1EngineArgs(engine_args, backend_type)
 
     # Launch or connect to the ray cluster for multi-node serving.
     setup_ray_cluster(entrypoints_args)

@@ -15,7 +15,7 @@ import time
 
 from ray.util.queue import Queue as RayQueue
 
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs, add_cli_args, get_args
+from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs, add_cli_args, get_args
 from llumnix.entrypoints.setup import connect_to_ray_cluster
 from llumnix.config import get_llumnix_config
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.GLOBAL, parser, cli_args)
     backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=backend_type)
-    vllm_engine_args = VllmEngineArgs(engine_args, backend_type)
+    vllm_engine_args = VLLMEngineArgs(engine_args, backend_type)
 
     # magic actor to avoid fast api server actor initialization error
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",

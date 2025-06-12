@@ -17,14 +17,14 @@ from blade_llm.service.args import ServingArgs, DisaggOptions
 from blade_llm.utils.load_model_options import LoadModelOptions
 
 from llumnix.arg_utils import LlumnixEngineArgsFactory, LlumnixEngineArgs
-from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
+from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
 from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
 
 
 # pylint: disable=unused-argument
 def mocked_load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
-    return BladellmEngineArgs(
+    return BladeLLMEngineArgs(
         engine_args=ServingArgs(
             load_model_options=LoadModelOptions(model="./"),
             disagg_options=DisaggOptions(),
@@ -42,7 +42,7 @@ def test_gen_next_engine_args_baldellm():
     serving_args = ServingArgs(
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
-    engine_args = BladellmEngineArgs(serving_args)
+    engine_args = BladeLLMEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, InstanceType.NO_CONSTRAINTS.value
     )
@@ -95,7 +95,7 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
     serving_args = ServingArgs(
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
-    engine_args = BladellmEngineArgs(serving_args)
+    engine_args = BladeLLMEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, InstanceType.PREFILL.value
     )
@@ -120,7 +120,7 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
     serving_args = ServingArgs(
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
-    engine_args = BladellmEngineArgs(serving_args)
+    engine_args = BladeLLMEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, InstanceType.PREFILL.value
     )

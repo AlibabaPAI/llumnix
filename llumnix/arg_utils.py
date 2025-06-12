@@ -139,8 +139,8 @@ class LlumnixEngineArgsFactory:
 
         if backend_type == BackendType.BLADELLM:
             # pylint: disable=import-outside-toplevel
-            from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
-            next_engine_args = BladellmEngineArgs(current_engine_args)
+            from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
+            next_engine_args = BladeLLMEngineArgs(current_engine_args)
             if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
                 next_engine_args.revised_args.disagg_options_inst_role = (
                     instance_type.value if isinstance(instance_type, InstanceType)
@@ -150,14 +150,14 @@ class LlumnixEngineArgsFactory:
 
         if backend_type == BackendType.VLLM:
             # pylint: disable=import-outside-toplevel
-            from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
-            next_engine_args = VllmEngineArgs(current_engine_args, current_engine_args.backend_type)
+            from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
+            next_engine_args = VLLMEngineArgs(current_engine_args, current_engine_args.backend_type)
             return next_engine_args
 
         if backend_type == BackendType.VLLM_V1:
             # pylint: disable=import-outside-toplevel
-            from llumnix.entrypoints.vllm_v1.arg_utils import VllmV1EngineArgs
-            next_engine_args = VllmV1EngineArgs(current_engine_args, current_engine_args.backend_type)
+            from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
+            next_engine_args = VLLMV1EngineArgs(current_engine_args, current_engine_args.backend_type)
             return next_engine_args
 
         raise TypeError(

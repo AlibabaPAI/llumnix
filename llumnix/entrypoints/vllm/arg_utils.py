@@ -29,7 +29,7 @@ from llumnix.config import LlumnixConfig
 logger = init_logger(__name__)
 
 
-class VllmEngineArgs(LlumnixEngineArgs):
+class VLLMEngineArgs(LlumnixEngineArgs):
     def __init__(self,
                  engine_args: Union[AsyncEngineArgs, LlumnixEngineArgs],
                  backend_type: BackendType = BackendType.VLLM) -> None:

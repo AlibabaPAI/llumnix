@@ -26,7 +26,7 @@ from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
-from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs, add_cli_args, get_args
+from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs, add_cli_args, get_args
 from llumnix.logging.logger import init_logger
 from llumnix.metrics.timestamps import set_timestamp
 
@@ -120,7 +120,7 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
 
     # If gpu is not available, it means that this node is head pod without any llumnix components.
     if is_gpu_available():
-        bladellm_engine_args = BladellmEngineArgs(engine_args)
+        bladellm_engine_args = BladeLLMEngineArgs(engine_args)
         global llumnix_client
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
         llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)

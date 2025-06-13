@@ -32,6 +32,7 @@ class EngineState(str, Enum):
 
 class BackendType(str, Enum):
     VLLM = "vLLM"
+    VLLM_V1 = "vLLM v1"
     BLADELLM = "BladeLLM"
     SIM_VLLM = "vLLM simulator"
 

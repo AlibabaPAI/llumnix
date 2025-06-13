@@ -83,7 +83,7 @@ class Llumlet:
                   request_output_queue_type: QueueType,
                   engine_args: LlumnixEngineArgs):
         backend_type = engine_args.backend_type
-        assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.SIM_VLLM], \
+        assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.VLLM_V1, BackendType.SIM_VLLM], \
             f'unimplemented backend {BackendType}'
         # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
         if backend_type == BackendType.VLLM:

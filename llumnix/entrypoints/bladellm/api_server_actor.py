@@ -18,7 +18,7 @@ from aiohttp.web_runner import _raise_graceful_exit
 
 from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
-from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
+from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.utils import get_ip_address, wait_port_free
@@ -28,7 +28,7 @@ logger = init_logger(__name__)
 
 class APIServerActorBladeLLM(APIServerActor):
     def _set_host(self, entrypoints_args: EntrypointsArgs, engine_args):
-        assert isinstance(engine_args, BladellmEngineArgs)
+        assert isinstance(engine_args, BladeLLMEngineArgs)
         # pylint: disable=import-outside-toplevel
         from blade_llm.service.args import ServingArgs
         engine_args: ServingArgs = engine_args.load_engine_args()
@@ -42,7 +42,7 @@ class APIServerActorBladeLLM(APIServerActor):
 
     def _run_server(self,
                     entrypoints_args: EntrypointsArgs,
-                    engine_args: BladellmEngineArgs,
+                    engine_args: BladeLLMEngineArgs,
                     entrypoints_context: EntrypointsContext):
         # pylint: disable=import-outside-toplevel
         from llumnix.entrypoints.bladellm.api_server import LlumnixEntrypoint

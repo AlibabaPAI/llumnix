@@ -474,6 +474,7 @@ class Scaler:
         next_instance_args = await self._get_next_instance_args(instance_args, instance_type)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
+            backend_type=backend_type,
             current_engine_args=engine_args,
             instance_type=next_instance_args.instance_type,
         )

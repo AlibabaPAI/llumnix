@@ -35,6 +35,8 @@ logger = init_logger(__name__)
 # All the default values of llumnix arguments are set in default.py. So all the arguments here are set to None for default.
 
 class LlumnixArgumentParser(argparse.ArgumentParser):
+    _deprecated: set[argparse.Action] = set()
+
     def __init__(self, *args, **kwargs):
         self.cur_namespace = "llumnix"
         super().__init__(*args, **kwargs)
@@ -43,13 +45,31 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
         self.cur_namespace = namespace
 
     def add_argument(self, *args, **kwargs):
+        # Compatible with vllm v0.9.0 FlexibleArgumentParser
+        deprecated = kwargs.pop("deprecated", False)
         if self.cur_namespace == 'llumnix' and "--help" not in args:
             assert 'default' not in kwargs or kwargs['default'] is None, \
                 f"Do not set the default value for '{args[0]}' in CLI, or set default value to None. " \
                 f"The default value will be retrieved from config/default.py in get_llumnix_config."
             if kwargs.get('action') == 'store_true':
                 kwargs['default'] = None
-        super().add_argument(*args, **kwargs)
+        action = super().add_argument(*args, **kwargs)
+        if deprecated:
+            self._deprecated.add(action)
+        return action
+
+    class _LlumnixArgumentGroup(argparse._ArgumentGroup):  # pylint: disable=protected-access
+        def add_argument(self, *args, **kwargs):
+            # Compatible with vllm v0.9.0 FlexibleArgumentParser
+            deprecated = kwargs.pop("deprecated", False)
+            action = super().add_argument(*args, **kwargs)
+            if deprecated:
+                LlumnixArgumentParser._deprecated.add(action)  # pylint: disable=protected-access
+            return action
+
+    def add_argument_group(self, *args, **kwargs):
+        group = self._LlumnixArgumentGroup(self, *args, **kwargs)
+        return group
 
 
 class LlumnixEngineArgs(ABC):
@@ -112,31 +132,33 @@ class LlumnixEngineArgsFactory:
                 )
 
     def gen_next_engine_args(
-        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
+        self, backend_type: BackendType, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, InstanceType]
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
             current_engine_args = self.engine_args_dict[instance_type]
 
-        # lazy import to avoid circular import
-        # pylint: disable=import-outside-toplevel
-        from llumnix.entrypoints.bladellm.arg_utils import BladellmEngineArgs
-
-        if isinstance(current_engine_args, BladellmEngineArgs):
-            next_engine_args = BladellmEngineArgs(current_engine_args)
+        if backend_type == BackendType.BLADELLM:
+            # pylint: disable=import-outside-toplevel
+            from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
+            next_engine_args = BladeLLMEngineArgs(current_engine_args)
             if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
                 next_engine_args.revised_args.disagg_options_inst_role = (
-                    instance_type.value
-                    if isinstance(instance_type, InstanceType)
+                    instance_type.value if isinstance(instance_type, InstanceType)
                     else instance_type
                 )
             return next_engine_args
 
-        # pylint: disable=import-outside-toplevel
-        from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+        if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
+            # pylint: disable=import-outside-toplevel
+            from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
+            next_engine_args = VLLMEngineArgs(current_engine_args, current_engine_args.backend_type)
+            return next_engine_args
 
-        if isinstance(current_engine_args, VllmEngineArgs):
-            vllm_engine_args = VllmEngineArgs(current_engine_args, current_engine_args.backend_type)
-            return vllm_engine_args
+        if backend_type == BackendType.VLLM_V1:
+            # pylint: disable=import-outside-toplevel
+            from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
+            next_engine_args = VLLMV1EngineArgs(current_engine_args, current_engine_args.backend_type)
+            return next_engine_args
 
         raise TypeError(
             "Unsupported engine args type when generating next engine args."

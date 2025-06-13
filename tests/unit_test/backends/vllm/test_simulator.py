@@ -24,7 +24,7 @@ from vllm.sequence import ExecuteModelRequest
 from vllm.outputs import RequestOutput
 
 from llumnix.arg_utils import InstanceArgs
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.backends.vllm.sim_executor import SimGPUExecutor
 from llumnix.backends.vllm.sim_llm_engine import BackendSimVLLM
 from llumnix.backends.profiling import LatencyMemData
@@ -112,7 +112,7 @@ async def test_backend(ray_env):
                                  placement_group=placement_group,
                                  request_output_queue_type=request_output_queue_type,
                                  instance_args=instance_args,
-                                 llumnix_engine_args=VllmEngineArgs(engine_args=engine_args))
+                                 llumnix_engine_args=VLLMEngineArgs(engine_args=engine_args))
 
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     request_id0 = random_uuid()

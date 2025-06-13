@@ -27,9 +27,9 @@ from llumnix import (
     EntrypointsArgs,
     LaunchMode,
     RayQueueServer,
-    VllmEngineArgs,
     LlumnixRequestOuputVLLM,
 )
+from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 
 from tests.utils import try_convert_to_local_path
 from tests.conftest import cleanup_ray_env_func
@@ -62,7 +62,7 @@ instance_args = InstanceArgs()
 engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                          trust_remote_code=True, max_model_len=370, enforce_eager=True)
 launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.VLLM)
-vllm_engine_args = VllmEngineArgs(engine_args=engine_args)
+vllm_engine_args = VLLMEngineArgs(engine_args=engine_args)
 
 # Create a manager. If the manager is created first, and then the instances are created.
 scaler: Scaler = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args)

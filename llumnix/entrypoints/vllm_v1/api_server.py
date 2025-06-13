@@ -25,8 +25,8 @@ from vllm.sampling_params import SamplingParams
 
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
-from llumnix.entrypoints.vllm.arg_utils import add_cli_args, get_args, VLLMEngineArgs
-from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
+from llumnix.entrypoints.vllm_v1.arg_utils import add_cli_args, get_args, VLLMV1EngineArgs
+from llumnix.entrypoints.vllm_v1.client import LlumnixClientVLLM
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config
@@ -36,7 +36,7 @@ from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE
 from llumnix.metrics.timestamps import set_timestamp
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
-logger = init_logger("llumnix.entrypoints.vllm.api_server")
+logger = init_logger("llumnix.entrypoints.vllm_v1.api_server")
 
 llumnix_client: LlumnixClientVLLM = None
 
@@ -200,9 +200,9 @@ if __name__ == "__main__":
     llumnix_config = get_llumnix_config(cli_args.config_file, args=cli_args)
 
     entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.LOCAL, parser, cli_args)
-    backend_type = BackendType.VLLM if not instance_args.simulator_mode else BackendType.SIM_VLLM
+    backend_type = BackendType.VLLM_V1 if not instance_args.simulator_mode else BackendType.SIM_VLLM
     launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=backend_type)
-    vllm_engine_args: VLLMEngineArgs = VLLMEngineArgs(engine_args, backend_type)
+    vllm_engine_args: VLLMV1EngineArgs = VLLMV1EngineArgs(engine_args, backend_type)
 
     # Launch or connect to the ray cluster for multi-node serving.
     setup_ray_cluster(entrypoints_args)

@@ -33,7 +33,7 @@ from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import get_llumnix_env_vars
 from llumnix.ray_utils import (initialize_placement_group, get_placement_group_name,
                                remove_placement_group, kill_instance)
-from llumnix.entrypoints.vllm.arg_utils import VllmEngineArgs
+from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 
 from tests.unit_test.queue.utils import request_output_queue_server
@@ -200,7 +200,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
 
     ray.init(namespace="llumnix", ignore_reinit_error=True, runtime_env={"env_vars": get_llumnix_env_vars()})
 
-    engine_args = VllmEngineArgs(
+    engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",
@@ -351,7 +351,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
                 instance_args=instance_args,
                 request_output_queue_type=request_output_queue_type,
                 placement_group=placement_group,
-                llumnix_engine_args=VllmEngineArgs(engine_args),
+                llumnix_engine_args=VLLMEngineArgs(engine_args),
             )
         while True:
             res = ray.get(llumlet_2.is_ready.remote())
@@ -374,7 +374,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
 @pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl'])
 @pytest.mark.parametrize("disable_async_output_proc", [False, True])
 async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_async_output_proc):
-    engine_args = VllmEngineArgs(
+    engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             try_convert_to_local_path("facebook/opt-125m"),
             download_dir="/mnt/model",

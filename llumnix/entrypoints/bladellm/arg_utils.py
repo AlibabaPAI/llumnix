@@ -27,7 +27,7 @@ from llumnix.config import LlumnixConfig
 logger = init_logger(__name__)
 
 
-class BladellmEngineArgs(LlumnixEngineArgs):
+class BladeLLMEngineArgs(LlumnixEngineArgs):
     def __init__(self,
                  engine_args: Union["ServingArgs", LlumnixEngineArgs],
                  backend_type: BackendType = BackendType.BLADELLM):

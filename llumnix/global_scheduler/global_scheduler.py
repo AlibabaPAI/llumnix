@@ -14,6 +14,8 @@
 from typing import Dict, List, Tuple, Union, Iterable, Set
 import math
 
+import ray
+
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceInfo, InstanceType
@@ -21,7 +23,8 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
-from llumnix.utils import RequestIDType
+from llumnix.llumlet.llumlet import Llumlet
+from llumnix.utils import RequestIDType, ray_get_with_timeout
 
 logger = init_logger(__name__)
 
@@ -40,6 +43,8 @@ class GlobalScheduler:
 
         self.decode_instance_info: Dict[str, InstanceInfo] = {}
         self.decode_instance_num_requests: Dict[str, int] = {}
+
+        self.instance_id_2_engine_inner_inst_id: Dict[str, str] = {}
 
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
                                                     global_scheduler_config.topk_random_dispatch)
@@ -63,69 +68,70 @@ class GlobalScheduler:
                 if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
-    def dispatch(self, request_id: RequestIDType) -> str:
-        no_constrains_instance_id, prefill_instance_id, decode_instance_id = self.dispatch_scheduler.dispatch(
-            request_id,
-            self.instance_info,
-            self.instance_num_requests,
-            self.prefill_instance_info,
-            self.prefill_instance_num_requests,
-            self.decode_instance_info,
-            self.decode_instance_num_requests
-        )
-        
-        target_instance_id: str = no_constrains_instance_id
-        if self.global_scheduler_config.enable_pd_disagg or self.global_scheduler_config.enable_engine_pd_disagg:
-            target_instance_id = prefill_instance_id
+    def _enable_pd(self):
+        return self.global_scheduler_config.enable_pd_disagg \
+            or self.global_scheduler_config.enable_engine_pd_disagg \
+            or self.global_scheduler_config.enable_dynamic_pd_disagg
 
-            
-
-            kwargs["decode_instance_id"] = self.instance_id_2_engine_disagg_inst_id.get(
-                decode_instance_id, None
-            )
-
-        if self.global_scheduler_config.enable_dynamic_pd_disagg:
-            instance_id = self.dispatch_scheduler.soft_dispatch(
-                instance_type=instance_type,
-                prefill_instance_infos=self.prefill_instance_info,
-                prefill_instance_num_requests=self.prefill_instance_num_requests,
-                decode_instance_infos=self.decode_instance_info,
-                decode_instance_num_requests=self.decode_instance_num_requests
-            )
-            if instance_id in self.prefill_instance_num_requests:
-                self.prefill_instance_num_requests[instance_id] += 1
-            else:
-                self.decode_instance_num_requests[instance_id] += 1
+    def _log_request_dispatch_info(self,
+                                   request_id: str,
+                                   no_constrains_instance_id: str,
+                                   prefill_instance_id: str,
+                                   decode_instance_id: str,
+                                   expected_steps: int,
+                                   addition_dispatch_info: Dict[str, str]):
+        if not self._enable_pd():
+            logger.info("dispath request {} to instance {}.".format(request_id, no_constrains_instance_id))
         else:
-            if instance_type == InstanceType.PREFILL:
-                instance_id = self.dispatch_scheduler.dispatch(
-                    instance_type=instance_type,
-                    instance_info=self.prefill_instance_info,
-                    instance_num_requests=self.prefill_instance_num_requests,
-                )
-                self.prefill_instance_num_requests[instance_id] += 1
-            elif instance_type == InstanceType.DECODE:
-                instance_id = self.dispatch_scheduler.dispatch(
-                    instance_type=instance_type,
-                    instance_info=self.decode_instance_info,
-                    instance_num_requests=self.decode_instance_num_requests,
-                )
-                self.decode_instance_num_requests[instance_id] += 1
+            if self.global_scheduler_config.enable_pd_disagg:
+                logger.info("dispath request {} to prefill instance {}, expected_steps: {}.".format(
+                    request_id, prefill_instance_id, expected_steps))
             else:
-                raise TypeError("instance_type {} is not supported.".format(instance_type))
+                logger.info("dispath request {} to prefill instance {}, decode instance: {}, addition_dispatch_info: {}.".format(
+                    request_id, prefill_instance_id, decode_instance_id, addition_dispatch_info))
 
+    def dispatch(self, request_id: RequestIDType) -> Tuple[str, Dict[str, str]]:
+        addition_dispatch_info = {}
+
+        # instance_num_requests will be updated inplace in dispatch_scheduler.dispatch
+        if self._enable_pd():
+            no_constrains_instance_id = self.dispatch_scheduler.dispatch_no_constrains(
+                self.instance_info,
+                self.instance_num_requests
+            )
+            target_instance_id = no_constrains_instance_id
+            prefill_instance_id, decode_instance_id = None, None
+        else:
+            prefill_instance_id, decode_instance_id = self.dispatch_scheduler.dispatch_pd(
+                self.instance_info,
+                self.instance_num_requests,
+                self.prefill_instance_info,
+                self.prefill_instance_num_requests,
+                self.decode_instance_info,
+                self.decode_instance_num_requests
+            )
+            target_instance_id = prefill_instance_id
+            no_constrains_instance_id = None
+
+            if self.global_scheduler_config.enable_engine_pd_disagg:
+                addition_dispatch_info["decode_instance_id"] = \
+                    self.instance_id_2_engine_inner_inst_id[decode_instance_id]
+        
+        # request_expected_steps is only used in llumnix based prefill-decode disagg
         request_expected_steps = math.inf
-        if self.global_scheduler_config.enable_pd_disagg:
-            if instance_type == InstanceType.PREFILL and instance_id in self.prefill_instance_info:
+        if self.global_scheduler_config.enable_pd_disagg and \
+            self.instance_info[target_instance_id].instance_type == InstanceType.PREFILL:
                 request_expected_steps = 1
 
-        if self.log_requests:
-            logger.info("manager receive request {}".format(request_id))
-            logger.info("dispath request {} to instance {}".format(request_id, instance_id))
-            if self.manager_args.enable_engine_pd_disagg:
-                logger.info("dispatch request {} to decode instance {}".format(request_id, instance_id))
+        self._log_request_dispatch_info(
+            request_id=request_id,
+            no_constrains_instance_id=no_constrains_instance_id,
+            prefill_instance_id=prefill_instance_id,
+            decode_instance_id=decode_instance_id,
+            expected_steps=request_expected_steps,
+            addition_dispatch_info=addition_dispatch_info)
 
-        return instance_id, request_expected_steps
+        return target_instance_id, request_expected_steps, addition_dispatch_info
 
     def pair_migration(
         self, pair_migration_type: PairMigrationConstraints
@@ -139,16 +145,40 @@ class GlobalScheduler:
         scale_up_num, scale_down_num = self.scaling_scheduler.check_scale(self.instance_info, self.instance_id_set)
         return scale_up_num, scale_down_num
 
-    def scale_up(self, instance_id: Union[str, Iterable[str]], instance_type: List[InstanceType]) -> int:
+    def _set_engine_self_assigned_id(self, ins_id: str, instance_actor: Llumlet):
+        if self.global_scheduler_config.enable_engine_pd_disagg:
+            try:
+                self.instance_id_2_engine_inner_inst_id[ins_id] = \
+                    ray_get_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())
+            # pylint: disable=broad-except
+            except Exception as e:
+                if isinstance(e, ray.exceptions.RayActorError):
+                    logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
+                elif isinstance(e, ray.exceptions.GetTimeoutError):
+                    logger.error("Failed to scale up instance {}, instance is hang, "
+                                "please check the cause.".format(ins_id))
+                else:
+                    logger.exception("Error during scale up instance {}, "
+                                    "unexpected exception: {}".format(ins_id, e))
+            logger.info("Bind instance id {} with engine instance id {}.".format(
+                ins_id, self.instance_id_2_engine_inner_inst_id[ins_id]))
+
+    def _remove_engine_self_assigned_id(self, ins_id: str):
+        self.instance_id_2_engine_inner_inst_id.pop(ins_id, None)
+
+    def scale_up(self, instance_id: Union[str, Iterable[str]], instance_actor: List[Llumlet],
+                 instance_type: List[InstanceType]) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
-        for ins_id, ins_type in zip(instance_ids, instance_type):
+        instance_actors = list(instance_actor)
+        for ins_id, instance_actor, ins_type in zip(instance_ids, instance_actors, instance_type):
             if ins_id not in self.instance_id_set:
                 logger.info("Scale up instance {}.".format(ins_id))
                 new_intance_info = self._get_empty_instance_info()
                 new_intance_info.instance_id = ins_id
                 self._add_instance(ins_id, ins_type)
+                self._set_engine_self_assigned_id(ins_id, instance_actor)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
@@ -160,6 +190,7 @@ class GlobalScheduler:
             if ins_id in self.instance_id_set:
                 logger.info("Scale down instance {}".format(ins_id))
                 self._remove_instance(ins_id)
+                self._remove_engine_self_assigned_id(ins_id)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 

@@ -37,6 +37,7 @@ class DispatchScheduler:
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
         self.enable_dynamic_pd_disagg = enable_dynamic_pd_disagg
+
         self.dispatch_policy: DispatchPolicy = DispatchPolicyFactory.get_policy(
             dispatch_policy,
             topk_random_dispatch=topk_random_dispatch,
@@ -47,53 +48,39 @@ class DispatchScheduler:
             dispatch_decode_as_prefill_load_metric=dispatch_decode_as_prefill_load_metric)
 
         # statistics
-        self.instance_type_num_requests: Dict[str, int] = {}
+        self.instance_type_num_requests: Dict[InstanceType, int] = {
+            InstanceType.NO_CONSTRAINTS: 0,
+            InstanceType.DECODE: 0,
+            InstanceType.PREFILL: 0
+        }
 
-    def dispatch(self,
-                 request_id: RequestIDType,
+    def dispatch_no_constrains(self,
                  instance_info: Dict[str, InstanceInfo],
-                 instance_num_requests: Dict[str, int],
-                 prefill_instance_info: Dict[str, InstanceInfo],
-                 prefill_instance_num_requests: Dict[str, int],
-                 decode_instance_info: Dict[str, InstanceInfo],
-                 decode_instance_num_requests: Dict[str, int]):
-        if not self.enable_dynamic_pd_disagg:
-            no_constrains_instance_id = self.general_dispatch()
-            instance_num_requests[no_constrains_instance_id] += 1
-            prefill_instance_id, decode_instance_id = None, None
-        else:
-            instance_id = self.general_dispatch()
-        logger.info("dispath request {} to instance {}.".format(request_id, instance_id))
-        return no_constrains_instance_id, prefill_instance_id, decode_instance_id
-
-    def general_dispatch(self,
-                 request_id: RequestIDType,
-                 instance_num_requests: Dict[str, int],
-                 prefill_instance_info: Dict[str, InstanceInfo],
-                 prefill_instance_num_requests: Dict[str, int],
-                 decode_instance_info: Dict[str, InstanceInfo],
-                 decode_instance_num_requests: Dict[str, int]):
+                 instance_num_requests: Dict[str, int]):
         instance_type = InstanceType.NO_CONSTRAINTS
-        if self.enable_pd_disagg or self.enable_engine_pd_disagg:
-            instance_type = InstanceType.PREFILL
 
         instance_id = self.dispatch_policy.dispatch(
             instance_type=instance_type,
-            instance_info=prefill_instance_info,
-            instance_num_requests=prefill_instance_num_requests
+            instance_info=instance_info,
+            instance_num_requests=instance_num_requests
         )
+        instance_num_requests[instance_id] += 1
 
-        if instance_type == InstanceType.NO_CONSTRAINTS or self.global_scheduler_config.enable_pd_disagg:
-            logger.info("dispath request {} to instance {}.".format(request_id, instance_id))
-            return instance_id
+        self.instance_type_num_requests[InstanceType.NO_CONSTRAINTS] += 1
+        num_total_requests = self.instance_type_num_requests[InstanceType.NO_CONSTRAINTS]
+        if num_total_requests % DISPATCH_LOG_FREQUENCY == 0:
+            logger.info("dispatch scheduler total_dispatched_requests: {}.".format(num_total_requests))
+            for instance_id, num_requests in instance_num_requests.items():
+                logger.info("instance {} num_dispatched_requests: {}.".format(instance_id, num_requests))
 
-        if self.global_scheduler_config.enable_engine_pd_disagg:
-            instance_type = InstanceType.DECODE
-            decode_instance_id = self.dispatch_scheduler.dispatch(
-                instance_type=instance_type,
-                instance_info=self.decode_instance_info,
-                instance_num_requests=self.decode_instance_num_requests
-            )
+    def dispatch_pd(self,
+                    instance_info: Dict[str, InstanceInfo],
+                    instance_num_requests: Dict[str, int],
+                    prefill_instance_info: Dict[str, InstanceInfo],
+                    prefill_instance_num_requests: Dict[str, int],
+                    decode_instance_info: Dict[str, InstanceInfo],
+                    decode_instance_num_requests: Dict[str, int]):
+        pass
 
     def general_dispatch(
         self,
@@ -110,29 +97,4 @@ class DispatchScheduler:
             logger.info("dispatch scheduler total_dispatched_requests: {}".format(num_requests))
             for instance_id, num_requests in instance_num_requests.items():
                 logger.info("instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
-        return dispatch_instance_id
-    
-    def soft_pd_dispatch(
-        self,
-        instance_type: InstanceType,
-        prefill_instance_infos: Dict[str, InstanceInfo],
-        prefill_instance_num_requests: Dict[str, int],
-        decode_instance_infos: Dict[str, InstanceInfo],
-        decode_instance_num_requests: Dict[str, int]
-    ) -> str:
-        dispatch_instance_id = self.dispatch_policy.soft_dispatch(
-            instance_type, prefill_instance_infos, prefill_instance_num_requests,
-            decode_instance_infos, decode_instance_num_requests
-        )
-        num_requests = self.instance_type_num_requests.get(instance_type, 0) + 1
-        self.instance_type_num_requests[instance_type] = num_requests
-        if num_requests % DISPATCH_LOG_FREQUENCY == 0:
-            logger.info("dispatch scheduler total_dispatched_requests for {}: {}".format(instance_type, num_requests))
-            if instance_type == InstanceType.PREFILL:
-                for instance_id, num_requests in prefill_instance_num_requests.items():
-                    logger.info("instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
-            elif instance_type == InstanceType.DECODE:
-                for instance_id, num_requests in decode_instance_num_requests.items():
-                    logger.info("instance {} num_dispatched_requests: {}".format(instance_id, num_requests))
-
         return dispatch_instance_id

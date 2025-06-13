@@ -110,7 +110,6 @@ class Manager:
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
 
         # log args
-        self.log_requests = not manager_args.disable_log_requests_manager
         self.log_instance_info = manager_args.log_instance_info
         if self.log_instance_info:
             self._init_instance_info_csv(manager_args)
@@ -119,7 +118,6 @@ class Manager:
         # instance states
         self.num_instances = 0
         self.instances: Dict[str, Llumlet] = {}
-        self.instance_id_2_engine_disagg_inst_id: Dict[str, str] = {}
         self.pgs: Dict[str, PlacementGroup] = {}
         self.servers: Dict[str, APIServerActor] = None
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
@@ -356,23 +354,6 @@ class Manager:
         for idx, ins_id in enumerate(instance_ids):
             if ins_id not in self.instances:
                 instance_actor = instance_actor_handles[idx]
-                if self.manager_args.enable_engine_pd_disagg:
-                    try:
-                        self.instance_id_2_engine_disagg_inst_id[ins_id] = \
-                            ray_get_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())
-                    # pylint: disable=broad-except
-                    except Exception as e:
-                        if isinstance(e, ray.exceptions.RayActorError):
-                            logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
-                        elif isinstance(e, ray.exceptions.GetTimeoutError):
-                            logger.error("Failed to scale up instance {}, instance is hang, "
-                                        "please check the cause.".format(ins_id))
-                        else:
-                            logger.exception("Error during scale up instance {}, "
-                                            "unexpected exception: {}".format(ins_id, e))
-                        continue
-                    logger.info("Bind instance id {} with engine instance id {}.".format(
-                        ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))
                 indeed_update = True
                 self.instances[ins_id] = instance_actor
                 self.pgs[ins_id] = placement_groups[idx]
@@ -384,7 +365,7 @@ class Manager:
                 self.pending_rebuild_migration_instances += 1
 
         if indeed_update:
-            self.global_scheduler.scale_up(instance_ids, instance_types)
+            self.global_scheduler.scale_up(instance_ids, instance_actor_handles, instance_types)
             self.num_instances = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
@@ -413,7 +394,6 @@ class Manager:
                 indeed_update = True
                 if ins_id in self.instances:
                     self.instances.pop(ins_id)
-                    self.instance_id_2_engine_disagg_inst_id.pop(ins_id, None)
                     if ins_id in self.pgs:
                         self.pgs.pop(ins_id)
                     else:

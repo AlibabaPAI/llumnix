@@ -261,7 +261,6 @@ class ManagerArgs:
     scale_up_threshold: float = None
     scale_down_threshold: float = None
 
-    disable_log_requests_manager: bool = None
     log_instance_info: bool = None
     log_filename: str = None
     enable_port_increment: bool = None
@@ -426,9 +425,6 @@ class ManagerArgs:
         parser.add_argument('--scale-down-threshold',
                             type=float,
                             help='scale down threshold')
-        parser.add_argument('--disable-log-requests-manager',
-                            action='store_true',
-                            help='disable logging requests in manager')
         parser.add_argument('--log-instance-info',
                             action='store_true',
                             help='enable logging instance info')

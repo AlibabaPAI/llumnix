@@ -42,7 +42,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--scaling-policy {max_load,avg_load}]
             [--scale-up-threshold SCALE_UP_THRESHOLD]
             [--scale-down-threshold SCALE_DOWN_THRESHOLD]
-            [--disable-log-requests-manager]
             [--log-instance-info]
             [--log-filename LOG_FILENAME]
             [--simulator-mode]
@@ -218,9 +217,6 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--scale-down-threshold`
 - Scale down threshold.
 - Default: 60
-
-`--disable-log-requests-manager`
-- Disable logging requests in manager.
 
 `--log-instance-info`
 - Enable logging instance info.

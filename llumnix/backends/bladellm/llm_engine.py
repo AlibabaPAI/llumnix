@@ -118,7 +118,8 @@ class AsyncBackQueueWrapper:
         self.get_current_step_counter_queue: asyncio.Queue = asyncio.Queue()
         asyncio.create_task(self._clear_request_server_info_loop())
 
-        self.drop_middle_token = os.getenv('DROP_MIDDLE_TOKEN',default="0")
+        self.drop_middle_token = int(os.getenv('DROP_MIDDLE_TOKEN',default="0")) !=0
+        self.restrict_reqeust_forwarding = int(os.getenv('RESTRICT_REQEUST_FORWARDING',default="0")) !=0
         self.response_buffer = {}
 
     # Due to Bladellm returning tokens to Llumnix asynchronously, Llumnix cannot directly delete the
@@ -157,15 +158,23 @@ class AsyncBackQueueWrapper:
                 self.request_server_map.pop(resp.req_id, None)
             # return resp, server_info
 
+            if not self.restrict_reqeust_forwarding:
+                return [resp], [server_info]
 
             if resp.req_id not in self.response_buffer:
+                logger.info('enbale restrict_reqeust_forwarding')
                 self.response_buffer[resp.req_id] = []
                 return [resp], [server_info]
-            if self.drop_middle_token > 0:
-                self.response_buffer[resp.req_id].append(resp)
+            if self.drop_middle_token and not resp.is_finished:
                 return [], []
+
+            self.response_buffer[resp.req_id].append(resp)
             if resp.is_finished:
-                return self.response_buffer[resp.req_id], [server_info for _ in len(self.response_buffer[resp.req_id])]
+                if self.drop_middle_token:
+                    resp.usage.completion_tokens = 2
+                    resp.usage.total_tokens = resp.usage.prompt_tokens + 2
+                return self.response_buffer[resp.req_id], [server_info for _ in self.response_buffer[resp.req_id]]
+            return [],[]
 
         self.current_step_metrics: RequestTimestamps = None
         while True:

@@ -118,6 +118,9 @@ class AsyncBackQueueWrapper:
         self.get_current_step_counter_queue: asyncio.Queue = asyncio.Queue()
         asyncio.create_task(self._clear_request_server_info_loop())
 
+        self.drop_middle_token = os.getenv('DROP_MIDDLE_TOKEN',default="0")
+        self.response_buffer = {}
+
     # Due to Bladellm returning tokens to Llumnix asynchronously, Llumnix cannot directly delete the
     # server-related information for a request in the request_server_map during handle_abort, handle_drop,
     # or migration free_src_request. Instead, the related information can only be safely removed after
@@ -137,6 +140,7 @@ class AsyncBackQueueWrapper:
             for req_id in expired_req_ids:
                 self.backup_dangling_request_server_info.pop(req_id, None)
 
+    #  here
     async def _put_request_outputs_loop(self):
         async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
             resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
@@ -151,22 +155,32 @@ class AsyncBackQueueWrapper:
             if resp.is_finished:
                 logger.info("Engine finished request {}.".format(resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
-            return resp, server_info
+            # return resp, server_info
+
+
+            if resp.req_id not in self.response_buffer:
+                self.response_buffer[resp.req_id] = []
+                return [resp], [server_info]
+            if self.drop_middle_token > 0:
+                self.response_buffer[resp.req_id].append(resp)
+                return [], []
+            if resp.is_finished:
+                return self.response_buffer[resp.req_id], [server_info for _ in len(self.response_buffer[resp.req_id])]
 
         self.current_step_metrics: RequestTimestamps = None
         while True:
             request_outputs, server_info_outputs = [], []
 
             resp, server_info = await get_single_response()
-            request_outputs.append(resp)
-            server_info_outputs.append(server_info)
+            request_outputs.extend(resp)
+            server_info_outputs.extend(server_info)
 
             if self.put_queue_args_queue.qsize() > 0:
                 output_size = self.put_queue_args_queue.qsize()
                 for _ in range(output_size):
                     resp, server_info = await get_single_response()
-                    request_outputs.append(resp)
-                    server_info_outputs.append(server_info)
+                    request_outputs.extend(resp)
+                    server_info_outputs.extend(server_info)
 
             await self._put_request_outputs_to_server(request_outputs, server_info_outputs)
 

@@ -77,7 +77,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
     def step(self) -> SchedulerStepOutput:
         self.step_counter += 1
         step_out = super().step()
-        self.llumnix_metrics.scheduler_step_metrics(self)
+        # self.llumnix_metrics.scheduler_step_metrics(self)
         return step_out
 
     # migration related method

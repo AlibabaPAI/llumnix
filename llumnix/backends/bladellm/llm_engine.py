@@ -365,7 +365,7 @@ class AsyncLLMEngineLlumnixMixin:
         self.resp_queue.put_nowait(self.step_counter)
         await super().update_callback(resp_list, *args, **kwargs)
         self._update_request_inference_type(resp_list)
-        self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
+        # self.scheduler.llumnix_metrics.engine_step_metrics(self.scheduler)
 
     async def _loop(self):
         previous_state = self.state

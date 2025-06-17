@@ -46,6 +46,14 @@ def init_backend_engine(instance_id: str,
                                      request_output_queue_type,
                                      instance_args,
                                      llumnix_engine_args)
+    elif backend_type == BackendType.VLLM_V1:
+        # pylint: disable=import-outside-toplevel
+        from llumnix.backends.vllm.llm_engine import BackendVLLM
+        backend_engine = BackendVLLM(instance_id,
+                                     placement_group,
+                                     request_output_queue_type,
+                                     instance_args,
+                                     llumnix_engine_args)
     elif backend_type == BackendType.BLADELLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.bladellm.llm_engine import BackendBladeLLM

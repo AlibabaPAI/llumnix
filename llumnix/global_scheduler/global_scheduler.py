@@ -21,6 +21,7 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
+from llumnix.metrics.global_scheduler_metrics import GlobalSchedulerMetrics
 
 logger = init_logger(__name__)
 
@@ -52,8 +53,14 @@ class GlobalScheduler:
                                                   global_scheduler_config.scaling_load_metric,
                                                   global_scheduler_config.enable_pd_disagg)
 
+        self.global_scheduler_metrics = GlobalSchedulerMetrics()
+
     def update_instance_infos(self, instance_infos: List[InstanceInfo]) -> None:
         for instance_info in instance_infos:
+            self.global_scheduler_metrics.dispatch_load.observe(
+                value=instance_info.dispatch_load_metric,
+                labels={"instance_id": instance_info.instance_id},
+            )
             if instance_info.instance_id in self.instance_id_set:
                 self.instance_info[instance_info.instance_id] = instance_info
                 if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
@@ -62,26 +69,38 @@ class GlobalScheduler:
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
     def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
-        if instance_type == InstanceType.PREFILL:
-            instance_id = self.dispatch_scheduler.dispatch(
-                instance_info=self.prefill_instance_info,
-                instance_num_requests=self.prefill_instance_num_requests,
+        with self.manager_metrics.dispatch_latency.observe_time(
+            labels={
+                "instance_type": (
+                    instance_type.value
+                    if isinstance(instance_type, InstanceType)
+                    else instance_type
+                )
+            }
+        ):
+            if instance_type == InstanceType.PREFILL:
+                instance_id = self.dispatch_scheduler.dispatch(
+                    instance_info=self.prefill_instance_info,
+                    instance_num_requests=self.prefill_instance_num_requests,
+                )
+                self.prefill_instance_num_requests[instance_id] += 1
+            elif instance_type == InstanceType.DECODE:
+                instance_id = self.dispatch_scheduler.dispatch(
+                    instance_info=self.decode_instance_info,
+                    instance_num_requests=self.decode_instance_num_requests,
+                )
+                self.decode_instance_num_requests[instance_id] += 1
+            else:
+                logger.error("instance_type {} is not supported".format(instance_type))
+                raise TypeError("instance_type {} is not supported".format(instance_type))
+            if self.global_scheduler_config.enable_pd_disagg and instance_type == InstanceType.PREFILL:
+                request_expected_steps = 1
+            else:
+                request_expected_steps = math.inf
+            self.global_scheduler_metrics.dispatch_counter.increase(
+                labels={"instance_id": instance_id}
             )
-            self.prefill_instance_num_requests[instance_id] += 1
-        elif instance_type == InstanceType.DECODE:
-            instance_id = self.dispatch_scheduler.dispatch(
-                instance_info=self.decode_instance_info,
-                instance_num_requests=self.decode_instance_num_requests,
-            )
-            self.decode_instance_num_requests[instance_id] += 1
-        else:
-            logger.error("instance_type {} is not supported".format(instance_type))
-            raise TypeError("instance_type {} is not supported".format(instance_type))
-        if self.global_scheduler_config.enable_pd_disagg and instance_type == InstanceType.PREFILL:
-            request_expected_steps = 1
-        else:
-            request_expected_steps = math.inf
-        return instance_id, request_expected_steps
+            return instance_id, request_expected_steps
 
     def pair_migration(
         self, pair_migration_type: PairMigrationConstraints

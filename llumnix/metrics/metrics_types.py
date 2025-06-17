@@ -19,6 +19,19 @@ import time
 import numpy as np
 
 class TimeRecorder:
+    """
+    A context manager class for recording the execution time of a code block.
+    
+    It starts timing when entering the context and stops when exiting,
+    then records the elapsed time using the provided metrics.
+    
+    Attributes:
+        metrics (Summary): The metrics object to record the elapsed time.
+        enabled (bool): Whether the timing is enabled.
+        labels (Dict[str, str]):  Metric labels.
+        _start_time (float): The start time of the context.
+        _end_time (float): The end time of the context.
+    """
     def __init__(self, metrics: "Summary", enabled: bool = True, labels: Dict[str, str] = None):
         self.metrics: Summary = metrics
         self.enabled = enabled
@@ -98,7 +111,7 @@ class Registery:
     # reset summary metrics value
     def reset(self):
         for _, metric in self._metrics.items():
-            if isinstance(metric, Summary) or isinstance(metric, TimeAveragedCounter):
+            if isinstance(metric, (Summary, TimeAveragedCounter)):
                 metric.reset()
 
     def remove(self, key) -> None:
@@ -143,13 +156,25 @@ class MetricWrapperBase(ABC):
 
 
 class Status(MetricWrapperBase):
+    """
+    A metric wrapper that represents a status value.
+    
+    This class holds the latest value of a metric and can be used to track 
+    the current state of a system. It supports optional labels to differentiate 
+    between groups of metrics.
+
+    Attributes:
+        _value (Any): The current value of the metric.
+        _label_values (Dict[str, int]): Dictionary mapping label hashes to values.
+        _hash_label_map (Dict[str, str]): Dictionary mapping label hashes to label dictionaries.
+    """
     def __init__(
         self, name: str, registry: Registery = None, initial_value: Any = None, metrics_sampling_interval: int = 0
     ):
         super().__init__(name, registry, metrics_sampling_interval)
         self._value: Any = initial_value
         self._label_values: Dict[str, int] = {} # count groups by label
-        self._label_hashs: Dict[str, str] = {}
+        self._hash_label_map: Dict[str, str] = {}
 
     def collect(self) -> List[MetricEntry]:
         res = []
@@ -158,7 +183,7 @@ class Status(MetricWrapperBase):
                 MetricEntry(
                     name=self.name,
                     value=value,
-                    labels=self._label_hashs.get(label_hash),
+                    labels=self._hash_label_map.get(label_hash),
                 )
             )
         res.append(MetricEntry(name=self.name, value=self._value))
@@ -173,11 +198,20 @@ class Status(MetricWrapperBase):
         self._value = value
         if labels is not None:
             label_hash = hash(frozenset(labels.items()))
-            self._label_hashs[label_hash] = labels
+            self._hash_label_map[label_hash] = labels
             self._label_values[label_hash] = value
 
 
 class PassiveStatus(MetricWrapperBase):
+    """
+    A metric wrapper for passive status tracking.
+    
+    This class does not store values directly but instead relies on an external function 
+    to provide the current value when requested. Useful for metrics that are observed externally.
+
+    Attributes:
+        get_func (Callable): A function that returns the current metric value.
+    """
     def __init__(self, name, registry: Registery = None):
         super().__init__(name, registry)
         self.get_func = None
@@ -201,11 +235,22 @@ class PassiveStatus(MetricWrapperBase):
 
 
 class Counter(MetricWrapperBase):
+    """
+    A metric wrapper representing a counter.
+    
+    Counters are cumulative and strictly increasing. They are typically used 
+    to count events or occurrences over time.
+
+    Attributes:
+        _count (int): The total count.
+        _label_counts (Dict[str, int]): Dictionary mapping label hashes to counts.
+        _hash_label_map (Dict[str, str]): Dictionary mapping label hashes to label dictionaries.
+    """
     def __init__(self, name, registry: Registery = None, metrics_sampling_interval=1):
         super().__init__(name, registry, metrics_sampling_interval)
         self._count: int = 0
         self._label_counts: Dict[str, int] = {} # count groups by label
-        self._label_hashs: Dict[str, str] = {}
+        self._hash_label_map: Dict[str, str] = {}
 
     def collect(self) -> List[MetricEntry]:
         res = []
@@ -214,7 +259,7 @@ class Counter(MetricWrapperBase):
                 MetricEntry(
                     name=self.name,
                     value=count,
-                    labels=self._label_hashs.get(label_hash),
+                    labels=self._hash_label_map.get(label_hash),
                 )
             )
         res.append(MetricEntry(name=self.name, value=self._count))
@@ -233,7 +278,7 @@ class Counter(MetricWrapperBase):
         self._count += increase_count
         if labels is not None:
             label_hash = hash(frozenset(labels.items()))
-            self._label_hashs[label_hash] = labels
+            self._hash_label_map[label_hash] = labels
             self._label_counts[label_hash] = (
                 self._label_counts.get(label_hash, 0) + increase_count
             )
@@ -252,7 +297,7 @@ class TimeAveragedCounter(MetricWrapperBase):
     def reset(self):
         self._count: int = 0
         self._label_counts: Dict[str, int] = {} # count groups by label
-        self._label_hashs: Dict[str, str] = {}
+        self._hash_label_map: Dict[str, str] = {}
         self._create_time = time.perf_counter()
 
     def observe(self, value: float, labels: Dict[str, str] = None):
@@ -266,7 +311,7 @@ class TimeAveragedCounter(MetricWrapperBase):
         self._count += increase_count
         if labels is not None:
             label_hash = hash(frozenset(labels.items()))
-            self._label_hashs[label_hash] = labels
+            self._hash_label_map[label_hash] = labels
             self._label_counts[label_hash] = (
                 self._label_counts.get(label_hash, 0) + increase_count
             )
@@ -279,7 +324,7 @@ class TimeAveragedCounter(MetricWrapperBase):
                 MetricEntry(
                     name=self.name,
                     value=count / time_sec,
-                    labels=self._label_hashs.get(label_hash),
+                    labels=self._hash_label_map.get(label_hash),
                 )
             )
         res.append(MetricEntry(name=self.name, value=self._count / time_sec))
@@ -292,7 +337,15 @@ class TimeAveragedCounter(MetricWrapperBase):
 
 class Summary(MetricWrapperBase):
     """
-    Record a seriase of value, compute several statistics value of collected values.
+    A metric wrapper for summarizing a series of values.
+    
+    This class records a sequence of values and computes statistical summaries such as mean,
+    min, max, and percentile values (e.g., p99).
+
+    Attributes:
+        label_samples (Dict[str, list[float]]): Dictionary mapping label hashes to lists of values.
+        _hash_label_map (Dict[str, str]): Dictionary mapping label hashes to label dictionaries.
+        _samples (List[float]): List of all recorded values.
     """
 
     def __init__(self, name: str, registry: Registery = None, metrics_sampling_interval: int = 0):
@@ -301,7 +354,7 @@ class Summary(MetricWrapperBase):
 
     def reset(self):
         self.label_samples: Dict[str, list[float]] = {}
-        self.label_hashs: Dict[str, str] = {}  # value groups by label
+        self._hash_label_map: Dict[str, str] = {}  # value groups by label
         self._samples: List[float] = []  # all values
 
     def observe(self, value: float, labels: Dict[str, str] = None):
@@ -310,9 +363,9 @@ class Summary(MetricWrapperBase):
             return
         if labels:
             label_hash = hash(frozenset(labels.items()))
-            if label_hash not in self.label_hashs:
+            if label_hash not in self._hash_label_map:
                 self.label_samples[label_hash] = []
-                self.label_hashs[label_hash] = labels
+                self._hash_label_map[label_hash] = labels
             self.label_samples[label_hash].append(value)
         self._samples.append(value)
 
@@ -330,7 +383,7 @@ class Summary(MetricWrapperBase):
             min_val = arr.min().item()
             max_val = arr.max().item()
             p99_val = np.percentile(arr, 99).item()
-            labels = self.label_hashs.get(label_hash)
+            labels = self._hash_label_map.get(label_hash)
             res.append(MetricEntry(f"{self._name}_mean", mean_val, labels))
             res.append(MetricEntry(f"{self._name}_min", min_val, labels))
             res.append(MetricEntry(f"{self._name}_max", max_val, labels))

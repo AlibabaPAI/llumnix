@@ -19,8 +19,6 @@ from llumnix.metrics.base_metrics import BaseMetrics
 from llumnix.metrics.metrics_types import _REGISTRY, Status, MetricEntry
 from llumnix.metrics.exporters import MultiExporter
 from llumnix.metrics.dumper import Dumper, DummyDumper
-from llumnix.metrics.utils import is_metrics_enabled
-from llumnix import envs as llumnix_envs
 from llumnix.instance_info import InstanceInfo
 from llumnix.logging.logger import init_logger
 logger = init_logger(__name__)
@@ -84,25 +82,22 @@ class EngineMetrics(BaseMetrics):
         self.dumper: Dumper = None
         self._init_dumper()
 
-        self.enable_export_metrics = is_metrics_enabled(
-            llumnix_envs.ENGINE_METRICS_SAMPLING_INTERVAL
-        )
-        if self.enable_export_metrics:
-            self.start_metrics_export_loop()
+        self.start_metrics_export_loop()
 
     def start_metrics_export_loop(self):
         def _worker():
             multi_exporter = MultiExporter()
             while True:
                 time.sleep(self.export_interval_sec)
-                metrics: List[MetricEntry] = _REGISTRY.describe()
-                label_instance: Dict[str, Any] = {"instance_id": self.instance_id.collect()[0].value}
-                for metric in metrics:
-                    if metric.labels is None:
-                        metric.labels = {}
-                    metric.labels.update(label_instance)
-                multi_exporter.export(metrics)
-                _REGISTRY.reset()
+                if multi_exporter.need_export():
+                    metrics: List[MetricEntry] = _REGISTRY.describe()
+                    label_instance: Dict[str, Any] = {"instance_id": self.instance_id.collect()[0].value}
+                    for metric in metrics:
+                        if metric.labels is None:
+                            metric.labels = {}
+                        metric.labels.update(label_instance)
+                    multi_exporter.export(metrics)
+                    _REGISTRY.reset()
 
         t = threading.Thread(target=_worker, daemon=True)
         t.start()

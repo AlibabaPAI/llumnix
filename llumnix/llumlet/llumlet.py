@@ -150,7 +150,7 @@ class Llumlet:
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
-        self.llumlet_metrics.call_llumlet_generate_qps.increase(
+        self.llumlet_metrics.llumlet_request_qps.increase(
             labels={"instance_id": self.instance_id}
         )
         await self.backend_engine.add_request(

@@ -12,7 +12,7 @@
 # limitations under the License.
 
 from llumnix.metrics.base_metrics import BaseMetrics
-from llumnix.metrics.metrics_types import Registery, TimeAveragedCounter
+from llumnix.metrics.metrics_types import Counter, Registery, Summary, Status
 from llumnix import envs as llumnix_envs
 from llumnix.logging.logger import init_logger
 from llumnix.metrics.utils import is_metrics_enabled
@@ -20,20 +20,31 @@ from llumnix.metrics.utils import is_metrics_enabled
 logger = init_logger(__name__)
 
 
-class LlumletMetrics(BaseMetrics):
+class GlobalSchedulerMetrics(BaseMetrics):
     def __init__(self):
         super().__init__()
         self.register = Registery()
-        self.metrics_sampling_interval = int(llumnix_envs.LLUMLET_METRICS_SAMPLE_EVERY_N_RECORDS)
+        self.metrics_sampling_interval = int(llumnix_envs.GLOBAL_SCHEDULER_METRICS_SAMPLE_EVERY_N_RECORDS)
 
-        self.llumlet_request_qps = TimeAveragedCounter(
-            name = "llumlet_request_qps",
+        # metrics for dispatch
+        self.dispatch_latency = Summary(
+            name="dispatch_latency",
+            registry=self.register,
+            metrics_sampling_interval=self.metrics_sampling_interval,
+        )
+        self.dispatch_counter = Counter(
+            name="dispatch_counter",
+            registry=self.register,
+            metrics_sampling_interval=self.metrics_sampling_interval
+        )
+        self.dispatch_load = Status(
+            name="dispatch_load",
             registry=self.register,
             metrics_sampling_interval=self.metrics_sampling_interval,
         )
 
         self.enable_metrics = is_metrics_enabled(
-            llumnix_envs.LLUMLET_METRICS_SAMPLE_EVERY_N_RECORDS
+            llumnix_envs.GLOBAL_SCHEDULER_METRICS_SAMPLE_EVERY_N_RECORDS
         )
         if self.enable_metrics:
             self.start_metrics_export_loop()

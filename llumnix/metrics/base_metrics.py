@@ -19,14 +19,13 @@ from typing import List
 from llumnix.metrics.metrics_types import MetricEntry
 from llumnix.metrics.exporters import MultiExporter
 from llumnix.logging.logger import init_logger
-from llumnix import envs as llumnix_envs
 
 logger = init_logger(__name__)
 
 
 class BaseMetrics(ABC):
     def __init__(self):
-        self.export_interval_sec = int(llumnix_envs.LLUMNIX_METRICS_EXPORT_INTERVAL_SEC)
+        self.export_interval_sec = 15
         self.metrics_sampling_interval = 1
 
     def start_metrics_export_loop(self):

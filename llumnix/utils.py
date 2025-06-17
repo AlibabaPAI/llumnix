@@ -261,7 +261,3 @@ def execute_method_with_timeout(method, timeout, *args, **kwargs):
             return future.result(timeout=timeout)
         except TimeoutError as e:
             raise TimeoutError(f"Method {method.__name__} timed out after {timeout} seconds") from e
-
-@staticmethod
-def is_enable(value: str) -> bool:
-    return value.lower() in ("true", "1", "yes")

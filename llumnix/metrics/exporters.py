@@ -86,3 +86,6 @@ class MultiExporter:
     def export(self, metrics: List[MetricEntry]):
         for exporter in self.exporters:
             exporter.export(metrics)
+
+    def need_export(self) -> bool:
+        return len(self.exporters) > 0

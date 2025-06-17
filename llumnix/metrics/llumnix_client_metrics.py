@@ -28,11 +28,11 @@ class LlumnixClientMetrics(BaseMetrics):
         super().__init__()
         self.register = Registery()
         self.metrics_sampling_interval = int(
-            llumnix_envs.LLUMNIX_CLIENT_METRICS_SAMPLING_INTERVAL
+            llumnix_envs.LLUMNIX_CLIENT_METRICS_SAMPLE_EVERY_N_RECORDS
         )
         self.curr_reqeust_index = -1
         self.request_received_timestamps: Dict[str, float] = {}
-        self.request_pre_chunk_received_timestamp: Dict[str, float] = {}
+        self.request_last_token_received_timestamp: Dict[str, float] = {}
 
         self.llumnix_client_request_qps = TimeAveragedCounter(
             name="llumnix_client_request_qps",
@@ -41,20 +41,20 @@ class LlumnixClientMetrics(BaseMetrics):
         )
 
         # reqeust in llumnix client is all is_stream=True
-        self.llumnix_client_token_ttft = Summary(
-            name="llumnix_client_token_ttft",
+        self.llumnix_client_ttft = Summary(
+            name="llumnix_client_ttft",
             registry=self.register,
             metrics_sampling_interval=1,  # special check before observe, so use 1 here
         )
 
-        self.llumnix_client_token_tpot = Summary(
-            name="llumnix_client_token_tpot",
+        self.llumnix_client_tpot = Summary(
+            name="llumnix_client_tpot",
             registry=self.register,
             metrics_sampling_interval=1,  # special check before observe, so use 1 here
         )
 
         self.enable_metrics = is_metrics_enabled(
-            llumnix_envs.LLUMNIX_CLIENT_METRICS_SAMPLING_INTERVAL
+            llumnix_envs.LLUMNIX_CLIENT_METRICS_SAMPLE_EVERY_N_RECORDS
         )
         if self.enable_metrics:
             self.start_metrics_export_loop()
@@ -77,26 +77,26 @@ class LlumnixClientMetrics(BaseMetrics):
     def remove_request(self, request_id: str):
         if not self.request_received_timestamps.pop(request_id, None):
             logger.warning('Request id {} not in dict request_received_timestamps, skip del.'.format(request_id))
-        if not self.request_pre_chunk_received_timestamp.pop(request_id, None):
+        if not self.request_last_token_received_timestamp.pop(request_id, None):
             logger.warning('Request id {} not in dict request_pre_chunk_received_timestamp, skip del.'.format(request_id))
 
     def observe_tpot_and_ttft(self, request_id: str):
         if request_id not in self.request_received_timestamps:
             # not sample
             return
-        if request_id not in self.request_pre_chunk_received_timestamp:
+        if request_id not in self.request_last_token_received_timestamp:
             # first chunk, record ttft
             curr_timestamp = time.time()
-            self.request_pre_chunk_received_timestamp[request_id] = curr_timestamp
+            self.request_last_token_received_timestamp[request_id] = curr_timestamp
             ttft_ms = (
                 curr_timestamp - self.request_received_timestamps[request_id]
             ) * 1000
-            self.llumnix_client_token_ttft.observe(value=ttft_ms)
+            self.llumnix_client_ttft.observe(value=ttft_ms)
         else:
             # not first chunk, record tpot
             curr_timestamp = time.time()
             tpot_ms = (
-                curr_timestamp - self.request_pre_chunk_received_timestamp[request_id]
+                curr_timestamp - self.request_last_token_received_timestamp[request_id]
             ) * 1000
-            self.request_pre_chunk_received_timestamp[request_id] = curr_timestamp
-            self.llumnix_client_token_tpot.observe(value=tpot_ms)
+            self.request_last_token_received_timestamp[request_id] = curr_timestamp
+            self.llumnix_client_tpot.observe(value=tpot_ms)

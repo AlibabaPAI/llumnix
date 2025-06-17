@@ -69,7 +69,7 @@ class GlobalScheduler:
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
     def dispatch(self, instance_type: InstanceType = InstanceType.PREFILL) -> str:
-        with self.manager_metrics.dispatch_latency.observe_time(
+        with self.global_scheduler_metrics.dispatch_latency.observe_time(
             labels={
                 "instance_type": (
                     instance_type.value

@@ -24,21 +24,20 @@ from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 import ray.actor
 
+from vllm.engine.arg_utils import AsyncEngineArgs
+from vllm.config import VllmConfig
+
 from vllm.v1.engine import EngineCoreRequest, EngineCoreOutputs
 from vllm.v1.engine.core import EngineCoreProc
 from vllm.v1.request import Request, RequestStatus
 
-
-from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.config import VllmConfig
-
-from vllm.engine.async_llm_engine import _AsyncLLMEngine
-from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
-from vllm.sequence import SequenceGroup, SequenceStatus
+# from vllm.engine.async_llm_engine import _AsyncLLMEngine
+# from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
+# from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
-from vllm.utils import Counter
-from vllm.usage.usage_lib import UsageContext
-from vllm.engine.llm_engine import SchedulerContext
+# from vllm.utils import Counter
+# from vllm.usage.usage_lib import UsageContext
+# from vllm.engine.llm_engine import SchedulerContext
 from vllm import envs as vllm_envs
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
@@ -46,7 +45,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, RequestInferenceType
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
-from llumnix.llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
+from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
@@ -64,29 +63,39 @@ from llumnix.utils import RequestIDType, MigrationResponse
 logger = init_logger(__name__)
 
 
-class LlumnixRequestOutputFactory(RequestOutputFactory):
-    @staticmethod
-    def create(seq_group: SequenceGroupLlumnix, use_cache: bool = False):
-        # Determine the type based on a condition, for example:
-        if hasattr(seq_group,
-                   'embeddings') and seq_group.embeddings is not None:
-            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
-        # pylint: disable=too-many-function-args
-        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
+# class LlumnixRequestOutputFactory(RequestOutputFactory):
+#     @staticmethod
+#     def create(seq_group: SequenceGroupLlumnix, use_cache: bool = False):
+#         # Determine the type based on a condition, for example:
+#         if hasattr(seq_group,
+#                    'embeddings') and seq_group.embeddings is not None:
+#             return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
+#         # pylint: disable=too-many-function-args
+#         return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
 
-class StopPutQueueSignal:
-    pass
+# class StopPutQueueSignal:
+#     pass
 
 
 class EngineCoreProcLlumnix(EngineCoreProc):
     def __init__(self,
                  instance_id: str,
-                 *arg, **kwargs) -> None:
-        # pylint: disable=import-outside-toplevel
-        super().__init__(*arg, **kwargs)
+                 vllm_config: VllmConfig,
+                 *args, **kwargs) -> None:
+        
+        # Change EngineCore.scheduler to SchedulerLlumnix
+        vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
+
+        super().__init__(vllm_config=vllm_config, *args, **kwargs)
+        
+        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
+
         self.instance_id = instance_id
         self.instance_info = None
+
+        assert isinstance(self.scheduler, SchedulerLlumnix), \
+            "EngineCore.scheduler failed to set to SchedulerLlumnix"
 
     # pylint: disable=W0221
     @classmethod
@@ -96,14 +105,16 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
-        engine_args: EngineArgs,
+        engine_args: AsyncEngineArgs,
         backend_type: BackendType,
         latency_mem: Optional[LatencyMemData] = None,
-        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT
     ) -> "EngineCoreProcLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
+        # FIXME(zhaozhiyu): I don't where speculative_config is set, just overload it
+        engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
+        logger.info("engine_config: {}", engine_config)
         # Hack to pass placement_group for init workers.
         engine_config.parallel_config.placement_group = placement_group
         # Initialize the cluster and specify the executor class.
@@ -123,14 +134,13 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         # Create the LLM engine.
         engine = cls(
             instance_id=instance_id,
+            vllm_config=engine_config,
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
             disable_async_output_proc=engine_args.disable_async_output_proc,
             backend_type=backend_type,
-            vllm_config=engine_config,
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
-            usage_context=usage_context,
         )
         return engine
 
@@ -243,8 +253,6 @@ class BackendVLLMV1(BackendInterface):
                                                                           backend_type=BackendType.VLLM)
         engine_config: VllmConfig = engine_args.create_engine_config()
         # FIXME(zhaozhiyu): pass in params to SchedulerLlumnix properly
-        self.engine.scheduler = SchedulerLlumnix(vllm_config=engine_config, ...)
-        self.engine.scheduler.add_update_instance_info_callback(self.engine.update_instance_info)
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
@@ -319,7 +327,7 @@ class BackendVLLMV1(BackendInterface):
 
     async def commit_dst_request(self,
                                  request_id: RequestIDType,
-                                 backend_request: SequenceGroupLlumnix) -> MigrationResponse:
+                                 backend_request) -> MigrationResponse:
         raise NotImplementedError("commit_dst_request not implemented in vllm v1")
         # if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
         #     await self._run_workers_async("commit_seq_group_metadata", request_id)
@@ -457,7 +465,7 @@ class BackendVLLMV1(BackendInterface):
             asyncio.create_task(self._run_workers_async("free_migrating_in_seq_group_metadata"))
         return self.engine.scheduler[0].free_pre_alloc_cache(request_id)
 
-    def free_src_request(self, backend_request: SequenceGroup) -> None:
+    def free_src_request(self, backend_request) -> None:
         # When free_src_request is called, it means that all migration operations is successful.
         # However, there exists migrating_out_seq_group_metadata in worker only when migrating running request,
         # so the request id does not always exists.

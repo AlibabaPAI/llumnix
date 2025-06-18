@@ -24,6 +24,10 @@ bladellm_install:
 	@pip install -e .[bladellm]
 	@make proto
 
+.PHONY: vllm_v1_install
+vllm_v1_install:
+	@pip install -e .[vllm_v1]
+
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed
 	@pylint --rcfile=.pylintrc -s n --jobs=128 ./llumnix setup.py --ignore=llumnix/backends/bladellm/proto

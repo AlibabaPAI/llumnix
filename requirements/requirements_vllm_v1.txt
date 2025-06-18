@@ -1,0 +1,11 @@
+ray[default]
+pyarrow  # Required for Ray data.
+aiohttp
+scipy
+pandas
+matplotlib
+func_timeout
+pyyaml
+yacs
+pyzmq
+setuptools <= 70.0.0

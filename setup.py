@@ -43,7 +43,7 @@ class BuildWheelOverride(bdist_wheel):
 setup(
     name='llumnix',
     version='0.0.2',
-    python_requires='>=3.9.0, <3.11',
+    python_requires='>=3.9.0, <=3.12.3',
     description='Efficient and easy multi-instance LLM serving',
     long_description=readme(),
     long_description_content_type="text/markdown",
@@ -54,12 +54,15 @@ setup(
     extras_require={
         'vllm': get_requirements('vllm'),
         'bladellm': get_requirements('bladellm'),
+        'vllm_v1': get_requirements('vllm_v1'),
     },
     platforms=["all"],
     classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
         "License :: OSI Approved :: Apache Software License",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],

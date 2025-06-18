@@ -19,6 +19,8 @@ RAY_RPC_TIMEOUT: float = 10.0
 # llumnix/llumlet.py, llumnix/backends/vllm/executor.py
 # Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
 NUM_GPUS_VLLM_GPU_ACTOR = 0.5
+# FIXME(zhaozhiyu): copy from NUM_GPUS_VLLM_GPU_ACTOR, modify this later
+NUM_GPUS_VLLM_V1_GPU_ACTOR = 0.5
 # llumnix/llumlet.py, llumnix/scaler.py, llumnix/backends/bladellm/worker.py
 # Llumlet, ActorOutputMediator, APIServerActor and Worker share the same 1 gpu in the first bundle of PlacementGroup.
 NUM_GPUS_BLADELLM_GPU_ACTOR = 0.25

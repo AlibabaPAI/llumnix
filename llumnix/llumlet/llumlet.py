@@ -33,7 +33,7 @@ from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import RequestIDType, BackendType
-from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -90,6 +90,8 @@ class Llumlet:
         # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
         if backend_type == BackendType.VLLM:
             num_gpus = NUM_GPUS_VLLM_GPU_ACTOR
+        elif backend_type == BackendType.VLLM_V1:
+            num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
         elif backend_type == BackendType.BLADELLM:
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR
         else: # backend_type == BackendType.SIM_VLLM

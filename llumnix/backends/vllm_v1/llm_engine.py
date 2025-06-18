@@ -82,10 +82,6 @@ class StopPutQueueSignal:
 class EngineCoreProcLlumnix(EngineCoreProc):
     def __init__(self,
                  instance_id: str,
-                 placement_group: PlacementGroup,
-                 request_output_queue_type: QueueType,
-                 disable_async_output_proc: bool,
-                 backend_type: BackendType,
                  *arg, **kwargs) -> None:
         # pylint: disable=import-outside-toplevel
         super().__init__(*arg, **kwargs)
@@ -142,7 +138,7 @@ class EngineCoreProcLlumnix(EngineCoreProc):
     def _process_request_output(
             self,
             output: Tuple[int, EngineCoreOutputs],
-    ) -> Tuple[int, EngineCoreOutputs]:
+    ):
         client_index, outputs = output
 
         # TODO(zhaozhiyu): check where this timestamp is used, determine whether to set timestamp in outputs or in each request_output
@@ -199,15 +195,7 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         return model_executed
 
     def stop(self) -> None:
-        self.put_queue_args_queue.put(StopPutQueueSignal())
-        self.put_queue_loop_thread.join()
-        try:
-            ray_get_with_timeout(self.async_put_queue_actor.stop.remote())
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to stop AsyncPutQueueActor, unexpected exception: {}".format(e))
-        gc.collect()
-
+        super().shutdown()
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
         if self.instance_info is not None:

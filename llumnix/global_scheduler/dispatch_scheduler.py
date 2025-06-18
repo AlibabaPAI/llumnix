@@ -11,12 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceType, InstanceInfo, all_instances_busy
 from llumnix.constants import DISPATCH_LOG_FREQUENCY
 from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory, DispatchPolicy
+from llumnix.global_scheduler.dispatch_filter import DispatchFilter, LoadBusyFilter
 
 logger = init_logger(__name__)
 
@@ -27,11 +28,12 @@ class DispatchScheduler:
                  topk_random_dispatch: int,
                  enable_pd_disagg: bool,
                  enable_engine_pd_disagg: bool,
-                 enable_dynamic_pd_disagg: bool) -> None:
+                 enable_adaptive_pd: bool) -> None:
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
-        self.enable_dynamic_pd_disagg = enable_dynamic_pd_disagg
+        self.enable_adaptive_pd = enable_adaptive_pd
 
+        self.busy_filter = LoadBusyFilter()
         self.dispatch_policy: DispatchPolicy = DispatchPolicyFactory.get_policy(
             dispatch_policy,
             topk_random_dispatch=topk_random_dispatch)
@@ -52,119 +54,31 @@ class DispatchScheduler:
                 logger.info("{} instance {} num_dispatched_requests: {}.".format(
                     instance_type, instance_id, num_requests))
 
+    def _dispatch(self, steps: List[Tuple[InstanceType, Dict, Dict, Optional[DispatchFilter]]]) -> str:
+        target_instance_id = None
+        for instance_type, instance_infos, instance_num_requests, dispatch_filter in steps:
+            available_instances = instance_infos
+            if dispatch_filter:
+                available_instance_infos, available_instance_num_requests = \
+                    dispatch_filter.filter(instance_type, instance_infos, instance_num_requests)
+            if len(available_instances) > 0:
+                target_instance_id = self.dispatch_policy.dispatch(
+                    instance_type=instance_type,
+                    instance_num_requests=available_instance_num_requests,
+                    available_instance_infos=available_instance_infos,
+                )
+                instance_num_requests[target_instance_id] += 1
+                break
+        return target_instance_id
+
     def dispatch_no_constrains(self,
                  instance_infos: Dict[str, InstanceInfo],
                  instance_num_requests: Dict[str, int]):
         instance_type = InstanceType.NO_CONSTRAINTS
-        targer_instance_id = self.dispatch_policy.dispatch(
-            instance_type=instance_type,
-            instance_num_requests=instance_num_requests,
-            available_instance_infos=instance_infos,
-        )
-        instance_num_requests[targer_instance_id] += 1
+        steps = [(instance_type, instance_infos, instance_num_requests, None)]
+        targer_instance_id = self._dispatch(steps)
         self._log_instance_dispatch_info(instance_type, instance_num_requests)
-
         return targer_instance_id
-
-    # pylint: disable=unused-argument
-    def _dispatch_normal_pd(self,
-                            instance_infos: Dict[str, InstanceInfo],
-                            instance_num_requests: Dict[str, int],
-                            prefill_instance_infos: Dict[str, InstanceInfo],
-                            prefill_instance_num_requests: Dict[str, int],
-                            decode_instance_infos: Dict[str, InstanceInfo],
-                            decode_instance_num_requests: Dict[str, int]) -> Tuple[str, str]:
-        prefill_instance_id = self.dispatch_policy.dispatch(
-            instance_type=InstanceType.PREFILL,
-            instance_num_requests=prefill_instance_num_requests,
-            available_instance_infos=prefill_instance_infos
-        )
-        prefill_instance_num_requests[prefill_instance_id] += 1
-        instance_num_requests[prefill_instance_id] += 1
-
-        decode_instance_id = None
-        if self.enable_engine_pd_disagg:
-            decode_instance_id = self.dispatch_policy.dispatch(
-                instance_type=InstanceType.DECODE,
-                instance_num_requests=decode_instance_num_requests,
-                available_instance_infos=decode_instance_infos
-            )
-            decode_instance_num_requests[decode_instance_id] += 1
-            instance_num_requests[decode_instance_id] += 1
-
-        return prefill_instance_id, decode_instance_id
-
-    # pylint: disable=unused-argument
-    def _dispatch_dynamic_pd(self,
-                            instance_infos: Dict[str, InstanceInfo],
-                            instance_num_requests: Dict[str, int],
-                            prefill_instance_infos: Dict[str, InstanceInfo],
-                            prefill_instance_num_requests: Dict[str, int],
-                            decode_instance_infos: Dict[str, InstanceInfo],
-                            decode_instance_num_requests: Dict[str, int]) -> Tuple[str, str]:
-        # choose prefill instance first
-        if not all_instances_busy(prefill_instance_infos.values()):
-            prefill_instance_id = self.dispatch_policy.dispatch(
-                instance_type=InstanceType.PREFILL,
-                instance_num_requests=prefill_instance_num_requests,
-                available_instance_infos=prefill_instance_infos)
-            prefill_instance_num_requests[prefill_instance_id] += 1
-        else:
-            # all prefills are busy, dispatch to free decode instances
-            available_decode_instance_infos = {}
-            available_decode_instance_num_requests = {}
-            for ins_id, ins_info in decode_instance_infos.items():
-                if not ins_info.dispatch_load_metric.is_busy():
-                    available_decode_instance_infos[ins_id] = ins_info
-                    available_decode_instance_num_requests[ins_id] = decode_instance_num_requests[ins_id]
-
-            if len(available_decode_instance_infos) > 0:
-                prefill_instance_id = self.dispatch_policy.dispatch(
-                    instance_type=InstanceType.DECODE_AS_PREFILL,
-                    instance_num_requests=available_decode_instance_num_requests,
-                    available_instance_infos=decode_instance_infos)
-                decode_instance_num_requests[prefill_instance_id] += 1
-            else: # fallback to prefill instances
-                prefill_instance_id = self.dispatch_policy.dispatch(
-                    instance_type=InstanceType.PREFILL,
-                    instance_num_requests=prefill_instance_num_requests,
-                    available_instance_infos=prefill_instance_infos)
-                prefill_instance_num_requests[prefill_instance_id] += 1
-        instance_num_requests[prefill_instance_id] += 1
-
-        # choose decode instance
-        decode_instance_id = None
-        if self.enable_engine_pd_disagg:
-            if not all_instances_busy(decode_instance_infos.values()):
-                decode_instance_id = self.dispatch_policy.dispatch(
-                    instance_type=InstanceType.DECODE,
-                    instance_num_requests=decode_instance_num_requests,
-                    available_instance_infos=decode_instance_infos)
-                decode_instance_num_requests[decode_instance_id] += 1
-            else:
-                # all decodes are busy, dispatch to free prefill instances
-                available_prefill_instance_infos = {}
-                available_prefill_instance_num_requests = {}
-                for ins_id, ins_info in prefill_instance_infos.items():
-                    if not ins_info.dispatch_load_metric.is_busy():
-                        available_prefill_instance_infos[ins_id] = ins_info
-                        available_prefill_instance_num_requests[ins_id] = prefill_instance_num_requests[ins_id]
-
-                if len(available_prefill_instance_infos) > 0:
-                    decode_instance_id = self.dispatch_policy.dispatch(
-                        instance_type=InstanceType.PREFILL_AS_DECODE,
-                        instance_num_requests=available_prefill_instance_num_requests,
-                        available_instance_infos=available_prefill_instance_infos)
-                    prefill_instance_num_requests[decode_instance_id] += 1
-                else: # fallback to decode instances
-                    decode_instance_id = self.dispatch_policy.dispatch(
-                        instance_type=InstanceType.DECODE,
-                        instance_num_requests=decode_instance_num_requests,
-                        available_instance_infos=decode_instance_infos)
-                    decode_instance_num_requests[decode_instance_id] += 1
-            instance_num_requests[decode_instance_id] += 1
-
-        return prefill_instance_id, decode_instance_id
 
     # For llumnix-based pd (enable_pd_disagg), the decode instance is not selected in the dispatch scheduler,
     # but rather based on the pair-migration-policy. For engine-based pd (enable_engine_pd_disagg), the decode
@@ -177,32 +91,35 @@ class DispatchScheduler:
                     prefill_instance_num_requests: Dict[str, int],
                     decode_instance_infos: Dict[str, InstanceInfo],
                     decode_instance_num_requests: Dict[str, int]) -> Tuple[str, str]:
-        if self.enable_dynamic_pd_disagg:
-            prefill_instance_id, decode_instance_id = self._dispatch_dynamic_pd(
-                instance_infos,
-                instance_num_requests,
-                prefill_instance_infos,
-                prefill_instance_num_requests,
-                decode_instance_infos,
-                decode_instance_num_requests
-            )
+        if self.enable_adaptive_pd:
+            prefill_dispatch_steps = [
+                (InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, self.busy_filter),
+                (InstanceType.DECODE_AS_PREFILL, decode_instance_infos, decode_instance_num_requests, self.busy_filter),
+                (InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, None),
+            ]
+            decode_dispatch_steps = [
+                (InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, self.busy_filter),
+                (InstanceType.PREFILL_AS_DECODE, prefill_instance_infos, prefill_instance_num_requests, self.busy_filter)
+                (InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, None),
+            ]
         else:
-            prefill_instance_id, decode_instance_id = self._dispatch_normal_pd(
-                instance_infos,
-                instance_num_requests,
-                prefill_instance_infos,
-                prefill_instance_num_requests,
-                decode_instance_infos,
-                decode_instance_num_requests
-            )
+            prefill_dispatch_steps = [(InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, None)]
+            decode_dispatch_steps = [(InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, None)]
 
-        if prefill_instance_id:
-            self._log_instance_dispatch_info(InstanceType.PREFILL, prefill_instance_num_requests)
+        prefill_instance_id = self._dispatch(prefill_dispatch_steps)
+        instance_num_requests[prefill_instance_id] += 1
+        self._log_instance_dispatch_info(InstanceType.PREFILL, prefill_instance_num_requests)
 
-        if decode_instance_id:
+        decode_instance_id = None
+        if self.enable_engine_pd_disagg:
+            if self.enable_adaptive_pd and prefill_instance_id in decode_instance_infos:
+                decode_instance_id = prefill_instance_id
+            else:
+                decode_instance_id = self._dispatch(decode_dispatch_steps)
+            instance_num_requests[decode_instance_id] += 1
             self._log_instance_dispatch_info(InstanceType.DECODE, decode_instance_num_requests)
-        else:
-            assert self.enable_pd_disagg, "decode instance should be selected in the dispatch scheduler, " \
-                "except for llumnix-based pd."
+
+        assert self.enable_pd_disagg or decode_instance_id, "Decode instance must be selected in the dispatch scheduler, " \
+            "except for llumnix-based pd."
 
         return prefill_instance_id, decode_instance_id

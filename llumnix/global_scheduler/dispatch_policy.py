@@ -65,22 +65,23 @@ class Balanced(DispatchPolicy):
 
 
 class Load(DispatchPolicy):
+    instance_type_metric_map: Dict[InstanceType, str] = {
+        InstanceType.NO_CONSTRAINTS: 'dispatch_load_metric',
+        InstanceType.PREFILL: 'dispatch_load_metric',
+        InstanceType.DECODE: 'dispatch_load_metric',
+        InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
+        InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
+    }
+    
     def __init__(self, topk_random_dispatch: int):
         super().__init__(topk_random_dispatch)
-
-        self.target_metric: Dict[InstanceType, str] = {
-            InstanceType.NO_CONSTRAINTS: 'dispatch_load_metric',
-            InstanceType.PREFILL: 'dispatch_load_metric',
-            InstanceType.DECODE: 'dispatch_load_metric',
-            InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
-            InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
-        }
 
     def dispatch(self,
                  instance_type: InstanceType,
                  instance_num_requests: Dict[str, int],
                  available_instance_infos: Dict[str, InstanceInfo]) -> str:
-        sorted_instance_infos = sort_instance_infos(available_instance_infos.values(), self.target_metric[instance_type])
+        sorted_instance_infos = sort_instance_infos(available_instance_infos.values(),
+                                                    self.instance_type_metric_map[instance_type])
         instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
         instance_id = instance_info_chosen.instance_id
         logger.info("dispatch {} request to {}, load: {}".format(instance_type, instance_id,

@@ -19,7 +19,7 @@ from tests.utils import try_convert_to_local_path
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen-7B')])
 @pytest.mark.parametrize("engine", ["engine_vLLM"])
-async def test_dynamicpd(request, ray_env, shutdown_llumnix_service, check_log_exception, model, engine):
+async def test_adaptive_pd(request, ray_env, shutdown_llumnix_service, check_log_exception, model, engine):
     engine = engine.split("_")[1]
     ip = get_ip_address()
     base_port = 15000 + random.randint(0, 96)
@@ -43,7 +43,7 @@ async def test_dynamicpd(request, ray_env, shutdown_llumnix_service, check_log_e
                                             model=model,
                                             request_output_queue_type="zmq",
                                             enable_pd_disagg=True,
-                                            enable_dynamic_pd_disagg=True,
+                                            enable_adaptive_pd=True,
                                             pd_ratio="1:3",
                                             enforce_eager=True,
                                             max_instances=num_instances)
@@ -76,6 +76,6 @@ async def test_dynamicpd(request, ray_env, shutdown_llumnix_service, check_log_e
         for future in as_completed(future_to_command):
             process = future.result()
             process.wait()
-            assert process.returncode == 0, "dynamicpd_test failed with return code {}.".format(process.returncode)
+            assert process.returncode == 0, "adaptive_pd_test failed with return code {}.".format(process.returncode)
 
     await asyncio.sleep(5)

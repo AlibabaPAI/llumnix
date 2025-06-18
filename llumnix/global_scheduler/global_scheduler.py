@@ -54,7 +54,7 @@ class GlobalScheduler:
                                                     global_scheduler_config.topk_random_dispatch,
                                                     global_scheduler_config.enable_pd_disagg,
                                                     global_scheduler_config.enable_engine_pd_disagg,
-                                                    global_scheduler_config.enable_dynamic_pd_disagg)
+                                                    global_scheduler_config.enable_adaptive_pd)
 
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
@@ -78,7 +78,7 @@ class GlobalScheduler:
     def _enable_pd(self):
         return self.global_scheduler_config.enable_pd_disagg \
             or self.global_scheduler_config.enable_engine_pd_disagg \
-            or self.global_scheduler_config.enable_dynamic_pd_disagg
+            or self.global_scheduler_config.enable_adaptive_pd
 
     def _log_request_dispatch_info(self,
                                    request_id: str,

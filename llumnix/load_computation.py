@@ -58,28 +58,28 @@ class DummyLoad(BaseLoad):
         return DummyLoad()
 
 
-class UsageRatioLoad(BaseLoad):
-    BUSY_THRESHOLD = float(llumnix_envs.USAGERATIO_BUSY_THRESHOLD)
+class BlockDemandFactorLoad(BaseLoad):
+    BUSY_THRESHOLD = float(llumnix_envs.BLOCKDEMANDFACTOR_BUSY_THRESHOLD)
 
-    def __init__(self, usage_ratio: float = 0.0) -> None:
-        self.usage_ratio = usage_ratio
+    def __init__(self, demand_factor: float = 0.0) -> None:
+        self.demand_factor = demand_factor
 
     def is_busy(self) -> bool:
-        return self.usage_ratio >= UsageRatioLoad.BUSY_THRESHOLD
+        return self.demand_factor >= BlockDemandFactorLoad.BUSY_THRESHOLD
 
-    def __lt__(self, other: "UsageRatioLoad") -> bool:
+    def __lt__(self, other: "BlockDemandFactorLoad") -> bool:
         if isinstance(other, DummyLoad):
             return False
-        return self.usage_ratio < other.usage_ratio
+        return self.demand_factor < other.demand_factor
 
     def __repr__(self) -> str:
-        return f"UsageRatioLoad(usage_ratio={self.usage_ratio},is_busy={self.is_busy()})"
+        return f"BlockDemandFactorLoad(demand_factor={self.demand_factor},is_busy={self.is_busy()})"
 
     @classmethod
-    def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "UsageRatioLoad":
+    def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "BlockDemandFactorLoad":
         all_wanted_blocks = instance_info.num_used_gpu_blocks + instance_info.num_blocks_all_waiting_requests
-        usage_ratio = all_wanted_blocks / instance_info.num_total_gpu_blocks
-        return UsageRatioLoad(usage_ratio)
+        demand_factor = all_wanted_blocks / instance_info.num_total_gpu_blocks
+        return BlockDemandFactorLoad(demand_factor)
 
 
 class RemainingStepsLoad(BaseLoad):
@@ -120,8 +120,13 @@ class AdaptiveDecodeBatchLoad(BaseLoad):
 
     def __init__(self, decode_batch_size: float = 0) -> None:
         self.decode_batch_size = decode_batch_size
-        self.decode_load = self.decode_batch_size if self.decode_batch_size > 0 \
-            else self.DECODE_COMPUTE_BOUND_BATCH_SIZE
+
+        if self.decode_batch_size == 0:
+            self.decode_load = self.DECODE_COMPUTE_BOUND_BATCH_SIZE
+        elif self.decode_batch_size >= self.DECODE_COMPUTE_BOUND_BATCH_SIZE:
+            self.decode_load = self.decode_batch_size
+        else:
+            self.decode_load = self.DECODE_COMPUTE_BOUND_BATCH_SIZE - self.decode_batch_size
 
     def is_busy(self) -> bool:
         return self.decode_batch_size > 2 * self.DECODE_COMPUTE_BOUND_BATCH_SIZE
@@ -141,7 +146,7 @@ class AdaptiveDecodeBatchLoad(BaseLoad):
 
 class LoadCalculatorFactory:
     _LOAD_REGISTRY = {
-        'usage_ratio': UsageRatioLoad,
+        'block_demand_factor': BlockDemandFactorLoad,
         'remaining_steps': RemainingStepsLoad,
         'adaptive_decode': AdaptiveDecodeBatchLoad
     }

@@ -99,7 +99,7 @@ def generate_vllm_serve_command(
     request_migration_policy: str = 'SR',
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
-    enable_dynamic_pd_disagg: bool = False,
+    enable_adaptive_pd: bool = False,
     pd_ratio: str = "1:1",
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
@@ -136,7 +136,7 @@ def generate_vllm_serve_command(
         f"--enable-port-increment "
         f"--max-instances {max_instances} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
-        f"{'--enable-dynamic-pd-disagg ' if enable_dynamic_pd_disagg else ''}"
+        f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--config-file {config_path} "
         f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"

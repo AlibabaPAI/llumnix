@@ -18,7 +18,7 @@ from typing import Dict
 import pytest
 from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
-from llumnix.load_computation import UsageRatioLoad, RemainingStepsLoad
+from llumnix.load_computation import BlockDemandFactorLoad, RemainingStepsLoad
 
 
 def init_dispatch_scheduler(
@@ -26,13 +26,13 @@ def init_dispatch_scheduler(
         topk_random_dispatch=1,
         enable_pd_disagg=False,
         enable_engine_pd_disagg=False,
-        enable_dynamic_pd_disagg=False):
+        enable_adaptive_pd=False):
     dispatch_scheduler = DispatchScheduler(
         dispatch_policy=policy,
         topk_random_dispatch=topk_random_dispatch,
         enable_pd_disagg=enable_pd_disagg,
         enable_engine_pd_disagg=enable_engine_pd_disagg,
-        enable_dynamic_pd_disagg=enable_dynamic_pd_disagg,
+        enable_adaptive_pd=enable_adaptive_pd,
     )
     return dispatch_scheduler
 
@@ -140,19 +140,19 @@ def test_dispatch_pd(enable_pd_disagg):
             assert num_requests == decode_instance_num_requests[instance_id] == instance_num_requests[instance_id]
 
 @pytest.mark.parametrize("enable_pd_disagg", [True, False])
-def test_dispatch_dynamicpd(enable_pd_disagg):
+def test_dispatch_adaptive_pd(enable_pd_disagg):
     dispatch_scheduler = init_dispatch_scheduler(
         policy='load',
         enable_pd_disagg=enable_pd_disagg,
         enable_engine_pd_disagg=not enable_pd_disagg,
-        enable_dynamic_pd_disagg=True)
+        enable_adaptive_pd=True)
     instance_num: int = 4
     instance_info_dict, instance_num_requests, prefill_instance_info_dict, prefill_instance_num_requests, \
         decode_instance_info_dict, decode_instance_num_requests = init_pd_instances(instance_num, instance_num)
 
     for load, instance_info in enumerate(prefill_instance_info_dict.values()):
-        instance_info.dispatch_load_metric = UsageRatioLoad(load)
-        instance_info.dispatch_prefill_as_decode_load_metric = UsageRatioLoad(load)
+        instance_info.dispatch_load_metric = BlockDemandFactorLoad(load)
+        instance_info.dispatch_prefill_as_decode_load_metric = BlockDemandFactorLoad(load)
     for load, instance_info in enumerate(decode_instance_info_dict.values()):
         instance_info.dispatch_load_metric = RemainingStepsLoad(load)
         instance_info.dispatch_decode_as_prefill_load_metric = RemainingStepsLoad(load)
@@ -161,7 +161,7 @@ def test_dispatch_dynamicpd(enable_pd_disagg):
     # ----- choose prefill tests -----
 
     # exist free prefill, choose prefill
-    UsageRatioLoad.BUSY_THRESHOLD = 10
+    BlockDemandFactorLoad.BUSY_THRESHOLD = 10
     RemainingStepsLoad.BUSY_THRESHOLD = -1
     prefill_instance_id, decode_instance_id = dispatch_scheduler.dispatch_pd(
         instance_infos=instance_info_dict,
@@ -187,7 +187,7 @@ def test_dispatch_dynamicpd(enable_pd_disagg):
         assert instance_dispatch_info[decode_instance_id] == decode_instance_num_requests[decode_instance_id]
 
     # no free prefill, choose decode
-    UsageRatioLoad.BUSY_THRESHOLD = -1
+    BlockDemandFactorLoad.BUSY_THRESHOLD = -1
     RemainingStepsLoad.BUSY_THRESHOLD = -1
     prefill_instance_id, decode_instance_id = dispatch_scheduler.dispatch_pd(
         instance_infos=instance_info_dict,
@@ -214,7 +214,7 @@ def test_dispatch_dynamicpd(enable_pd_disagg):
         assert instance_dispatch_info[decode_instance_id] == decode_instance_num_requests[decode_instance_id]
 
     # no free prefill, no free decode, choose busy prefill
-    UsageRatioLoad.BUSY_THRESHOLD = -1
+    BlockDemandFactorLoad.BUSY_THRESHOLD = -1
     RemainingStepsLoad.BUSY_THRESHOLD = 10
     prefill_instance_id, decode_instance_id = dispatch_scheduler.dispatch_pd(
         instance_infos=instance_info_dict,
@@ -243,7 +243,7 @@ def test_dispatch_dynamicpd(enable_pd_disagg):
     # ----- choose decode tests -----
 
     # exist free decode, choose decode
-    UsageRatioLoad.BUSY_THRESHOLD = 10
+    BlockDemandFactorLoad.BUSY_THRESHOLD = 10
     RemainingStepsLoad.BUSY_THRESHOLD = -1
     prefill_instance_id, decode_instance_id = dispatch_scheduler.dispatch_pd(
         instance_infos=instance_info_dict,
@@ -269,7 +269,7 @@ def test_dispatch_dynamicpd(enable_pd_disagg):
         assert instance_dispatch_info[decode_instance_id] == decode_instance_num_requests[decode_instance_id]
 
     # no free decode, choose prefill
-    UsageRatioLoad.BUSY_THRESHOLD = 10
+    BlockDemandFactorLoad.BUSY_THRESHOLD = 10
     RemainingStepsLoad.BUSY_THRESHOLD = 10
     prefill_instance_id, decode_instance_id = dispatch_scheduler.dispatch_pd(
         instance_infos=instance_info_dict,
@@ -295,7 +295,7 @@ def test_dispatch_dynamicpd(enable_pd_disagg):
         assert instance_dispatch_info[decode_instance_id] == prefill_instance_num_requests[decode_instance_id]
 
     # no free decode, no free prefill, choose busy decode
-    UsageRatioLoad.BUSY_THRESHOLD = -1
+    BlockDemandFactorLoad.BUSY_THRESHOLD = -1
     RemainingStepsLoad.BUSY_THRESHOLD = 10
     prefill_instance_id, decode_instance_id = dispatch_scheduler.dispatch_pd(
         instance_infos=instance_info_dict,

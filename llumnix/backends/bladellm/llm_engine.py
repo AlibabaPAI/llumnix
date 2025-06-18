@@ -773,6 +773,7 @@ class BackendBladeLLM(BackendInterface):
             self.engine._migration_semaphore.release()
 
         return MigrationResponse(success=True, return_value=None)
+
     def get_stats(self) -> Stats:
         return self.engine.get_stats()
 

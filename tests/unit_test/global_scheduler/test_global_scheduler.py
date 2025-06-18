@@ -23,7 +23,7 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, Instance
 from llumnix.utils import random_uuid
 from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.arg_utils import InstanceArgs
-from llumnix.load_computation import UsageRatioLoad, RemainingStepsLoad
+from llumnix.load_computation import BlockDemandFactorLoad, RemainingStepsLoad
 
 from .test_manager import get_instance_info_migrate_in, get_instance_info_migrate_out
 
@@ -40,7 +40,7 @@ class MockLlumlet:
 def init_global_scheduler(
         enable_pd_disagg: bool = False,
         enable_engine_pd_disagg: bool = False,
-        enable_dynamic_pd_disagg: bool = False):
+        enable_adaptive_pd: bool = False):
     global_scheduler_config = GlobalSchedulerConfig(
         initial_instances=0,
         dispatch_policy="load",
@@ -53,7 +53,7 @@ def init_global_scheduler(
         scale_down_threshold=60,
         enable_pd_disagg=enable_pd_disagg,
         enable_engine_pd_disagg=enable_engine_pd_disagg,
-        enable_dynamic_pd_disagg=enable_dynamic_pd_disagg,
+        enable_adaptive_pd=enable_adaptive_pd,
         is_group_kind_migration_backend=False)
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler
@@ -274,13 +274,13 @@ async def test_dispatch_engine_pd_disagg_and_expected_steps():
     assert addition_dispatch_info['decode_instance_id'] in instance_ids
 
 @pytest.mark.asyncio
-async def test_dispatch_dynamic_pd_disagg_and_expected_steps():
-    global_scheduler = init_global_scheduler(enable_pd_disagg=True, enable_dynamic_pd_disagg=True)
+async def test_dispatch_adaptive_pd_disagg_and_expected_steps():
+    global_scheduler = init_global_scheduler(enable_pd_disagg=True, enable_adaptive_pd=True)
 
     prefill_instance_id = random_uuid()
     prefill_instance_info = InstanceInfo(instance_id=prefill_instance_id, instance_type=InstanceType.PREFILL)
-    UsageRatioLoad.BUSY_THRESHOLD = 100
-    prefill_instance_info.dispatch_load_metric = UsageRatioLoad(10)
+    BlockDemandFactorLoad.BUSY_THRESHOLD = 100
+    prefill_instance_info.dispatch_load_metric = BlockDemandFactorLoad(10)
     await global_scheduler.scale_up(prefill_instance_id, None, InstanceType.PREFILL, None, None, None)
     global_scheduler.update_instance_infos([prefill_instance_info])
     global_scheduler.instance_id_2_engine_inner_inst_id[prefill_instance_id] = prefill_instance_id
@@ -298,7 +298,7 @@ async def test_dispatch_dynamic_pd_disagg_and_expected_steps():
     assert request_expected_steps == 1
     assert len(addition_dispatch_info) == 0
 
-    UsageRatioLoad.BUSY_THRESHOLD = 0
+    BlockDemandFactorLoad.BUSY_THRESHOLD = 0
     target_instance_id, request_expected_steps, addition_dispatch_info = global_scheduler.dispatch(0)
     assert target_instance_id == decode_instance_id
     assert request_expected_steps == math.inf

@@ -67,8 +67,8 @@ class InstanceInfo:
 
     # on-demand init infos
     dispatch_load_metric: BaseLoad = DummyLoad()
-    dispatch_prefill_as_decode_load_metric: BaseLoad = DummyLoad() # used for dynamic pd
-    dispatch_decode_as_prefill_load_metric: BaseLoad = DummyLoad() # used for dynamic pd
+    dispatch_prefill_as_decode_load_metric: BaseLoad = DummyLoad() # used for adaptive pd
+    dispatch_decode_as_prefill_load_metric: BaseLoad = DummyLoad() # used for adaptive pd
     migration_load_metric: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_in: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_out: BaseLoad = DummyLoad()
@@ -113,8 +113,8 @@ class InstanceLoadCalculator:
         self.dispatch_load_calculator = LoadCalculatorFactory.get_load_calculator(dispach_load_metric)
         self.migration_load_calculator = LoadCalculatorFactory.get_load_calculator(instance_args.migration_load_metric)
 
-        self.enable_dynamic_pd_disagg = instance_args.enable_dynamic_pd_disagg
-        if self.enable_dynamic_pd_disagg:
+        self.enable_adaptive_pd = instance_args.enable_adaptive_pd
+        if self.enable_adaptive_pd:
             self.dispatch_prefill_as_decode_load_calculator = \
                 LoadCalculatorFactory.get_load_calculator(instance_args.dispatch_prefill_as_decode_load_metric)
             self.dispatch_decode_load_as_prefill_load_calculator = \
@@ -129,7 +129,7 @@ class InstanceLoadCalculator:
         instance_info.migration_load_metric_after_migrate_in = \
             self._compute_load_after_migrate(instance_info, is_migrate_in=True)
 
-        if self.enable_dynamic_pd_disagg:
+        if self.enable_adaptive_pd:
             instance_info.dispatch_prefill_as_decode_load_metric = \
                 self.dispatch_prefill_as_decode_load_calculator.compute_instance_load(instance_info)
             instance_info.dispatch_decode_as_prefill_load_metric = \

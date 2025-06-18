@@ -286,8 +286,8 @@ class ManagerArgs:
     enable_port_increment: bool = None
     enable_port_offset_store: bool = None
 
+    enable_adaptive_pd: bool = None
     enable_pd_disagg: bool = None
-    enable_dynamic_pd_disagg: bool = None
     pd_ratio: Union[str, List[int]] = None
     load_registered_service: bool = None
     load_registered_service_path: str = None
@@ -338,12 +338,12 @@ class ManagerArgs:
         if args.enable_pd_disagg:
             assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
 
-        if args.enable_dynamic_pd_disagg:
+        if args.enable_adaptive_pd:
             assert args.enable_pd_disagg or args.enable_engine_pd_disagg, \
-                "Dynamic prefill-decode disaggregation is only supported when prefill-decode disaggregation, " \
+                "Adaptive prefill-decode disaggregation is only supported when prefill-decode disaggregation, " \
                 "set --enable-pd-disagg or --enable-engine-pd-disagg to enable prefill-decode disaggregation."
 
-        assert not (args.enable_engine_pd_disagg and args.enable_dynamic_pd_disagg), "Dynamic prefill-decode disaggregation \
+        assert not (args.enable_engine_pd_disagg and args.enable_adaptive_pd), "Adaptive prefill-decode disaggregation \
             is not supported when engine-based prefill-decode disaggregation is enabled."
 
         assert not (args.enable_engine_pd_disagg and args.enable_pd_disagg), "Engine-based prefill-decode disaggregation and \
@@ -365,7 +365,7 @@ class ManagerArgs:
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
                                                         self.enable_engine_pd_disagg,
-                                                        self.enable_dynamic_pd_disagg,
+                                                        self.enable_adaptive_pd,
                                                         self.is_group_kind_migration_backend)
         return global_scheduler_config
 
@@ -386,7 +386,7 @@ class ManagerArgs:
                             help='time interval(s) to update instance info and pair migration')
         parser.add_argument('--scaling-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'block_demand_factor'],
                             help='instance scaling load metric')
         parser.add_argument('--dispatch-policy',
                             type=str,
@@ -456,9 +456,9 @@ class ManagerArgs:
         parser.add_argument('--enable-pd-disagg',
                             action='store_true',
                             help='enable prefill-decode disaggregation')
-        parser.add_argument('--enable-dynamic-pd-disagg',
+        parser.add_argument('--enable-adaptive-pd',
                             action='store_true',
-                            help='enable dynamic prefill-decode disaggregation')
+                            help='enable adaptive prefill-decode disaggregation')
         parser.add_argument('--enable-engine-pd-disagg',
                             action='store_true',
                             help='enable engine-based prefill-decode disaggregation')
@@ -526,7 +526,7 @@ class InstanceArgs:
 
     # init from manager args
     enable_migration: bool = None
-    enable_dynamic_pd_disagg: bool = None
+    enable_adaptive_pd: bool = None
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -560,7 +560,7 @@ class InstanceArgs:
 
     def init_from_manager_args(self, manager_args: ManagerArgs):
         self.enable_migration = manager_args.enable_migration
-        self.enable_dynamic_pd_disagg = manager_args.enable_dynamic_pd_disagg
+        self.enable_adaptive_pd = manager_args.enable_adaptive_pd
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.enable_migration,
@@ -599,27 +599,27 @@ class InstanceArgs:
                             help='enable simulator mode')
         parser.add_argument('--dispatch-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'block_demand_factor'],
                             help='instance dispatch load metric')
         parser.add_argument('--dispatch-prefill-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'block_demand_factor'],
                             help='prefill instance dispatch load metric')
         parser.add_argument('--dispatch-prefill-as-decode-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio', 'adaptive_decode'],
+                            choices=['remaining_steps', 'block_demand_factor', 'adaptive_decode'],
                             help='prefill instance dispatch load metric when decoding')
         parser.add_argument('--dispatch-decode-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'block_demand_factor'],
                             help='decode instance dispatch load metric')
         parser.add_argument('--dispatch-decode-as-prefill-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'block_demand_factor'],
                             help='decode instance dispatch load metric when prefilling')
         parser.add_argument('--migration-load-metric',
                             type=str,
-                            choices=['remaining_steps', 'usage_ratio'],
+                            choices=['remaining_steps', 'block_demand_factor'],
                             help='instance migration load metric')
         parser.add_argument('--enable-defrag',
                             type=bool,

@@ -27,7 +27,7 @@ from llumnix.constants import SERVER_GRACEFUL_SHUTDOWN_TIMEOUT
 logger = init_logger(__name__)
 
 
-class APIServerActorVLLM(APIServerActor):
+class APIServerActorVLLMV1(APIServerActor):
     def _set_host(self, entrypoints_args: EntrypointsArgs, engine_args):
         if entrypoints_args.host not in ("127.0.0.1", "0.0.0.0"):
             entrypoints_args.host = get_ip_address()
@@ -41,23 +41,23 @@ class APIServerActorVLLM(APIServerActor):
                     engine_args: AsyncEngineArgs,
                     entrypoints_context: EntrypointsContext):
         # pylint: disable=import-outside-toplevel
-        import llumnix.entrypoints.vllm.api_server
-        from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
+        import llumnix.entrypoints.vllm_v1.api_server
+        from llumnix.entrypoints.vllm_v1.client import LlumnixClientVLLMV1
 
-        app = llumnix.entrypoints.vllm.api_server.app
+        app = llumnix.entrypoints.vllm_v1.api_server.app
         config = uvicorn.Config(
             app,
             host=self.host,
             port=entrypoints_args.port,
             log_level=entrypoints_args.server_log_level,
-            timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE,
+            timeout_keep_alive=llumnix.entrypoints.vllm_v1.api_server.SERVER_TIMEOUT_KEEP_ALIVE,
             ssl_keyfile=entrypoints_args.ssl_keyfile,
             ssl_certfile=entrypoints_args.ssl_certfile,
             timeout_graceful_shutdown=SERVER_GRACEFUL_SHUTDOWN_TIMEOUT
         )
         self.server = uvicorn.Server(config)
         self.loop = asyncio.new_event_loop()
-        llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(entrypoints_context, self.loop)
+        llumnix.entrypoints.vllm_v1.api_server.llumnix_client = LlumnixClientVLLMV1(entrypoints_context, self.loop)
         asyncio.set_event_loop(self.loop)
         try:
             self.loop.run_until_complete(self.server.serve())

@@ -17,6 +17,8 @@ import time
 import asyncio
 from typing import Dict, List
 
+from vllm.v1.engine.async_llm import AsyncLLM
+
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
 from vllm import SamplingParams
@@ -33,7 +35,7 @@ from llumnix.entrypoints.client import LlumnixClient
 logger = init_logger(__name__)
 
 
-class LlumnixClientVLLM(LlumnixClient):
+class LlumnixClientVLLMV1(LlumnixClient):
     def __init__(self, entrypoints_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
         self.request_stream: Dict[str, AsyncStream] = {}
         super().__init__(entrypoints_context, loop)

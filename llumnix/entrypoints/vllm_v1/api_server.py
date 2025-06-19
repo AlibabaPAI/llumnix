@@ -26,7 +26,7 @@ from vllm.sampling_params import SamplingParams
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.vllm_v1.arg_utils import add_cli_args, get_args, VLLMV1EngineArgs
-from llumnix.entrypoints.vllm_v1.client import LlumnixClientVLLM
+from llumnix.entrypoints.vllm_v1.client import LlumnixClientVLLMV1
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid
 from llumnix.config import get_llumnix_config
@@ -38,7 +38,7 @@ from llumnix.metrics.timestamps import set_timestamp
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm_v1.api_server")
 
-llumnix_client: LlumnixClientVLLM = None
+llumnix_client: LlumnixClientVLLMV1 = None
 
 
 # pylint: disable=unused-argument
@@ -90,7 +90,7 @@ async def generate(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
-    # Use LlumnixClientVLLM's generate and abort api to replace with vLLM AsyncLLMEngine's generate and abort api.
+    # Use LlumnixClientVLLMV1's generate and abort api to replace with vLLM AsyncLLM's generate and abort api.
     results_generator = await llumnix_client.generate(prompt, sampling_params, request_id)
 
     # Streaming case
@@ -212,7 +212,7 @@ if __name__ == "__main__":
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args)
         # Start the api server after all the components of llumnix are ready.
         loop = asyncio.new_event_loop()
-        llumnix_client = LlumnixClientVLLM(entrypoints_context, loop)
+        llumnix_client = LlumnixClientVLLMV1(entrypoints_context, loop)
         asyncio.set_event_loop(loop)
         config = uvicorn.Config(app,
             host=entrypoints_args.host,

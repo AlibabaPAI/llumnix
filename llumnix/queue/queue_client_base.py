@@ -36,8 +36,7 @@ class QueueClientBase(ABC):
                 self.metric_index + 1
             ) % self.metric_sample_every_n_records
             return self.metric_index == 0
-        else:
-            return False
+        return False
 
     @abstractmethod
     async def put_nowait(self, item: Any, server_info: ServerInfo):

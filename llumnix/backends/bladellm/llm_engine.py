@@ -150,6 +150,21 @@ class AsyncBackQueueWrapper:
                 logger.info("Engine finished request {}.".format(resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
             return resp, server_info
+        
+        def get_nowait_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
+            resp: Union[GenerateStreamResponse, int] = self.put_queue_args_queue.get_nowait()
+            while isinstance(resp, int):
+                self.get_current_step_counter_queue.put_nowait(resp)
+                try:
+                    self.current_step_metrics = self.metrics_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                resp: Union[GenerateStreamResponse, int] = self.put_queue_args_queue.get_nowait()
+            server_info: ServerInfo = self.request_server_map[resp.req_id]
+            if resp.is_finished:
+                logger.info("Engine finished request {}.".format(resp.req_id))
+                self.request_server_map.pop(resp.req_id, None)
+            return resp, server_info
 
         self.current_step_metrics: RequestTimestamps = None
         while True:
@@ -162,7 +177,7 @@ class AsyncBackQueueWrapper:
             if self.put_queue_args_queue.qsize() > 0:
                 output_size = self.put_queue_args_queue.qsize()
                 for _ in range(output_size):
-                    resp, server_info = await get_single_response()
+                    resp, server_info = get_nowait_single_response()
                     request_outputs.append(resp)
                     server_info_outputs.append(server_info)
 

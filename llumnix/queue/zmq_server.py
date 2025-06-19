@@ -141,7 +141,7 @@ class ZmqServer(QueueServerBase):
             and request.send_time
         ):
             self.queue_server_metrics.queue_trans_latency.observe(
-                time.time() - request.send_time
+                (time.time() - request.send_time) * 1000
             )
             self.queue_server_metrics.queue_trans_size_bytes.observe(len(message))
         if request == RPCUtilityRequest.IS_SERVER_READY:

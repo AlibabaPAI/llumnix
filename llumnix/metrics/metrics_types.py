@@ -159,8 +159,8 @@ class Status(MetricWrapperBase):
     """
     A metric wrapper that represents a status value.
 
-    This class holds the latest value of a metric and can be used to track 
-    the current state of a system. It supports optional labels to differentiate 
+    This class holds the latest value of a metric and can be used to track
+    the current state of a system. It supports optional labels to differentiate
     between groups of metrics.
 
     Attributes:
@@ -206,7 +206,7 @@ class PassiveStatus(MetricWrapperBase):
     """
     A metric wrapper for passive status tracking.
 
-    This class does not store values directly but instead relies on an external function 
+    This class does not store values directly but instead relies on an external function
     to provide the current value when requested. Useful for metrics that are observed externally.
 
     Attributes:
@@ -238,7 +238,7 @@ class Counter(MetricWrapperBase):
     """
     A metric wrapper representing a counter.
 
-    Counters are cumulative and strictly increasing. They are typically used 
+    Counters are cumulative and strictly increasing. They are typically used
     to count events or occurrences over time.
 
     Attributes:
@@ -357,6 +357,7 @@ class Summary(MetricWrapperBase):
         self._hash_label_map: Dict[str, str] = {}  # value groups by label
         self._samples: List[float] = []  # all values
 
+    # pylint: disable=arguments-differ
     def observe(self, value: float, labels: Dict[str, str] = None, ignore_sample: bool = False):
         """Record a value"""
         if not ignore_sample and not self.increase_index_and_check_need_sample():

@@ -56,7 +56,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.entrypoint_req_id_to_llumnix_req_id = {}
         self.request_instance = {}
         self.global_instances = {}
-        self.llumnix_client_metrics = LlumnixClientMetrics()
+        self.llumnix_client_metrics = LlumnixClientMetrics(server_id="server_id")
         if loop:
             loop.create_task(self.get_request_outputs_loop())
 

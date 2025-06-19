@@ -93,20 +93,19 @@ class DispatchScheduler:
                     prefill_instance_num_requests: Dict[str, int],
                     decode_instance_infos: Dict[str, InstanceInfo],
                     decode_instance_num_requests: Dict[str, int]) -> Tuple[str, str]:
+        prefill_dispatch_steps, decode_dispatch_steps = [], []
         if self.enable_adaptive_pd:
-            prefill_dispatch_steps = [
+            prefill_dispatch_steps.extend([
                 (InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, self.busy_filter),
-                (InstanceType.DECODE_AS_PREFILL, decode_instance_infos, decode_instance_num_requests, self.busy_filter),
-                (InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, None),
-            ]
-            decode_dispatch_steps = [
+                (InstanceType.DECODE_AS_PREFILL, decode_instance_infos, decode_instance_num_requests, self.busy_filter)
+            ])
+            decode_dispatch_steps.extend([
                 (InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, self.busy_filter),
                 (InstanceType.PREFILL_AS_DECODE, prefill_instance_infos, prefill_instance_num_requests, self.busy_filter),
                 (InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, None),
-            ]
-        else:
-            prefill_dispatch_steps = [(InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, None)]
-            decode_dispatch_steps = [(InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, None)]
+            ])
+        prefill_dispatch_steps.append((InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, None))
+        decode_dispatch_steps.append((InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, None))
 
         prefill_instance_id = self._dispatch(prefill_dispatch_steps)
         instance_num_requests[prefill_instance_id] += 1

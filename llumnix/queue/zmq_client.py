@@ -85,6 +85,7 @@ class ZmqSocketFactory:
 
 class ZmqClient(QueueClientBase):
     def __init__(self):
+        super().__init__()
         self.context = zmq.asyncio.Context(ZMQ_IO_THREADS)
         self.socket_factory: ZmqSocketFactory = ZmqSocketFactory(context=self.context)
 
@@ -96,6 +97,10 @@ class ZmqClient(QueueClientBase):
         self, request: RPC_REQUEST_TYPE, ip: str, port: int, error_message: str
     ):
         async def do_rpc_call(socket: zmq.asyncio.Socket, request: RPC_REQUEST_TYPE):
+            if isinstance(
+                request, (RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest)
+            ) and self.need_record_latency():
+                request.send_time = time.time()
 
             await socket.send_multipart([cloudpickle.dumps(request)])
 

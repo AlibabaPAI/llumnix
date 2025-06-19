@@ -148,7 +148,6 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             for request_response in request_responses:
                 request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
                 request_id = request_output.req_id
-                self.llumnix_client_metrics.observe_tpot_and_ttft(request_id=request_id)
                 request_timestamp: RequestTimestamps = request_response.request_timestamps
                 set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
                 # Request could be dispatched twice when manager is dead, the first request will free
@@ -167,6 +166,11 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 if not processed_output:
                     continue
                 for req in processed_output:
+                    self.llumnix_client_metrics.observe_tpot_and_ttft(
+                        request_id=self.llumnix_req_id_to_entrypoint_req_id.get(
+                            request_id, None
+                        )
+                    )
                     self.request_stream[request_id].put_nowait(req)
                 last_output = processed_output[-1]
                 self.request_stream_last_completion_tokens[request_id] = last_output.usage.completion_tokens

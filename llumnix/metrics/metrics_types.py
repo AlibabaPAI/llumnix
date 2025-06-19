@@ -21,10 +21,10 @@ import numpy as np
 class TimeRecorder:
     """
     A context manager class for recording the execution time of a code block.
-    
+
     It starts timing when entering the context and stops when exiting,
     then records the elapsed time using the provided metrics.
-    
+
     Attributes:
         metrics (Summary): The metrics object to record the elapsed time.
         enabled (bool): Whether the timing is enabled.
@@ -62,7 +62,7 @@ class TimeRecorder:
             return
         self._end_time = time.perf_counter()
         cost_time = (self._end_time - self._start_time) * 1000  # record in millisecond
-        self.metrics.observe(value=cost_time, labels=self.labels)
+        self.metrics.observe(value=cost_time, labels=self.labels, ignore_sample=True)
 
 
 @dataclass
@@ -158,7 +158,7 @@ class MetricWrapperBase(ABC):
 class Status(MetricWrapperBase):
     """
     A metric wrapper that represents a status value.
-    
+
     This class holds the latest value of a metric and can be used to track 
     the current state of a system. It supports optional labels to differentiate 
     between groups of metrics.
@@ -205,7 +205,7 @@ class Status(MetricWrapperBase):
 class PassiveStatus(MetricWrapperBase):
     """
     A metric wrapper for passive status tracking.
-    
+
     This class does not store values directly but instead relies on an external function 
     to provide the current value when requested. Useful for metrics that are observed externally.
 
@@ -237,7 +237,7 @@ class PassiveStatus(MetricWrapperBase):
 class Counter(MetricWrapperBase):
     """
     A metric wrapper representing a counter.
-    
+
     Counters are cumulative and strictly increasing. They are typically used 
     to count events or occurrences over time.
 
@@ -338,7 +338,7 @@ class TimeAveragedCounter(MetricWrapperBase):
 class Summary(MetricWrapperBase):
     """
     A metric wrapper for summarizing a series of values.
-    
+
     This class records a sequence of values and computes statistical summaries such as mean,
     min, max, and percentile values (e.g., p99).
 
@@ -357,9 +357,9 @@ class Summary(MetricWrapperBase):
         self._hash_label_map: Dict[str, str] = {}  # value groups by label
         self._samples: List[float] = []  # all values
 
-    def observe(self, value: float, labels: Dict[str, str] = None):
+    def observe(self, value: float, labels: Dict[str, str] = None, ignore_sample: bool = False):
         """Record a value"""
-        if not self.increase_index_and_check_need_sample():
+        if not ignore_sample and not self.increase_index_and_check_need_sample():
             return
         if labels:
             label_hash = hash(frozenset(labels.items()))
@@ -371,7 +371,7 @@ class Summary(MetricWrapperBase):
 
     def observe_time(self, labels: Dict[str, str] = None):
         """Return a Timer context object to record excution time of a scope."""
-
+        print(f"observe_time {self.name} {self.metrics_sampling_interval}")
         return TimeRecorder(metrics=self, enabled=self.increase_index_and_check_need_sample(), labels=labels)
 
     def collect(self) -> List[MetricEntry]:

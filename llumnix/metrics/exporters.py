@@ -20,6 +20,7 @@ import numpy as np
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
 from llumnix.metrics.metrics_types import MetricEntry
+from llumnix.constants import EAS_FAILURE_LIMIT, DEFAULT_EAS_EXPORTER_URL
 
 logger = init_logger(__name__)
 
@@ -39,14 +40,12 @@ class LoggerExporter(_BaseExporter):
 class EASExporter(_BaseExporter):
     """Export metric info to EAS sidecar."""
 
-    FAILURE_LIMIT = 5
-
     def __init__(self, url: str = ""):
-        self._url = url or "http://localhost:8080/api/builtin/realtime_metrics"
+        self._url = url or DEFAULT_EAS_EXPORTER_URL
         self._failed_cnt = 0
 
     def export(self, metrics: List[MetricEntry]):
-        if self._failed_cnt >= EASExporter.FAILURE_LIMIT:
+        if self._failed_cnt >= EAS_FAILURE_LIMIT:
             return
         try:
             data = [
@@ -68,7 +67,7 @@ class EASExporter(_BaseExporter):
         except Exception as e:
             self._failed_cnt += 1
             logger.warning("Failed to export metric to EAS sidecar, error: {}".format(e))
-            if self._failed_cnt == EASExporter.FAILURE_LIMIT:
+            if self._failed_cnt == EAS_FAILURE_LIMIT:
                 logger.warning(
                     "Stop exporting metric to EAS sidecar due to too many failures."
                 )

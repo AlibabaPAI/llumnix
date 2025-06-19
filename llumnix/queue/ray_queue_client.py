@@ -25,16 +25,19 @@ from llumnix.constants import RAY_QUEUE_RPC_TIMEOUT
 class RayQueueClient(QueueClientBase):
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
+        send_time = time.time() if self.need_record_latency() else None
         set_timestamp(item, 'queue_client_send_timestamp', time.time())
         return await asyncio.wait_for(
-            output_queue.actor.put_nowait.remote(item),
+            output_queue.actor.put_nowait.remote((item, send_time)),
             timeout=RAY_QUEUE_RPC_TIMEOUT
         )
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
         set_timestamp(items, 'queue_client_send_timestamp', time.time())
+        send_time = time.time() if self.need_record_latency() else None
+        items_with_send_time = [(item, send_time) for item in items]
         return await asyncio.wait_for(
-            output_queue.actor.put_nowait_batch.remote(items),
+            output_queue.actor.put_nowait_batch.remote(items_with_send_time),
             timeout=RAY_QUEUE_RPC_TIMEOUT
         )

@@ -134,6 +134,16 @@ class ZmqServer(QueueServerBase):
     def _make_handler_coro(self, identity,
                            message) -> Coroutine[Any, Any, Never]:
         request = cloudpickle.loads(message)
+        if (
+            isinstance(
+                request, (RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest)
+            )
+            and request.send_time
+        ):
+            self.queue_server_metrics.queue_trans_latency.observe(
+                time.time() - request.send_time
+            )
+            self.queue_server_metrics.queue_trans_size_bytes.observe(len(message))
         if request == RPCUtilityRequest.IS_SERVER_READY:
             return self._is_server_ready(identity)
         if isinstance(request, RPCPutNoWaitQueueRequest):

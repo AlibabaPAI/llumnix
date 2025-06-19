@@ -21,7 +21,9 @@ from llumnix.metrics.exporters import MultiExporter
 from llumnix.metrics.dumper import Dumper, DummyDumper
 from llumnix.instance_info import InstanceInfo
 from llumnix.logging.logger import init_logger
+
 logger = init_logger(__name__)
+
 
 class EngineMetrics(BaseMetrics):
 
@@ -99,7 +101,7 @@ class EngineMetrics(BaseMetrics):
                     multi_exporter.export(metrics)
                     _REGISTRY.reset()
 
-        t = threading.Thread(target=_worker, daemon=True)
+        t = threading.Thread(target=_worker, daemon=True, name="engine_metrics_export_loop")
         t.start()
 
     def dump(self):

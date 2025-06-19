@@ -24,7 +24,8 @@ logger = init_logger(__name__)
 
 
 class LlumnixClientMetrics(BaseMetrics):
-    def __init__(self):
+
+    def __init__(self, server_id: str):
         super().__init__()
         self.register = Registery()
         self.metrics_sampling_interval = int(
@@ -33,7 +34,7 @@ class LlumnixClientMetrics(BaseMetrics):
         self.curr_reqeust_index = -1
         self.request_received_timestamps: Dict[str, float] = {}
         self.request_last_token_received_timestamp: Dict[str, float] = {}
-
+        self.server_id = server_id
         self.llumnix_client_request_qps = TimeAveragedCounter(
             name="llumnix_client_request_qps",
             registry=self.register,
@@ -53,16 +54,17 @@ class LlumnixClientMetrics(BaseMetrics):
             metrics_sampling_interval=1,  # special check before observe, so use 1 here
         )
 
-        self.enable_metrics = is_metrics_enabled(
-            llumnix_envs.LLUMNIX_CLIENT_METRICS_SAMPLE_EVERY_N_RECORDS
-        )
+        self.enable_metrics = is_metrics_enabled(self.metrics_sampling_interval)
         if self.enable_metrics:
             self.start_metrics_export_loop()
 
-    def increase_request_index_and_check_need_sample(self):
-        if self.metrics_sampling_interval <= 0:
-            # disable meitrics
-            return False
+    def check_metrics_enabled(self):
+        return self.enable_metrics
+
+    def need_record_reveived_timestamp(self):
+        return self.enable_metrics and self.increase_index_and_check_need_sample()
+
+    def increase_index_and_check_need_sample(self):
         self.curr_reqeust_index = (
             self.curr_reqeust_index + 1
         ) % self.metrics_sampling_interval
@@ -70,8 +72,8 @@ class LlumnixClientMetrics(BaseMetrics):
 
     # record qps, ttft and tpot
     def add_request(self, reqeust_id: str):
-        self.llumnix_client_request_qps.increase()
-        if self.increase_request_index_and_check_need_sample():
+        self.llumnix_client_request_qps.increase(labels={"server_id": self.server_id})
+        if self.need_record_reveived_timestamp():
             self.request_received_timestamps[reqeust_id] = time.time()
 
     def remove_request(self, request_id: str):
@@ -91,7 +93,7 @@ class LlumnixClientMetrics(BaseMetrics):
             ttft_ms = (
                 curr_timestamp - self.request_received_timestamps[request_id]
             ) * 1000
-            self.llumnix_client_ttft.observe(value=ttft_ms)
+            self.llumnix_client_ttft.observe(value=ttft_ms, labels={"server_id": self.server_id})
         else:
             # not first chunk, record tpot
             curr_timestamp = time.time()
@@ -99,4 +101,4 @@ class LlumnixClientMetrics(BaseMetrics):
                 curr_timestamp - self.request_last_token_received_timestamp[request_id]
             ) * 1000
             self.request_last_token_received_timestamp[request_id] = curr_timestamp
-            self.llumnix_client_tpot.observe(value=tpot_ms)
+            self.llumnix_client_tpot.observe(value=tpot_ms, labels={"server_id": self.server_id})

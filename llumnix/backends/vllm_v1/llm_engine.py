@@ -35,7 +35,7 @@ from vllm.v1.request import Request, RequestStatus
 # from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
 # from vllm.sequence import SequenceGroup, SequenceStatus
 from vllm.engine.arg_utils import EngineArgs
-# from vllm.utils import Counter
+from vllm.utils import Counter
 # from vllm.usage.usage_lib import UsageContext
 # from vllm.engine.llm_engine import SchedulerContext
 from vllm import envs as vllm_envs
@@ -92,6 +92,7 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
 
         self.instance_id = instance_id
+        self.step_counter = Counter()
         self.instance_info = None
 
         assert isinstance(self.scheduler, SchedulerLlumnix), \
@@ -114,7 +115,6 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
-        logger.info("engine_config: {}", engine_config)
         # Hack to pass placement_group for init workers.
         engine_config.parallel_config.placement_group = placement_group
         # Initialize the cluster and specify the executor class.
@@ -125,20 +125,25 @@ class EngineCoreProcLlumnix(EngineCoreProc):
             # executor_class = SimGPUExecutor
             # executor_class.latency_mem = latency_mem
         elif engine_config.parallel_config.use_ray:
-            from llumnix.backends.vllm_v1.executor import LlumnixRayGPUExecutor
-            executor_class = LlumnixRayGPUExecutor
+            from llumnix.backends.vllm_v1.executor import LlumnixRayDistributedExecutor
+            executor_class = LlumnixRayDistributedExecutor
             executor_class.migration_config = migration_config
             executor_class.instance_id = instance_id
         else:
             raise ValueError('Unsupported executor backend')
-        # Create the LLM engine.
+        # Create the EngineCoreProc
+        # vllm_config: VllmConfig,
+        # on_head_node: bool,
+        # handshake_address: str,
+        # executor_class: type[Executor],
+        # log_stats: bool,
+        # engine_index: int = 0,
+        # FIXME(zhaozhiyu): pass corret args to EngineCoreProc
         engine = cls(
             instance_id=instance_id,
             vllm_config=engine_config,
-            placement_group=placement_group,
-            request_output_queue_type=request_output_queue_type,
-            disable_async_output_proc=engine_args.disable_async_output_proc,
-            backend_type=backend_type,
+            on_head_node=True,
+            handshake_address="tcp://127.0.0.1:29550",
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
         )
@@ -251,11 +256,10 @@ class BackendVLLMV1(BackendInterface):
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           backend_type=BackendType.VLLM)
-        engine_config: VllmConfig = engine_args.create_engine_config()
-        # FIXME(zhaozhiyu): pass in params to SchedulerLlumnix properly
+        # engine_config: VllmConfig = engine_args.create_engine_config()
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
-        if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
+        if len(self.worker_handle_list) + 1 == self.engine.vllm_config.parallel_config.world_size:
             self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix"))
 
         if self.migration_config.enable_migration:

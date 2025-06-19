@@ -124,6 +124,8 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             ip=ip,
                                             port=base_port,
                                             model=model,
+                                            enable_migration=True,
+                                            enable_pd_disagg=enable_pd_disagg,
                                             request_output_queue_type=request_output_queue_type,
                                             max_instances=num_instances)
     subprocess.run(serve_command, shell=True, check=True)

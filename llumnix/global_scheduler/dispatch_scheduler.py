@@ -101,8 +101,7 @@ class DispatchScheduler:
             ])
             decode_dispatch_steps.extend([
                 (InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, self.busy_filter),
-                (InstanceType.PREFILL_AS_DECODE, prefill_instance_infos, prefill_instance_num_requests, self.busy_filter),
-                (InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, None),
+                (InstanceType.PREFILL_AS_DECODE, prefill_instance_infos, prefill_instance_num_requests, self.busy_filter)
             ])
         prefill_dispatch_steps.append((InstanceType.PREFILL, prefill_instance_infos, prefill_instance_num_requests, None))
         decode_dispatch_steps.append((InstanceType.DECODE, decode_instance_infos, decode_instance_num_requests, None))

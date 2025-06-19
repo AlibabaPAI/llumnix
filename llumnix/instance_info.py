@@ -98,9 +98,6 @@ def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
         reverse=descending
     )
 
-def all_instances_busy(instance_infos: Iterable[InstanceInfo]) -> bool:
-    return all(instance_info.dispatch_load_metric.is_busy() for instance_info in instance_infos)
-
 
 class InstanceLoadCalculator:
     def __init__(self, instance_args: InstanceArgs) -> None:

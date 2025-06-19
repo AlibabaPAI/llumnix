@@ -150,7 +150,7 @@ class AsyncBackQueueWrapper:
                 logger.info("Engine finished request {}.".format(resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
             return resp, server_info
-        
+
         def get_nowait_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
             resp: Union[GenerateStreamResponse, int] = self.put_queue_args_queue.get_nowait()
             while isinstance(resp, int):

@@ -35,7 +35,7 @@ from llumnix.entrypoints.client import LlumnixClient
 logger = init_logger(__name__)
 
 
-class LlumnixClientVLLM(LlumnixClient):
+class LlumnixClientVLLMV1(LlumnixClient):
     def __init__(self, entrypoints_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
         self.request_stream: Dict[str, AsyncStream] = {}
         super().__init__(entrypoints_context, loop)

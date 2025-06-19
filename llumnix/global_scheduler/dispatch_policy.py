@@ -72,7 +72,7 @@ class Load(DispatchPolicy):
         InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
         InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
     }
-    
+
     def __init__(self, topk_random_dispatch: int):
         super().__init__(topk_random_dispatch)
 
@@ -84,8 +84,7 @@ class Load(DispatchPolicy):
                                                     self.instance_type_metric_map[instance_type])
         instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
         instance_id = instance_info_chosen.instance_id
-        logger.info("dispatch {} request to {}, load: {}".format(instance_type, instance_id,
-                                                                 instance_info_chosen.dispatch_load_metric))
+        logger.info("dispatch request to {}, load: {}".format(instance_id, instance_info_chosen.dispatch_load_metric))
         return instance_id
 
 

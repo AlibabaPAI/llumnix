@@ -72,7 +72,7 @@ _C.MANAGER.ENABLE_PORT_OFFSET_STORE = False
 # Enable prefill-decode disaggregation
 _C.MANAGER.ENABLE_PD_DISAGG = False
 # Enable adaptive prefill-decode disaggregation
-_C.MANAGER.enable_adaptive_pd = False
+_C.MANAGER.ENABLE_ADAPTIVE_PD = False
 # Enable engine-based prefill-decode disaggregation
 _C.MANAGER.ENABLE_ENGINE_PD_DISAGG = False
 # The p:d ratio used in gloabl launch mode

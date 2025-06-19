@@ -25,7 +25,7 @@ class DispatchFilter(ABC):
                instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         raise NotImplementedError
-    
+
 
 class LoadBusyFilter(DispatchFilter):
     def filter(self,

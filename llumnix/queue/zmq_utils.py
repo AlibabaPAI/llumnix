@@ -21,10 +21,12 @@ RPC_SUCCESS_STR = "SUCCESS"
 @dataclass
 class RPCPutNoWaitQueueRequest:
     item: Any = None
+    send_time : float = None
 
 @dataclass
 class RPCPutNoWaitBatchQueueRequest:
     items: List[Any] = None
+    send_time : float = None
 
 class RPCUtilityRequest(Enum):
     IS_SERVER_READY = 1

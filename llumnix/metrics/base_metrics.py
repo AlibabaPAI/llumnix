@@ -11,63 +11,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
+from abc import ABC
+import threading
+import time
+from typing import List
 
-from llumnix.metrics.variable import _REGISTRY, Status
-from llumnix.metrics.dumper import Dumper, DummyDumper
+from llumnix.metrics.metrics_types import MetricEntry
+from llumnix.metrics.exporters import MultiExporter
+from llumnix.logging.logger import init_logger
+from llumnix import envs as llumnix_envs
 
-from llumnix.instance_info import InstanceInfo
+logger = init_logger(__name__)
 
 
-class LlumnixMetrics(ABC):
+class BaseMetrics(ABC):
     def __init__(self):
-        self.instance_id = Status("instance_id")
+        self.export_interval_sec = int(llumnix_envs.LLUMNIX_METRICS_EXPORT_INTERVAL_SEC)
+        self.metrics_sampling_interval = 1
 
-        # used for dispatch and migration
-        self.num_total_gpu_blocks = Status("num_total_gpu_blocks")
-        self.num_used_gpu_blocks = Status("num_used_gpu_blocks")
-        self.num_running_requests = Status("num_running_requests")
-        self.num_waiting_requests = Status("num_waiting_requests")
+    def start_metrics_export_loop(self):
+        logger.info("Starting {} export loop".format(self.__class__.__name__))
 
-        # used for dispatch
-        self.num_blocks_all_waiting_requests = Status("num_blocks_all_waiting_requests")
+        def _worker():
+            multi_exporter = MultiExporter()
+            while True:
+                time.sleep(self.export_interval_sec)
+                metrics: List[MetricEntry] = self.register.describe()
+                multi_exporter.export(metrics)
+                self.register.reset()
 
-        # used for migration
-        self.num_blocks_last_running_request = Status("num_blocks_last_running_request")
-        self.num_blocks_first_waiting_request = Status("num_blocks_first_waiting_request")
-
-        # stastics
-        self.num_watermark_blocks = Status("num_watermark_blocks")
-        self.num_killed_requests = Status("num_killed_requests")
-
-        self.dumper: Dumper = None
-        self._init_dumper()
-
-    def dump(self):
-        self.dumper.dump(_REGISTRY.describe_all())
-
-    def to_instance_info(self) -> InstanceInfo:
-        return InstanceInfo(**(_REGISTRY.describe_all()))
-
-    def _init_dumper(self):
-        self.dumper = DummyDumper()
-
-    @abstractmethod
-    def block_manager_init_metrics(self, block_manager):
-        ...
-
-    @abstractmethod
-    def engine_init_metrics(self, engine):
-        ...
-
-    @abstractmethod
-    def scheduler_init_metrics(self, scheduler):
-        ...
-
-    @abstractmethod
-    def scheduler_step_metrics(self, scheduler):
-        ...
-
-    @abstractmethod
-    def engine_step_metrics(self, scheduler):
-        ...
+        t = threading.Thread(target=_worker, daemon=True, name='metrics_export_loop')
+        t.start()

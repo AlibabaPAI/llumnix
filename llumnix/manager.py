@@ -37,6 +37,7 @@ from llumnix.arg_utils import (
     LaunchArgs,
     LlumnixEngineArgs,
 )
+from llumnix.metrics.manager_metrics import ManagerMetrics
 from llumnix.server_info import ServerInfo
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (
@@ -45,7 +46,7 @@ from llumnix.utils import (
     async_wrapper,
     ray_get_with_timeout,
     asyncio_wait_for_with_timeout,
-    RequestIDType,
+    RequestIDType
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -131,11 +132,17 @@ class Manager:
         self.num_instance_info_updates = 0
         self.migrating = False
 
+        # metrics
+        self.manager_metrics = ManagerMetrics()
+
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
+        self.manager_metrics.manager_request_qps.increase(
+            labels={"server_id": server_info.server_id}
+        )
         while self.num_instances == 0:
             logger.warning("No instance available now, sleep {}s, "
                            "and regenerate request {}.".format(NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))

@@ -94,3 +94,8 @@ SERVER_STOP_TIMEOUT: float = 10.0
 
 # llumnix/llumlet/migration_coordinator.py
 PENDING_MIGRATE_IN_TIMEOUT = 10.0
+
+# llumnix/metrics
+DEFAULT_METRICS_EXPORT_INTERVAL_SEC: int = 15
+EAS_FAILURE_LIMIT: int = 5
+DEFAULT_EAS_EXPORTER_URL = "http://localhost:8080/api/builtin/realtime_metrics"

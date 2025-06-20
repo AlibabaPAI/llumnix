@@ -12,11 +12,13 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
+from llumnix.metrics.queue_server_metrics import QueueServerMetrics
 
 
 class QueueServerBase(ABC):
     def __init__(self):
         self.port: int = None
+        self.queue_server_metrics = QueueServerMetrics()
 
     @abstractmethod
     async def get(self, timeout):

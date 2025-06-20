@@ -21,6 +21,7 @@ import ray.exceptions
 from llumnix.manager import Manager
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.llumlet.llumlet import Llumlet
+from llumnix.metrics.llumnix_client_metrics import LlumnixClientMetrics
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.server_info import ServerInfo
@@ -61,6 +62,9 @@ class LlumnixClient(ABC):
         self.request_stream_last_completion_tokens: Dict[RequestIDType, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True
+
+        # metrics
+        self.llumnix_client_metrics = LlumnixClientMetrics(server_id = self.server_info.server_id)
 
         loop.create_task(self.get_request_outputs_loop())
         loop.create_task(self.request_output_queue.run_server_loop())

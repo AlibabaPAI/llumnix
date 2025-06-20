@@ -159,12 +159,16 @@ class AsyncBackQueueWrapper:
 
             while output_size > 0:
                 resp: Union[GenerateStreamResponse, int] = self.put_queue_args_queue.get_nowait()
+                output_size -= 1
 
-                while isinstance(resp, int):
+                while isinstance(resp, int) and output_size > 0:
                     self.get_current_step_counter_queue.put_nowait(resp)
                     self._set_step_metrics()
                     resp: Union[GenerateStreamResponse, int] = self.put_queue_args_queue.get_nowait()
                     output_size -= 1
+
+                if isinstance(resp, int):
+                    continue
 
                 server_info: ServerInfo = self.request_server_map[resp.req_id]
                 if resp.is_finished:
@@ -173,8 +177,6 @@ class AsyncBackQueueWrapper:
 
                 resps.append(resp)
                 server_infos.append(server_info)
-
-                output_size -= 1
 
             return resps, server_infos
 

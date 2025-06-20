@@ -30,11 +30,11 @@ class MigrationFilterConfig:
 # TODO(KuilongCui): A filter might contain other filters; leave this for the future.
 class MigrationFilterPolicy(ABC):
     @abstractmethod
-    def filter_src_condition(self, filter_config, pair_migration_type) -> Callable[[InstanceInfo], bool]:
+    def filter_src_condition(self, filter_config: MigrationFilterConfig) -> Callable[[InstanceInfo], bool]:
         raise NotImplementedError
 
     @abstractmethod
-    def filter_dst_condition(self, filter_config, pair_migration_type) -> Callable[[InstanceInfo], bool]:
+    def filter_dst_condition(self, filter_config: MigrationFilterConfig) -> Callable[[InstanceInfo], bool]:
         raise NotImplementedError
 
 
@@ -57,26 +57,27 @@ class MigrationInstanceFilter:
     def get_filter(self, filter_name: str) -> Optional[MigrationFilterPolicy]:
         return self.registered_filters.get(filter_name, None)
 
-    def filter_instances(self, instance_infos: List[InstanceInfo],
-                         pair_migration_type: PairMigrationConstraints) -> Tuple[List[InstanceInfo], List[InstanceInfo]]:
-        src_filter_conditions = [filter.filter_src_condition(self.filter_config, pair_migration_type)
+    def filter_instances(self, instance_infos: List[InstanceInfo]
+                         ) -> Tuple[List[InstanceInfo], List[InstanceInfo]]:
+        src_filter_conditions = [filter.filter_src_condition(self.filter_config)
                                  for filter in self.registered_filters.values()]
-        dst_filter_conditions = [filter.filter_dst_condition(self.filter_config, pair_migration_type)
+        dst_filter_conditions = [filter.filter_dst_condition(self.filter_config)
                                  for filter in self.registered_filters.values()]
-
-        if pair_migration_type == PairMigrationConstraints.NO_CONSTRAINTS:
-            policy_filter = MigrationFilterPolicyFactory.get_policy("load")
-        elif pair_migration_type in [PairMigrationConstraints.PREFILL_2_DECODE, PairMigrationConstraints.DECODE_2_DECODE]:
-            policy_filter = MigrationFilterPolicyFactory.get_policy('pdd')
-        else:
-            raise ValueError(f"Unsupported pair migration type: {pair_migration_type}")
-        src_filter_conditions.append(policy_filter.filter_src_condition(self.filter_config, pair_migration_type))
-        dst_filter_conditions.append(policy_filter.filter_dst_condition(self.filter_config, pair_migration_type))
-
         filtered_src_instance_infos = [info for info in instance_infos if all(cond(info) for cond in src_filter_conditions)]
         filtered_dst_instance_infos = [info for info in instance_infos if all(cond(info) for cond in dst_filter_conditions)]
-
         return filtered_src_instance_infos, filtered_dst_instance_infos
+
+    def filter_src_instances(self, instance_infos: List[InstanceInfo]) -> List[InstanceInfo]:
+        src_filter_conditions = [filter.filter_src_condition(self.filter_config)
+                                 for filter in self.registered_filters.values()]
+        filtered_src_instance_infos = [info for info in instance_infos if all(cond(info) for cond in src_filter_conditions)]
+        return filtered_src_instance_infos
+
+    def filter_dst_instances(self, instance_infos: List[InstanceInfo]) -> List[InstanceInfo]:
+        dst_filter_conditions = [filter.filter_dst_condition(self.filter_config)
+                                 for filter in self.registered_filters.values()]
+        filtered_dst_instance_infos = [info for info in instance_infos if all(cond(info) for cond in dst_filter_conditions)]
+        return filtered_dst_instance_infos
 
 
 class LoadFilter(MigrationFilterPolicy):

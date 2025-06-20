@@ -98,6 +98,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
 
     global test_times
 
+    qps = 5 if not enable_pd_disagg else 0.5
     ip = get_ip_address()
     base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:
@@ -146,7 +147,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
             num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
-            qps=5,
+            qps=qps,
             results_filename=f"{port}.out"
         )
         tasks.append(bench_command)

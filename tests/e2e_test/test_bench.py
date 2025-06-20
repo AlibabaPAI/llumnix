@@ -91,9 +91,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     if "vLLM" in engine and enable_pd_disagg:
         conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
 
-    if "vLLM" in engine and enable_pd_disagg:
-        conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
-
     if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
         pytest.skip(conftest.SKIP_REASON)
 

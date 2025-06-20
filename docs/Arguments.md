@@ -61,6 +61,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--enable-port-offset-store]
             [--instance-type INSTANCE_TYPE]
             [--engine-disagg-inst-id-env-var]
+            [--request-output-token-forwarding-mode]
 
 ```
 
@@ -274,7 +275,11 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Possible choices: prefill, decode, no_constraints
 
 `--engine-disagg-inst-id-env-var`
-- specify which environment variable to use as the engine instance id.
+- Specify which environment variable to use as the engine instance id.
+
+`--request-output-forwarding-mode`
+- Mode of forwarding request output.
+- Possible choices: thread, actor
 
 # Unsupported vLLM feature options
 

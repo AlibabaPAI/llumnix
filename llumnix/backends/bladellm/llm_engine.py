@@ -17,7 +17,7 @@ import sys
 import time
 from functools import partial
 import json
-from typing import List, Optional, Tuple, Union, Iterable, Dict, Any
+from typing import List, Optional, Tuple, Union, Iterable, Dict, Any, Coroutine
 from collections import defaultdict
 import asyncio
 import queue
@@ -27,7 +27,6 @@ import ray
 import ray.actor
 import grpc
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from loguru import logger as loguru_logger
 from google.protobuf import empty_pb2
 
@@ -52,7 +51,10 @@ from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_fr
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
-from llumnix.backends.utils import AsyncPutQueueActor
+from llumnix.backends.utils import (
+    OutputMediator,
+    RequestOutputForwardingMode,
+)
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
@@ -63,8 +65,7 @@ from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
-from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
-from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
+from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
 from llumnix.utils import RequestIDType, MigrationResponse
@@ -91,20 +92,19 @@ class AsyncBackQueueWrapper:
                  request_output_queue_type: QueueType,
                  resp_queue: asyncio.Queue,
                  metrics_queue: asyncio.Queue,
-                 backend_type: BackendType) -> None:
-        scheduling_strategy = PlacementGroupSchedulingStrategy(
-            placement_group=placement_group,
-            placement_group_bundle_index=0,
-            placement_group_capture_child_tasks=True,
-        )
+                 backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
+                 drop_request_callback: Coroutine) -> None:
         self.instance_id = instance_id
-        self.async_put_queue_actor = ray.remote(
-            num_cpus=1,
-            num_gpus=NUM_GPUS_BLADELLM_GPU_ACTOR,
-            scheduling_strategy=scheduling_strategy,
-            name=f"AsyncPutQueueActor_{instance_id}"
-        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type, backend_type)
-        self.put_queue_args_queue: asyncio.Queue = resp_queue
+        self.output_mediator = OutputMediator(
+            instance_id,
+            request_output_queue_type,
+            request_output_forwarding_mode,
+            drop_request_callback,
+            placement_group,
+            backend_type,
+        )
+        self.resp_queue: asyncio.Queue = resp_queue
         self.metrics_queue: asyncio.Queue = metrics_queue
 
         self.request_server_map = {}
@@ -143,11 +143,11 @@ class AsyncBackQueueWrapper:
 
     async def _put_request_outputs_loop(self):
         async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
-            resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
+            resp: Union[GenerateStreamResponse, int] = await self.resp_queue.get()
             while isinstance(resp, int):
                 self.get_current_step_counter_queue.put_nowait(resp)
                 self._set_step_metrics()
-                resp: Union[GenerateStreamResponse, int] = await self.put_queue_args_queue.get()
+                resp: Union[GenerateStreamResponse, int] = await self.resp_queue.get()
             server_info: ServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
                 logger.info("Engine finished request {}.".format(resp.req_id))
@@ -188,17 +188,19 @@ class AsyncBackQueueWrapper:
             request_outputs.append(resp)
             server_info_outputs.append(server_info)
 
-            output_size = self.put_queue_args_queue.qsize()
+            output_size = self.resp_queue.qsize()
             if output_size > 0:
                 resps, server_infos = get_nowait_responses(output_size)
                 request_outputs.extend(resps)
                 server_info_outputs.extend(server_infos)
 
-            await self._put_request_outputs_to_server(request_outputs, server_info_outputs)
+            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, server_info_outputs)
+            if server_request_outputs:
+                await self.output_mediator.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
-    async def _put_request_outputs_to_server(self,
-                                             request_outputs: List[GenerateStreamResponse],
-                                             server_infos: List[ServerInfo]) -> None:
+    def _gen_server_request_outputs(self,
+                                    request_outputs: List[GenerateStreamResponse],
+                                    server_infos: List[ServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in order to put request output to queue in batch at one time.
@@ -217,7 +219,7 @@ class AsyncBackQueueWrapper:
                 set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
                             self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
 
-            llumnix_request_output = LlumnixRequestOuputBladeLLM(
+            llumnix_request_output = LlumnixRequestOuput(
                 request_output.req_id, self.instance_id, request_output.model_dump_json(), request_timestamps
             )
             server_id = server_info.server_id
@@ -225,10 +227,10 @@ class AsyncBackQueueWrapper:
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
 
-        if server_info_dict:
-            await self.async_put_queue_actor.put_nowait_to_servers.remote(
-                server_request_outputs, server_info_dict
-            )
+        return server_request_outputs, server_info_dict
+
+    def stop(self):
+        self.output_mediator.stop()
 
     def remove_request_server_info(self, request_id: int, expired_step: int) -> None:
         self.dangling_request_server_info[request_id] = expired_step
@@ -271,7 +273,8 @@ class AsyncLLMEngineLlumnixMixin:
                  request_output_queue_type: QueueType,
                  migration_config: MigrationConfig,
                  request_barriers: queue.Queue,
-                 backend_type: BackendType
+                 backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
                  ) -> None:
         self.instance_id = instance_id
         self.state = EngineState.INIT
@@ -280,6 +283,7 @@ class AsyncLLMEngineLlumnixMixin:
 
         self.placement_group = placement_group
         self.request_output_queue_type = request_output_queue_type
+        self.request_output_forwarding_mode = request_output_forwarding_mode
         self._worker_processes = WorkerProcessesRay(placement_group, self._args, instance_id, migration_config)
 
         self.src_workers_migration_ip_addr_list: List[str] = None
@@ -304,9 +308,16 @@ class AsyncLLMEngineLlumnixMixin:
     async def async_start(self, loop: asyncio.AbstractEventLoop):
         await super().async_start(loop)
         self._client: AsyncLLMEngineClient = self.init_client_from_engine()
-        self.trans_wrapper = AsyncBackQueueWrapper(self.placement_group, self.instance_id,
-                                                   self.request_output_queue_type, self.resp_queue,
-                                                   self.metrics_queue, self.backend_type)
+        self.trans_wrapper = AsyncBackQueueWrapper(
+            self.placement_group,
+            self.instance_id,
+            self.request_output_queue_type,
+            self.resp_queue,
+            self.metrics_queue,
+            self.backend_type,
+            self.request_output_forwarding_mode,
+            self.drop_request,
+        )
         self._scheduler.trans_wrapper = self.trans_wrapper
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
@@ -392,6 +403,7 @@ class AsyncLLMEngineLlumnixMixin:
     def stop(self):
         if self.migration_config.enable_migration:
             run_coroutine_in_new_thread(self.close_migration(), blocking=True)
+        self.trans_wrapper.stop()
         super().stop()
 
     # Close migraion grpc client and delete server.
@@ -471,6 +483,7 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
                  migration_config: MigrationConfig,
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
                  serving_args: ServingArgs,
                  *args, **kwargs,
                  ) -> None:
@@ -482,7 +495,8 @@ class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
             request_output_queue_type,
             migration_config,
             request_barriers,
-            backend_type
+            backend_type,
+            request_output_forwarding_mode,
         )
 
 
@@ -494,6 +508,7 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
                  migration_config: MigrationConfig,
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
                  serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
@@ -505,7 +520,8 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             request_output_queue_type,
             migration_config,
             request_barriers,
-            backend_type
+            backend_type,
+            request_output_forwarding_mode,
         )
 
 
@@ -518,6 +534,7 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
                  migration_config: MigrationConfig,
                  request_barriers: queue.Queue,
                  backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
                  serving_args: ServingArgs,
                  *args, **kwargs,
                 ) -> None:
@@ -529,7 +546,8 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
             request_output_queue_type,
             migration_config,
             request_barriers,
-            backend_type
+            backend_type,
+            request_output_forwarding_mode,
         )
 
 
@@ -553,9 +571,16 @@ class BackendBladeLLM(BackendInterface):
 
         self._load_and_reconfig_engine_args()
         engine_cls = self._get_engine_cls()
-        self.engine: AsyncLLMEngineLlumnixMixin = engine_cls(self.instance_id, self.placement_group,
-                            self.request_output_queue_type, self.migration_config,
-                            self.request_barriers, BackendType.BLADELLM, self.engine_args)
+        self.engine: AsyncLLMEngineLlumnixMixin = engine_cls(
+            self.instance_id,
+            self.placement_group,
+            self.request_output_queue_type,
+            self.migration_config,
+            self.request_barriers,
+            BackendType.BLADELLM,
+            instance_args.request_output_forwarding_mode,
+            self.engine_args,
+        )
 
         asyncio.create_task(self._start_engine())
 

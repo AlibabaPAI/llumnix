@@ -51,13 +51,17 @@ class BackendSimVLLM(BackendVLLM):
         self.migration_config: MigrationConfig = instance_args.create_migration_config()
         profiling_result_file_path = instance_args.profiling_result_file_path
         latency_mem = self._get_lantecy_mem(profiling_result_file_path, engine_args)
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          request_output_queue_type=request_output_queue_type,
-                                                                          migration_config=self.migration_config,
-                                                                          instance_id=instance_id,
-                                                                          placement_group=placement_group,
-                                                                          backend_type=BackendType.SIM_VLLM,
-                                                                          latency_mem=latency_mem)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(
+            engine_args=engine_args,
+            request_output_queue_type=request_output_queue_type,
+            migration_config=self.migration_config,
+            instance_id=instance_id,
+            placement_group=placement_group,
+            backend_type=BackendType.SIM_VLLM,
+            request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
+            abort_request_callback=self.abort_request,
+            latency_mem=latency_mem
+        )
         self.engine.scheduler = [SchedulerLlumnix(self.engine.scheduler_config, self.engine.cache_config, self.engine.lora_config)
                                  for _ in range(engine_args.pipeline_parallel_size)]
         for vid in range(engine_args.pipeline_parallel_size):

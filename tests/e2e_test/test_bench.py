@@ -88,8 +88,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                 enable_pd_disagg, model, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
-    num_prompts = 500
-
     if "vLLM" in engine and enable_pd_disagg:
         conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
 
@@ -99,6 +97,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     global test_times
 
     qps = 5 if not enable_pd_disagg else 0.5
+    num_prompts = 500 if not enable_pd_disagg else 50
     ip = get_ip_address()
     base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:

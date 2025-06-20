@@ -158,13 +158,13 @@ class AsyncBackQueueWrapper:
             resps, server_infos = [], []
 
             while output_size > 0:
-                resp: Union[GenerateStreamResponse, int] = self.put_queue_args_queue.get_nowait()
+                resp: Union[GenerateStreamResponse, int] = self.resp_queue.get_nowait()
                 output_size -= 1
 
                 while isinstance(resp, int) and output_size > 0:
                     self.get_current_step_counter_queue.put_nowait(resp)
                     self._set_step_metrics()
-                    resp: Union[GenerateStreamResponse, int] = self.put_queue_args_queue.get_nowait()
+                    resp: Union[GenerateStreamResponse, int] = self.resp_queue.get_nowait()
                     output_size -= 1
 
                 if isinstance(resp, int):

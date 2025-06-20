@@ -28,6 +28,7 @@ class PairMigrationConstraints(str, Enum):
     # Enable the prefill-decode disaggregration.
     DECODE_2_DECODE = "DECODE_2_DECODE"
     PREFILL_2_DECODE = "PREFILL_2_DECODE"
+    PREFILL_2_PREFILL = "PREFILL_2_PREFILL"
 
 
 class PairMigrationPolicy(ABC):

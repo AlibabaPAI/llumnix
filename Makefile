@@ -143,9 +143,9 @@ PYLINT_VERSION = 2.12.2
 
 .PHONY: check_pylint_installed
 check_pylint_installed:
-	@python3 -m pip show pylint > /dev/null 2>&1 || { \
-		echo "pylint is not installed. Installing pylint $(PYLINT_VERSION)..."; \
-		python3 -m pip install pylint==$(PYLINT_VERSION); }
+	@python3 -c "import pylint; assert pylint.__version__ == '$(PYLINT_VERSION)'" 2>/dev/null || { \
+		echo "pylint is not installed or version does not match $(PYLINT_VERSION). Installing..."; \
+		python3 -m pip install --force-reinstall pylint==$(PYLINT_VERSION); }
 
 ###################################### pylint end #######################################
 

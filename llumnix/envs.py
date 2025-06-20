@@ -14,10 +14,13 @@
 import os
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 from llumnix.constants import (
-    DEFAULT_SERVER_READY_TIMEOUT,
-    DEFAULT_INSTANCE_READY_TIMEOUT,
-    DEFAULT_DATASET_PATH,
-    DEFAULT_MODEL_PATH,
+    SERVER_READY_TIMEOUT,
+    INSTANCE_READY_TIMEOUT,
+    DATASET_PATH,
+    MODEL_PATH,
+    BLOCKDEMANDFACTOR_BUSY_THRESHOLD,
+    REMAININGSTEPS_BUSY_THRESHOLD,
+    DECODE_COMPUTE_BOUND_BATCH_SIZE
 )
 
 if TYPE_CHECKING:
@@ -31,6 +34,10 @@ if TYPE_CHECKING:
     LLUMNIX_LOG_NODE_PATH: str = ""
     MODEL_PATH: str = ""
     DATASET_PATH: str = ""
+    BLOCKDEMANDFACTOR_BUSY_THRESHOLD: float = 0.0
+    REMAININGSTEPS_BUSY_THRESHOLD: float = 0.0
+    DECODE_COMPUTE_BOUND_BATCH_SIZE: float = 0.0
+
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -65,15 +72,23 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("LLUMNIX_LOG_NODE_PATH", ""),
 
     "MODEL_PATH":
-    lambda: os.getenv("MODEL_PATH", DEFAULT_MODEL_PATH),
+    lambda: os.getenv("MODEL_PATH", MODEL_PATH),
     "DATASET_PATH":
-    lambda: os.getenv("DATASET_PATH", DEFAULT_DATASET_PATH),
+    lambda: os.getenv("DATASET_PATH", DATASET_PATH),
 
     # used for scale up
     "SERVER_READY_TIMEOUT":
-    lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", str(DEFAULT_SERVER_READY_TIMEOUT)),
+    lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", str(SERVER_READY_TIMEOUT)),
     "INSTANCE_READY_TIMEOUT":
-    lambda: os.getenv("LLUMNIX_INSTANCE_READY_TIMEOUT", str(DEFAULT_INSTANCE_READY_TIMEOUT)),
+    lambda: os.getenv("LLUMNIX_INSTANCE_READY_TIMEOUT", str(INSTANCE_READY_TIMEOUT)),
+
+    # used for load computation
+    "BLOCKDEMANDFACTOR_BUSY_THRESHOLD":
+    lambda: os.getenv("BLOCKDEMANDFACTOR_BUSY_THRESHOLD", str(BLOCKDEMANDFACTOR_BUSY_THRESHOLD)),
+    "REMAININGSTEPS_BUSY_THRESHOLD":
+    lambda: os.getenv("REMAININGSTEPS_BUSY_THRESHOLD", str(REMAININGSTEPS_BUSY_THRESHOLD)),
+    "DECODE_COMPUTE_BOUND_BATCH_SIZE":
+    lambda: os.getenv("DECODE_COMPUTE_BOUND_BATCH_SIZE", str(DECODE_COMPUTE_BOUND_BATCH_SIZE)),
 }
 
 

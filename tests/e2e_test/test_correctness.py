@@ -120,6 +120,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
+@pytest.mark.parametrize("request_output_forwarding_mode", ['thread', 'actor'])
 @pytest.mark.parametrize("launch_mode", ['global', 'local'])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 @pytest.mark.parametrize("enable_simulator", [False, True])
@@ -129,7 +130,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            launch_mode, enable_pd_disagg, enable_simulator, tensor_parallel_size,
-                           enable_migration, migration_backend, engine):
+                           enable_migration, migration_backend, request_output_forwarding_mode, engine):
     engine = engine.split("_")[1]
 
     if "BladeLLM" in engine:
@@ -148,7 +149,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
         if not enable_migration:
             if launch_mode != "global" or tensor_parallel_size != 1:
-                conftest.SKIP_REASON =  "The only configuration tested under Migration=False in BladeLLM \
+                conftest.SKIP_REASON = "The only configuration tested under Migration=False in BladeLLM \
                     is with tensor parallelism set to 1, and global launch mode."
 
     if "vLLM" in engine:
@@ -181,9 +182,14 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         if not enable_migration:
             if launch_mode != "global" or not enable_pd_disagg or migration_backend != "gloo" \
                 or tensor_parallel_size != 1 or enable_simulator:
-                conftest.SKIP_REASON = "The only configuration tested under Migration=False in vLLM \
+                conftest.SKIP_REASON = "The only configuration tested under enable_migration=False in vLLM \
                     is with tensor parallelism set to 1, prefill-decode disaggregation enabled, global \
                     launch mode and using the Gloo backend for migration."
+
+    if request_output_forwarding_mode == "actor":
+        if migration_backend not in ["gloo", "kvtransfer"] or tensor_parallel_size == 2 or not enable_migration or \
+            enable_simulator or enable_pd_disagg or launch_mode != "global":
+            conftest.SKIP_REASON = "Only test one basic case for actor request outout forwarding mode."
 
     if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
         pytest.skip(conftest.SKIP_REASON)

@@ -126,8 +126,10 @@ _C.INSTANCE.INSTANCE_TYPE = "no_constraints"
 _C.INSTANCE.SIMULATOR_MODE = False
 # Profiling result file path when using simulator
 _C.INSTANCE.PROFILING_RESULT_FILE_PATH = None
-# environment variable used as bladellm engine instance id
+# Environment variable used as bladellm engine instance id
 _C.INSTANCE.ENGINE_DISAGG_INST_ID_ENV_VAR = None
+# Mode of forwarding request output
+_C.INSTANCE.REQUEST_OUTPUT_FORWARDING_MODE = "thread"
 
 # ------------------------- LOAD METRICS CONFIGURATION ------------------------
 # Instance dispatch load metric

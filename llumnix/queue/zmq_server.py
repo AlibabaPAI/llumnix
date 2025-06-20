@@ -158,7 +158,7 @@ class ZmqServer(QueueServerBase):
     async def _put_nowait(self, identity, put_nowait_queue_request: RPCPutNoWaitQueueRequest):
         # Server does not die when encoutering exception during sending message to client.
         # Server handles exception inside,
-        # while client raises exception to outside (but AsyncPutQueueActor will not die).
+        # while client raises exception to outside (but ActorOutputMediator will not die).
         try:
             item = put_nowait_queue_request.item
             set_timestamp(item, 'queue_server_receive_timestamp', time.time())

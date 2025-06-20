@@ -88,8 +88,6 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                 enable_pd_disagg, model, request_output_queue_type, engine):
     engine = engine.split("_")[1]
 
-    num_prompts = 500
-
     if "vLLM" in engine and enable_pd_disagg:
         conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
 
@@ -98,6 +96,8 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
 
     global test_times
 
+    qps = 5 if not enable_pd_disagg else 0.5
+    num_prompts = 500 if not enable_pd_disagg else 50
     ip = get_ip_address()
     base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:
@@ -124,6 +124,8 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             ip=ip,
                                             port=base_port,
                                             model=model,
+                                            enable_migration=True,
+                                            enable_pd_disagg=enable_pd_disagg,
                                             request_output_queue_type=request_output_queue_type,
                                             max_instances=num_instances)
     subprocess.run(serve_command, shell=True, check=True)
@@ -144,7 +146,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
             num_prompts=num_prompts,
             dataset_type="sharegpt",
             dataset_path="/mnt/dataset/sharegpt_gpt4/sharegpt_gpt4.jsonl",
-            qps=5,
+            qps=qps,
             results_filename=f"{port}.out"
         )
         tasks.append(bench_command)

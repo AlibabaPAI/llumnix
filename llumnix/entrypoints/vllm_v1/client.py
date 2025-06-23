@@ -15,10 +15,15 @@ import copy
 import math
 import time
 import asyncio
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional, Type
+from contextlib import contextmanager
 
 import ray.actor
+from vllm.v1.engine.core_client import EngineCoreClient, MPClient, AsyncMPClient
+from vllm.v1.executor.abstract import Executor
 
+from vllm.config import VllmConfig
+from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
 from vllm import SamplingParams
@@ -34,26 +39,33 @@ from llumnix.entrypoints.client import LlumnixClient
 
 logger = init_logger(__name__)
 
+class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
+    def __init__(
+        self,
+        entrypoints_context: EntrypointsContext,
+        loop: asyncio.AbstractEventLoop,
+        vllm_config: VllmConfig,
+        executor_class: type[Executor],
+        log_stats: bool,
+        client_addresses: dict[str, str] | None = None,
+        client_index: int = 0,
+    ):
+        # self.request_stream: Dict[str, AsyncStream] = {}
+        LlumnixClient.__init__(self, entrypoints_context, loop)
+        AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
 
-class LlumnixClientVLLMV1(LlumnixClient):
-    def __init__(self, entrypoints_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
-        self.request_stream: Dict[str, AsyncStream] = {}
-        super().__init__(entrypoints_context, loop)
-
+            
     async def generate(self,
                        prompt: str,
                        sampling_params: SamplingParams,
                        request_id: str,
                        *args,
-                       **kwargs) -> AsyncStream:
+                       **kwargs):
         if sampling_params.n > 1:
             raise ValueError("Unsupported feature: multiple sequence decoding")
         logger.info("Client received request {}".format(request_id))
         # pylint: disable=unexpected-keyword-arg
-        results_generator = AsyncStream(request_id, cancel=self.abort_request)
-        self.request_stream[request_id] = results_generator
         server_info_copy = copy.deepcopy(self.server_info)
-
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
             await self._generate_by_manager(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
@@ -64,10 +76,7 @@ class LlumnixClientVLLMV1(LlumnixClient):
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
-                return results_generator
             await self._generate_by_instance(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
-
-        return results_generator
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,

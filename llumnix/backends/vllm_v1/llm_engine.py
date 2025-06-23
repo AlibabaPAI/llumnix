@@ -29,7 +29,9 @@ from vllm.config import VllmConfig
 
 from vllm.v1.engine import EngineCoreRequest, EngineCoreOutputs
 from vllm.v1.engine.core import EngineCoreProc
+from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
+from vllm.v1.utils import get_engine_client_zmq_addr
 
 # from vllm.engine.async_llm_engine import _AsyncLLMEngine
 # from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
@@ -82,18 +84,20 @@ class EngineCoreProcLlumnix(EngineCoreProc):
     def __init__(self,
                  instance_id: str,
                  vllm_config: VllmConfig,
-                 *args, **kwargs) -> None:
+                 on_head_node: bool,
+                 handshake_address: str,
+                 executor_class: type[Executor],
+                 log_stats: bool,
+                 engine_index: int = 0) -> None:
         
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
-
-        super().__init__(vllm_config=vllm_config, *args, **kwargs)
-        
-        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
-
+        logger.info("EngineCoreProc.__init__")
+        super().__init__(vllm_config, on_head_node, handshake_address, executor_class, log_stats, engine_index)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
+        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
 
         assert isinstance(self.scheduler, SchedulerLlumnix), \
             "EngineCore.scheduler failed to set to SchedulerLlumnix"
@@ -130,6 +134,7 @@ class EngineCoreProcLlumnix(EngineCoreProc):
             executor_class = LlumnixRayDistributedExecutor
             executor_class.migration_config = migration_config
             executor_class.instance_id = instance_id
+            logger.info("executor_class set to LlumnixRayDistributedExecutor")
         else:
             raise ValueError('Unsupported executor backend')
         # Create the EngineCoreProc
@@ -140,11 +145,15 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         # log_stats: bool,
         # engine_index: int = 0,
         # FIXME(zhaozhiyu): pass corret args to EngineCoreProc
+        handshake_address = get_engine_client_zmq_addr(
+            False, engine_config.parallel_config.data_parallel_master_ip, engine_config.parallel_config.data_parallel_rpc_port
+        )
+        # logger.info("engine_config.parallel_config: %s", str(engine_config.parallel_config))
         engine = cls(
             instance_id=instance_id,
             vllm_config=engine_config,
             on_head_node=True,
-            handshake_address="tcp://127.0.0.1:29550",
+            handshake_address=handshake_address,
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
         )
@@ -212,6 +221,7 @@ class EngineCoreProcLlumnix(EngineCoreProc):
 
     def stop(self) -> None:
         super().shutdown()
+        
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
         if self.instance_info is not None:
@@ -225,13 +235,25 @@ class EngineCoreProcLlumnix(EngineCoreProc):
     # pylint: disable=invalid-overridden-method
     async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
         # TODO(zhaozhiyu): super().add_request() bypass the input_queue in EngineCoreProc, should double-check whether it's properiate
-        super().add_request(*args, **kwargs) # EngineCore.add_request(request: EngineCoreRequest)
+        # FIXME(zhaozhiyu): construct EngineCoreRequest properly
+        prompt_token_ids = kwargs["prompt_token_ids"]
+        prompt = args[0]
+        sampling_params = args[1]
+        logger.info("prompt: %s", str(prompt))
+        logger.info("sampling_params: %s", str(sampling_params))
+        engine_core_request = EngineCoreRequest(
+            request_id=request_id, prompt_token_ids=prompt_token_ids,
+            mm_inputs=None, mm_hashes=None, mm_placeholders=None,
+            sampling_params=sampling_params, eos_token_id=None,
+            arrival_time=time.time(), lora_request=None, cache_salt=None, data_parallel_rank=None
+        )
+        super().add_request(engine_core_request) # EngineCore.add_request(request: EngineCoreRequest)
         request: LlumnixRequestVLLMV1 = self.scheduler.waiting[-1]
         set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
         self.scheduler.waiting[-1] = LlumnixRequestVLLMV1(
-            request_id, server_info, expected_steps, 
+            request_id, server_info, expected_steps,
             request.prompt_token_ids, request.mm_inputs,
-            request.mm_hashes, request.mm_positions, 
+            request.mm_hashes, request.mm_positions,
             request.sampling_params, request.eos_token_id,
             request.client_index, request.lora_request,
             request.structured_output_request, request.cache_salt
@@ -285,40 +307,39 @@ class BackendVLLMV1(BackendInterface):
         # TODO(zhaozhiyu): determine whether this env var is still in vllm v1
         self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
 
-        self._stop_event = asyncio.Event()
-        asyncio.create_task(self._start_engine_step_loop())
+        self.engine.run_busy_loop()
 
-    # FIXME(zhaozhiyu): This loop should be removed, running loop is inside EngineCoreProc. Need to handle self.state.
-    async def _start_engine_step_loop(self) -> None:
-        self._stop_event.clear()
+    # # FIXME(zhaozhiyu): This loop should be removed, running loop is inside EngineCoreProc. Need to handle self.state.
+    # async def _start_engine_step_loop(self) -> None:
+    #     self._stop_event.clear()
 
-        previous_state = self.state
-        self.state = EngineState.RUNNING
-        logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+    #     previous_state = self.state
+    #     self.state = EngineState.RUNNING
+    #     logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
 
-        while not self._stop_event.is_set():
-            try:
-                while self._step_done_event_queue.qsize() > 0:
-                    request_id, step_done_event = self._step_done_event_queue.get()
-                    self._remove_running_request_ret[request_id] = self._remove_running_request(request_id)
-                    step_done_event.set()
-                await asyncio.sleep(0.0)
-                request_outputs, _ = await self.engine.step_async()
-                if len(request_outputs) == 0:
-                    await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
-            # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Error in engine loop, unexpected exception: {}".format(e))
-                self.stop()
-                previous_state = self.state
-                self.state = EngineState.CRASHED
-                logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
-                break
+    #     while not self._stop_event.is_set():
+    #         try:
+    #             while self._step_done_event_queue.qsize() > 0:
+    #                 request_id, step_done_event = self._step_done_event_queue.get()
+    #                 self._remove_running_request_ret[request_id] = self._remove_running_request(request_id)
+    #                 step_done_event.set()
+    #             await asyncio.sleep(0.0)
+    #             request_outputs, _ = await self.engine.step_async()
+    #             if len(request_outputs) == 0:
+    #                 await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
+    #         # pylint: disable=broad-except
+    #         except Exception as e:
+    #             logger.exception("Error in engine loop, unexpected exception: {}".format(e))
+    #             self.stop()
+    #             previous_state = self.state
+    #             self.state = EngineState.CRASHED
+    #             logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
+    #             break
 
-        if self.state == EngineState.RUNNING:
-            self.stop()
-            self.state = EngineState.STOPPED
-            logger.info("engine {} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
+    #     if self.state == EngineState.RUNNING:
+    #         self.stop()
+    #         self.state = EngineState.STOPPED
+    #         logger.info("engine {} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def stop(self):
         self.engine.stop()

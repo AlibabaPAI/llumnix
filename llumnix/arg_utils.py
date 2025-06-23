@@ -602,7 +602,12 @@ class InstanceArgs:
         parser.add_argument('--dispatch-load-metric',
                             type=str,
                             choices=['remaining_steps', 'block_demand_factor'],
-                            help='instance dispatch load metric')
+                            help='instance dispatch load metric.\n\n'
+                            '* "remaining_steps" refers to the number of steps the remaining KV cache can support for all \
+                            running and some waiting requests to proceed.\n'
+                            '* "block_demand_factor" refers to the total number of KV cache blocks required by all running \
+                            and waiting requests.\n'
+                            )
         parser.add_argument('--dispatch-prefill-load-metric',
                             type=str,
                             choices=['remaining_steps', 'block_demand_factor'],

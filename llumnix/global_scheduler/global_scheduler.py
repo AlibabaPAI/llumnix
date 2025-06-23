@@ -153,8 +153,7 @@ class GlobalScheduler:
         scale_up_num, scale_down_num = self.scaling_scheduler.check_scale(self.instance_info, self.instance_id_set)
         return scale_up_num, scale_down_num
 
-    async def _set_engine_self_assigned_id(self, ins_id: str, instance_actor: Llumlet) -> bool:
-        is_ok = True
+    async def _set_engine_self_assigned_id(self, ins_id: str, instance_actor: Llumlet):
         if self.global_scheduler_config.enable_engine_pd_disagg:
             try:
                 self.instance_id_2_engine_inner_inst_id[ins_id] = \
@@ -163,7 +162,6 @@ class GlobalScheduler:
                     ins_id, self.instance_id_2_engine_inner_inst_id[ins_id]))
             # pylint: disable=broad-except
             except Exception as e:
-                is_ok = False
                 if isinstance(e, ray.exceptions.RayActorError):
                     logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
                 elif isinstance(e, ray.exceptions.GetTimeoutError):
@@ -172,7 +170,7 @@ class GlobalScheduler:
                 else:
                     logger.exception("Error during scale up instance {}, "
                                     "unexpected exception: {}".format(ins_id, e))
-        return is_ok
+                raise e
 
     def _remove_engine_self_assigned_id(self, ins_id: str):
         self.instance_id_2_engine_inner_inst_id.pop(ins_id, None)
@@ -193,10 +191,9 @@ class GlobalScheduler:
         available_instance_ids, available_instance_actors, available_instance_types = [], [], []
         available_placement_groups, available_servers = [], []
 
-        def self_assign_success_callback(fut, instance_idx: int, scale_up_info: List[List], available_scale_up_info: List[List]):
+        def self_assign_id_success_callback(fut, instance_idx: int, scale_up_info: List[List], available_scale_up_info: List[List]):
             ret = fut.result()[0]
-            assert not isinstance(ret, Exception)
-            if ret:
+            if not isinstance(ret, Exception):
                 for item_idx, scale_up_info_item in enumerate(scale_up_info):
                     available_scale_up_info[item_idx].append(scale_up_info_item[instance_idx])
 
@@ -207,7 +204,7 @@ class GlobalScheduler:
                 task = asyncio.gather(self._set_engine_self_assigned_id(ins_id, ins_actor), return_exceptions=True)
                 task.add_done_callback(
                     partial(
-                        self_assign_success_callback,
+                        self_assign_id_success_callback,
                         instance_idx=ins_idx,
                         scale_up_info=[instance_ids, instance_actors, instance_types, placement_groups, servers],
                         available_scale_up_info=[available_instance_ids, available_instance_actors,
@@ -217,6 +214,7 @@ class GlobalScheduler:
         await asyncio.gather(*tasks, return_exceptions=True)
 
         # Note: await is not allowed below !!!
+        # Must keep the atomicity of global_scheduler._add_instance and mananger.scale_up_callback
         for ins_id, ins_actor, ins_type in zip(available_instance_ids, available_instance_actors,
                                                available_instance_types):
             if ins_id not in self.instance_id_set:

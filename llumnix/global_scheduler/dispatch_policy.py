@@ -99,7 +99,7 @@ class Queue(DispatchPolicy):
         sorted_instance_infos = sort_instance_infos(available_instance_infos.values(), 'num_waiting_requests')
         instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
         instance_id = instance_info_chosen.instance_id
-        logger.info("dispatch to {}, queue size: {}".format(instance_id, instance_info_chosen.num_waiting_requests))
+        logger.info("dispatch request to {}, queue size: {}".format(instance_id, instance_info_chosen.num_waiting_requests))
         return instance_id
 
 

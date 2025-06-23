@@ -11,24 +11,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
+import signal
+import multiprocessing
+from dataclasses import fields
 
-import uvicorn
+import uvloop
 
-from vllm.engine.arg_utils import AsyncEngineArgs
-
-from llumnix.arg_utils import EntrypointsArgs
+from llumnix.arg_utils import VLLMV1EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
-from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
+from llumnix.logging.logger import init_logger
 from llumnix.utils import get_ip_address
-from llumnix.constants import SERVER_GRACEFUL_SHUTDOWN_TIMEOUT
 
 logger = init_logger(__name__)
 
 
-class APIServerActorVLLM(APIServerActor):
-    def _set_host(self, entrypoints_args: EntrypointsArgs, engine_args):
+class APIServerActorVLLMV1(APIServerActor):
+    def __init__(self,
+                 instance_id: str,
+                 entrypoints_args: VLLMV1EntrypointsArgs,
+                 engine_args: VLLMV1EngineArgs,
+                 scaler: "ray.actor.ActorHandle",
+                 manager: "ray.actor.ActorHandle",
+                 instance: "ray.actor.ActorHandle"):
+        # Set up listen address and socket
+        self.listen_address, self.sock = setup_server(entrypoints_args)
+        
+        super().__init__(instance_id, entrypoints_args, engine_args,
+                         scaler, manager, instance)
+
+    def _set_host(self, entrypoints_args: VLLMV1EntrypointsArgs, engine_args):
         if entrypoints_args.host not in ("127.0.0.1", "0.0.0.0"):
             entrypoints_args.host = get_ip_address()
         self.host = entrypoints_args.host
@@ -37,32 +50,32 @@ class APIServerActorVLLM(APIServerActor):
         self.health_api = "health"
 
     def _run_server(self,
-                    entrypoints_args: EntrypointsArgs,
-                    engine_args: AsyncEngineArgs,
+                    entrypoints_args: VLLMV1EntrypointsArgs,
+                    engine_args: VLLMV1EngineArgs,
                     entrypoints_context: EntrypointsContext):
-        # pylint: disable=import-outside-toplevel
-        import llumnix.entrypoints.vllm.api_server
-        from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
+        # If dp_size == 1, client_index will always be 0
+        self.client_index = 0
+        self.server_id = entrypoints_context.server_info.server_id
 
-        app = llumnix.entrypoints.vllm.api_server.app
-        config = uvicorn.Config(
-            app,
-            host=self.host,
-            port=entrypoints_args.port,
-            log_level=entrypoints_args.server_log_level,
-            timeout_keep_alive=llumnix.entrypoints.vllm.api_server.SERVER_TIMEOUT_KEEP_ALIVE,
-            ssl_keyfile=entrypoints_args.ssl_keyfile,
-            ssl_certfile=entrypoints_args.ssl_certfile,
-            timeout_graceful_shutdown=SERVER_GRACEFUL_SHUTDOWN_TIMEOUT
-        )
-        self.server = uvicorn.Server(config)
-        self.loop = asyncio.new_event_loop()
-        llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(entrypoints_context, self.loop)
-        asyncio.set_event_loop(self.loop)
-        try:
-            self.loop.run_until_complete(self.server.serve())
-        finally:
-            self.loop.close()
+        # NOTE(shejiarui): Hard code here. The logic of handshake will be removed soom.
+        client_config = {
+            "input_address": "ipc:///tmp/58dd6824-0fbc-4221-865d-70ce72247d85",
+            "output_address": "ipc:///tmp/eac4f94c-d6c2-4fb6-a35c-3b0c4ddcf52c",
+            "client_index": self.client_index
+        }
+        
+        serve_args = engine_args.load_engine_args()
+        for field in fields(VLLMV1EntrypointsArgs):
+            setattr(serve_args, field.name, getattr(entrypoints_args, field.name))
+        if hasattr(serve_args, "speculative_config"):
+            serve_args.speculative_config = None
+
+        spawn_context = multiprocessing.get_context("spawn")
+        self.proc = spawn_context.Process(
+            target=_run_server_proc, 
+            name=f"Server_{self.server_id}",  
+            args=(self.listen_address, self.sock, serve_args, client_config))
+        self.proc.start()
 
     def _stop_server(self):
         def stop_server():
@@ -70,3 +83,56 @@ class APIServerActorVLLM(APIServerActor):
 
         if self.loop.is_running():
             self.loop.call_soon_threadsafe(stop_server)
+
+
+def setup_server(entrypoints_args: VLLMV1EntrypointsArgs):
+    """
+    Validate API server args, set up signal handler, create socket ready to serve.
+    
+    Main logic copied from vLLM's `setup_server`, removed some unnecessary logic.
+    """
+    # pylint: disable=import-outside-toplevel
+    from vllm.version import __version__ as VLLM_VERSION
+    from vllm.entrypoints.openai.tool_parsers import ToolParserManager
+    from vllm.entrypoints.openai.api_server import create_server_socket
+    from vllm.utils import (is_valid_ipv6_address, set_ulimit)
+
+    logger.info("vLLM API server version %s", VLLM_VERSION)
+
+    if entrypoints_args.tool_parser_plugin and len(entrypoints_args.tool_parser_plugin) > 3:
+        ToolParserManager.import_tool_parser(entrypoints_args.tool_parser_plugin)
+
+    # workaround to make sure that we bind the port before the engine is set up.
+    # This avoids race conditions with ray.
+    # see https://github.com/vllm-project/vllm/issues/8204
+    sock_addr = (entrypoints_args.host or "", entrypoints_args.port)
+    sock = create_server_socket(sock_addr)
+
+    # workaround to avoid footguns where uvicorn drops requests with too
+    # many concurrent requests active
+    set_ulimit()
+
+    def signal_handler(*_) -> None:
+        # Interrupt server on sigterm while initializing
+        raise KeyboardInterrupt("terminated")
+
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    addr, port = sock_addr
+    is_ssl = entrypoints_args.ssl_keyfile and entrypoints_args.ssl_certfile
+    host_part = f"[{addr}]" if is_valid_ipv6_address(
+        addr) else addr or "0.0.0.0"
+    listen_address = f"http{'s' if is_ssl else ''}://{host_part}:{port}"
+
+    return listen_address, sock
+
+
+def _run_server_proc(listen_address, 
+                     sock, 
+                     args, 
+                     client_config=None, 
+                     **uvicorn_kwargs) -> None:
+    from vllm.entrypoints.openai.api_server import run_server_worker
+    uvloop.run(
+        run_server_worker(listen_address, sock, 
+                          args, client_config, **uvicorn_kwargs))

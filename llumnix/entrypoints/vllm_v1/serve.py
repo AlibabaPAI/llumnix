@@ -29,10 +29,7 @@ if __name__ == "__main__":
     connect_to_ray_cluster()
 
     parser: LlumnixArgumentParser = LlumnixArgumentParser()
-    parser.add_argument("--host", type=str)
-    parser.add_argument("--port", type=int)
-    parser.add_argument("--ssl-keyfile", type=str)
-    parser.add_argument("--ssl-certfile", type=str)
+    parser.add_argument('--api-server-count', '-asc', type=int, help='How many API server processes to run.')
     parser.add_argument("--server-log-level", type=str, choices=['debug', 'info', 'warning', 'error'])
     parser.add_argument('--disable-keep-serve-process-alive', action='store_true')
 

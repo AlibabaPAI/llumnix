@@ -35,7 +35,7 @@ from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.queue.utils import init_request_output_queue_client
-from llumnix.utils import ray_get_with_timeout
+from llumnix.utils import ray_get_with_timeout, exception_wrapper_async
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -177,9 +177,10 @@ class ThreadOutputMediator(BaseOutputMediator):
         aborted_request_ids = await self.put_nowait_to_servers_func(
             self.request_output_queue_type, self.request_output_queue_client, server_request_outputs, server_info_dict
         )
+        abort_request_callback = exception_wrapper_async(self.abort_request_callback)
         if aborted_request_ids:
             asyncio.run_coroutine_threadsafe(
-                self.abort_request_callback(aborted_request_ids), self.main_loop
+                abort_request_callback(aborted_request_ids), self.main_loop
             )
 
     def stop(self) -> None:

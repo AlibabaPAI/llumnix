@@ -261,3 +261,12 @@ def execute_method_with_timeout(method, timeout, *args, **kwargs):
             return future.result(timeout=timeout)
         except TimeoutError as e:
             raise TimeoutError(f"Method {method.__name__} timed out after {timeout} seconds") from e
+
+def exception_wrapper_async(func):
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger.exception("Unexpected exception in {}: {}".format(func.__name__, str(e)))
+            raise
+    return wrapper

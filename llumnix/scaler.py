@@ -397,7 +397,7 @@ class Scaler:
                               service_name: str = None
                               ) -> PlacementGroup:
         backend_type = engine_args.backend_type
-        # num_cpus=2+(0/1), for Llumlet + AsyncPutQueueActor + (ApiServerActor)
+        # num_cpus=2+(0/1), for Llumlet + ActorOutputMediator + (ApiServerActor)
         if not BackendType.is_sim_backend(backend_type):
             # num_gpus=world_size, for world_size Workers
             world_size = engine_args.get_world_size()

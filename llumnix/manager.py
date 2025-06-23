@@ -354,10 +354,10 @@ class Manager:
                             logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
                         elif isinstance(e, ray.exceptions.GetTimeoutError):
                             logger.error("Failed to scale up instance {}, instance is hang, "
-                                        "please check the cause.".format(ins_id))
+                                         "please check the cause.".format(ins_id))
                         else:
                             logger.exception("Error during scale up instance {}, "
-                                            "unexpected exception: {}".format(ins_id, e))
+                                             "unexpected exception: {}".format(ins_id, e))
                         continue
                     logger.info("Bind instance id {} with engine instance id {}.".format(
                         ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))

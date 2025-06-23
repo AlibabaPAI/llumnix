@@ -12,16 +12,14 @@
 # limitations under the License.
 
 import time
-from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any
-from collections import defaultdict
-import threading
+from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any, Coroutine
 import asyncio
 import queue
 import gc
+from collections import defaultdict
 
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 import ray.actor
 
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
@@ -36,22 +34,21 @@ from vllm import envs as vllm_envs
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.backends.backend_interface import BackendInterface, EngineState
+from llumnix.backends.backend_interface import BackendInterface, EngineState, BackendType
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
-from llumnix.queue.utils import QueueType
-from llumnix.backends.utils import AsyncPutQueueActor
-from llumnix.utils import make_async, ray_get_with_timeout
+from llumnix.queue.queue_type import QueueType
+from llumnix.backends.utils import RequestOutputForwardingMode, OutputMediator
+from llumnix.utils import make_async
 from llumnix.ray_utils import get_instance_name, asyncio_wait_for_with_timeout
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
-from llumnix.backends.backend_interface import BackendType
-from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.utils import RequestIDType, MigrationResponse
+from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)
 
@@ -67,10 +64,6 @@ class LlumnixRequestOutputFactory(RequestOutputFactory):
         return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
 
 
-class StopPutQueueSignal:
-    pass
-
-
 class LLMEngineLlumnix(_AsyncLLMEngine):
     def __init__(self,
                  instance_id: str,
@@ -78,6 +71,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                  request_output_queue_type: QueueType,
                  disable_async_output_proc: bool,
                  backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
+                 abort_request_callback: Coroutine,
                  *arg, **kwargs) -> None:
         # pylint: disable=import-outside-toplevel
         import vllm.outputs
@@ -86,25 +81,14 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        # Place the async put queue actor together with the instance.
-        scheduling_strategy = PlacementGroupSchedulingStrategy(
-            placement_group=placement_group,
-            placement_group_bundle_index=0,
-            placement_group_capture_child_tasks=True,
+        self.output_mediator = OutputMediator(
+            instance_id,
+            request_output_queue_type,
+            request_output_forwarding_mode,
+            abort_request_callback,
+            placement_group,
+            backend_type,
         )
-        self.put_queue_args_queue = queue.Queue()
-        # TODO(Failover): Add mechanism to ensure the parent thread and sub thread can die together.
-        self.put_queue_loop_thread = threading.Thread(
-            target=self._start_put_queue_loop, args=(), daemon=True, name="put_queue_loop"
-        )
-        self.request_output_queue_type = request_output_queue_type
-        self.async_put_queue_actor: AsyncPutQueueActor = ray.remote(
-            num_cpus=1,
-            scheduling_strategy=scheduling_strategy,
-            name=f"AsyncPutQueueActor_{instance_id}"
-        )(AsyncPutQueueActor).remote(instance_id, request_output_queue_type, backend_type)
-        self.put_queue_loop_thread.start()
-
         self.disable_async_output_proc = disable_async_output_proc
 
     # pylint: disable=W0221
@@ -117,6 +101,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         migration_config: MigrationConfig,
         engine_args: EngineArgs,
         backend_type: BackendType,
+        request_output_forwarding_mode: RequestOutputForwardingMode,
+        abort_request_callback: Coroutine,
         latency_mem: Optional[LatencyMemData] = None,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT
     ) -> "LLMEngineLlumnix":
@@ -145,6 +131,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             request_output_queue_type=request_output_queue_type,
             disable_async_output_proc=engine_args.disable_async_output_proc,
             backend_type=backend_type,
+            request_output_forwarding_mode=request_output_forwarding_mode,
+            abort_request_callback=abort_request_callback,
             **engine_config.to_dict(),
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
@@ -208,11 +196,9 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 output_proc_done_event = self._output_proc_done_event_queue.get()
                 output_proc_done_event.set()
 
-        return
-
-    def _process_request_outputs(
-            self,
-            outputs: List[Tuple[RequestOutput, ServerInfo]],
+    async def _process_request_outputs(
+        self,
+        outputs: List[Tuple[RequestOutput, ServerInfo]],
     ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         request_outputs = []
         server_infos = []
@@ -250,30 +236,42 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         set_timestamp(request_outputs, 'engine_put_queue_timestamp', time.time())
 
         if request_outputs:
-            if self.put_queue_loop_thread.is_alive():
-                self.put_queue_args_queue.put_nowait((request_outputs, server_infos))
-            # Ensure engine will die if put queue loop thread is dead.
-            else:
-                raise RuntimeError("Engine put queue loop thread is dead.")
+            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, server_infos)
+            if server_request_outputs:
+                await self.output_mediator.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
         set_timestamp(request_outputs, 'engine_step_postprocess_timestamp_end', time.time())
 
         return request_outputs, server_infos
 
+    def _gen_server_request_outputs(
+        self,
+        request_outputs: List[RequestOutput],
+        server_infos: List[ServerInfo]
+    ) -> Tuple[Dict[str, List[LlumnixRequestOuput]], Dict[str, ServerInfo]]:
+        server_request_outputs = defaultdict(list)
+        server_info_dict = {}
+        # Reorganize data in orther to put request output to queue in batch at one time.
+        for request_output, server_info in zip(request_outputs, server_infos):
+            server_id = server_info.server_id
+            request_timestamps = None if not hasattr(request_output, "request_timestamps") else request_output.request_timestamps
+            llumnix_resquest_output = LlumnixRequestOuput(
+                request_output.request_id, self.instance_id, request_output, request_timestamps
+            )
+            server_request_outputs[server_id].append(llumnix_resquest_output)
+            if server_id not in server_info_dict:
+                server_info_dict[server_id] = server_info
+
+        return server_request_outputs, server_info_dict
+
     async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
         self.step_begin_time = time.time()
         # pylint: disable=too-many-function-args
         outputs = await super().step_async(0)
-        return self._process_request_outputs(outputs)
+        return await self._process_request_outputs(outputs)
 
     def stop(self) -> None:
-        self.put_queue_args_queue.put(StopPutQueueSignal())
-        self.put_queue_loop_thread.join()
-        try:
-            ray_get_with_timeout(self.async_put_queue_actor.stop.remote())
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to stop AsyncPutQueueActor, unexpected exception: {}".format(e))
+        self.output_mediator.stop()
         gc.collect()
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
@@ -296,38 +294,6 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                                                              seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
                                                              seq_group.priority)
 
-    def _start_put_queue_loop(self):
-        while True:
-            item = self.put_queue_args_queue.get()
-            if isinstance(item, StopPutQueueSignal):
-                break
-            request_outputs, server_infos = item
-            set_timestamp(request_outputs, 'engine_thread_put_queue_timestamp', time.time())
-            self._put_request_outputs_to_server(request_outputs, server_infos)
-
-    def _put_request_outputs_to_server(self, request_outputs: List[RequestOutput], server_infos: List[ServerInfo]) -> None:
-        server_request_outputs = defaultdict(list)
-        server_info_dict = {}
-        # Reorganize data in orther to put request output to queue in batch at one time.
-        for request_output, server_info in zip(request_outputs, server_infos):
-            server_id = server_info.server_id
-            request_timestamps = None if not hasattr(request_output, "request_timestamps") else request_output.request_timestamps
-            llumnix_resquest_output = LlumnixRequestOuputVLLM(
-                request_output.request_id, self.instance_id, request_output, request_timestamps
-            )
-            server_request_outputs[server_id].append(llumnix_resquest_output)
-            if server_id not in server_info_dict:
-                server_info_dict[server_id] = server_info
-        # TODO(s5u13b): Reduce the across-actor overhead.
-        if server_info_dict:
-            # Step-by-step request outputs forwarding, and sub thread should die together with the AsyncPutQueueActor,
-            # so just ray.get here.
-            ray_get_with_timeout(
-                self.async_put_queue_actor.put_nowait_to_servers.remote(
-                    server_request_outputs, server_info_dict
-                )
-            )
-
 
 class BackendVLLM(BackendInterface):
     def __init__(
@@ -341,12 +307,16 @@ class BackendVLLM(BackendInterface):
         self.engine_disagg_inst_id = instance_id
         engine_args = llumnix_engine_args.load_engine_args()
         self.migration_config = instance_args.create_migration_config()
-        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          request_output_queue_type=request_output_queue_type,
-                                                                          migration_config=self.migration_config,
-                                                                          instance_id=instance_id,
-                                                                          placement_group=placement_group,
-                                                                          backend_type=BackendType.VLLM)
+        self.engine: LLMEngineLlumnix = LLMEngineLlumnix.from_engine_args(
+            engine_args=engine_args,
+            request_output_queue_type=request_output_queue_type,
+            migration_config=self.migration_config,
+            instance_id=instance_id,
+            placement_group=placement_group,
+            backend_type=BackendType.VLLM,
+            request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
+            abort_request_callback=self.abort_request,
+        )
         # In order to call the verify_async_output_proc implicitly.
         engine_config = engine_args.create_engine_config()
         if not engine_config.model_config.use_async_output_proc:

@@ -243,7 +243,7 @@ class SchedulerLlumnix(Scheduler):
                 instance_info.num_seqs = len(instance_info.running_seq_lens)
             # FIXME(zhaozhiyu) figure out how vllm v1 determine the inference type
             instance_info.inference_type = RequestInferenceType.UNKNOWN
-        instance_info.num_batched_tokens = scheduler_output.total_num_scheduled_tokens # type: ignore
+            instance_info.num_batched_tokens = scheduler_output.total_num_scheduled_tokens # type: ignore
         return instance_info
 
     # TODO(zhaozhiyu): adapt vllm v1, remove sequence group

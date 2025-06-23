@@ -75,7 +75,8 @@ from llumnix.constants import (
     HEARTBEAT_LOOP_INTERVAL,
 )
 from llumnix import envs as llumnix_envs
-from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.entrypoints.utils import LaunchMode
+from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR
 from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.queue.queue_server_base import QueueServerBase
@@ -592,6 +593,65 @@ class Scaler:
             )
         )
 
+    async def _init_server_and_instance_v1(self,
+                                        instance_id: str,
+                                        entrypoints_args: EntrypointsArgs,
+                                        instance_args: InstanceArgs,
+                                        engine_args: LlumnixEngineArgs,
+                                        placement_group: PlacementGroup,
+                                        instance_type: InstanceType = None):
+        backend_type = engine_args.backend_type
+        assert backend_type == BackendType.VLLM_V1
+        request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
+        next_instance_args = await self._get_next_instance_args(instance_args, instance_type)
+        next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
+        next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
+            backend_type=backend_type,
+            current_engine_args=engine_args,
+            instance_type=next_instance_args.instance_type,
+        )
+        instance_ready = False
+        
+        # TODO(shejiarui): Add DP's logic here
+        try:
+            instance = self._init_instance(
+                instance_id,
+                next_instance_args,
+                placement_group,
+                request_output_queue_type,
+                next_engine_args,
+            )
+            server = self._init_server(
+                instance_id,
+                placement_group,
+                backend_type,
+                next_entrypoints_args,
+                next_engine_args,
+                self.scaler,
+                self.manager,
+                instance,
+            )
+            self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
+            self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
+            
+            await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
+            instance_ready = True
+            await asyncio.wait_for(server.is_ready.remote(), timeout=float(llumnix_envs.SERVER_READY_TIMEOUT))
+        except Exception as e: # pylint: disable=broad-except
+            if isinstance(e, ray.exceptions.RayActorError):
+                logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
+            elif isinstance(e, asyncio.TimeoutError):
+                if not instance_ready:
+                    logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
+                else:
+                    logger.error("Server {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.SERVER_READY_TIMEOUT)))
+            else:
+                logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
+            await self.clear_instance_ray_resources(instance_id)
+        finally:
+            self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
+            self.inflight_num_decode_instances -= 1 if instance_type == InstanceType.DECODE else 0
+
     def _init_server(self,
                      instance_id: str,
                      placement_group: PlacementGroup,
@@ -615,8 +675,9 @@ class Scaler:
             )
         elif backend_type == BackendType.VLLM_V1:
             from llumnix.entrypoints.vllm_v1.api_server_actor import APIServerActorVLLMV1
+            # To avoid triton runtime error, assign GPU to api server.
             api_server = APIServerActorVLLMV1.from_args(
-                0,
+                NUM_GPUS_VLLM_V1_GPU_ACTOR,
                 instance_id,
                 placement_group,
                 entrypoints_args,

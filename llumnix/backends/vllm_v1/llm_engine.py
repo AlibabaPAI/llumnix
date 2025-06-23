@@ -142,7 +142,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
-        logger.info("engine_config: {}", engine_config)
+        logger.info("engine_config: {}".format(engine_config))
         # Hack to pass placement_group for init workers.
         engine_config.parallel_config.placement_group = placement_group
         # Initialize the cluster and specify the executor class.

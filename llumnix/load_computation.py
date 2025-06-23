@@ -141,7 +141,7 @@ class AdaptiveDecodeBatchLoad(BaseLoad):
 
     @classmethod
     def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "AdaptiveDecodeBatchLoad":
-        return AdaptiveDecodeBatchLoad(instance_info.max_decode_batch_size)
+        return AdaptiveDecodeBatchLoad(instance_info.decode_batch_size)
 
 
 class LoadCalculatorFactory:

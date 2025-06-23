@@ -138,8 +138,8 @@ class Manager:
                 NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
-        instance_id, request_expected_steps, addition_dispatch_info = self.global_scheduler.dispatch(request_id)
-        kwargs.update(addition_dispatch_info)
+        instance_id, request_expected_steps, addition_dispatch_kwargs = self.global_scheduler.dispatch(request_id)
+        kwargs.update(addition_dispatch_kwargs)
 
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         try:

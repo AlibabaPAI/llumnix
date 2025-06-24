@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 import os
 import random
 import subprocess
@@ -28,7 +29,7 @@ from llumnix.utils import get_ip_address, wait_port_free
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env
-from tests.e2e_test.utils import (generate_bench_command, to_markdown_table,
+from tests.e2e_test.utils import (generate_bench_command, to_markdown_table, generate_special_test_config,
                                   wait_for_llumnix_service_ready, shutdown_llumnix_service,
                                   generate_bladellm_serve_command, check_log_exception,
                                   generate_vllm_serve_command)
@@ -103,29 +104,33 @@ def get_instance_num_blocks():
 
 config_schema = "engine, migration_request_status, tensor_parallel_size, migration_backend, use_ray_spmd_worker"
 
+generate_special_migration_test_config = partial(generate_special_test_config, schema=config_schema)
+
+
 def generate_migration_test_config():
+    vllm_base_config = ["engine_vLLM", "running", 1, "gloo", False]
+
     vllm_config = [
-        ("engine_vLLM", "running", 1, "gloo", False),
+        vllm_base_config,
 
         # migrate waiting
-        ("engine_vLLM", "waiting", 1, "gloo", False),
+        generate_special_migration_test_config([("migration_request_status", "waiting")], vllm_base_config),
 
         # spmd
-        ("engine_vLLM", "running", 1, "gloo", True),
+        generate_special_migration_test_config([("use_ray_spmd_worker", True)], vllm_base_config),
 
         # spmd and migrate waiting
-        ("engine_vLLM", "waiting", 1, "gloo", True),
+        generate_special_migration_test_config([("migration_request_status", "waiting"), ("use_ray_spmd_worker", True)], vllm_base_config),
     ]
 
-    bladellm_config = [
-        ("engine_BladeLLM", "running", 1, "grpc", False),
 
-        # migration backend
-        ("engine_BladeLLM", "running", 1, "kvtransfer", False),
+    bladellm_base_config = ["engine_BladeLLM", "running", 1, "grpc", False]
+
+    bladellm_config = [
+        bladellm_base_config,
 
         # tp=2
-        ("engine_BladeLLM", "running", 2, "grpc", False),
-        ("engine_BladeLLM", "running", 2, "kvtransfer", False),
+        generate_special_migration_test_config([("tensor_parallel_size", 2)], bladellm_base_config),
     ]
 
     return vllm_config + bladellm_config

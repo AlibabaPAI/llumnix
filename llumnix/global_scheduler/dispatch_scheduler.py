@@ -46,10 +46,12 @@ class DispatchScheduler:
                  topk_random_dispatch: int,
                  enable_pd_disagg: bool,
                  enable_engine_pd_disagg: bool,
+                 enable_engine_semi_pd_disagg: bool,
                  enable_adaptive_pd: bool,
                  dispatch_latency_metric: Summary = Summary("dummy")) -> None:
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
+        self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
 
         self.dispatch_policy: DispatchPolicy = DispatchPolicyFactory.get_policy(
@@ -68,7 +70,7 @@ class DispatchScheduler:
         self._build_phase_rules()
 
     def _build_phase_rules(self):
-        if not self.enable_engine_pd_disagg and not self.enable_pd_disagg:
+        if not self.enable_engine_pd_disagg and not self.enable_pd_disagg and not self.enable_engine_semi_pd_disagg:
             self.no_constrains_rules = []
             self.no_constrains_rules.append(DispatchRule(InstanceType.NO_CONSTRAINTS, None))
         else:
@@ -80,7 +82,7 @@ class DispatchScheduler:
             self.prefill_dispatch_rules.append(DispatchRule(InstanceType.PREFILL, None))
 
             self.decode_dispatch_rules = []
-            if self.enable_engine_pd_disagg:
+            if not self.enable_pd_disagg:
                 if self.enable_adaptive_pd:
                     self.decode_dispatch_rules.append(DispatchRule(InstanceType.DECODE, self.busy_filter))
                     self.decode_dispatch_rules.append(DispatchRule(InstanceType.PREFILL_AS_DECODE, self.busy_filter))
@@ -160,7 +162,7 @@ class DispatchScheduler:
         self._log_instance_dispatch_info(InstanceType.PREFILL, prefill_instance_num_requests)
 
         decode_instance_id = None
-        if self.enable_engine_pd_disagg:
+        if not self.enable_pd_disagg:
             with self.dispatch_latency_metric.observe_time(
                 labels={"instance_type": InstanceType.DECODE.value}
             ):

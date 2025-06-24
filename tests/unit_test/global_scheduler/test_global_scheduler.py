@@ -40,7 +40,8 @@ class MockLlumlet:
 def init_global_scheduler(
         enable_pd_disagg: bool = False,
         enable_engine_pd_disagg: bool = False,
-        enable_adaptive_pd: bool = False):
+        enable_adaptive_pd: bool = False,
+        enable_engine_semi_pd_disagg = False):
     global_scheduler_config = GlobalSchedulerConfig(
         initial_instances=0,
         dispatch_policy="load",
@@ -53,6 +54,7 @@ def init_global_scheduler(
         scale_down_threshold=60,
         enable_pd_disagg=enable_pd_disagg,
         enable_engine_pd_disagg=enable_engine_pd_disagg,
+        enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
         enable_adaptive_pd=enable_adaptive_pd,
         is_group_kind_migration_backend=False)
     global_scheduler = GlobalScheduler(global_scheduler_config)

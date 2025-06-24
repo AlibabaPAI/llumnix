@@ -13,6 +13,7 @@
 
 import gc
 import os
+import random
 import time
 import uuid
 import asyncio
@@ -187,6 +188,8 @@ def get_free_port() -> int:
     # try to find a free port based on pid to avoid port conflict between multiple processes
     base_port = os.getpid()
     for i in range(10000, 60000, 2000):
+        # sleep a random time to avoid port conflict
+        time.sleep(random.randint(1, 1000)/1000)
         port = _get_port_by_pid(base_port, i, i + 2000)
         if check_free_port(port=port) and check_free_port(port=port + 1):
             return port
@@ -325,8 +328,8 @@ def log_instance_exception(e: Exception, instance_id: str, method_name: str, req
         )
     else:
         logger.exception(
-            "Error in instance {} (instance_id: {}, request_id: {})".format(
-                method_name, instance_id, request_id
+            "Error in instance {} (instance_id: {}, request_id: {}), exception type: {}, exception message: {}".format(
+                method_name, instance_id, request_id, type(e).__name__, e
             )
         )
 

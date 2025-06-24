@@ -11,11 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import os
 import time
 import subprocess
 import uuid
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import pytest
 import requests
@@ -43,6 +44,7 @@ def generate_vllm_launch_command(
     request_migration_policy: str = 'SR',
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
+    enable_adaptive_pd: bool = False,
     instance_type: str = "no_constraints",
     tensor_parallel_size: int = 1,
     enable_simulator: bool = False,
@@ -80,6 +82,7 @@ def generate_vllm_launch_command(
         f"--instance-type {instance_type} "
         f"--request-output-forwarding-mode {request_output_forwarding_mode} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
+        f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
@@ -162,19 +165,25 @@ def generate_bladellm_launch_command(
     max_num_batched_tokens: int = 4096,
     enable_llumnix: bool = True,
     enable_pd_disagg: bool = False,
+    enable_adaptive_pd: bool = False,
     enable_migration: bool = True,
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
     engine_disagg_transfer_type: str = "rdma",
-    max_gpu_memory_utilization: float = 0.85,
-    migration_backend: str = "kvtransfer",
+    max_gpu_memory_utilization: float = 0.60,
+    migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     cuda_visiable_device: Optional[str] = None,
     request_output_queue_type: str = "zmq",
     enforce_eager: bool = False,
+    pd_ratio: str = "1:1",
     request_output_forwarding_mode: str = "thread",
+    enable_engine_semi_pd_disagg: bool = False,
+    semi_pd_ins_id: str = "test",
     **kwargs
 ):
+    enable_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id={semi_pd_ins_id} --semi_pd.transfer_type=rdma ' \
+        f'--semi_pd.prefill_server_port={port+37}'
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
         f"{f'CUDA_VISIBLE_DEVICES={cuda_visiable_device} ' if cuda_visiable_device else ''}"
@@ -193,6 +202,7 @@ def generate_bladellm_launch_command(
         f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "
         f"{'--disable_cuda_graph' if enforce_eager else ''} "
         f"{'--enable_disagg' if enable_pd_disagg else ''} "
+        f"{enable_engine_semi_pd_disagg_option if enable_engine_semi_pd_disagg else ''} "
         f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
         f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role={instance_type} "
@@ -202,6 +212,8 @@ def generate_bladellm_launch_command(
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration and not enable_pd_disagg} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
+        f"MANAGER.ENABLE_ADAPTIVE_PD {enable_adaptive_pd} "
+        f"MANAGER.PD_RATIO {pd_ratio} "
         f"INSTANCE.REQUEST_OUTPUT_FORWARDING_MODE {request_output_forwarding_mode} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
@@ -217,19 +229,24 @@ def generate_bladellm_serve_command(
     max_num_batched_tokens: int = 16000,
     enable_llumnix: bool = True,
     enable_pd_disagg: bool = False,
+    enable_adaptive_pd: bool = False,
     enable_migration: bool = True,
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
     engine_disagg_transfer_type: str = "rdma",
-    max_gpu_memory_utilization: float = 0.80, # TODO(s5u13b): Fix OOM in TP=2.
-    migration_backend: str = "kvtransfer",
+    max_gpu_memory_utilization: float = 0.60, # TODO(s5u13b): Fix OOM in TP=2.
+    migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     max_instances: int = 4,
+    pd_ratio: str = "1:1",
     request_output_queue_type: str = "zmq",
     enforce_eager: bool = False,
     request_output_forwarding_mode: str = "thread",
+    enable_engine_semi_pd_disagg: bool = False,
     **kwargs
 ):
+    enable_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id=test --semi_pd.transfer_type=rdma ' \
+        f'--semi_pd.prefill_server_port={port+37}'
     command = (
         f"RAY_DEDUP_LOGS=0 "
         f"nohup python -u -m llumnix.entrypoints.bladellm.serve "
@@ -251,7 +268,10 @@ def generate_bladellm_serve_command(
         f"--disagg_pd.inst_role {instance_type} "
         f"--naming_url {NAMING_URL} "
         f"{'--enable-engine-pd-disagg' if enable_pd_disagg else ''} "
+        f"{enable_engine_semi_pd_disagg_option if enable_engine_semi_pd_disagg else ''} "
+        f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"--dispatch-policy {dispatch_policy} "
+        f"--pd-ratio {pd_ratio} "
         f"{'--enable-migration' if enable_migration and not enable_pd_disagg else ''} "
         f"--migration-backend {migration_backend} "
         f"--request-output-queue-type {request_output_queue_type} "
@@ -298,6 +318,8 @@ def generate_bladellm_request(prompt):
         "ignore_eos": "false",
         "presence_penalty": 1.1,
         "repetition_penalty": 1.1,
+        "semi_p_inst_id": "prefill",
+        "semi_d_inst_id": "decode",
     }
     return request
 
@@ -427,6 +449,7 @@ def generate_bladellm_register_service_command_func(
         f"--disable_frontend_multiprocessing "
         f"--disable_signal_handler "
         f"--enable_disagg "
+        f"{'--disable_cuda_graph' if engine_type == 'prefill' else ''} "
         f"--disagg_pd.inst_id {str(uuid.uuid4().hex)[:8]} "
         f"--disagg_pd.inst_role {engine_type} "
         f"--disagg_pd.disagg_transfer_type rdma "
@@ -469,11 +492,15 @@ def shutdown_llumnix_service_func():
     time.sleep(1.0)
 
 def cleanup_ci_outputs_func():
+    subprocess.run('rm -rf bench_*.out', shell=True, check=False)
     subprocess.run('rm -rf instance_*.out', shell=True, check=False)
     subprocess.run('rm -rf nohup.out', shell=True, check=False)
     subprocess.run('rm -rf core.*', shell=True, check=False)
     subprocess.run('rm -rf nfs*', shell=True, check=False)
     subprocess.run('rm -rf service_test', shell=True, check=False)
+    subprocess.run('rm -rf *.png', shell=True, check=False)
+    subprocess.run('rm -rf *.npy', shell=True, check=False)
+    subprocess.run('rm -rf *.json', shell=True, check=False)
 
 @pytest.fixture
 def shutdown_llumnix_service():
@@ -525,3 +552,10 @@ def to_markdown_table(data):
 
     table = f"{header_row}\n{separator_row}\n" + "\n".join(data_rows) + "\n\n"
     return table
+
+def generate_special_test_config(key_value_pairs: List[Tuple[str, str]], base_config: List, schema: str):
+    new_config = copy.deepcopy(base_config)
+    for key, value in key_value_pairs:
+        index = schema.replace(" ", "").split(",").index(key)
+        new_config[index] = value
+    return new_config

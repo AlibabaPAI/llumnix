@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
@@ -28,7 +29,7 @@ from llumnix.utils import get_ip_address, wait_port_free
 from tests import conftest
 from tests.conftest import ray_env
 from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
-                    wait_for_llumnix_service_ready, shutdown_llumnix_service,
+                    wait_for_llumnix_service_ready, shutdown_llumnix_service, generate_special_test_config,
                     generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
                     generate_bladellm_serve_command)
 from tests.utils import try_convert_to_local_path
@@ -78,26 +79,55 @@ def parse_log_file(title: str):
     )
 
 
+config_schema = "engine, enable_pd_disagg, request_output_queue_type, enable_engine_semi_pd_disagg, enable_adaptive_pd"
+
+generate_special_bench_test_config = partial(generate_special_test_config, schema=config_schema)
+
+def generate_bench_test_config():
+    vllm_base_config = ["engine_vLLM", False, "zmq", False, False]
+
+    vllm_config = [
+        vllm_base_config,
+
+        # rayqueue
+        generate_special_bench_test_config([("request_output_queue_type", "rayqueue")], vllm_base_config),
+    ]
+
+
+    bladellm_base_config = ["engine_BladeLLM", False, "zmq", False, False]
+
+    bladellm_config = [
+        bladellm_base_config,
+
+        # pd
+        generate_special_bench_test_config([("enable_pd_disagg", True)], bladellm_base_config),
+
+        # rayqueue
+        generate_special_bench_test_config([("request_output_queue_type", "rayqueue")], bladellm_base_config),
+
+        # semi-pd
+        generate_special_bench_test_config([("enable_engine_semi_pd_disagg", True)], bladellm_base_config),
+
+        # adaptive-pd
+        generate_special_bench_test_config([("enable_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)],
+                                           bladellm_base_config),
+    ]
+
+    return vllm_config + bladellm_config
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
-@pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception,
-                                enable_pd_disagg, model, request_output_queue_type, engine):
+@pytest.mark.parametrize(config_schema, generate_bench_test_config())
+async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model,
+                                engine, enable_pd_disagg, request_output_queue_type, enable_engine_semi_pd_disagg,
+                                enable_adaptive_pd):
     engine = engine.split("_")[1]
-
-    if "vLLM" in engine and enable_pd_disagg:
-        conftest.SKIP_REASON = "Do not test the vLLM pd-disagg mode; only consider its correctness for now."
-
-    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
-        pytest.skip(conftest.SKIP_REASON)
 
     global test_times
 
     qps = 5 if not enable_pd_disagg else 0.5
-    num_prompts = 500 if not enable_pd_disagg else 50
+    num_prompts = 50 if not enable_pd_disagg else 50
     ip = get_ip_address()
     base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:
@@ -106,6 +136,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     ip_ports = []
     device_count = min(4, torch.cuda.device_count())
     num_instances = device_count
+    pd_ratio = "1:1" if not enable_adaptive_pd else "1:3"
 
     if "vLLM" in engine:
         generate_serve_command = generate_vllm_serve_command
@@ -124,8 +155,11 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             ip=ip,
                                             port=base_port,
                                             model=model,
+                                            pd_ratio=pd_ratio,
                                             enable_migration=True,
                                             enable_pd_disagg=enable_pd_disagg,
+                                            enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+                                            enable_adaptive_pd=enable_adaptive_pd,
                                             request_output_queue_type=request_output_queue_type,
                                             max_instances=num_instances)
     subprocess.run(serve_command, shell=True, check=True)

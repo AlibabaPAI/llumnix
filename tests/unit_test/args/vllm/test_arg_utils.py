@@ -15,7 +15,7 @@ from dataclasses import asdict
 from unittest.mock import patch
 from vllm import EngineArgs
 
-from llumnix.arg_utils import LlumnixEngineArgsFactory, LlumnixEngineArgs
+from llumnix.arg_utils import LlumnixEngineArgsFactory, LlumnixEngineArgs, InstanceArgs
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
@@ -54,7 +54,7 @@ def test_gen_next_engine_args_vllm():
         )
     )
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.VLLM, engine_args, InstanceType.NO_CONSTRAINTS.value
+        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.NO_CONSTRAINTS)
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(engine_args.engine_args)
@@ -66,12 +66,12 @@ def test_gen_next_engine_args_vllm_from_registered_service():
             enable_port_increment=True,
             load_registered_service=True,
             load_registered_service_path="",
-            pdd_config=PDDConfig(True, False, [1, 2], False),
+            pdd_config=PDDConfig(True, False, False, [1, 2], False),
         )
 
     engine_args = None
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.VLLM, engine_args, InstanceType.PREFILL.value
+        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.PREFILL)
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(
@@ -79,7 +79,7 @@ def test_gen_next_engine_args_vllm_from_registered_service():
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.VLLM, engine_args, InstanceType.DECODE.value
+        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.DECODE)
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(

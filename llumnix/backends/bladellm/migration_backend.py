@@ -89,6 +89,9 @@ class WorkerRequestSyncGroup:
 
     def backup_request_group(self, request_group_ids):
         with self.lock:
+            self._backup_state_manager_groups.clear()
+            self._backup_request_tracker.clear()
+
             for request_group_id in request_group_ids:
                 self._backup_state_manager_groups[request_group_id] = self.request_group[request_group_id]
                 self._backup_request_tracker[request_group_id] = self.request_tracker.get_req_metrics(request_group_id)

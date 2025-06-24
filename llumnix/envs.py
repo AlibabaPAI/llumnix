@@ -95,7 +95,7 @@ environment_variables: Dict[str, Callable[[], Any]] = {
 
     # metrics envs
     "METRICS_OUTPUT_TARGET":
-    lambda: os.getenv("LLUMNIX_METRICS_OUTPUT_TARGET", "logger"),
+    lambda: os.getenv("LLUMNIX_METRICS_OUTPUT_TARGET", ""),
     "MANAGER_METRICS_SAMPLE_EVERY_N_RECORDS":
     lambda: os.getenv("LLUMNIX_MANAGER_METRICS_SAMPLE_EVERY_N_RECORDS", "0"),
     "LLUMNIX_CLIENT_METRICS_SAMPLE_EVERY_N_RECORDS":

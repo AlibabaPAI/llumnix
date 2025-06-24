@@ -75,7 +75,7 @@ class MetricEntry:
         if self.labels:
             return f"{self.name}{{{self.labels}}}: {self.value}."\
 
-        return f"{self.name}{{}}: {self.value}."
+        return f"{self.name}: {self.value}."
 
     def __repr__(self):
         return self.__str__()

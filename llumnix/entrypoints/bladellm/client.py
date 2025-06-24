@@ -11,19 +11,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import time
 import asyncio
 import copy
 import random
 from typing import Dict, List, Tuple, Optional
 
+import msgspec
 import ray
 
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.metrics.timestamps import RequestTimestamps
@@ -72,10 +72,10 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_req_id))
         internal_request = copy.deepcopy(request)
         internal_request.id = llumnix_req_id
-        resp_stream = await self._generate(llumnix_req_id, internal_request.model_dump_json())
+        resp_stream = await self._generate(llumnix_req_id, self.msg_encoder.encode(internal_request))
         return resp_stream
 
-    async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
+    async def _generate(self, request_id: int, request: bytes) -> LLMResponse:
         logger.info("Client receive request {}.".format(request_id))
         results_queue = asyncio.Queue()
         self.request_stream[request_id] = results_queue
@@ -102,7 +102,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         return LLMResponse(request_id, resp_queue=results_queue)
 
     # pylint: disable=arguments-differ
-    async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
+    async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: bytes):
         if self.log_request_timestamps:
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
@@ -113,7 +113,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         )
 
     # pylint: disable=arguments-differ
-    async def _generate_by_instance(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
+    async def _generate_by_instance(self, request_id: int, server_info: ServerInfo, request: bytes):
         try:
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
@@ -146,7 +146,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 continue
 
             for request_response in request_responses:
-                request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
+                request_output = msgspec.convert(self.msg_decoder.decode(request_response.get_engine_output()),
+                                                 type=GenerateStreamResponse)
                 request_id = request_output.req_id
                 request_timestamp: RequestTimestamps = request_response.request_timestamps
                 set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())

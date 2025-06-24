@@ -101,8 +101,15 @@ class MockLlumlet:
     def get_engine_disagg_inst_id(self) -> str:
         return self.engine_disagg_inst_id
 
-def init_manager():
-    manager_args = ManagerArgs(enable_migration=True)
+def init_manager(
+        enable_pd_disagg: bool = False,
+        enable_engine_pd_disagg: bool = False,
+        enable_engine_semi_pd_disagg: bool = False):
+    manager_args = ManagerArgs(
+        enable_migration=True,
+        enable_pd_disagg=enable_pd_disagg,
+        enable_engine_pd_disagg=enable_engine_pd_disagg,
+        enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg)
     manager_args.log_instance_info = False
     # manager is initialized by scaler
     scaler: Scaler = Scaler.from_args(
@@ -137,14 +144,17 @@ def manager():
     ray.get(manager.is_ready.remote())
     yield manager
 
-@pytest.fixture
-def llumlet():
+def generate_llumlet() -> MockLlumlet:
     instance_id = random_uuid()
     instance_name = get_instance_name(instance_id)
     llumlet = MockLlumlet.options(name=instance_name,
                                   namespace='llumnix').remote(instance_id)
     ray.get(llumlet.is_ready.remote())
     return llumlet
+
+@pytest.fixture
+def llumlet():
+    return generate_llumlet()
 
 def test_init_manager(ray_env, manager):
     assert manager is not None
@@ -203,6 +213,42 @@ def test_generate(ray_env, manager: Manager, llumlet):
     ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None))
     time.sleep(1.0)
     num_requests = ray.get(llumlet.get_num_requests.remote())
+    assert num_requests == 1
+
+def test_generate_pdd(ray_env):
+    manager = init_manager(enable_engine_pd_disagg=True)
+    prefill_llumlet: MockLlumlet = generate_llumlet()
+    instance_id = ray.get(prefill_llumlet.get_instance_id.remote())
+    ray.get(manager.scale_up.remote(instance_id, prefill_llumlet, InstanceType("prefill"), None))
+    decode_llumlet: MockLlumlet = generate_llumlet()
+    instance_id = ray.get(decode_llumlet.get_instance_id.remote())
+    ray.get(manager.scale_up.remote(instance_id, decode_llumlet, InstanceType("decode"), None))
+
+    request_id = random_uuid()
+    num_requests = ray.get(prefill_llumlet.get_num_requests.remote())
+    assert num_requests == 0
+    server_info = ServerInfo(None, None, None, None, None)
+    ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None))
+    time.sleep(1.0)
+    num_requests = ray.get(prefill_llumlet.get_num_requests.remote())
+    assert num_requests == 1
+
+def test_generate_semi_pdd(ray_env):
+    manager = init_manager(enable_engine_semi_pd_disagg=True)
+    prefill_llumlet: MockLlumlet = generate_llumlet()
+    instance_id = ray.get(prefill_llumlet.get_instance_id.remote())
+    ray.get(manager.scale_up.remote(instance_id, prefill_llumlet, InstanceType("prefill"), None))
+    decode_llumlet: MockLlumlet = generate_llumlet()
+    instance_id = ray.get(decode_llumlet.get_instance_id.remote())
+    ray.get(manager.scale_up.remote(instance_id, decode_llumlet, InstanceType("decode"), None))
+
+    request_id = random_uuid()
+    num_requests = ray.get(decode_llumlet.get_num_requests.remote())
+    assert num_requests == 0
+    server_info = ServerInfo(None, None, None, None, None)
+    ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None))
+    time.sleep(1.0)
+    num_requests = ray.get(decode_llumlet.get_num_requests.remote())
     assert num_requests == 1
 
 def get_instance_info_migrate_in(instance_id):

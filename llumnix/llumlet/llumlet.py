@@ -32,7 +32,7 @@ from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import MigrationType, RequestIDType, BackendType
+from llumnix.utils import MigrationType, RequestIDType, BackendType, is_request_debug_mode
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -155,7 +155,8 @@ class Llumlet:
         return self.backend_engine.engine_disagg_inst_id
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
+        if is_request_debug_mode(server_info):
+            set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
         self.llumlet_metrics.llumlet_request_qps.increase(
             labels={"instance_id": self.instance_id}
         )

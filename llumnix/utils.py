@@ -33,7 +33,8 @@ import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
-from llumnix.constants import RAY_RPC_TIMEOUT
+from llumnix.constants import RAY_RPC_TIMEOUT, LLUMNIX_DEBUG_MODE, REQUEST_TIMESTAMPS
+
 
 logger = init_logger(__name__)
 
@@ -416,3 +417,19 @@ def log_worker_exception(e: Exception, instance_id: str, rank: str, method_name:
                 method_name, instance_id, rank, request_id,
             )
         )
+
+
+def is_request_debug_mode(
+    request: Union["ServerInfo", "LlumnixServerRequest", Dict[str, Any]],
+):
+    if isinstance(request, dict):
+        return request.get(LLUMNIX_DEBUG_MODE, False)
+    return hasattr(request, REQUEST_TIMESTAMPS) or (
+        hasattr(request, LLUMNIX_DEBUG_MODE) and getattr(request, LLUMNIX_DEBUG_MODE)
+    )
+
+def disable_request_debug_mode(request: Union["ServerInfo", "LlumnixServerRequest"]):
+    setattr(request, LLUMNIX_DEBUG_MODE, False)
+
+def enable_request_debug_mode(request: Union["ServerInfo", "LlumnixServerRequest"]):
+    setattr(request, LLUMNIX_DEBUG_MODE, True)

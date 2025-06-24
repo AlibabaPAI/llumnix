@@ -35,6 +35,7 @@ from llumnix.queue.zmq_utils import (
 )
 from llumnix.constants import ZMQ_RPC_TIMEOUT, ZMQ_IO_THREADS
 from llumnix.metrics.timestamps import set_timestamp
+from llumnix.utils import is_request_debug_mode
 
 logger = init_logger(__name__)
 
@@ -136,7 +137,8 @@ class ZmqClient(QueueClientBase):
                         error_message="Unable to start RPC Server")
 
     async def put_nowait(self, item: Any, server_info: ServerInfo):
-        set_timestamp(item, 'queue_client_send_timestamp', time.time())
+        if is_request_debug_mode(server_info):
+            set_timestamp(item, 'queue_client_send_timestamp', time.time())
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitQueueRequest(item=item),
                         ip=server_info.request_output_queue_ip,
@@ -144,7 +146,8 @@ class ZmqClient(QueueClientBase):
                         error_message="Unable to put items into queue.")
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
-        set_timestamp(items, 'queue_client_send_timestamp', time.time())
+        if is_request_debug_mode(server_info):
+            set_timestamp(items, 'queue_client_send_timestamp', time.time())
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitBatchQueueRequest(items=items),
                         ip=server_info.request_output_queue_ip,

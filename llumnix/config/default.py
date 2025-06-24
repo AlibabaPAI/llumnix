@@ -36,8 +36,8 @@ _C.SERVER.SERVER_LOG_LEVEL = "info"
 _C.SERVER.REQUEST_OUTPUT_QUEUE_TYPE = "zmq"
 # Disable logging requests in server
 _C.SERVER.DISABLE_LOG_REQUESTS_SERVER = False
-# Enable logging request timestamp
-_C.SERVER.LOG_REQUEST_TIMESTAMPS = False
+# Enable debug mode
+_C.SERVER.ENABLE_DEBUG_MODE = False
 # Path to config file of arguments
 _C.SERVER.CONFIG_FILE = None
 # Disable keep serve process alive

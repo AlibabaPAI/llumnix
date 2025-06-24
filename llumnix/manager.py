@@ -42,6 +42,7 @@ from llumnix.utils import (
     log_instance_exception,
     BackendType,
     LaunchMode,
+    is_request_debug_mode
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -150,7 +151,8 @@ class Manager:
         prefill_instance_id, decode_instance_id, request_expected_steps = self.global_scheduler.dispatch(request_id)
         target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id, kwargs)
 
-        set_timestamp(server_info, 'manager_generate_timestamp', time.time())
+        if is_request_debug_mode(server_info):
+            set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         asyncio.create_task(
             self._generate_with_exception_handling(
                 request_id, server_info, request_expected_steps, target_instance_id, *args, **kwargs

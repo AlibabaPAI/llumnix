@@ -111,3 +111,8 @@ DEFAULT_EAS_EXPORTER_URL = "http://localhost:8080/api/builtin/realtime_metrics"
 BLOCKDEMANDFACTOR_BUSY_THRESHOLD: float = 1.0
 REMAININGSTEPS_BUSY_THRESHOLD: float = 10.0
 DECODE_COMPUTE_BOUND_BATCH_SIZE: float = 128
+
+# debug mode
+LLUMNIX_DEBUG_MODE = "llumnix_debug_mode"
+REQUEST_TIMESTAMPS = 'request_timestamps'
+LLUMNIX_DEBUG_MODE_HEADER = 'X-Llumnix-Debug-Mode'

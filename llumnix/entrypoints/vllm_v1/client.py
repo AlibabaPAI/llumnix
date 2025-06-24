@@ -92,7 +92,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                                    sampling_params: SamplingParams,
                                    *args,
                                    **kwargs) -> AsyncStream:
-        if self.log_request_timestamps:
+        if self.enable_debug_mode:
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())

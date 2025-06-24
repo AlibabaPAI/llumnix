@@ -15,15 +15,12 @@ import copy
 import math
 import time
 import asyncio
-from typing import Callable, Dict, List, Optional, Type
-from contextlib import contextmanager
 
 import ray.actor
-from vllm.v1.engine.core_client import EngineCoreClient, MPClient, AsyncMPClient
+
+from vllm.v1.engine.core_client import AsyncMPClient
 from vllm.v1.executor.abstract import Executor
 
-from vllm.config import VllmConfig
-from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
 from vllm import SamplingParams
@@ -51,9 +48,11 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         client_index: int = 0,
     ):
         # self.request_stream: Dict[str, AsyncStream] = {}
+        
         LlumnixClient.__init__(self, entrypoints_context, loop)
+        logger.info("before AsyncMPClient.__init__")
         AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
-
+        logger.info("after AsyncMPClient.__init__, handshake success")
             
     async def generate(self,
                        prompt: str,
@@ -136,6 +135,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
                 request_id, instance_id, instance))
 
+    # get outputs loop is inside AsyncMPClient
     async def _abort_request(self, instance_id: str, instance: ray.actor.ActorHandle, request_id: str):
         try:
             await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort, request_id)

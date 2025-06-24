@@ -11,20 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import Any, Optional, Union
 
 from vllm.v1.request import Request
 from vllm.v1.request import RequestStatus as RequestStatusVLLMV1
 from vllm.multimodal.inputs import MultiModalKwargs, PlaceholderRange
 from vllm.sampling_params import SamplingParams
-from vllm.utils import is_list_of
-from vllm.v1.engine import (EngineCoreEvent, EngineCoreEventType,
-                            EngineCoreRequest, FinishReason)
+from vllm.v1.engine import EngineCoreEvent
 from vllm.v1.structured_output.request import StructuredOutputRequest
 from vllm.v1.utils import ConstantList
-
-if TYPE_CHECKING:
-    from vllm.lora.request import LoRARequest
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
@@ -57,12 +52,9 @@ class LlumnixRequestVLLMV1(Request, LlumnixRequest):
         self.lora_request = lora_request
         self.structured_output_request = structured_output_request
 
-        # self.status = (RequestStatus.WAITING_FOR_FSM
-        #                if sampling_params.guided_decoding is not None else
-        #                RequestStatus.WAITING)
-        self.vllm_status = (RequestStatus.WAITING_FOR_FSM
+        self.vllm_status = (RequestStatusVLLMV1.WAITING_FOR_FSM
                        if sampling_params.guided_decoding is not None else
-                       RequestStatus.WAITING)
+                       RequestStatusVLLMV1.WAITING)
         self.events: list[EngineCoreEvent] = []
         self.stop_reason: Union[int, str, None] = None
         assert sampling_params.max_tokens is not None
@@ -103,42 +95,17 @@ class LlumnixRequestVLLMV1(Request, LlumnixRequest):
         # The number of tokens with prefix cache hits.
         self.num_cached_tokens = -1
     
-    # @property
-    # def block_size(self) -> int:
-    #     return self.
-
     @property
     def prompt_len(self) -> int:
         return self.num_prompt_tokens
-
-    # @property
-    # def request_len(self) -> int:
-    #     return self.get_seqs()[0].get_len()
 
     @property
     def output_len(self) -> int:
         return self.num_computed_tokens
 
-    # @property
-    # def n_blocks(self) -> int:
-    #     return self.get_seqs()[0].n_blocks
-    # @property
-    # def token_ids(self) -> int:
-    #     return self.all_token_ids
-
-    # @property
-    # def inference_type(self) -> RequestInferenceType:
-    #     if self.is_prefill():
-    #         return RequestInferenceType.PREFILL
-    #     return RequestInferenceType.DECODE
-
     @property
     def finished(self) -> bool:
         return self.is_finished()
-
-    # @property
-    # def request_arrival_time(self) -> float:
-    #     return self.arrival_time
 
     @property
     def status(self) -> RequestStatus:
@@ -152,8 +119,3 @@ class LlumnixRequestVLLMV1(Request, LlumnixRequest):
         else:
             request_status = RequestStatus.FINISHED
         return request_status
-
-    # @property
-    # def prefill_num_blocks(self) -> int:
-    #     # Get the prefill len of the waiting request.
-    #     return self.get_seqs()[0].n_blocks

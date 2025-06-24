@@ -63,6 +63,17 @@ class LaunchMode(str, Enum):
     GLOBAL = "GLOBAL"
 
 
+class MigrationType(str, Enum):
+    PD_MIGRATION = "PD_MIGRATION"
+
+    NO_CONSTRAINTS_LOAD_BALANCE = "NO_CONSTRAINTS_LOAD_BALANCE"
+    DD_LOAD_BALANCE = "DD_LOAD_BALANCE"
+
+    DYNAMIC_P_TO_D = "DYNAMIC_P_TO_D"
+    AGGREGATE_DYNAMIC_P = "AGGREGATE_DYNAMIC_P"
+    EASE_D_WITH_P_BUBBLE = "EASE_D_WITH_P_BUBBLE"
+
+
 @dataclass
 class MigrationResponse:
     success: bool = True

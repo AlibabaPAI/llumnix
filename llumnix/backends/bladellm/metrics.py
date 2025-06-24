@@ -33,7 +33,7 @@ class BladeLLMMetrics(EngineMetrics):
         self.num_watermark_blocks.observe(block_manager.reserved_blocks)
 
     def scheduler_init_metrics(self, scheduler):
-        pass
+        self.decode_batch_size.observe(scheduler.get_decode_batch_size)
 
     def engine_init_metrics(self, engine):
         self.instance_id.observe(engine.instance_id)

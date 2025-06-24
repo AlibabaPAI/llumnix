@@ -12,8 +12,10 @@
 # limitations under the License.
 
 import math
+from typing import Dict, List, Optional, Union
 
-from blade_llm.service.scheduler_types import GenerationGroupState
+from blade_llm.service.scheduler_types import GenerationGroupState, RequestMetrics
+from blade_llm.service.tracing import WorkerReqMetrics
 
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 
@@ -23,6 +25,9 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         GenerationGroupState.__init__(self, **gen_group.__dict__)
         LlumnixRequest.__init__(self, *args)
         self._inference_type = RequestInferenceType.PREFILL
+
+        self.req_tracker_migration_state: Optional[Union[RequestMetrics, WorkerReqMetrics]] = None
+        self.detokenizer_migration_state: Optional[Dict[str, List]] = None
 
     @property
     def llumnix_status(self) -> RequestStatus:

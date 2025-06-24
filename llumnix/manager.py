@@ -24,7 +24,6 @@ import ray.actor
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
-from llumnix.global_scheduler.migration_scheduler import PairMigrationConstraints
 from llumnix.global_scheduler.migration_filter import CustomFilter
 from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.arg_utils import (
@@ -101,6 +100,7 @@ class Manager:
         self.enable_pd_disagg = manager_args.enable_pd_disagg
 
         # scheduling states
+        self.instance_id_2_engine_inner_inst_id: Dict[str, str] = {}
         self.polling_interval = manager_args.polling_interval
         global_scheduler_config = manager_args.create_global_scheduler_config()
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
@@ -126,7 +126,13 @@ class Manager:
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
-        def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str):
+        def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
+            if self.manager_args.enable_engine_pd_disagg:
+                dispatch_kwargs["decode_instance_id"] = self.instance_id_2_engine_inner_inst_id[decode_instance_id]
+            elif self.manager_args.enable_engine_semi_pd_disagg:
+                dispatch_kwargs["semi_p_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(prefill_instance_id, None)
+                dispatch_kwargs["semi_d_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(decode_instance_id, None)
+
             if not self.manager_args.enable_engine_semi_pd_disagg:
                 target_instance_id = prefill_instance_id
             else:
@@ -141,9 +147,8 @@ class Manager:
                 NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
-        prefill_instance_id, decode_instance_id, request_expected_steps = \
-            self.global_scheduler.dispatch(request_id, dispatch_kwargs=kwargs)
-        target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id)
+        prefill_instance_id, decode_instance_id, request_expected_steps = self.global_scheduler.dispatch(request_id)
+        target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id, kwargs)
 
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         asyncio.create_task(
@@ -242,7 +247,7 @@ class Manager:
                 # Push migrate when the instance_info have updated a certain number of times.
                 if self.enable_migration and self.num_instance_info_updates != 0 \
                     and self.num_instance_info_updates % self.pair_migration_frequency == 0:
-                    asyncio.create_task(self._push_migrations())
+                    asyncio.create_task(self._migrate())
                 if self.log_instance_info:
                     self._log_instance_infos_to_csv(instance_infos)
             # pylint: disable=W0703
@@ -252,24 +257,73 @@ class Manager:
                     exc_info=True, stack_info=True
                 )
 
-    async def _push_migrations(self) -> None:
-        if self.enable_pd_disagg:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODE))
-            asyncio.create_task(self._migrate(PairMigrationConstraints.DECODE_2_DECODE))
-        else:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS))
+    async def _migrate(self):
+        # If encounter error during migration, to make manager keep running, we do not raise exception.
+        try:
+            instance_infos = self.global_scheduler.instance_info
+            migrate_tasks = self.global_scheduler.push_migrations(instance_infos)
 
-    async def _migrate(self, pair_migration_type: PairMigrationConstraints) -> None:
-        migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
-        for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
-            src_instance_id, dst_instance_id = migrate_instance_pair
-            dst_instance_actor = self.instances[dst_instance_id]
-            asyncio.create_task(
-                asyncio_wait_for_ray_remote_call_with_timeout(
-                    self.instances[src_instance_id].migrate_out, dst_instance_actor, dst_instance_id,
-                    exc_handling=True,
-                )
+            for task in migrate_tasks:
+                migration_type, migrate_pairs = task
+                for src_instance_id, dst_instance_id in migrate_pairs:
+                    dst_instance_actor = self.instances[dst_instance_id]
+                    asyncio.create_task(
+                        asyncio_wait_for_ray_remote_call_with_timeout(
+                            self.instances[src_instance_id].migrate_out,
+                            dst_instance_actor, dst_instance_id, migration_type
+                        )
+                    )
+        # pylint: disable=broad-except
+        except Exception:
+            logger.critical(
+                "Manager get error in _migrate, manager keeps running, please check the cause!",
+                exc_info=True, stack_info=True
             )
+
+    async def _get_engine_self_assigned_id(self, ins_id: str, instance_actor: Llumlet) -> str:
+        try:
+            engine_self_assigned_id = await asyncio_wait_for_ray_remote_call_with_timeout(
+                instance_actor.get_engine_disagg_inst_id)
+            self.instance_id_2_engine_inner_inst_id[ins_id] = engine_self_assigned_id
+            logger.info("Bind instance id {} with engine instance id {}.".format(ins_id, engine_self_assigned_id))
+            return engine_self_assigned_id
+        # pylint: disable=broad-except
+        except Exception as e:
+            log_instance_exception(e, ins_id, "scale_up")
+            raise e
+
+    async def _get_available_instances(self,
+                                instance_ids: List[str],
+                                instance_actor_handles: List[Llumlet],
+                                instance_types: List[InstanceType]
+                                ) -> List[str]:
+        available_instance_ids, available_instance_actors, available_instance_types = [], [], []
+
+        def self_assign_id_success_callback(fut,
+                                            instance_idx: int,
+                                            scale_up_info: List[List],
+                                            available_scale_up_info: List[List]):
+            ret = fut.result()[0]
+            if not isinstance(ret, Exception):
+                for item_idx, scale_up_info_item in enumerate(scale_up_info):
+                    available_scale_up_info[item_idx].append(scale_up_info_item[instance_idx])
+
+        tasks = []
+        for ins_idx, ins_info in enumerate(zip(instance_ids, instance_actor_handles)):
+            ins_id, ins_actor = ins_info
+            if ins_id not in self.instances:
+                task = asyncio.gather(self._get_engine_self_assigned_id(ins_id, ins_actor), return_exceptions=True)
+                task.add_done_callback(
+                    partial(
+                        self_assign_id_success_callback,
+                        instance_idx=ins_idx,
+                        scale_up_info=[instance_ids, instance_actor_handles, instance_types],
+                        available_scale_up_info=[available_instance_ids, available_instance_actors, available_instance_types])
+                    )
+                tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        return available_instance_ids, available_instance_actors, available_instance_types
 
     @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     async def scale_up(self,
@@ -288,19 +342,24 @@ class Manager:
         no_pending_instance = (self.pending_rebuild_migration_instances == 0)
         indeed_update = not set(instance_ids).issubset(self.instances.keys())
 
-        def scale_up_done_callback(manager: 'Manager', instance_ids, instance_actor_handles) -> None:
-            for idx, ins_id in enumerate(instance_ids):
-                if ins_id not in manager.instances:
-                    instance_actor = instance_actor_handles[idx]
-                    manager.instances[ins_id] = instance_actor
-                    if manager.log_instance_info:
-                        manager.instance_last_logged_empty[ins_id] = False
-                    manager.pending_rebuild_migration_instances += 1
-
         if indeed_update:
-            await self.global_scheduler.scale_up(
-                instance_ids, instance_actor_handles, instance_types, partial(scale_up_done_callback, manager=self)
-            )
+            if self.manager_args.enable_engine_pd_disagg or self.manager_args.enable_engine_semi_pd_disagg:
+                available_instance_ids, available_instance_actors, available_instance_types = \
+                    await self._get_available_instances(instance_ids, instance_actor_handles, instance_types)
+            else:
+                available_instance_ids, available_instance_actors, available_instance_types = \
+                    instance_ids, instance_actor_handles, instance_types
+
+            self.global_scheduler.scale_up(available_instance_ids, available_instance_types)
+
+            for idx, ins_id in enumerate(available_instance_ids):
+                if ins_id not in self.instances:
+                    instance_actor = available_instance_actors[idx]
+                    self.instances[ins_id] = instance_actor
+                    if self.log_instance_info:
+                        self.instance_last_logged_empty[ins_id] = False
+                    self.pending_rebuild_migration_instances += 1
+
             self.num_instances = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
@@ -327,6 +386,7 @@ class Manager:
                 indeed_update = True
                 self.pending_rebuild_migration_instances += 1
                 self.instances.pop(ins_id)
+                self.instance_id_2_engine_inner_inst_id.pop(ins_id, None)
             else:
                 logger.warning("instance {} is not in instances".format(ins_id))
 
@@ -422,7 +482,7 @@ class Manager:
             group_name = None
 
         migration_filter: CustomFilter = \
-            self.global_scheduler.migration_scheduler.migration_filter.get_filter("migration_backend_init_filter")
+            self.global_scheduler.migration_scheduler.migration_base_filter.get_filter("migration_backend_init_filter")
         migration_filter.set_filter_condtition(
             src_filter=lambda instance_info: instance_info.instance_id in alive_instances,
             dst_filter=lambda instance_info: instance_info.instance_id in alive_instances,

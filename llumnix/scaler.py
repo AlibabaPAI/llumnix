@@ -104,7 +104,6 @@ class Scaler:
         self.load_registered_service = manager_args.load_registered_service
         self.load_registered_service_path = manager_args.load_registered_service_path
         self.pdd_config: PDDConfig = manager_args.create_pdd_config()
-
         self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
         try:
             self.manager = Manager.from_args(
@@ -342,7 +341,8 @@ class Scaler:
                     )
                     tasks.append(task)
                 await asyncio.gather(*tasks)
-                self.scale_down(dead_instance_ids)
+                if len(dead_instance_ids) > 0:
+                    await self.scale_down(dead_instance_ids)
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(

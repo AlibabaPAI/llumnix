@@ -37,7 +37,7 @@ from blade_llm.service.workers.base_worker import BaseWorker
 from blade_llm.service.proto.bladellm_pb2 import (SamplingParams, LogitsProcessorParams,
                                                   DetokenParams, StoppingCriteria, WorkerRequest)
 
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, convert_bytes
 from llumnix.internal_config import MigrationConfig
 from llumnix.backends.migration_backend_interface import MigrationBackendBase
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration_worker_pb2
@@ -93,6 +93,8 @@ class WorkerRequestSyncGroup:
             self._backup_request_tracker.clear()
 
             for request_group_id in request_group_ids:
+                if request_group_id not in self.request_group:
+                    continue
                 self._backup_state_manager_groups[request_group_id] = self.request_group[request_group_id]
                 self._backup_request_tracker[request_group_id] = self.request_tracker.get_req_metrics(request_group_id)
 
@@ -275,8 +277,8 @@ class GrpcMigrationBackend(MigrationBackendBase):
 
             response.state_manager_data = pickle.dumps(state_manager_data)
             response.request_tracker_data = pickle.dumps(request_tracker_data)
-            logger.debug("Pickle state manager meta for request id {}, data length: {}".format(
-                request.request_id, len(response.state_manager_data)))
+            logger.debug("Pickle state manager meta for request id {}, data length: {}.".format(
+                request.request_id, convert_bytes(len(response.state_manager_data))))
 
         return response
 

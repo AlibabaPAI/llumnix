@@ -29,3 +29,6 @@ class ServerInfo:
         self.request_output_queue = request_output_queue.queue if request_output_queue_type == QueueType.RAYQUEUE else None
         self.request_output_queue_ip = request_output_queue_ip
         self.request_output_queue_port = request_output_queue_port
+
+    def __repr__(self) -> str:
+        return f"ServerInfo(server_id={self.server_id}, request_output_queue_type={self.request_output_queue_type})"

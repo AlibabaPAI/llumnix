@@ -16,7 +16,7 @@ import time
 from typing import Any, Dict, List
 
 from llumnix.metrics.base_metrics import BaseMetrics
-from llumnix.metrics.metrics_types import _REGISTRY, Status, MetricEntry
+from llumnix.metrics.metrics_types import _REGISTRY, Status, MetricEntry, PassiveStatus
 from llumnix.metrics.exporters import MultiExporter
 from llumnix.metrics.dumper import Dumper, DummyDumper
 from llumnix.instance_info import InstanceInfo
@@ -70,6 +70,7 @@ class EngineMetrics(BaseMetrics):
             name="num_blocks_first_waiting_request",
             metrics_sampling_interval=self.metrics_sampling_interval,
         )
+        self.decode_batch_size = PassiveStatus("decode_batch_size")
 
         # stastics
         self.num_watermark_blocks = Status(

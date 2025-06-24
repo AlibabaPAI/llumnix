@@ -167,7 +167,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self.id2group[backend_request.request_id] = backend_request
         self._detokenizer.add_new_request(
             backend_request.paged_reqs[0].req_proto,
-            backend_request.detokenizer_state)
+            backend_request.detokenizer_migration_state)
 
         self.running.append(backend_request)
         self.running.sort(key=lambda x: x.receive_time)
@@ -240,3 +240,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         for gen_group_state in self.waiting:
             num_blocks_all_waiting_requests += sum([page_req.required_blocks for page_req in gen_group_state.paged_reqs])
         return num_blocks_all_waiting_requests
+
+    def get_decode_batch_size(self) -> int:
+        return sum([len(request.paged_reqs[0].token_ids) > len(request.paged_reqs[0].req_proto.prompt_tokens)
+                    for request in self.running])

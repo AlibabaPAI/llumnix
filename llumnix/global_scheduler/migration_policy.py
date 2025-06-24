@@ -14,7 +14,6 @@
 from typing import List, Tuple
 from abc import ABC, abstractmethod
 from enum import Enum
-import numpy as np
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
@@ -31,8 +30,8 @@ class PairMigrationConstraints(str, Enum):
     PREFILL_2_PREFILL = "PREFILL_2_PREFILL"
 
 
-class PairMigrationPolicy(ABC):
-    def __init__(self, migrate_out_load_threshold: float) -> None:
+class MigrationPolicy(ABC):
+    def __init__(self, migrate_out_load_threshold: float = 0.0) -> None:
         self.migrate_out_load_threshold = migrate_out_load_threshold
 
     @abstractmethod
@@ -52,7 +51,7 @@ class PairMigrationPolicy(ABC):
         return sorted_instance_infos
 
 
-class Balanced(PairMigrationPolicy):
+class Balanced(MigrationPolicy):
     def pair_migration(self,
                        src_instance_infos: List[InstanceInfo],
                        dst_instance_infos: List[InstanceInfo],
@@ -68,13 +67,13 @@ class Balanced(PairMigrationPolicy):
             if right_load_after_mig > self.migrate_out_load_threshold:
                 continue
             load_diff_after_mig = left_load_after_mig - right_load_after_mig
-            if (0 < load_diff_after_mig < load_diff_before_mig) or (sorted_dst_instance_infos[i].migration_load_metric == -np.inf):
+            if 0 < load_diff_after_mig < load_diff_before_mig:
                 migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id,
                                                sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
 
-class Defrag(PairMigrationPolicy):
+class Defrag(MigrationPolicy):
     def pair_migration(self,
                        src_instance_infos: List[InstanceInfo],
                        dst_instance_infos: List[InstanceInfo],
@@ -86,13 +85,32 @@ class Defrag(PairMigrationPolicy):
             migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
+class AggrateDynamicPrefill(MigrationPolicy):
+    def pair_migration(self,
+                       src_instance_infos: List[InstanceInfo],
+                       dst_instance_infos: List[InstanceInfo],
+                       ) -> List[Tuple[str, str]]:
+        if min(len(src_instance_infos), len(dst_instance_infos)) <= 1:
+            return []
 
-class PairMigrationPolicyFactory:
+        sorted_src_instance_infos = sorted(src_instance_infos, reverse=False,
+                                           key=lambda instance_info: getattr(instance_info, 'instance_id'))
+        sorted_dst_instance_infos = sorted(dst_instance_infos, reverse=True,
+                                           key=lambda instance_info: getattr(instance_info, 'instance_id'))
+        migrate_instance_pairs = []
+        for i in range(min(len(sorted_src_instance_infos), len(sorted_dst_instance_infos))//2):
+            if sorted_src_instance_infos[i].instance_id != sorted_dst_instance_infos[i].instance_id:
+                migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
+
+        return migrate_instance_pairs
+
+class MigrationPolicyFactory:
     _POLICY_REGISTRY = {
         'balanced': Balanced,
         'defrag': Defrag,
+        'aggrate_dynamic_prefill': AggrateDynamicPrefill,
     }
 
     @classmethod
-    def get_policy(cls, policy_name: str, **kwargs) -> PairMigrationPolicy:
+    def get_policy(cls, policy_name: str, **kwargs) -> MigrationPolicy:
         return cls._POLICY_REGISTRY[policy_name](**kwargs)

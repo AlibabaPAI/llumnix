@@ -129,7 +129,7 @@ class AdaptiveDecodeBatchLoad(BaseLoad):
             self.decode_load = self.DECODE_COMPUTE_BOUND_BATCH_SIZE - self.decode_batch_size
 
     def is_busy(self) -> bool:
-        return self.decode_batch_size > 2 * self.DECODE_COMPUTE_BOUND_BATCH_SIZE
+        return self.decode_batch_size > self.DECODE_COMPUTE_BOUND_BATCH_SIZE
 
     def __lt__(self, other: "AdaptiveDecodeBatchLoad") -> bool:
         if isinstance(other, DummyLoad):

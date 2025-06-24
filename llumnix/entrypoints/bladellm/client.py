@@ -16,7 +16,7 @@ import time
 import asyncio
 import copy
 import random
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 import ray
 
@@ -32,9 +32,10 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.server_info import ServerInfo
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_with_timeout, is_request_debug_mode, disable_request_debug_mode, enable_request_debug_mode
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.entrypoints.client import LlumnixClient
+from llumnix.backends.bladellm.protocol import LlumnixServerRequest, LlumnixGenerateStreamResponse
 
 logger = init_logger(__name__)
 
@@ -59,7 +60,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
     def get_request_timestamps_generator(self, entrypoint_req_id: int) -> Optional[asyncio.Queue]:
         return self.timestamps_stream.get(entrypoint_req_id, None)
 
-    async def _add_request(self, request: ServerRequest) -> LLMResponse:
+    async def _add_request(self, request: Union[ServerRequest, LlumnixServerRequest]) -> LLMResponse:
         self.llumnix_client_metrics.add_request(reqeust_id=request.id)
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
             return error_resp(request.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
@@ -72,18 +73,19 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_req_id))
         internal_request = copy.deepcopy(request)
         internal_request.id = llumnix_req_id
-        resp_stream = await self._generate(llumnix_req_id, internal_request.model_dump_json())
+        if not self.enable_debug_mode and is_request_debug_mode(request):
+            # Disable request debug mode if llumnix not in debug mode.
+            disable_request_debug_mode(request)
+        resp_stream = await self._generate(llumnix_req_id, internal_request.model_dump())
         return resp_stream
 
-    async def _generate(self, request_id: int, request: ServerRequest) -> LLMResponse:
+    async def _generate(self, request_id: int, request: Union[ServerRequest, LlumnixServerRequest]) -> LLMResponse:
         logger.info("Client receive request {}.".format(request_id))
         results_queue = asyncio.Queue()
         self.request_stream[request_id] = results_queue
-        if self.log_request_timestamps:
-            entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
-            if entrypoint_req_id is not None:
-                self.timestamps_stream[entrypoint_req_id] = asyncio.Queue()
         server_info_copy = copy.deepcopy(self.server_info)
+        if is_request_debug_mode(request):
+            enable_request_debug_mode(server_info_copy) # move request debug mode flag to server_info
 
         # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
@@ -103,7 +105,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: ServerRequest):
-        if self.log_request_timestamps:
+        if is_request_debug_mode(server_info):
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
@@ -149,18 +151,21 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
                 request_id = request_output.req_id
                 request_timestamp: RequestTimestamps = request_response.request_timestamps
-                set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
+                if request_timestamp is not None:
+                    set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
+                request_id = request_output.req_id
                 # Request could be dispatched twice when manager is dead, the first request will free
                 # the request_streams when finished. Or the request is dropped already.
                 if request_id not in self.request_stream:
                     continue
                 self.request_instance[request_id] = request_response.instance_id
 
-                if self.log_request_timestamps:
+                if self.enable_debug_mode and request_timestamp:
                     # Do not consider the out of order for request timestamp currently.
                     entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
                     if entrypoint_req_id is not None:
-                        self.timestamps_stream[entrypoint_req_id].put_nowait(request_timestamp)
+                        request_output: LlumnixGenerateStreamResponse = LlumnixGenerateStreamResponse.from_generate_stream_response(request_output)
+                        request_output.set_request_timestamp(request_timestamp)
 
                 processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
                 if not processed_output:

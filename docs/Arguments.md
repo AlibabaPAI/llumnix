@@ -16,7 +16,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--disable-log-to-driver]
             [--request-output-queue-type {rayqueue,zmq}]
             [--disable-log-requests-server]
-            [--log-request-timestamps]
+            [--enable-debug-mode]
             [--config-file CONFIG_FILE]
             [--initial-instances INITIAL_INSTANCES]
             [--dispatch-load-metric {remaining_steps,kv_blocks_ratio}]
@@ -108,8 +108,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--disable-log-requests-server`
 - Disable logging requests in server.
 
-`--log-request-timestamps`
-- If log request timestamps.
+`--enable-debug-mode`
+- record request timestamps when exist param x-llumnix-debug in request header.
 
 `--config-file`
 - Path to config file of arguments.

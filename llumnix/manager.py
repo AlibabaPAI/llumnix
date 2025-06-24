@@ -46,6 +46,7 @@ from llumnix.utils import (
     asyncio_wait_for_with_timeout,
     RequestIDType,
     log_instance_exception,
+    is_request_debug_mode
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -149,7 +150,8 @@ class Manager:
             self.global_scheduler.dispatch(request_id, dispatch_kwargs=kwargs)
         target_instance_id = prefill_instance_id
 
-        set_timestamp(server_info, 'manager_generate_timestamp', time.time())
+        if is_request_debug_mode(server_info):
+            set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         try:
             asyncio.create_task(
                 asyncio_wait_for_with_timeout(

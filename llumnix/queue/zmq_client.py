@@ -100,7 +100,7 @@ class ZmqClient(QueueClientBase):
             if isinstance(
                 request, (RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest)
             ) and self.need_record_latency():
-                request.send_time = time.time()
+                request.send_time = time.perf_counter()
 
             await socket.send_multipart([cloudpickle.dumps(request)])
 

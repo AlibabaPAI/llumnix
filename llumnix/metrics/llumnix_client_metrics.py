@@ -74,7 +74,7 @@ class LlumnixClientMetrics(BaseMetrics):
     def add_request(self, reqeust_id: str):
         self.llumnix_client_request_qps.increase(labels={"server_id": self.server_id})
         if self.need_record_reveived_timestamp():
-            self.request_received_timestamps[reqeust_id] = time.time()
+            self.request_received_timestamps[reqeust_id] = time.perf_counter()
 
     def remove_request(self, request_id: str):
         if not self.request_received_timestamps.pop(request_id, None):
@@ -88,7 +88,7 @@ class LlumnixClientMetrics(BaseMetrics):
             return
         if request_id not in self.request_last_token_received_timestamp:
             # first chunk, record ttft
-            curr_timestamp = time.time()
+            curr_timestamp = time.perf_counter()
             self.request_last_token_received_timestamp[request_id] = curr_timestamp
             ttft_ms = (
                 curr_timestamp - self.request_received_timestamps[request_id]
@@ -96,7 +96,7 @@ class LlumnixClientMetrics(BaseMetrics):
             self.llumnix_client_ttft.observe(value=ttft_ms, labels={"server_id": self.server_id})
         else:
             # not first chunk, record tpot
-            curr_timestamp = time.time()
+            curr_timestamp = time.perf_counter()
             tpot_ms = (
                 curr_timestamp - self.request_last_token_received_timestamp[request_id]
             ) * 1000

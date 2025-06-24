@@ -71,7 +71,9 @@ class BaseOutputMediator(ABC):
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
-            set_timestamp(req_outputs, 'engine_actor_put_queue_timestamp', time.time())
+            for req_output in req_outputs:
+                if req_output.request_timestamps is not None:
+                    set_timestamp(req_output, 'engine_actor_put_queue_timestamp', time.time())
             tasks.append(asyncio.create_task(request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         aborted_request_ids = []

@@ -48,7 +48,7 @@ from blade_llm.utils.hardware_util import get_cpu_number
 
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_free_port,
-                           wait_port_free, run_coroutine_in_new_thread)
+                           wait_port_free, run_coroutine_in_new_thread, is_request_debug_mode)
 from llumnix.backends.backend_interface import BackendInterface, EngineState
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
@@ -92,6 +92,7 @@ class AsyncBackQueueWrapper:
                  instance_id: str,
                  request_output_queue_type: QueueType,
                  resp_queue: asyncio.Queue,
+                 request_metrics_queue_dict: Dict[str, asyncio.Queue],
                  metrics_queue: asyncio.Queue,
                  backend_type: BackendType,
                  request_output_forwarding_mode: RequestOutputForwardingMode,
@@ -107,6 +108,7 @@ class AsyncBackQueueWrapper:
         )
         self.resp_queue: asyncio.Queue = resp_queue
         self.metrics_queue: asyncio.Queue = metrics_queue
+        self.request_metrics_queue_dict: Dict[str, asyncio.Queue] = request_metrics_queue_dict
 
         self.request_server_map = {}
         # asyncio.queue is not thread-safe, just create a asyncio.task
@@ -132,6 +134,7 @@ class AsyncBackQueueWrapper:
                 if cur_step_idx >= expired_step_idx:
                     expired_req_ids.append(req_id)
                     self.request_server_map.pop(req_id, None)
+                    self.request_metrics_queue_dict.pop(req_id, None)
 
             for req_id in expired_req_ids:
                 self.backup_dangling_request_server_info.pop(req_id, None)
@@ -207,21 +210,24 @@ class AsyncBackQueueWrapper:
         # Reorganize data in order to put request output to queue in batch at one time.
         for request_output, server_info in zip(request_outputs, server_infos):
             request_timestamps = None
-            if hasattr(server_info, "request_timestamps"):
+            req_id = request_output.req_id
+            if req_id in self.request_metrics_queue_dict:
                 request_timestamps = server_info.request_timestamps
                 set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_end', time.time())
                 engine_put_queue_timestamp = time.time()
                 set_timestamp(request_timestamps, 'engine_put_queue_timestamp', engine_put_queue_timestamp)
                 set_timestamp(request_timestamps, 'engine_thread_put_queue_timestamp', engine_put_queue_timestamp)
+
+                current_step_metrics = self.request_metrics_queue_dict[req_id].get_nowait()
                 set_timestamp(request_timestamps, 'engine_step_timestamp_end',
-                            self.current_step_metrics.engine_step_timestamp_end)
+                            current_step_metrics.engine_step_timestamp_end)
                 set_timestamp(request_timestamps, 'engine_step_postprocess_timestamp_end',
-                            self.current_step_metrics.engine_step_postprocess_timestamp_end)
+                            current_step_metrics.engine_step_postprocess_timestamp_end)
                 set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
-                            self.current_step_metrics.engine_process_model_outputs_timestamp_begin)
+                            current_step_metrics.engine_process_model_outputs_timestamp_begin)
 
             llumnix_request_output = LlumnixRequestOuput(
-                request_output.req_id, self.instance_id, request_output.model_dump_json(), request_timestamps
+                req_id, self.instance_id, request_output.model_dump_json(), request_timestamps
             )
             server_id = server_info.server_id
             server_request_outputs[server_id].append(llumnix_request_output)
@@ -245,6 +251,7 @@ class AsyncBackQueueWrapper:
 
     def clear(self):
         self.request_server_map = {}
+        self.request_metrics_queue_dict = {}
         logger.info("Trans_wrapper reset.")
 
 
@@ -293,10 +300,10 @@ class AsyncLLMEngineLlumnixMixin:
         self.migrated_request = set()
         self.resp_queue = asyncio.Queue()
         self.metrics_queue = asyncio.Queue()
+        self.request_metrics_queue_dict: Dict[str, asyncio.Queue] = {}        
 
         self.backend_type = backend_type
         self.step_counter: int = 0
-        self.log_request_timestamps: bool = False
 
     @property
     def instance_info(self) -> InstanceInfo:
@@ -314,6 +321,7 @@ class AsyncLLMEngineLlumnixMixin:
             self.instance_id,
             self.request_output_queue_type,
             self.resp_queue,
+            self.request_metrics_queue_dict,
             self.metrics_queue,
             self.backend_type,
             self.request_output_forwarding_mode,
@@ -362,19 +370,20 @@ class AsyncLLMEngineLlumnixMixin:
                     RequestInferenceType.DECODE if num_out_token > 0 else RequestInferenceType.PREFILL
 
     async def update_callback(self, resp_list, *args, **kwargs):
-        if self.log_request_timestamps:
-            request_groups = resp_list[0].generation_groups.generation_group
+        print(f'resp_list in update_callback:{resp_list}')
+        for resp in resp_list:
+            request_groups = resp.generation_groups.generation_group
             step_timestamps = RequestTimestamps()
             for gen_group in request_groups:
                 request_group_id = gen_group.request_group_id
-                if request_group_id in self._back_queue:
+                if request_group_id in self.request_metrics_queue_dict and request_group_id in self._back_queue:
                     worker_metrics = resp_list[0].worker_step_metrics
                     worker_forward_time = worker_metrics.worker_bubble_time_us / 1000 + worker_metrics.prepare_step_ms + \
                         worker_metrics.model_forward_ms + worker_metrics.post_step_ms
                     set_timestamp(step_timestamps, 'engine_step_timestamp_end', worker_forward_time / 1000)
                     set_timestamp(step_timestamps, 'engine_step_postprocess_timestamp_end', worker_forward_time / 1000)
                     set_timestamp(step_timestamps, 'engine_process_model_outputs_timestamp_begin', time.time())
-            self.metrics_queue.put_nowait(step_timestamps)
+                    self.request_metrics_queue_dict[request_group_id].put_nowait(step_timestamps)
 
         self.resp_queue.put_nowait(self.step_counter)
         await super().update_callback(resp_list, *args, **kwargs)
@@ -437,8 +446,9 @@ class AsyncLLMEngineLlumnixMixin:
 
     async def add_request(self, server_info: ServerInfo, server_request: ServerRequest):
         logger.debug("Engine {} add request {}:{}.".format(self.instance_id, server_request.id, server_request.external_id))
-        self.log_request_timestamps = self.log_request_timestamps or hasattr(server_info, 'request_timestamps')
-        set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
+        if is_request_debug_mode(server_info):
+            set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
+            self.request_metrics_queue_dict[server_request.id] = asyncio.Queue()
         self.trans_wrapper.add_request(server_request.id, server_info)
         # pylint: disable=protected-access
         await self._client._add_request(server_request, self.resp_queue)
@@ -682,7 +692,7 @@ class BackendBladeLLM(BackendInterface):
 
     async def add_request(self, request_id: int, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
-        server_request = ServerRequest(**json.loads(kwargs["server_request"]))
+        server_request = ServerRequest(**kwargs["server_request"])
         # The instance ID of the decode instance. If provided, engine will skip dispatch decode instance after prefilling.
         decode_instance_id = kwargs.get("decode_instance_id", "")
         if decode_instance_id:

@@ -70,7 +70,7 @@ test_times = 0
 @pytest.mark.parametrize("enable_llumnix_debug_mode", [True, False])
 @pytest.mark.parametrize("enable_request_debug_mode", [True, False])
 @pytest.mark.parametrize("is_stream", [True, False])
-async def test_correctness(
+async def test_debug_mode(
     ray_env,
     shutdown_llumnix_service,
     check_log_exception,

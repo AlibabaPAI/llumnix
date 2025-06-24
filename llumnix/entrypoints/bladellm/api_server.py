@@ -106,6 +106,7 @@ class LlumnixEntrypoint(Entrypoint):
             if oai_req.n > 1:
                 # TODO(litan.ls): support multiple generation
                 return web.Response(text='Do no support to generate multiple completions.', status=500)
+            # pylint: enable=no-else-return
             else:
                 tokens = []
                 llumnix_debug_infos = []
@@ -196,7 +197,7 @@ class LlumnixEntrypoint(Entrypoint):
                 if connection_alive:
                     await sse.send('[DONE]')
                     await sse.write_eof()
-
+        # pylint: enable=no-else-return
         else:
             if oai_req.n > 1:
                 # TODO(litan.ls): support multiple generation

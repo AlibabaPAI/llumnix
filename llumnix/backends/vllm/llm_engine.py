@@ -152,8 +152,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
              is_last_step, is_first_step_output, skip) = ctx.output_queue[0]
         else:
             (outputs, seq_group_metadata_list, scheduler_outputs, is_async,
-             is_last_step, is_first_step_output,
-             skip) = ctx.output_queue.popleft()
+             is_last_step, is_first_step_output, skip) = ctx.output_queue.popleft()
 
         # Filter out outputs of migrating requests.
         server_infos = []
@@ -226,7 +225,12 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         if seq_groups:
             tot_blocks = []
             for seq in seq_groups[-1].get_seqs(SequenceStatus.RUNNING):
-                blocks = self.scheduler[0].block_manager.get_block_table(seq)
+                # temporary log to catch unfixed bug
+                try:
+                    blocks = self.scheduler[0].block_manager.get_block_table(seq)
+                except KeyError as e:
+                    logger.exception("Error in get_block_table, seq_id: {}, request_id: {}, "
+                        "unexpected exception: {}".format(seq.seq_id, seq_groups[-1].request_id, e))
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
@@ -408,8 +412,9 @@ class BackendVLLM(BackendInterface):
 
         seq = backend_request.get_seqs()[0]
         seq.seq_id = next(self.engine.seq_counter)
-        logger.info("pop request {} from pre_alloc_cache_dict".format(request_id))
+        logger.info("pop request {} from pre-allocated cache".format(request_id))
         pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(request_id)
+        logger.info("add seq {} to block table".format(seq.seq_id))
         self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_states_dst()
         assert RequestStatus.is_migrating(backend_request.status), \

@@ -80,8 +80,7 @@ class MigrationInstanceFilter:
 
 
 class LoadFilter(MigrationFilterPolicy):
-    def filter_src_condition(self, filter_config: MigrationFilterConfig,
-                             pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
+    def filter_src_condition(self, filter_config: MigrationFilterConfig) -> Callable[[InstanceInfo], bool]:
         def compare_load(instance_info: InstanceInfo) -> bool:
             metrics_cls = type(instance_info.migration_load_metric)
             migrate_out_load_threshold = metrics_cls(filter_config.migrate_out_load_threshold)
@@ -90,8 +89,7 @@ class LoadFilter(MigrationFilterPolicy):
 
         return compare_load
 
-    def filter_dst_condition(self, filter_config: MigrationFilterConfig,
-                             pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
+    def filter_dst_condition(self, filter_config: MigrationFilterConfig) -> Callable[[InstanceInfo], bool]:
         def compare_load(instance_info: InstanceInfo) -> bool:
             metrics_cls = type(instance_info.migration_load_metric)
             migrate_out_load_threshold = metrics_cls(filter_config.migrate_out_load_threshold)
@@ -114,12 +112,10 @@ class CustomFilter(MigrationFilterPolicy):
         if dst_filter:
             self.dst_filter = dst_filter
 
-    def filter_src_condition(self, filter_config: MigrationFilterConfig,
-                             pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
+    def filter_src_condition(self, filter_config: MigrationFilterConfig) -> Callable[[InstanceInfo], bool]:
         return self.src_filter
 
-    def filter_dst_condition(self, filter_config: MigrationFilterConfig,
-                             pair_migration_type: PairMigrationConstraints) -> Callable[[InstanceInfo], bool]:
+    def filter_dst_condition(self, filter_config: MigrationFilterConfig) -> Callable[[InstanceInfo], bool]:
         return self.dst_filter
 
 

@@ -30,11 +30,11 @@ vllm_v1_install:
 
 .PHONY: lint
 lint: check_pylint_installed check_pytest_installed
-	@pylint --rcfile=.pylintrc -s n --jobs=128 ./llumnix setup.py --ignore=llumnix/backends/bladellm/proto
+	@pylint --rcfile=.pylintrc -s n --jobs=1 ./llumnix setup.py --ignore=llumnix/backends/bladellm/proto
 
 	@pylint --rcfile=.pylintrc \
 			--disable=protected-access,super-init-not-called,unused-argument,redefined-outer-name,invalid-name \
-			-s n --jobs=128 ./tests/e2e_test ./tests/unit_test ./tests/conftest.py
+			-s n --jobs=1 ./tests/e2e_test ./tests/unit_test ./tests/conftest.py
 
 .PHONY: clean
 clean: proto-clean

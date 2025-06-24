@@ -26,7 +26,6 @@ from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.instance_info import InstanceType
 from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)

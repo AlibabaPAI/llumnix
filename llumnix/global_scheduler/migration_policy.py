@@ -98,7 +98,8 @@ class AggrateDynamicPrefill(PairMigrationPolicy):
         sorted_dst_instance_infos = sorted(dst_instance_infos, descending=False)
         migrate_instance_pairs = []
         for i in range(min(len(sorted_src_instance_infos), len(sorted_dst_instance_infos))):
-            migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
+            if sorted_src_instance_infos[i].instance_id != sorted_dst_instance_infos[i].instance_id:
+                migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
 
         return migrate_instance_pairs
 

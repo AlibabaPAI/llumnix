@@ -159,6 +159,7 @@ class SchedulerLlumnix(Scheduler):
         return MigrationResponse(success=True, return_value=block_table.physical_block_ids[-block_num:])
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
+        self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
         self.running.append(backend_request)
 
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:

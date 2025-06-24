@@ -517,7 +517,6 @@ class BackendVLLM(BackendInterface):
         return self.engine.scheduler[0].should_abort_migration(*args, **kwargs)
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
-        self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
         # Although add_running_request is always be called in last stage migration,
         # there exists migrating_out_seq_group_metadata in worker only when last stage do_send is executed,
         # so the request id does not always exists.

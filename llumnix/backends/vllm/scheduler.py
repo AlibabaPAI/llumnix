@@ -159,7 +159,6 @@ class SchedulerLlumnix(Scheduler):
         return MigrationResponse(success=True, return_value=block_table.physical_block_ids[-block_num:])
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
-        self._set_status(backend_request, status_to=SequenceStatus.RUNNING)
         self.running.append(backend_request)
 
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
@@ -197,7 +196,7 @@ class SchedulerLlumnix(Scheduler):
 
     def free_src_request(self, backend_request: SequenceGroupLlumnix) -> None:
         seq = backend_request.get_seqs()[0]
-        logger.info("free request: {} (seq: {})".format(backend_request.request_id, seq.seq_id))
+        logger.info("free request {} (seq {})".format(backend_request.request_id, seq.seq_id))
         self.free_seq(seq)
 
     def _get_instance_info(self, scheduled_seq_groups: List[SequenceGroupLlumnix]) -> InstanceInfo:

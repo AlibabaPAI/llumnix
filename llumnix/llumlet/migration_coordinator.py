@@ -171,7 +171,7 @@ class MigrationCoordinator:
             # Not raise exception to ensure src instance won't die due to the death of dst instance.
             if isinstance(e, ray.exceptions.RayActorError):
                 logger.info("Instance {} is dead.".format(dst_instance_id))
-            elif isinstance(e, asyncio.TimeoutError, ray.exceptions.GetTimeoutError):
+            elif isinstance(e, (asyncio.TimeoutError, ray.exceptions.GetTimeoutError)):
                 logger.error("Instance {} is hang, please check the cause.".format(dst_instance_id))
             else:
                 logger.exception("Failed to migrate out, unexpected exception: {}".format(e))

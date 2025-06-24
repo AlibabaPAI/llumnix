@@ -53,7 +53,7 @@ class LlumnixClient(ABC):
         self.server: APIServerActor = entrypoints_context.server
         self.server_info: ServerInfo = entrypoints_context.server_info
         self.log_requests: bool = entrypoints_context.log_requests
-        self.log_request_timestamps: bool = entrypoints_context.log_request_timestamps
+        self.enable_debug_mode: bool = entrypoints_context.enable_debug_mode
 
         self.request_instance: Dict[RequestIDType, str] = {}
         # TODO(s5u13): Consider a better way to get instance handle without calling ray.

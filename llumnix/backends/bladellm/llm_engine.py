@@ -305,7 +305,7 @@ class AsyncLLMEngineLlumnixMixin:
         self.migrated_request = set()
         self.resp_queue = asyncio.Queue()
         self.metrics_queue = asyncio.Queue()
-        self.request_metrics_queue_dict: Dict[str, asyncio.Queue] = {}        
+        self.request_metrics_queue_dict: Dict[str, asyncio.Queue] = {}
 
         self.backend_type = backend_type
         self.step_counter: int = 0

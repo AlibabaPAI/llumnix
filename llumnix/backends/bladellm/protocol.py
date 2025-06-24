@@ -51,6 +51,7 @@ class LlumnixGenerateStreamResponse(GenerateStreamResponse, LlumnixBaseResponse)
 
 class LlumnixOAICompletionsResponse(OAICompletionsResponse, LlumnixBaseResponse):
 
+    # pylint: enable=W0622
     @classmethod
     def from_gen_response(
         cls: Type["LlumnixOAICompletionsResponse"],
@@ -78,6 +79,7 @@ class LlumnixOAIChatCompletionsResponse(
     OAIChatCompletionsResponse, LlumnixBaseResponse
 ):
 
+    # pylint: enable=W0622
     @classmethod
     def from_gen_response(
         cls: Type["LlumnixOAIChatCompletionsResponse"],

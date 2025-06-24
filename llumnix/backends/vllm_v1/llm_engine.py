@@ -14,7 +14,6 @@
 import time
 from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any
 from collections import defaultdict
-import threading
 import asyncio
 import queue
 import gc
@@ -26,61 +25,37 @@ import ray.actor
 
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.config import VllmConfig
-
-from vllm.v1.engine import EngineCoreRequest, EngineCoreOutputs
-from vllm.v1.engine.core import EngineCoreProc
+from vllm.utils import Counter
+from vllm import envs as vllm_envs
+from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreOutputs
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
 from vllm.v1.utils import get_engine_client_zmq_addr
 
-# from vllm.engine.async_llm_engine import _AsyncLLMEngine
-# from vllm.outputs import RequestOutput, RequestOutputFactory, EmbeddingRequestOutput
-# from vllm.sequence import SequenceGroup, SequenceStatus
-from vllm.engine.arg_utils import EngineArgs
-from vllm.utils import Counter
-# from vllm.usage.usage_lib import UsageContext
-# from vllm.engine.llm_engine import SchedulerContext
-from vllm import envs as vllm_envs
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, RequestInferenceType
 from llumnix.backends.backend_interface import BackendInterface, EngineState
+from llumnix.backends.vllm_v1.async_core import AsyncEngineCoreProc
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
-from llumnix.backends.utils import AsyncPutQueueActor
 from llumnix.utils import make_async, ray_get_with_timeout
 from llumnix.ray_utils import get_instance_name, asyncio_wait_for_with_timeout
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
-from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.utils import RequestIDType, MigrationResponse
 
 logger = init_logger(__name__)
 
 
-# class LlumnixRequestOutputFactory(RequestOutputFactory):
-#     @staticmethod
-#     def create(seq_group: SequenceGroupLlumnix, use_cache: bool = False):
-#         # Determine the type based on a condition, for example:
-#         if hasattr(seq_group,
-#                    'embeddings') and seq_group.embeddings is not None:
-#             return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
-#         # pylint: disable=too-many-function-args
-#         return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
-
-
-# class StopPutQueueSignal:
-#     pass
-
-
-class EngineCoreProcLlumnix(EngineCoreProc):
+class EngineCoreProcLlumnix(AsyncEngineCoreProc):
     def __init__(self,
                  instance_id: str,
                  vllm_config: VllmConfig,
@@ -92,7 +67,6 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
-        logger.info("EngineCoreProc.__init__")
         super().__init__(vllm_config, on_head_node, handshake_address, executor_class, log_stats, engine_index)
         self.instance_id = instance_id
         self.step_counter = Counter()
@@ -126,29 +100,17 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         # pylint: disable=import-outside-toplevel
         if latency_mem is not None:
             raise NotImplementedError('vLLM v1 sim_executor not implemented yet')
-            # from llumnix.backends.vllm_v1.sim_executor import SimGPUExecutor
-            # executor_class = SimGPUExecutor
-            # executor_class.latency_mem = latency_mem
         elif engine_config.parallel_config.use_ray:
             from llumnix.backends.vllm_v1.executor import LlumnixRayDistributedExecutor
             executor_class = LlumnixRayDistributedExecutor
             executor_class.migration_config = migration_config
             executor_class.instance_id = instance_id
-            logger.info("executor_class set to LlumnixRayDistributedExecutor")
+            logger.debug("executor_class set to LlumnixRayDistributedExecutor")
         else:
             raise ValueError('Unsupported executor backend')
-        # Create the EngineCoreProc
-        # vllm_config: VllmConfig,
-        # on_head_node: bool,
-        # handshake_address: str,
-        # executor_class: type[Executor],
-        # log_stats: bool,
-        # engine_index: int = 0,
-        # FIXME(zhaozhiyu): pass corret args to EngineCoreProc
         handshake_address = get_engine_client_zmq_addr(
             False, engine_config.parallel_config.data_parallel_master_ip, engine_config.parallel_config.data_parallel_rpc_port
         )
-        # logger.info("engine_config.parallel_config: %s", str(engine_config.parallel_config))
         engine = cls(
             instance_id=instance_id,
             vllm_config=engine_config,
@@ -159,7 +121,7 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         )
         return engine
 
-    # FIXME(zhaozhiyu): this method update instance info, maybe should move the logic to output_processor
+    # TODO(zhaozhiyu): need to verify instance info update
     def _process_request_output(
             self,
             output: Tuple[int, EngineCoreOutputs],
@@ -233,31 +195,27 @@ class EngineCoreProcLlumnix(EngineCoreProc):
         self.instance_info = instance_info
 
     # pylint: disable=invalid-overridden-method
-    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
-        # TODO(zhaozhiyu): super().add_request() bypass the input_queue in EngineCoreProc, should double-check whether it's properiate
-        # FIXME(zhaozhiyu): construct EngineCoreRequest properly
-        prompt_token_ids = kwargs["prompt_token_ids"]
-        prompt = args[0]
-        sampling_params = args[1]
-        logger.info("prompt: %s", str(prompt))
-        logger.info("sampling_params: %s", str(sampling_params))
-        engine_core_request = EngineCoreRequest(
-            request_id=request_id, prompt_token_ids=prompt_token_ids,
-            mm_inputs=None, mm_hashes=None, mm_placeholders=None,
-            sampling_params=sampling_params, eos_token_id=None,
-            arrival_time=time.time(), lora_request=None, cache_salt=None, data_parallel_rank=None
-        )
-        super().add_request(engine_core_request) # EngineCore.add_request(request: EngineCoreRequest)
-        request: LlumnixRequestVLLMV1 = self.scheduler.waiting[-1]
-        set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
-        self.scheduler.waiting[-1] = LlumnixRequestVLLMV1(
-            request_id, server_info, expected_steps,
-            request.prompt_token_ids, request.mm_inputs,
-            request.mm_hashes, request.mm_positions,
-            request.sampling_params, request.eos_token_id,
-            request.client_index, request.lora_request,
-            request.structured_output_request, request.cache_salt
-        )
+    async def add_request_async(
+        self,
+        request_id: str,
+        server_info: ServerInfo,
+        expected_steps: int,
+        *args, **kwargs,
+    ):
+        request_type = EngineCoreRequestType.ADD
+        request = kwargs["engine_core_request"]
+        await self.input_queue.put((request_type, request))
+        # FIXME(zhaozhiyu): input_queue.put is async, below should be run after req is added to scheduler
+        # request: LlumnixRequestVLLMV1 = self.scheduler.waiting[-1]
+        # set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
+        # self.scheduler.waiting[-1] = LlumnixRequestVLLMV1(
+        #     request_id, server_info, expected_steps,
+        #     request.prompt_token_ids, request.mm_inputs,
+        #     request.mm_hashes, request.mm_positions,
+        #     request.sampling_params, request.eos_token_id,
+        #     request.client_index, request.lora_request,
+        #     request.structured_output_request, request.cache_salt
+        # )
 
 
 class BackendVLLMV1(BackendInterface):
@@ -279,7 +237,8 @@ class BackendVLLMV1(BackendInterface):
                                                                           instance_id=instance_id,
                                                                           placement_group=placement_group,
                                                                           backend_type=BackendType.VLLM)
-        # engine_config: VllmConfig = engine_args.create_engine_config()
+        asyncio.create_task(self.engine.run_busy_loop_async())
+        
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.vllm_config.parallel_config.world_size:
@@ -300,46 +259,8 @@ class BackendVLLMV1(BackendInterface):
 
         self._step_done_event_queue = queue.Queue()
         self._remove_running_request_ret: Dict[str] = {}
-        # if not self.disable_async_output_proc:
-        #     self._output_proc_done_event_queue = queue.Queue()
-        #     self.engine._output_proc_done_event_queue = self._output_proc_done_event_queue
-
-        # TODO(zhaozhiyu): determine whether this env var is still in vllm v1
         self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
 
-        self.engine.run_busy_loop()
-
-    # # FIXME(zhaozhiyu): This loop should be removed, running loop is inside EngineCoreProc. Need to handle self.state.
-    # async def _start_engine_step_loop(self) -> None:
-    #     self._stop_event.clear()
-
-    #     previous_state = self.state
-    #     self.state = EngineState.RUNNING
-    #     logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
-
-    #     while not self._stop_event.is_set():
-    #         try:
-    #             while self._step_done_event_queue.qsize() > 0:
-    #                 request_id, step_done_event = self._step_done_event_queue.get()
-    #                 self._remove_running_request_ret[request_id] = self._remove_running_request(request_id)
-    #                 step_done_event.set()
-    #             await asyncio.sleep(0.0)
-    #             request_outputs, _ = await self.engine.step_async()
-    #             if len(request_outputs) == 0:
-    #                 await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
-    #         # pylint: disable=broad-except
-    #         except Exception as e:
-    #             logger.exception("Error in engine loop, unexpected exception: {}".format(e))
-    #             self.stop()
-    #             previous_state = self.state
-    #             self.state = EngineState.CRASHED
-    #             logger.info("engine {} change state: {} -> {}".format(self.instance_id, previous_state, self.state))
-    #             break
-
-    #     if self.state == EngineState.RUNNING:
-    #         self.stop()
-    #         self.state = EngineState.STOPPED
-    #         logger.info("engine {} change state: {} -> {}".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def stop(self):
         self.engine.stop()
@@ -349,31 +270,12 @@ class BackendVLLMV1(BackendInterface):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
     async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        await self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+        await self.engine.add_request_async(request_id, server_info, expected_steps, *args, **kwargs)
 
     async def commit_dst_request(self,
                                  request_id: RequestIDType,
                                  backend_request) -> MigrationResponse:
         raise NotImplementedError("commit_dst_request not implemented in vllm v1")
-        # if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
-        #     await self._run_workers_async("commit_seq_group_metadata", request_id)
-
-        # seq = backend_request.get_seqs()[0]
-        # seq.seq_id = next(self.engine.seq_counter)
-        # logger.info("pop request {} from pre_alloc_cache_dict".format(request_id))
-        # pre_alloc_blocks = self.engine.scheduler[0].pre_alloc_cache_dict.pop(request_id)
-        # self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
-        # backend_request.reset_migration_states_dst()
-        # assert RequestStatus.is_migrating(backend_request.status), \
-        #     "The status of request migrated to dst instance should be  \
-        #      RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
-        # if backend_request.status == RequestStatus.RUNNING_MIGRATING:
-        #     backend_request.reset_status()
-        #     self.add_running_request(backend_request)
-        # else: # WAITING_MIGRATING:
-        #     self.add_waiting_request(backend_request)
-
-        # return MigrationResponse(success=True, return_value=None)
 
     async def send_cache(self,
                          dst_instance_actor: ray.actor.ActorHandle,
@@ -382,16 +284,6 @@ class BackendVLLMV1(BackendInterface):
                          request_id: str,
                          is_last_stage: bool) -> MigrationResponse:
         raise NotImplementedError("send_cache not implemented in vllm v1")
-        # return await asyncio_wait_for_with_timeout(
-        #     dst_instance_actor.execute_migration_method_async.remote(
-        #         "recv_cache",
-        #         request_id=request_id,
-        #         src_worker_handle_list=self.worker_handle_list,
-        #         src_blocks=src_blocks,
-        #         dst_blocks=dst_blocks,
-        #         is_last_stage=is_last_stage
-        #     )
-        # )
 
     async def recv_cache(self,
                          request_id: RequestIDType,
@@ -400,9 +292,7 @@ class BackendVLLMV1(BackendInterface):
                          dst_blocks: List[int],
                          is_last_stage: bool) -> MigrationResponse:
         raise NotImplementedError("recv_cache is not implemented in vllm v1.")
-        # success_list = await self._run_workers_async(
-        #     "recv_cache", request_id, src_worker_handle_list, src_blocks, dst_blocks, is_last_stage)
-        # return MigrationResponse(success=all(success_list), return_value=None)
+
 
     def _run_workers(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
         # pylint: disable=protected-access
@@ -412,7 +302,7 @@ class BackendVLLMV1(BackendInterface):
         # pylint: disable=protected-access
         return await make_async(self.engine.model_executor._run_workers)(*args, timeout=timeout, **kwargs)
 
-    # FIXME(zhaozhiyu): May need to check handshake result of EngineCoreClient and EngineCore
+    # TODO(zhaozhiyu): determine whether handshake result check is needed
     async def is_ready(self):
         return True
 

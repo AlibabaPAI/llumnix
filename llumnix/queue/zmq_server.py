@@ -72,12 +72,19 @@ class ZmqServer(QueueServerBase):
             except Exception as e:
                 logger.error("Failed to bind QueueServer's socket to {}, exception: {}.".format(rpc_path, e))
                 if attempt < MAX_BIND_ADDRESS_RETRY_TIMES - 1:
-                    logger.warning("The rpc path {} is already in use, sleep {}s, "
-                                   "and retry bind to it again.".format(rpc_path, RETRY_BIND_ADDRESS_INTERVAL))
+                    logger.warning(
+                        "The rpc path {} is already in use, sleep {}s, "
+                        "and retry bind to it again.".format(
+                            rpc_path, RETRY_BIND_ADDRESS_INTERVAL
+                        )
+                    )
                     time.sleep(RETRY_BIND_ADDRESS_INTERVAL)
                 else:
-                    logger.error("The rpc path {} is still in use after {} times retries.".format(
-                        rpc_path, MAX_BIND_ADDRESS_RETRY_TIMES))
+                    logger.error(
+                        "The rpc path {} is still in use after {} times retries.".format(
+                            rpc_path, MAX_BIND_ADDRESS_RETRY_TIMES
+                        )
+                    )
                     raise
 
         self.maxsize = maxsize
@@ -233,7 +240,6 @@ class ZmqServer(QueueServerBase):
 
     def _log_exception(self, e: Exception):
         if isinstance(e, asyncio.TimeoutError):
-            logger.error("Send response to client timeout, host: {}.".format(get_ip_address()))
+            logger.error("Zmq server send response to client timeout (host: {}).".format(get_ip_address()))
         else:
-            logger.exception("Send response to client timeout, host: {}, "
-                             "unexpected exception: {}".format(get_ip_address(), e))
+            logger.exception("Error in zmq server send response to client (host: {})".format(get_ip_address()))

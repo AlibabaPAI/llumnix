@@ -27,6 +27,7 @@ from dataclasses import dataclass
 import psutil
 from typing_extensions import ParamSpec
 import ray
+import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
@@ -266,7 +267,94 @@ def exception_wrapper_async(func):
     async def wrapper(*args, **kwargs):
         try:
             return await func(*args, **kwargs)
-        except Exception as e:
-            logger.exception("Unexpected exception in {}: {}".format(func.__name__, str(e)))
-            raise
+        # pylint: disable=broad-except
+        except Exception:
+            logger.exception("Error in {}".format(func.__name__))
     return wrapper
+
+def log_manager_exception(e: Exception, func_name: str, request_id: str = None):
+    if isinstance(e, ray.exceptions.RayActorError):
+        logger.info(
+            "Manager is dead, "
+            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
+                request_id, func_name, type(e).__name__, e
+            )
+        )
+    elif isinstance(e, asyncio.TimeoutError):
+        logger.error(
+            "Manager is hang, please check the cause, "
+            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
+                request_id, func_name, type(e).__name__, e
+            )
+        )
+    elif isinstance(e, ray.exceptions.GetTimeoutError):
+        logger.error(
+            "Manager is hang, please check the cause, "
+            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
+                request_id, func_name, type(e).__name__, e
+            )
+        )
+    else:
+        logger.exception(
+            "Error in manager {} (request_id: {})".format(
+                func_name, request_id
+            )
+        )
+
+def log_instance_exception(e: Exception, instance_id: str, func_name: str, request_id: str = None):
+    if isinstance(e, ray.exceptions.RayActorError):
+        logger.info(
+            "Instance {} is dead, "
+            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
+                instance_id, request_id, func_name, type(e).__name__, e
+            )
+        )
+    elif isinstance(e, asyncio.TimeoutError):
+        logger.error(
+            "Instance {} is hang, please check the cause, "
+            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
+                instance_id, request_id, func_name, type(e).__name__, e
+            )
+        )
+    elif isinstance(e, ray.exceptions.GetTimeoutError):
+        logger.error(
+            "Instance {} is hang, please check the cause, "
+            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
+                instance_id, request_id, func_name, type(e).__name__, e
+            )
+        )
+    else:
+        logger.exception(
+            "Error in instance {} (instance_id: {}, request_id: {})".format(
+                func_name, instance_id, request_id
+            )
+        )
+
+def log_worker_exception(e: Exception, instance_id: str, rank: str, func_name: str, request_id: str = None):
+    if isinstance(e, ray.exceptions.RayActorError):
+        logger.info(
+            "Worker {} is dead, "
+            "rank: {}, func_name: {}, exception type: {}, exception message: {}".format(
+                instance_id, rank, func_name, type(e).__name__, e
+            )
+        )
+    elif isinstance(e, asyncio.TimeoutError):
+        logger.error(
+            "Worker {} is hang, please check the cause, "
+            "rank: {}, func_name: {}, exception type: {}, exception message: {}".format(
+                instance_id, rank, func_name, type(e).__name__, e
+            )
+        )
+    elif isinstance(e, ray.exceptions.GetTimeoutError):
+        logger.error(
+            "Worker {} is hang, please check the cause, "
+            "rank: {}, func_name: {}, exception type: {}, exception message: {}".format(
+                instance_id, rank, func_name, type(e).__name__, e
+            )
+        )
+    else:
+        logger.exception(
+            "Error in worker {} (instance_id: {}, rank: {}, request_id: {})".format(
+                func_name, instance_id, rank, request_id
+            )
+        )

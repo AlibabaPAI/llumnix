@@ -128,9 +128,8 @@ def initialize_placement_group(
             except ray.exceptions.GetTimeoutError:
                 logger.warning("Waiting for new placement group {} ready timeout.".format(placement_group_name))
                 return None
-    except Exception as e: # pylint: disable=broad-except
-        logger.exception("Error during initialize placement group {}, "
-                         "unexpected exception: {}".format(placement_group_name, e))
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in initialize_placement_group (placement_group_name: {})".format(placement_group_name))
         return None
 
     return current_placement_group
@@ -157,9 +156,8 @@ def actor_exists(name: str) -> bool:
         return True
     except ValueError:
         return False
-    except Exception as e: # pylint: disable=broad-except
-        logger.exception("Error during check if actor {} exists, "
-                         "unexpected exception: {}".format(name, e))
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in actor_exists (actor_name: {})".format(name))
         return False
 
 def get_actor_names_by_name_prefix(name_prefix: str) -> List[str]:
@@ -177,9 +175,8 @@ def clear_gloo_backend_ray_resources():
     except ValueError:
         # gloo_queue may not have been created yet; just ignore this error.
         pass
-    except Exception as e: # pylint: disable=broad-except
-        logger.exception("Error during clear gloo backend ray resources, "
-                         "unexpected exception: {}".format(e))
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in clear_gloo_backend_ray_resources")
 
 def remove_placement_group(instance_id: str, placement_group: PlacementGroup = None) -> bool:
     try:
@@ -190,9 +187,8 @@ def remove_placement_group(instance_id: str, placement_group: PlacementGroup = N
         logger.info("Remove placement group {}.".format(instance_id))
     except ValueError:
         return False
-    except Exception as e: # pylint: disable=broad-except
-        logger.exception("Error during remove placement group {}, "
-                         "unexpected exception: {}".format(instance_id, e))
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in remove_placement_group (instance_id: {})".format(instance_id))
         return False
     return True
 
@@ -209,9 +205,8 @@ async def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) ->
         logger.info("Kill server {}.".format(instance_id))
     except ValueError:
         return False
-    except Exception as e: # pylint: disable=broad-except
-        logger.exception("Error during kill server {}, "
-                         "unexpected exception: {}".format(instance_id, e))
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in kill_server (instance_id: {})".format(instance_id))
         return False
     return True
 
@@ -228,9 +223,8 @@ async def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None
         logger.info("Kill instance {}.".format(instance_id))
     except ValueError:
         return False
-    except Exception as e: # pylint: disable=broad-except
-        logger.exception("Error during kill instance {}, "
-                         "unexpected exception: {}".format(instance_id, e))
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in kill_instance (instance_id: {})".format(instance_id))
         return False
     return True
 
@@ -277,9 +271,8 @@ def put_data_to_ray_internal_kv(data_name: str, value: Any) -> None:
             value = _dump_value(value)
             _internal_kv_put(_make_key(data_name), value, overwrite=True)
         # pylint: disable=W0703
-        except Exception as e:
-            logger.exception("Error during put data to ray internal kv, "
-                             "unexpected exception: {}".format(e))
+        except Exception:
+            logger.exception("Error in put_data_to_ray_internal_kv")
     else:
         logger.error("Ray internal key-value storage is not initilized, "
                      "failed to put the given data {}.".format(data_name))
@@ -305,9 +298,8 @@ def log_actor_ray_info(actor_class_name: str) -> None:
         pattern = os.path.join(session_dir, "logs", f"worker-{worker_id}*")
         logger.info("{}(log_dir={})".format(actor_class_name, glob.glob(pattern)))
     # pylint: disable=broad-except
-    except Exception as e:
-        logger.exception("Failed to log actor {} ray info, "
-                         "unexpected exception: {}".format(actor_class_name, e))
+    except Exception:
+        logger.exception("Error in log_actor_ray_info (actor_class_name: {})".format(actor_class_name))
 
 def execute_actor_method_sync_with_retries(ray_remote_call, actor_name, method_name, *args, **kwargs):
     for attempt in range(MAX_ACTOR_METHOD_RETRY_TIMES):
@@ -321,8 +313,12 @@ def execute_actor_method_sync_with_retries(ray_remote_call, actor_name, method_n
                     actor_name, e, RETRY_ACTOR_METHOD_INTERVAL, method_name))
                 time.sleep(RETRY_ACTOR_METHOD_INTERVAL)
             else:
-                logger.error("{} is still unavailable after {} times retries, exception: {}.".format(
-                    actor_name, MAX_ACTOR_METHOD_RETRY_TIMES, e))
+                logger.error(
+                    "{} is still unavailable after {} times retries, "
+                    "exception type: {}, exception message: {}.".format(
+                        actor_name, MAX_ACTOR_METHOD_RETRY_TIMES, type(e).__name__, e
+                    )
+                )
                 raise
     return ret
 
@@ -338,7 +334,11 @@ async def execute_actor_method_async_with_retries(ray_remote_call, actor_name, m
                     actor_name, e, RETRY_ACTOR_METHOD_INTERVAL, method_name))
                 await asyncio.sleep(RETRY_ACTOR_METHOD_INTERVAL)
             else:
-                logger.error("{} is still unavailable after {} times retries, exception: {}.".format(
-                    actor_name, MAX_ACTOR_METHOD_RETRY_TIMES, e))
+                logger.error(
+                    "{} is still unavailable after {} times retries, "
+                    "exception type: {}, exception message: {}.".format(
+                        actor_name, MAX_ACTOR_METHOD_RETRY_TIMES, type(e).__name__, e
+                    )
+                )
                 raise
     return ret

@@ -474,9 +474,10 @@ class KvTransferMigrationBackend(MigrationBackendBase):
 
         raise TimeoutError(
             "KvTransfer migrate kv cache timeout after {} seconds (request_id: {}, src_instance_id: {}, "
-            "src_worker_id: {}, dst_instance_id: {}, dst_worker_id: {}, src_blocks: {}, dst_blocks: {})"
-            .format(kv_request_id, KVTRANSFER_MIGRATION_TIMEOUT, src_instance_id, src_worker_id, self.instance_id,
-                self.worker_id, src_blocks, dst_blocks)
+            "src_worker_id: {}, dst_instance_id: {}, dst_worker_id: {}, src_blocks: {}, dst_blocks: {})".format(
+                kv_request_id, KVTRANSFER_MIGRATION_TIMEOUT, src_instance_id, src_worker_id, self.instance_id,
+                self.worker_id, src_blocks, dst_blocks
+            )
         )
 
 

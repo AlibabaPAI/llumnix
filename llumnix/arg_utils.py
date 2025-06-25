@@ -160,9 +160,7 @@ class LlumnixEngineArgsFactory:
             next_engine_args = VLLMV1EngineArgs(current_engine_args, current_engine_args.backend_type)
             return next_engine_args
 
-        raise TypeError(
-            "Unsupported engine args type when generating next engine args."
-        )
+        raise TypeError("Unsupported engine args type when generating next engine args")
 
 
 def ensure_args_default_none(args):

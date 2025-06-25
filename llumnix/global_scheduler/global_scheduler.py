@@ -91,8 +91,8 @@ class GlobalScheduler:
                 )
                 self.decode_instance_num_requests[instance_id] += 1
             else:
-                logger.error("instance_type {} is not supported".format(instance_type))
-                raise TypeError("instance_type {} is not supported".format(instance_type))
+                logger.error("Instance type {} is not supported".format(instance_type))
+                raise TypeError("Instance type {} is not supported".format(instance_type))
             if self.global_scheduler_config.enable_pd_disagg and instance_type == InstanceType.PREFILL:
                 request_expected_steps = 1
             else:

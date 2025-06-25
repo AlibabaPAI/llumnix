@@ -65,9 +65,9 @@ class DispatchScheduler:
             InstanceType.PREFILL: 0
         }
 
-        self._build_phase()
+        self._build_phase_rules()
 
-    def _build_phase(self):
+    def _build_phase_rules(self):
         if not self.enable_engine_pd_disagg and not self.enable_pd_disagg:
             self.no_constrains_rules = []
             self.no_constrains_rules.append(DispatchRule(InstanceType.NO_CONSTRAINTS, None))

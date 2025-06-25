@@ -384,7 +384,7 @@ class BackendVLLM(BackendInterface):
                 if len(request_outputs) == 0:
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
-            except Exception as e:
+            except Exception:
                 logger.exception("Error in engine loop")
                 self.stop()
                 previous_state = self.state

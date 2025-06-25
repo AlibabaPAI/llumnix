@@ -532,7 +532,7 @@ class Manager:
                     if isinstance(e, ValueError):
                         logger.warning("Failed to connect to instance {}, placement group not found.".format(instance_id))
                     else:
-                        logger.exception("Error in _connect_to_instances get_placement_group (instance_id: {})".format(instance_id))
+                        logger.exception("Error in manager _connect_to_instances get_placement_group (instance_id: {})".format(instance_id))
             else:
                 log_instance_exception(ret, instance_id, "_connect_to_instances")
 
@@ -552,7 +552,7 @@ class Manager:
                 if isinstance(e, ValueError):
                     logger.warning("Failed to connect to instance {}, actor not found.".format(instance_id))
                 else:
-                    logger.exception("Error in _connect_to_instances get_actor (instance_id: {})".format(instance_id))
+                    logger.exception("Error in manager _connect_to_instances get_actor (instance_id: {})".format(instance_id))
         instance_ids = []
         instances = []
         instance_types = []

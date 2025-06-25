@@ -460,7 +460,7 @@ class Scaler:
                     else:
                         logger.error("Server {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.SERVER_READY_TIMEOUT)))
                 else:
-                    logger.exception("Error in done_scale_up (instance_id: {})".format(instance_id))
+                    logger.exception("Error in scaler done_scale_up (instance_id: {})".format(instance_id))
                 await self.clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
@@ -576,7 +576,7 @@ class Scaler:
                         )
                     )
                 else:
-                    logger.exception("Error in instance_ready_scale_up (instance_id: {})".format(instance_id))
+                    logger.exception("Error in scaler instance_ready_scale_up (instance_id: {})".format(instance_id))
                 await self.clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []

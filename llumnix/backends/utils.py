@@ -242,8 +242,8 @@ class OutputMediator:
             try:
                 ray_get_with_timeout(self.actor_mediator.stop.remote())
             # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Failed to stop ActorOutputMediator, unexpected exception: {}".format(e))
+            except Exception:
+                logger.exception("Error in OutputMediator stop ActorOutputMediator")
         else:
             self.thread_mediator.stop()
 

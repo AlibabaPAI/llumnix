@@ -30,7 +30,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, log_instance_exception
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL, SUBPROCESS_RUN_TIMEOUT
 from llumnix import envs as llumnix_envs
@@ -158,14 +158,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
             available_instances.append(instance)
         # pylint: disable=broad-except
         except Exception as e:
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Failed to initialize instance {}, instance is dead.".format(instance_id))
-            elif isinstance(e, ray.exceptions.GetTimeoutError):
-                logger.error("Failed to initialize instance {}, instance is hang, "
-                             "please check the cause.".format(instance_id))
-            else:
-                logger.exception("Failed to initialize instance {}, "
-                                 "unexpected exception: {}".format(instance_id, e))
+            log_instance_exception(e, instance_id, "init_llumnix_components")
             execute_actor_method_sync_with_retries(
                 manager.scale_down.remote, 'Manager', 'scale_down', instance_id
             )

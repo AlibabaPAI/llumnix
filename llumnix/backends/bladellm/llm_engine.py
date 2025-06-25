@@ -388,8 +388,8 @@ class AsyncLLMEngineLlumnixMixin:
         try:
             await super()._loop()
         # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Error in engine loop, unexpected exception: {}.".format(e))
+        except Exception:
+            logger.exception("Error in engine _loop")
             self.stop()
             previous_state = self.state
             self.state = EngineState.CRASHED
@@ -412,15 +412,14 @@ class AsyncLLMEngineLlumnixMixin:
         try:
             await self.run_workers("close_migration", empty_pb2.Empty())
         # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to close migration for workers, exception: {}".format(e))
+        except Exception:
+            logger.exception("Error in engine close migration for workers")
         # close grpc client
         tasks = [channel.close() for channel in self.worker_migration_channels]
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         for rank, ret in enumerate(rets):
             if isinstance(ret, Exception):
-                logger.exception("Failed to close migration channel for worker(rank: {}), "
-                                 "unexpected exception: {}".format(rank, ret))
+                logger.exception("Error in engine close migration channel for worker (rank: {})".format(rank))
 
     async def _handle_abort(self, abort: Optional[List[Tuple[int, int, str]]] = None):
         await super()._handle_abort(abort)

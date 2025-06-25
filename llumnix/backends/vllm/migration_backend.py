@@ -277,22 +277,18 @@ class RayColMigrationBackend(MigrationBackendBase):
         def init_group(world_size, rank, backend, group_name):
             col.init_collective_group(world_size, rank, backend, group_name)
 
-        try:
-            init_group(world_size, rank, self.backend, group_name)
-        # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Failed to create migration backend "
-                             "(group_name: {}, world_size: {}, rank: {}, backbend: {}), "
-                             "unexpected exception: {}".format(group_name, world_size, rank, self.backend, e))
-            return False
-
         self.group_name = group_name
         self.global_world_size = world_size
         self.global_rank = rank
 
-        logger.info("Create migration backend group successfully "
-                    "(group_name: {}, world_size: {}, rank: {}, backbend: {})."
-                    .format(self.group_name, self.global_world_size, self.global_rank, self.backend))
+        try:
+            init_group(world_size, rank, self.backend, group_name)
+        # pylint: disable=broad-except
+        except Exception:
+            self._log_exception("init_backend")
+            return False
+
+        self._log_success("init_backend")
         return True
 
     def destory_backend(self) -> None:
@@ -307,11 +303,9 @@ class RayColMigrationBackend(MigrationBackendBase):
             err_info = e
 
         if err_info is not None:
-            logger.exception("Failed to destory migration backend (group_name: {}, backbend: {}), "
-                             "unexpected exception: {}".format(self.group_name, self.backend, err_info))
+            self._log_exception("destory_backend")
         else:
-            logger.info("Destory migration backend successfully "
-                        "(group_name: {}, backbend: {}).".format(self.group_name, self.backend))
+            self._log_success("destory_backend")
 
         self.group_name = None
 
@@ -320,16 +314,27 @@ class RayColMigrationBackend(MigrationBackendBase):
             try:
                 col.allreduce(self.dummy_cache[0], self.group_name)
             # pylint: disable=W0703
-            except Exception as e:
-                logger.exception("Failed to warmup migration backend "
-                                 "(group_name: {}, world_size: {}, rank: {}, backbend: {}), "
-                                 "unexpected exception: {}".format(
-                                     self.group_name, self.global_world_size, self.global_rank, self.backend, e))
+            except Exception:
+                self._log_exception("warmup")
                 return False
-
-        logger.info("Migration backend warmup successfully (group_name: {}, world_size: {}, rank: {}, backbend: {})."
-                    .format(self.group_name, self.global_world_size, self.global_rank, self.backend))
+        self._log_success("warmup")
         return True
+
+    def _log_success(self, func_name: str):
+        logger.info(
+            "Migration backend {} success "
+            "(group_name: {}, world_size: {}, rank: {}, backbend: {})".format(
+                func_name, self.group_name, self.global_world_size, self.global_rank, self.backend
+            )
+        )
+
+    def _log_exception(self, func_name: str):
+        logger.exception(
+            "Error in migration backend {} "
+            "(group_name: {}, world_size: {}, rank: {}, backbend: {})".format(
+                func_name, self.group_name, self.global_world_size, self.global_rank, self.backend
+            )
+        )
 
     # Ray.collective is used to construct the gloo and nccl backends. The do_send/do_recv functions will transmit
     # data layer by layer. Take into consideration that col.send/recv are blocking operations.

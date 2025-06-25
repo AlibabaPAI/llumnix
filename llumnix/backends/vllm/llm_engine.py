@@ -228,9 +228,12 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 # temporary log to catch unfixed bug
                 try:
                     blocks = self.scheduler[0].block_manager.get_block_table(seq)
-                except KeyError as e:
-                    logger.exception("Error in get_block_table, seq_id: {}, request_id: {}, "
-                        "unexpected exception: {}".format(seq.seq_id, seq_groups[-1].request_id, e))
+                except KeyError:
+                    logger.exception(
+                        "Error in scheduler get_block_table (seq_id: {}, request_id: {})".format(
+                            seq.seq_id, seq_groups[-1].request_id
+                        )
+                    )
                 tot_blocks.extend(blocks)
             tot_blocks = set(tot_blocks)
             instance_info.num_blocks_last_running_request = len(tot_blocks)
@@ -381,8 +384,8 @@ class BackendVLLM(BackendInterface):
                 if len(request_outputs) == 0:
                     await asyncio.sleep(NO_OUTPUTS_STEP_INTERVAL)
             # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Error in engine loop, unexpected exception: {}".format(e))
+            except Exception:
+                logger.exception("Error in engine loop")
                 self.stop()
                 previous_state = self.state
                 self.state = EngineState.CRASHED

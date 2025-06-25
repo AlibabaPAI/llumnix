@@ -34,7 +34,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.backends.vllm.utils import _sample_with_torch
 from llumnix.backends.vllm.migration_backend import MigrationBackendBase, get_migration_backend
 from llumnix.internal_config import MigrationConfig
-from llumnix.utils import convert_bytes
+from llumnix.utils import convert_bytes, log_worker_exception
 from llumnix.ray_utils import log_actor_ray_info
 
 logger = init_logger(__name__)
@@ -147,11 +147,7 @@ class MigrationWorker(Worker):
             return True
         # pylint: disable=broad-except
         except Exception as e:
-            # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Failed to recv kv cache, src worker is dead, instance_id: {}, rank: {}.".format(self.instance_id, self.rank))
-            else:
-                logger.exception("Failed to recv kv cache, request_id: {}, unexpected exception: {}".format(request_id, e))
+            log_worker_exception(e, self.instance_id, self.rank, "recv_cache", request_id)
             return False
 
     def do_recv(self, *args, **kwargs):

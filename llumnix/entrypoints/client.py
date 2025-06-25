@@ -16,7 +16,6 @@ from typing import Dict, Tuple, Any
 import asyncio
 
 import ray
-import ray.exceptions
 
 from llumnix.manager import Manager
 from llumnix.entrypoints.utils import EntrypointsContext
@@ -34,7 +33,7 @@ from llumnix.ray_utils import (
     asyncio_wait_for_with_timeout,
 )
 from llumnix.logging.logger import init_logger
-from llumnix.utils import RequestIDType
+from llumnix.utils import RequestIDType, log_instance_exception, log_manager_exception
 
 logger = init_logger(__name__)
 
@@ -104,9 +103,9 @@ class LlumnixClient(ABC):
                 except:
                     pass
         # pylint: disable=broad-except
-        except Exception as e:
-            logger.exception("Server cleanup failed (instance_ids: {}): {}".format(instance_ids, e))
-        logger.info("Server stops (instance_ids: {}).".format(instance_ids))
+        except Exception:
+            logger.exception("Server cleanup failed (instance_ids: {})".format(instance_ids))
+        logger.info("Server stopped (instance_ids: {}).".format(instance_ids))
 
     async def _abort(self, request_id: RequestIDType) -> None:
         instance_id, instance = self._get_instance_for_abort(request_id)
@@ -117,13 +116,7 @@ class LlumnixClient(ABC):
                 await asyncio_wait_for_with_timeout(instance.abort.remote(request_id))
                 self._clear_client_request_states(request_id)
             except Exception as e: # pylint: disable=broad-except
-                if isinstance(e, ray.exceptions.RayActorError):
-                    logger.info("Instance {} is dead.".format(instance_id))
-                elif isinstance(e, asyncio.TimeoutError):
-                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
-                else:
-                    logger.exception("Failed to abort request {} of instance {}, "
-                                     "unexpected exception: {}".format(request_id, instance_id, e))
+                log_instance_exception(e, instance_id, "_abort", request_id)
         else:
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
                 request_id, instance_id, instance))
@@ -159,25 +152,10 @@ class LlumnixClient(ABC):
             await asyncio.sleep(UPDATE_GLOBAL_INSTANCES_INTERVAL)
 
     def _handle_generate_by_manager_error(self, request_id: RequestIDType, e: Exception) -> None:
-        if isinstance(e, ray.exceptions.RayActorError):
-            logger.error("Manager is unavailable.")
-        elif isinstance(e, asyncio.TimeoutError):
-            logger.error("Failed to generate request {} by manager, manager is hang, "
-                         "please check the cause.".format(request_id))
-        else:
-            logger.exception("Failed to generate request {} by manager, "
-                             "unexpected exception: {}".format(request_id, e))
+        log_manager_exception(e, "generate_by_manager", request_id)
 
     def _handle_generate_by_instance_error(self, request_id: RequestIDType, instance_id: str, e: Exception) -> None:
-        if isinstance(e, ray.exceptions.RayActorError):
-            logger.info("Failed to generate request {} by instance {}, instance is dead.".format(
-                request_id, instance_id))
-        elif isinstance(e, asyncio.TimeoutError):
-            logger.error("Failed to generate request {} by instance {}, instance is hang, "
-                        "please check the cause.".format(request_id, instance_id))
-        else:
-            logger.exception("Failed to generate request {} by instance {}, "
-                            "unexpected exception: {}".format(request_id, instance_id, e))
+        log_instance_exception(e, instance_id, "generate_by_instance", request_id)
         if instance_id in self.instances:
             del self.instances[instance_id]
         else:

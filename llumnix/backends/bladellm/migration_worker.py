@@ -35,7 +35,7 @@ from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH
-from llumnix.utils import get_ip_address, convert_bytes, get_free_port, get_llumnix_env_vars
+from llumnix.utils import get_ip_address, convert_bytes, get_free_port, get_llumnix_env_vars, log_worker_exception
 
 logger = init_logger(__name__)
 
@@ -106,11 +106,7 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             logger.info("Recv kv cache done, num_blocks: {}, total_kv_cache_size: {}, time: {:.2f}s, speed: {:.5f}GB/s."
                         .format(len(request.src_blocks), convert_bytes(total_kv_cache_size), end_time - start_time, speed))
         except Exception as e: # pylint: disable=broad-except
-            # Not raise exception to ensure dst workers and dst instance won't die due to the death of src workers or instance.
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Failed to recv kv cache, src worker is dead, instance_id: {}, rank: {}.".format(self.instance_id, self.rank))
-            else:
-                logger.exception("Failed to recv kv cache, request_id: {}, unexpected exception: {}.".format(request.request_id, e))
+            log_worker_exception(e, self.instance_id, self.rank, "recv_cache")
             resp.is_ok = False
         return resp
 
@@ -127,8 +123,8 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             self.migration_backend.warmup()
         # pylint: disable=broad-except
         except Exception as e:
+            log_worker_exception(e, self.instance_id, self.rank, "warmup")
             resp.is_ok = False
-            logger.exception("Warmup failed, unexpected exception: {}".format(e))
         return resp
 
 

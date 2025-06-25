@@ -278,7 +278,6 @@ class Scaler:
                     self.manager.scale_down.remote, 'Manager', 'scale_down', instance_id
                 )
 
-        # If encounter error during check loop, to make scaler keep running, we do not raise exception.
         while True:
             try:
                 # Not check right after scaler initialized, so sleep at the beginning.
@@ -297,18 +296,17 @@ class Scaler:
                         )
                 await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Error during check deployment states loop, "
-                                 "unexpected exception: {}".format(e))
-                logger.critical("Scaler encouters error during check deployment states loop, "
-                                "scaler keeps running, please check the cause as soon as possible!")
+            except Exception:
+                logger.critical(
+                    "Scaler get error in _check_deployment_states_loop, scaler keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
+                )
 
     # TODO(KuilongCui): Deploy prefill and decode instances strictly according to the pd_ratio.
     # Currently, only one naive prefill-decode disaggregation deployment states check policy is implemented,
     # which prevents all instances in the cluster are prefill instances or decode instances.
     async def _check_pd_deployment_states_loop(self, interval: float) -> None:
         previous_penging_pg_names = None
-        # If encounter error during check loop, to make scaler keep running, we do not raise exception.
         while True:
             try:
                 pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
@@ -325,17 +323,16 @@ class Scaler:
 
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Error during check pd deployment states loop, "
-                                 "unexpected exception: {}".format(e))
-                logger.critical("Scaler encouters error during check pd deployment states loop, "
-                                "scaler keeps running, please check the cause as soon as possible!")
+            except Exception:
+                logger.critical(
+                    "Scaler get error in _check_pd_deployment_states_loop, scaler keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
+                )
 
     async def _check_pd_deployment_states(self) -> str:
-        prefill_instance_id_set, decode_instance_id_set = \
-            await execute_actor_method_async_with_retries(
-                self.manager.get_prefill_decode_instance_id_set.remote, 'Manager', 'get_prefill_decode_instance_id_set'
-            )
+        prefill_instance_id_set, decode_instance_id_set = await execute_actor_method_async_with_retries(
+            self.manager.get_prefill_decode_instance_id_set.remote, 'Manager', 'get_prefill_decode_instance_id_set'
+        )
         cur_num_prefill_instances = len(prefill_instance_id_set)
         cur_num_decode_instances = len(decode_instance_id_set)
         scale_down_instance_id = None
@@ -463,7 +460,7 @@ class Scaler:
                     else:
                         logger.error("Server {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.SERVER_READY_TIMEOUT)))
                 else:
-                    logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
+                    logger.exception("Error in scaler done_scale_up (instance_id: {})".format(instance_id))
                 await self.clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
@@ -572,10 +569,14 @@ class Scaler:
                 if isinstance(e, ray.exceptions.RayActorError):
                     logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
                 elif isinstance(e, asyncio.TimeoutError):
-                    logger.error("Failed to scale up instance {}, "
-                                 "instance is not ready in {} seconds.".format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
+                    logger.error(
+                        "Failed to scale up instance {}, "
+                        "instance is not ready in {} seconds.".format(
+                            instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                        )
+                    )
                 else:
-                    logger.exception("Failed to scale up instance {}, unexpected exception: {}".format(instance_id, e))
+                    logger.exception("Error in scaler instance_ready_scale_up (instance_id: {})".format(instance_id))
                 await self.clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []

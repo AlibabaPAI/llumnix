@@ -23,13 +23,18 @@ import ray
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 import ray.actor
+import ray.exceptions
 
 from blade_llm.service.args import ServingArgs
 from blade_llm.service.worker import worker_main, WorkerProcesses
 
 from llumnix.logging.logger import init_logger
-from llumnix.utils import (get_ip_address, update_environment_variables,
-                           ray_get_with_timeout)
+from llumnix.utils import (
+    get_ip_address,
+    update_environment_variables,
+    ray_get_with_timeout,
+    log_worker_exception,
+)
 from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.utils import random_uuid
 from llumnix.ray_utils import log_actor_ray_info
@@ -161,9 +166,12 @@ class WorkerProcessesRay(WorkerProcesses):
                 except: # pylint: disable=bare-except
                     has_dead = True
                 if has_dead:
-                    logger.exception("Worker {} is dead (pid {}, node_id: {}, gpu_ids: {}).".format(
-                        rank, self.worker_pids[rank],
-                        self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]))
+                    logger.exception(
+                        "Worker {} is dead (pid {}, node_id: {}, gpu_ids: {}).".format(
+                            rank, self.worker_pids[rank],
+                            self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]
+                        )
+                    )
             if self.remote_watch_dog:
                 has_dead = has_dead or self.remote_watch_dog.worker_watch_dog()
             if has_dead:
@@ -174,15 +182,19 @@ class WorkerProcessesRay(WorkerProcesses):
         for rank, worker in enumerate(self.workers):
             try:
                 if ray_get_with_timeout(worker.is_alive.remote()):
-                    logger.critical("Kill alive worker {} (pid {}, node_id: {}, gpu_ids: {}).".format(
-                        rank, self.worker_pids[rank],
-                        self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]))
+                    logger.critical(
+                        "Kill alive worker {} (pid {}, node_id: {}, gpu_ids: {}).".format(
+                            rank, self.worker_pids[rank],
+                            self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]
+                        ),
+                        exc_info=True, stack_info=True
+                    )
                     ray_get_with_timeout(worker.kill_worker_process.remote())
             except: # pylint: disable=bare-except
                 pass
             ray.kill(worker)
         # Not using sys.exit() since it do cleanup work which may still hang server process.
-        logger.critical("Server {} exit.".format(os.getpid()))
+        logger.critical("Server {} exit.".format(os.getpid()), exc_info=True, stack_info=True)
         os._exit(255) # pylint: disable=protected-access
 
     def _init_workers_ray(self, placement_group: PlacementGroup, instance_id: str):
@@ -360,16 +372,11 @@ class WorkerProcessesRay(WorkerProcesses):
                 ray_get_with_timeout(worker.stop_worker_process.remote())
             # pylint: disable=broad-except
             except Exception as e:
-                if isinstance(e, TimeoutError):
-                    logger.error("Worker is hang (instance_id: {}, rank: {}), please check the cause.")
-                else:
-                    logger.exception("Failed to stop worker process (instance_id: {}, rank: {}), "
-                                     "unexpected exception: {}.".format(self.instance_id, rank, e))
+                log_worker_exception(e, self.instance_id, rank, "stop_worker_process")
             try:
                 ray.kill(worker)
             # pylint: disable=broad-except
-            except Exception as e:
-                logger.exception("Failed to kill worker (instance_id: {}, rank: {}), "
-                                 "unexpected exception: {}.".format(self.instance_id, rank, e))
+            except Exception:
+                logger.exception("Error in worker kill worker actor (instance_id: {}, rank: {})".format(self.instance_id, rank))
         if self.remote_watch_dog:
             self.remote_watch_dog.stop()

@@ -46,7 +46,8 @@ from llumnix.utils import (
     async_wrapper,
     ray_get_with_timeout,
     asyncio_wait_for_with_timeout,
-    RequestIDType
+    RequestIDType,
+    log_instance_exception,
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -166,8 +167,7 @@ class Manager:
             )
         # pylint: disable=broad-except
         except Exception as e:
-            logger.exception("Failed to generate request {} by instance {}, unexcepted exception: {}".format(
-                request_id, prefill_instance_id, e))
+            log_instance_exception(e, prefill_instance_id, "generate", request_id)
             self.scale_down(prefill_instance_id)
             await asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
         if self.log_requests:
@@ -224,13 +224,7 @@ class Manager:
                     instance_infos.append(ret)
                     self.global_scheduler.update_instance_infos([ret])
             else:
-                if isinstance(ret, ray.exceptions.RayActorError):
-                    logger.info("Instance {} is dead.".format(instance_id))
-                elif isinstance(ret, asyncio.TimeoutError):
-                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
-                else:
-                    logger.exception("Failed to poll instance info of instance {}, "
-                                     "unexpected exception: {}".format(instance_id, ret))
+                log_instance_exception(ret, instance_id, "_poll_instance_info_loop")
                 await self.scale_down(instance_id)
 
         def get_instance_info_done_callback_wrapper(instance_id: str, fut) -> None:
@@ -294,7 +288,6 @@ class Manager:
             loop = asyncio.get_event_loop()
             loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
 
-        # If encounter error during migration, to make manager keep running, we do not raise exception.
         try:
             migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
             migration_tasks = []
@@ -321,10 +314,11 @@ class Manager:
             if len(migration_tasks) > 0 and not self.enable_pd_disagg:
                 logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
-        except Exception as e:
-            logger.exception("Error during migrate, unexpected exception: {}".format(e))
-            logger.critical("Manager encouters error during migrate, manager keeps running, "
-                            "please check the cause as soon as possible!")
+        except Exception:
+            logger.critical(
+                "Manager get error in _migrate, manager keeps running, please check the cause!",
+                exc_info=True, stack_info=True
+            )
 
     def scale_up(self,
                  instance_id: Union[str, Iterable[str]],
@@ -357,14 +351,7 @@ class Manager:
                             ray_get_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())
                     # pylint: disable=broad-except
                     except Exception as e:
-                        if isinstance(e, ray.exceptions.RayActorError):
-                            logger.warning("Failed to scale up instance {}, instance is dead.".format(ins_id))
-                        elif isinstance(e, ray.exceptions.GetTimeoutError):
-                            logger.error("Failed to scale up instance {}, instance is hang, "
-                                         "please check the cause.".format(ins_id))
-                        else:
-                            logger.exception("Error during scale up instance {}, "
-                                             "unexpected exception: {}".format(ins_id, e))
+                        log_instance_exception(e, ins_id, "scale_up")
                         continue
                     logger.info("Bind instance id {} with engine instance id {}.".format(
                         ins_id, self.instance_id_2_engine_disagg_inst_id[ins_id]))
@@ -485,13 +472,7 @@ class Manager:
             for instance_name, ret in zip(alive_instances, rets):
                 if isinstance(ret, Exception):
                     instance_id = instance_name[:len(INSTANCE_NAME_PREFIX)]
-                    if isinstance(ret, ray.exceptions.RayActorError):
-                        logger.info("Instance {} is dead.".format(instance_id))
-                    elif isinstance(ret, asyncio.TimeoutError):
-                        logger.error("Instance {} is hang, please check the cause.".format(instance_id))
-                    else:
-                        logger.exception("Failed to run task {} for instance {}, "
-                                         "unexpected exception: {}".format(task_name, instance_id, ret))
+                    log_instance_exception(ret, instance_id, "_rebuild_migration_backend")
                     dead_instances.add(instance_name)
             if len(dead_instances) > 0:
                 await self.scale_down(dead_instances, rebuild_migration_backend=False)
@@ -551,17 +532,9 @@ class Manager:
                     if isinstance(e, ValueError):
                         logger.warning("Failed to connect to instance {}, placement group not found.".format(instance_id))
                     else:
-                        logger.exception("Error during connect to instance {}, "
-                                         "unexpected exception: {}".format(instance_id, e))
+                        logger.exception("Error in manager _connect_to_instances get_placement_group (instance_id: {})".format(instance_id))
             else:
-                if isinstance(ret, ray.exceptions.RayActorError):
-                    logger.warning("Failed to connect to instance {}, instance is dead.".format(instance_id))
-                elif isinstance(ret, asyncio.TimeoutError):
-                    logger.error("Failed to connect to instance {}, instance is hang, "
-                                 "please check the cause.".format(instance_id))
-                else:
-                    logger.exception("Error during connect to instance {}, "
-                                     "unexpected exception: {}".format(instance_id, ret))
+                log_instance_exception(ret, instance_id, "_connect_to_instances")
 
         # Must set True despite set namespance to llumnix.
         actor_infos = ray.util.list_named_actors(all_namespaces=True)
@@ -579,8 +552,7 @@ class Manager:
                 if isinstance(e, ValueError):
                     logger.warning("Failed to connect to instance {}, actor not found.".format(instance_id))
                 else:
-                    logger.exception("Error during connect to instance {}, "
-                                     "unexpected exception: {}".format(instance_id, e))
+                    logger.exception("Error in manager _connect_to_instances get_actor (instance_id: {})".format(instance_id))
         instance_ids = []
         instances = []
         instance_types = []
@@ -609,13 +581,7 @@ class Manager:
                 logger.info("Instance {} is alive.".format(instance_id))
                 results[idx] = False
             else:
-                if isinstance(ret, ray.exceptions.RayActorError):
-                    logger.info("Instance {} is dead.".format(instance_id))
-                elif isinstance(ret, asyncio.TimeoutError):
-                    logger.error("Instance {} is hang, please check the cause.".format(instance_id))
-                else:
-                    logger.exception("Failed to check instance {} error, "
-                                     "unexpected exception: {}".format(instance_id, ret))
+                log_instance_exception(ret, instance_id, "_check_instance_error")
                 results[idx] = True
 
         results = [None, None]

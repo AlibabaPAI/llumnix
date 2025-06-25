@@ -24,7 +24,12 @@ import ray.exceptions
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface, BackendType
-from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType, MigrationResponse
+from llumnix.utils import (
+    asyncio_wait_for_with_timeout,
+    RequestIDType,
+    MigrationResponse,
+    log_instance_exception,
+)
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
 
@@ -149,33 +154,24 @@ class MigrationCoordinator:
         asyncio.create_task(self._watch_pending_migrate_in_requests_loop())
 
     async def migrate_out(self, dst_instance_actor: ray.actor.ActorHandle, dst_instance_id: str) -> List[RequestIDType]:
-        # TODO(Failover): Currently, llumnix directly return if meeting exception during migration,
-        # and handle migration exception through manager. In future, this should be handled by instance.
-        try:
-            migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
 
-            if len(migrate_out_requests) == 0:
-                return []
+        if len(migrate_out_requests) == 0:
+            return []
 
-            for migrate_out_request in migrate_out_requests:
-                migrate_out_request.is_migrating = True
+        for migrate_out_request in migrate_out_requests:
+            migrate_out_request.is_migrating = True
 
-            migrated_request_list = []
-            for migrate_out_request in migrate_out_requests:
+        migrated_request_list = []
+        for migrate_out_request in migrate_out_requests:
+            try:
                 migrated_request = await self._migrate_out_one_request(dst_instance_actor, dst_instance_id, migrate_out_request)
-                migrated_request_list.extend(migrated_request)
-                if len(migrated_request) == 0 and migrate_out_request.eom:
-                    break
-        # pylint: disable=W0703
-        except Exception as e:
-            # Not raise exception to ensure src instance won't die due to the death of dst instance.
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Instance {} is dead.".format(dst_instance_id))
-            elif isinstance(e, (asyncio.TimeoutError, ray.exceptions.GetTimeoutError)):
-                logger.error("Instance {} is hang, please check the cause.".format(dst_instance_id))
-            else:
-                logger.exception("Failed to migrate out, unexpected exception: {}".format(e))
-                raise
+            # pylint: disable=W0703
+            except Exception as e:
+                log_instance_exception(e, dst_instance_id, "migrate_out", migrate_out_request.request_id)
+            migrated_request_list.extend(migrated_request)
+            if len(migrated_request) == 0 and migrate_out_request.eom:
+                break
 
         return migrated_request_list
 
@@ -214,9 +210,13 @@ class MigrationCoordinator:
                 await self._dst_free_pre_alloc_cache(dst_instance_actor, dst_instance_id, migrate_out_request.request_id)
 
         t1 = time.time()
-        logger.info("Instance {}->{} migrate done, migrate request {}, migration status: {}, len: {} blocks, cost: {} ms" \
-                    .format(self.instance_id, dst_instance_id, migrated_request, status, \
-                            sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000))
+        logger.info(
+            "Instance {}->{} migrate done, migrate request {}, "
+            "migration status: {}, len: {} blocks, cost: {} ms".format(
+                self.instance_id, dst_instance_id, migrated_request, status,
+                sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000
+            )
+        )
 
         return migrated_request
 
@@ -396,13 +396,7 @@ class MigrationCoordinator:
             )
         # pylint: disable=W0703
         except Exception as e:
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Instance {} is dead.".format(dst_instance_id))
-            elif isinstance(e, asyncio.TimeoutError):
-                logger.error("Instance {} is hang, please check the cause.".format(dst_instance_id))
-            else:
-                logger.exception("Failed to call dst instance {} to pre-allocate cache for request {}, "
-                    "unexpected exception: {}".format(dst_instance_id, request_id, e))
+            log_instance_exception(e, dst_instance_id, "_dst_pre_alloc_cache", request_id)
             # Once return False response, the migration status will become ABORTED_DST,
             # which will stop and clear the migration.
             return MigrationResponse(success=False, return_value=None)
@@ -421,13 +415,7 @@ class MigrationCoordinator:
             return True
         # pylint: disable=W0703
         except Exception as e:
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Instance {} is dead.".format(dst_instance_id))
-            elif isinstance(e, asyncio.TimeoutError):
-                logger.error("Instance {} is hang, please check the cause.".format(dst_instance_id))
-            else:
-                logger.exception("Failed to call dst instance {} to free pre-allocate cache for request {}, "
-                    "unexpected exception: {}".format(dst_instance_id, request_id, e))
+            log_instance_exception(e, dst_instance_id, "_dst_free_pre_alloc_cache", request_id)
             return False
 
     async def _send_cache(self,
@@ -443,13 +431,7 @@ class MigrationCoordinator:
             )
         # pylint: disable=W0703
         except Exception as e:
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Instance {} is dead.".format(dst_instance_id))
-            elif isinstance(e, asyncio.TimeoutError):
-                logger.error("Instance {} is hang, please check the cause.".format(dst_instance_id))
-            else:
-                logger.exception("Failed to send cache to instance {} for request {}, "
-                    "unexpected exception: {}".format(dst_instance_id, request_id, e))
+            log_instance_exception(e, dst_instance_id, "_send_cache", request_id)
             return MigrationResponse(success=False, return_value=None)
 
     @watch_migrate_in_request_wrapper
@@ -473,13 +455,7 @@ class MigrationCoordinator:
             )
         # pylint: disable=W0703
         except Exception as e:
-            if isinstance(e, ray.exceptions.RayActorError):
-                logger.info("Instance {} is dead.".format(dst_instance_id))
-            elif isinstance(e, asyncio.TimeoutError):
-                logger.error("Instance {} is hang, please check the cause.".format(dst_instance_id))
-            else:
-                logger.exception("Failed to call dst instance {} to commit dst request {}, "
-                    "unexpected exception: {}".format(dst_instance_id, migrate_out_request.request_id, e))
+            log_instance_exception(e, dst_instance_id, "_dst_commit_dst_request", migrate_out_request.request_id)
             return MigrationResponse(success=False, return_value=None)
 
     async def _watch_pending_migrate_in_requests_loop(self):

@@ -123,8 +123,8 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
             self.migration_backend.warmup()
         # pylint: disable=broad-except
         except Exception as e:
-            resp.is_ok = False
             log_worker_exception(e, self.instance_id, self.rank, "warmup")
+            resp.is_ok = False
         return resp
 
 

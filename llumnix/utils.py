@@ -272,89 +272,89 @@ def exception_wrapper_async(func):
             logger.exception("Error in {}".format(func.__name__))
     return wrapper
 
-def log_manager_exception(e: Exception, func_name: str, request_id: str = None):
+def log_manager_exception(e: Exception, method_name: str, request_id: str = None):
     if isinstance(e, ray.exceptions.RayActorError):
         logger.info(
-            "Manager is dead, "
-            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
-                request_id, func_name, type(e).__name__, e
+            "Manager is dead, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                method_name, request_id, type(e).__name__, e
             )
         )
     elif isinstance(e, asyncio.TimeoutError):
         logger.error(
-            "Manager is hang, please check the cause, "
-            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
-                request_id, func_name, type(e).__name__, e
+            "Call manager timeout, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                method_name, request_id, type(e).__name__, e
             )
         )
     elif isinstance(e, ray.exceptions.GetTimeoutError):
         logger.error(
-            "Manager is hang, please check the cause, "
-            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
-                request_id, func_name, type(e).__name__, e
+            "Call manager timeout, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                method_name, request_id, type(e).__name__, e
             )
         )
     else:
         logger.exception(
             "Error in manager {} (request_id: {})".format(
-                func_name, request_id
+                method_name, request_id
             )
         )
 
-def log_instance_exception(e: Exception, instance_id: str, func_name: str, request_id: str = None):
+def log_instance_exception(e: Exception, instance_id: str, method_name: str, request_id: str = None):
     if isinstance(e, ray.exceptions.RayActorError):
         logger.info(
-            "Instance {} is dead, "
-            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
-                instance_id, request_id, func_name, type(e).__name__, e
+            "Instance {} is dead, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                instance_id, method_name, request_id, type(e).__name__, e
             )
         )
     elif isinstance(e, asyncio.TimeoutError):
         logger.error(
-            "Instance {} is hang, please check the cause, "
-            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
-                instance_id, request_id, func_name, type(e).__name__, e
+            "Call instance {} timeout, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                instance_id, method_name, request_id, type(e).__name__, e
             )
         )
     elif isinstance(e, ray.exceptions.GetTimeoutError):
         logger.error(
-            "Instance {} is hang, please check the cause, "
-            "func_name: {}, request_id: {}, exception type: {}, exception message: {}".format(
-                instance_id, request_id, func_name, type(e).__name__, e
+            "Call instance {} timeout, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                instance_id, method_name, request_id, type(e).__name__, e
             )
         )
     else:
         logger.exception(
             "Error in instance {} (instance_id: {}, request_id: {})".format(
-                func_name, instance_id, request_id
+                method_name, instance_id, request_id
             )
         )
 
-def log_worker_exception(e: Exception, instance_id: str, rank: str, func_name: str, request_id: str = None):
+def log_worker_exception(e: Exception, instance_id: str, rank: str, method_name: str, request_id: str = None):
     if isinstance(e, ray.exceptions.RayActorError):
         logger.info(
-            "Worker {} is dead, "
-            "rank: {}, func_name: {}, exception type: {}, exception message: {}".format(
-                instance_id, rank, func_name, type(e).__name__, e
+            "Worker {} (rank: {}) is dead, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                instance_id, rank, method_name, request_id, type(e).__name__, e
             )
         )
     elif isinstance(e, asyncio.TimeoutError):
         logger.error(
-            "Worker {} is hang, please check the cause, "
-            "rank: {}, func_name: {}, exception type: {}, exception message: {}".format(
-                instance_id, rank, func_name, type(e).__name__, e
+            "Call worker {} (rank: {}) timeout, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                instance_id, rank, method_name, request_id, type(e).__name__, e
             )
         )
     elif isinstance(e, ray.exceptions.GetTimeoutError):
         logger.error(
-            "Worker {} is hang, please check the cause, "
-            "rank: {}, func_name: {}, exception type: {}, exception message: {}".format(
-                instance_id, rank, func_name, type(e).__name__, e
+            "Call worker {} (rank: {}) timeout, method_name: {}, request_id: {}\n"
+            "exception type: {}, exception message: {}".format(
+                instance_id, rank, method_name, request_id, type(e).__name__, e
             )
         )
     else:
         logger.exception(
             "Error in worker {} (instance_id: {}, rank: {}, request_id: {})".format(
-                func_name, instance_id, rank, request_id
+                method_name, instance_id, rank, request_id,
             )
         )

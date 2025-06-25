@@ -297,10 +297,9 @@ class Scaler:
                 await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except
             except Exception:
-                logger.exception("Error in _check_deployment_states_loop")
                 logger.critical(
-                    "Scaler get error in _check_deployment_states_loop, "
-                    "scaler keeps running, please check the cause!"
+                    "Scaler get error in _check_deployment_states_loop, scaler keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
                 )
 
     # TODO(KuilongCui): Deploy prefill and decode instances strictly according to the pd_ratio.
@@ -325,16 +324,15 @@ class Scaler:
                 await asyncio.sleep(interval)
             # pylint: disable=broad-except
             except Exception:
-                logger.exception("Error in _check_pd_deployment_states_loop")
                 logger.critical(
-                    "Scaler get error in _check_pd_deployment_states_loop, "
-                    "scaler keeps running, please check the cause!")
+                    "Scaler get error in _check_pd_deployment_states_loop, scaler keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
+                )
 
     async def _check_pd_deployment_states(self) -> str:
-        prefill_instance_id_set, decode_instance_id_set = \
-            await execute_actor_method_async_with_retries(
-                self.manager.get_prefill_decode_instance_id_set.remote, 'Manager', 'get_prefill_decode_instance_id_set'
-            )
+        prefill_instance_id_set, decode_instance_id_set = await execute_actor_method_async_with_retries(
+            self.manager.get_prefill_decode_instance_id_set.remote, 'Manager', 'get_prefill_decode_instance_id_set'
+        )
         cur_num_prefill_instances = len(prefill_instance_id_set)
         cur_num_decode_instances = len(decode_instance_id_set)
         scale_down_instance_id = None

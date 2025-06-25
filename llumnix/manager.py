@@ -315,9 +315,9 @@ class Manager:
                 logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception:
-            logger.exception("Error in manager _migrate")
             logger.critical(
-                "Manager get error in _migrate, manager keeps running, please check the cause!"
+                "Manager get error in _migrate, manager keeps running, please check the cause!",
+                exc_info=True, stack_info=True
             )
 
     def scale_up(self,

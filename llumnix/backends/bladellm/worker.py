@@ -182,15 +182,19 @@ class WorkerProcessesRay(WorkerProcesses):
         for rank, worker in enumerate(self.workers):
             try:
                 if ray_get_with_timeout(worker.is_alive.remote()):
-                    logger.critical("Kill alive worker {} (pid {}, node_id: {}, gpu_ids: {}).".format(
-                        rank, self.worker_pids[rank],
-                        self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]))
+                    logger.critical(
+                        "Kill alive worker {} (pid {}, node_id: {}, gpu_ids: {}).".format(
+                            rank, self.worker_pids[rank],
+                            self.worker_node_and_gpu_ids[rank][0], self.worker_node_and_gpu_ids[rank][1]
+                        ),
+                        exc_info=True, stack_info=True
+                    )
                     ray_get_with_timeout(worker.kill_worker_process.remote())
             except: # pylint: disable=bare-except
                 pass
             ray.kill(worker)
         # Not using sys.exit() since it do cleanup work which may still hang server process.
-        logger.critical("Server {} exit.".format(os.getpid()))
+        logger.critical("Server {} exit.".format(os.getpid()), exc_info=True, stack_info=True)
         os._exit(255) # pylint: disable=protected-access
 
     def _init_workers_ray(self, placement_group: PlacementGroup, instance_id: str):

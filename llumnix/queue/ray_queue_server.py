@@ -40,7 +40,11 @@ class RayQueueServer(QueueServerBase):
 
     async def get(self, timeout=None):
         # Server call blocking get to wait for request output tokens.
-        item = await self.queue.actor.get.remote(timeout=timeout)
+        item, send_time = await self.queue.actor.get.remote(timeout=timeout)
+        if send_time:
+            self.queue_server_metrics.queue_trans_latency.observe(
+                (time.perf_counter() - send_time) * 1000
+            )
         set_timestamp(item, 'queue_server_receive_timestamp', time.time())
         return item
 

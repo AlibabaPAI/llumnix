@@ -60,6 +60,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         return self.timestamps_stream.get(entrypoint_req_id, None)
 
     async def _add_request(self, request: ServerRequest) -> LLMResponse:
+        self.llumnix_client_metrics.add_request(reqeust_id=request.id)
         if request.sampling_params.n > 1 or request.sampling_params.use_beam_search:
             return error_resp(request.id, err_code=400, err_msg="Unsupported feature: multiple sequence decoding in Llumnix.")
 
@@ -135,6 +136,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     async def drop_request(self, req_id: int) -> None:
         llumnix_req_id = self.entrypoint_req_id_to_llumnix_req_id.get(req_id, None)
+        self.llumnix_client_metrics.remove_request(request_id=req_id)
         await self._abort(llumnix_req_id)
 
     async def get_request_outputs_loop(self):
@@ -145,9 +147,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
             for request_response in request_responses:
                 request_output = GenerateStreamResponse(**json.loads(request_response.engine_output))
+                request_id = request_output.req_id
                 request_timestamp: RequestTimestamps = request_response.request_timestamps
                 set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
-                request_id = request_output.req_id
                 # Request could be dispatched twice when manager is dead, the first request will free
                 # the request_streams when finished. Or the request is dropped already.
                 if request_id not in self.request_stream:
@@ -164,6 +166,11 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 if not processed_output:
                     continue
                 for req in processed_output:
+                    self.llumnix_client_metrics.observe_tpot_and_ttft(
+                        request_id=self.llumnix_req_id_to_entrypoint_req_id.get(
+                            request_id, None
+                        )
+                    )
                     self.request_stream[request_id].put_nowait(req)
                 last_output = processed_output[-1]
                 self.request_stream_last_completion_tokens[request_id] = last_output.usage.completion_tokens
@@ -178,6 +185,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.entrypoint_req_id_to_llumnix_req_id.pop(entrypoint_req_id, None)
         self.request_stream.pop(request_id, None)
         self.request_stream_output_stash.pop(request_id, None)
+        self.llumnix_client_metrics.remove_request(request_id=entrypoint_req_id)
 
     def _process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
         current_completion_tokens = None

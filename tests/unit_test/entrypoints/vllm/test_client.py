@@ -199,7 +199,7 @@ async def test_abort_and_abort_request(ray_env):
     assert instance_id_returned is None and instance_returned is None
 
     request_output_engine = get_request_output_engine(request_id, instance_id, False)
-    client.request_output_queue.queue.put([request_output_engine], block=True)
+    client.request_output_queue.queue.put(([request_output_engine], None), block=True)
     # yield to get request outputs
     await asyncio.sleep(3.0)
 
@@ -246,7 +246,7 @@ async def test_clear_client_request_states(ray_env):
     instance_id = random_uuid()
 
     request_output_engine = get_request_output_engine(request_id, instance_id, False)
-    client.request_output_queue.queue.put([request_output_engine], block=True)
+    client.request_output_queue.queue.put(([request_output_engine], None), block=True)
     # yield to get request outputs
     await asyncio.sleep(3.0)
 
@@ -257,7 +257,7 @@ async def test_clear_client_request_states(ray_env):
     request_output_engine.engine_output.finished = True
     client._process_output_order = MagicMock()
     client._process_output_order.return_value = request_output_engine
-    client.request_output_queue.queue.put([request_output_engine], block=True)
+    client.request_output_queue.queue.put(([request_output_engine], None), block=True)
     # yield to get request outputs
     await asyncio.sleep(3.0)
 

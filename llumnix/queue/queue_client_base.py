@@ -16,9 +16,28 @@ from typing import Any
 from collections.abc import Iterable
 
 from llumnix.server_info import ServerInfo
+from llumnix import envs as llumnix_envs
 
 
 class QueueClientBase(ABC):
+
+    def __init__(self):
+        self.metric_sample_every_n_records = int(
+            llumnix_envs.QUEUE_SERVER_METRICS_SAMPLE_EVERY_N_RECORDS
+        )
+        self.metric_index = 0
+
+    def is_metric_enable(self):
+        return self.metric_sample_every_n_records > 0
+
+    def need_record_latency(self):
+        if self.is_metric_enable():
+            self.metric_index = (
+                self.metric_index + 1
+            ) % self.metric_sample_every_n_records
+            return self.metric_index == 0
+        return False
+
     @abstractmethod
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         raise NotImplementedError

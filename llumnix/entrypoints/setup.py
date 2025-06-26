@@ -193,7 +193,6 @@ def setup_entrypoints_context(entrypoints_args, scaler, manager, instance_ids, i
     )
 
     log_requests = not entrypoints_args.disable_log_requests_server
-    enable_debug_mode = entrypoints_args.enable_debug_mode
     entrypoints_context = EntrypointsContext(
         scaler,
         manager,
@@ -202,7 +201,6 @@ def setup_entrypoints_context(entrypoints_args, scaler, manager, instance_ids, i
         server,
         server_info,
         log_requests,
-        enable_debug_mode
     )
 
     return entrypoints_context

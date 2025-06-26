@@ -26,7 +26,7 @@ from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.server_info import ServerInfo
 from llumnix.constants import WAIT_MANAGER_INTERVAL
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_with_timeout, is_traced_request
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.entrypoints.client import LlumnixClient
 
@@ -75,10 +75,10 @@ class LlumnixClientVLLM(LlumnixClient):
                                    sampling_params: SamplingParams,
                                    *args,
                                    **kwargs) -> AsyncStream:
-        if self.enable_debug_mode:
+        if is_traced_request(server_info):
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
-            set_timestamp(server_info, "api_server_generate_timestamp", time.time())
+            set_timestamp(server_info, "api_server_generate_timestamp", time.perf_counter())
         await asyncio_wait_for_with_timeout(
             self.manager.generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
         )
@@ -132,7 +132,7 @@ class LlumnixClientVLLM(LlumnixClient):
             request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
             for request_response in request_responses:
                 request_output: RequestOutput = request_response.get_engine_output()
-                set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
+                set_timestamp(request_output, 'api_server_get_queue_timestamp', time.perf_counter())
                 request_id = request_response.request_id
                 # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                 if request_id not in self.request_stream:

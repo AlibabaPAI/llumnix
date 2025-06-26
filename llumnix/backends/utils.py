@@ -35,7 +35,7 @@ from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.queue.utils import init_request_output_queue_client
-from llumnix.utils import ray_get_with_timeout, exception_wrapper_async
+from llumnix.utils import ray_get_with_timeout, exception_wrapper_async, is_traced_request
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -72,8 +72,8 @@ class BaseOutputMediator(ABC):
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
             for req_output in req_outputs:
-                if req_output.request_timestamps is not None:
-                    set_timestamp(req_output, 'engine_actor_put_queue_timestamp', time.time())
+                if is_traced_request(req_output):
+                    set_timestamp(req_output, 'engine_actor_put_queue_timestamp', time.perf_counter())
             tasks.append(asyncio.create_task(request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         aborted_request_ids = []
@@ -112,7 +112,7 @@ class ActorOutputMediator(BaseOutputMediator):
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         # fake metric, for alignment
         for req_outputs in server_request_outputs.values():
-            set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.time())
+            set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.perf_counter())
         if self.engine_actor_handle is None:
             # The lifetime of ActorOutputMediator is the same as the lifetime of the instance actor,
             # so we do not handling exception here.
@@ -147,7 +147,7 @@ class ThreadOutputMediator(BaseOutputMediator):
                                     server_request_outputs: Dict[str, List[LlumnixRequestOuput]],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         for req_outputs in server_request_outputs.values():
-            set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.time())
+            set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.perf_counter())
         if self.put_queue_loop_thread.is_alive():
             self.server_request_outputs_queue.put_nowait((server_request_outputs, server_info_dict))
         # Ensure engine will die if put queue loop thread is dead.

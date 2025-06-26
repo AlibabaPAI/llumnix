@@ -137,7 +137,7 @@ async def generate_benchmark(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
-    start = time.time()
+    start = time.perf_counter()
 
     results_generator = await llumnix_client.generate(prompt, sampling_params, request_id)
 
@@ -150,7 +150,7 @@ async def generate_benchmark(request: Request) -> Response:
             # Abort the request if the client disconnects.
             await llumnix_client.abort(request_id)
             return Response(status_code=499)
-        now = time.time()
+        now = time.perf_counter()
         per_token_latency.append([now, (now - start)*1000])
         start = now
         final_output = request_output

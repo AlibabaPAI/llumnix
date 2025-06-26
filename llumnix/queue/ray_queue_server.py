@@ -19,7 +19,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import random_uuid, is_request_debug_mode
+from llumnix.utils import random_uuid, is_traced_request
 
 
 # TODO(KuilongCui): make rayqueueserver and api server stay in the same node
@@ -45,15 +45,13 @@ class RayQueueServer(QueueServerBase):
             self.queue_server_metrics.queue_trans_latency.observe(
                 (time.perf_counter() - send_time) * 1000
             )
-        if is_request_debug_mode(item):
-            set_timestamp(item, 'queue_server_receive_timestamp', time.time())
+        set_timestamp(item, 'queue_client_send_timestamp', send_time)
+        set_timestamp(item, 'queue_server_receive_timestamp', time.perf_counter())
         return item
 
     async def get_nowait_batch(self):
         qsize = await self.queue.actor.qsize.remote()
         items = await self.queue.actor.get_nowait_batch.remote(qsize)
-        if is_request_debug_mode(item):
-            set_timestamp(items, 'queue_server_receive_timestamp', time.time())
         return items
 
     async def run_server_loop(self):

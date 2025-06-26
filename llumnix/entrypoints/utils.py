@@ -37,8 +37,7 @@ class EntrypointsContext:
                  request_output_queue: "QueueServerBase",
                  server: "APIServerActor",
                  server_info: "ServerInfo",
-                 log_requests: bool,
-                 enable_debug_mode: bool):
+                 log_requests: bool,):
         self.scaler = scaler
         self.manager = manager
         self.instances = instances
@@ -46,7 +45,6 @@ class EntrypointsContext:
         self.server = server
         self.server_info = server_info
         self.log_requests = log_requests
-        self.enable_debug_mode = enable_debug_mode
 
 def is_gpu_available() -> bool:
     try:
@@ -58,10 +56,16 @@ def is_gpu_available() -> bool:
 
 
 @dataclass
-class LlumnixDebugInfo:
+class LlumnixTraceInfo:
     latencys: Dict[str, float] | None = None
     token_timestamps: RequestTimestamps | None = None
 
     def calc_latency(self):
         if self.token_timestamps is not None:
             self.latencys = self.token_timestamps.to_latency_breakdown_dict()
+
+    def dict(self):
+        return {
+            "latencys": self.latencys,
+            "token_timestamps": self.token_timestamps,
+        }

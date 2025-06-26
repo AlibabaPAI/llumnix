@@ -18,9 +18,8 @@ import asyncio
 
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_client_base import QueueClientBase
-from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import RAY_QUEUE_RPC_TIMEOUT
-from llumnix.utils import is_request_debug_mode
+from llumnix.utils import is_traced_request
 
 
 class RayQueueClient(QueueClientBase):
@@ -29,11 +28,9 @@ class RayQueueClient(QueueClientBase):
         # TODO: conbine metrics and debug mode logic
         send_time = (
             time.perf_counter()
-            if self.need_record_latency() or is_request_debug_mode(server_info)
+            if self.need_record_latency() or is_traced_request(server_info) or is_traced_request(item)
             else None
         )
-        if is_request_debug_mode(server_info):
-            set_timestamp(item, 'queue_client_send_timestamp', send_time)
         return await asyncio.wait_for(
             output_queue.actor.put_nowait.remote((item, send_time)),
             timeout=RAY_QUEUE_RPC_TIMEOUT
@@ -43,11 +40,9 @@ class RayQueueClient(QueueClientBase):
         output_queue = server_info.request_output_queue
         send_time = (
             time.perf_counter()
-            if self.need_record_latency() or is_request_debug_mode(server_info)
+            if self.need_record_latency() or is_traced_request(server_info)
             else None
         )
-        if is_request_debug_mode(server_info):
-            set_timestamp(items, 'queue_client_send_timestamp', send_time)
         items_with_send_time = [(item, send_time) for item in items]
         return await asyncio.wait_for(
             output_queue.actor.put_nowait_batch.remote(items_with_send_time),

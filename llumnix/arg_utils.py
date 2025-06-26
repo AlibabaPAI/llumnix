@@ -205,7 +205,6 @@ class EntrypointsArgs:
     disable_log_to_driver: bool = None
     request_output_queue_type: str = None
     disable_log_requests_server: bool = None
-    enable_debug_mode: bool = None
     config_file: str = None
     disable_keep_serve_process_alive: bool = None
 
@@ -247,9 +246,6 @@ class EntrypointsArgs:
         parser.add_argument('--disable-log-requests-server',
                             action='store_true',
                             help='disable logging requests in server')
-        parser.add_argument("--enable-debug-mode",
-                            action='store_true',
-                            help='run llumnix in debug mode')
         parser.add_argument("--config-file",
                             type=str,
                             help="path to config file of arguments")

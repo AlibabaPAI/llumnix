@@ -21,11 +21,11 @@ from blade_llm.protocol import (
     OAIChatCompletionsResponse,
 )
 
-from llumnix.entrypoints.utils import LlumnixDebugInfo
+from llumnix.entrypoints.utils import LlumnixTraceInfo
 
 
 class LlumnixBaseResponse(BaseModel):
-    llumnix_debug_info: Optional[Union[LlumnixDebugInfo, List[LlumnixDebugInfo]]] = (
+    llumnix_trace_info: Optional[Union[LlumnixTraceInfo, List[LlumnixTraceInfo]]] = (
         Field(default=None, title="Llumnix debug info.")
     )
 
@@ -36,22 +36,22 @@ class LlumnixGenerateStreamResponse(GenerateStreamResponse, LlumnixBaseResponse)
     def from_generate_stream_response(
         cls: Type["LlumnixGenerateStreamResponse"],
         gen_resp: GenerateStreamResponse,
-        llumnix_debug_info: LlumnixDebugInfo = None,
+        llumnix_trace_info: LlumnixTraceInfo = None,
     ):
         oai_data = gen_resp.model_dump(by_alias=True)
         llumnix_generate_stream_response = LlumnixGenerateStreamResponse(**oai_data)
-        llumnix_generate_stream_response.llumnix_debug_info = llumnix_debug_info
+        llumnix_generate_stream_response.llumnix_trace_info = llumnix_trace_info
         return llumnix_generate_stream_response
 
     def set_request_timestamp(self, request_timestamp):
-        if self.llumnix_debug_info is None:
-            self.llumnix_debug_info = LlumnixDebugInfo()
-        self.llumnix_debug_info.token_timestamps = request_timestamp
+        if self.llumnix_trace_info is None:
+            self.llumnix_trace_info = LlumnixTraceInfo()
+        self.llumnix_trace_info.token_timestamps = request_timestamp
 
 
 class LlumnixOAICompletionsResponse(OAICompletionsResponse, LlumnixBaseResponse):
 
-    # pylint: enable=W0622
+    # pylint: disable=redefined-builtin
     @classmethod
     def from_gen_response(
         cls: Type["LlumnixOAICompletionsResponse"],
@@ -68,9 +68,9 @@ class LlumnixOAICompletionsResponse(OAICompletionsResponse, LlumnixBaseResponse)
         oai_data = oai_completions_response.model_dump(by_alias=True)
         llumnix_oai_completions_response = LlumnixOAICompletionsResponse(**oai_data)
         if isinstance(gen_resp, LlumnixGenerateStreamResponse):
-            gen_resp.llumnix_debug_info.calc_latency()
-            llumnix_oai_completions_response.llumnix_debug_info = (
-                gen_resp.llumnix_debug_info
+            gen_resp.llumnix_trace_info.calc_latency()
+            llumnix_oai_completions_response.llumnix_trace_info = (
+                gen_resp.llumnix_trace_info
             )
         return llumnix_oai_completions_response
 
@@ -79,7 +79,7 @@ class LlumnixOAIChatCompletionsResponse(
     OAIChatCompletionsResponse, LlumnixBaseResponse
 ):
 
-    # pylint: enable=W0622
+    # pylint: disable=redefined-builtin
     @classmethod
     def from_gen_response(
         cls: Type["LlumnixOAIChatCompletionsResponse"],
@@ -99,21 +99,21 @@ class LlumnixOAIChatCompletionsResponse(
             **oai_data
         )
         if isinstance(gen_resp, LlumnixGenerateStreamResponse):
-            gen_resp.llumnix_debug_info.calc_latency()
-            llumnix_oai_chat_completions_response.llumnix_debug_info = (
-                gen_resp.llumnix_debug_info
+            gen_resp.llumnix_trace_info.calc_latency()
+            llumnix_oai_chat_completions_response.llumnix_trace_info = (
+                gen_resp.llumnix_trace_info
             )
         return llumnix_oai_chat_completions_response
 
 
 class LlumnixServerRequest(ServerRequest):
-    llumnix_debug_mode: bool = Field(default=False, title="Enable llumnix debug mode.")
+    llumnix_trace_request: bool = Field(default=False, title="Enable llumnix debug mode.")
 
     @classmethod
     def from_server_request(
-        cls: Type["LlumnixServerRequest"], request: ServerRequest, debug_mode: bool
+        cls: Type["LlumnixServerRequest"], request: ServerRequest, trace_request: bool
     ):
         server_request_data = request.model_dump(by_alias=True)
         llumxix_server_request = LlumnixServerRequest(**server_request_data)
-        llumxix_server_request.llumnix_debug_mode = debug_mode
+        llumxix_server_request.llumnix_trace_request = trace_request
         return llumxix_server_request

@@ -132,7 +132,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         except Exception as e:
             if instance_id in self.instances:
                 self._handle_generate_by_instance_error(request_id, instance_id, e)
-                return await asyncio.create_task(self._generate(request_id, request))
+            return await asyncio.create_task(self._generate(request_id, request))
 
     async def drop_request(self, req_id: int) -> None:
         llumnix_req_id = self.entrypoint_req_id_to_llumnix_req_id.get(req_id, None)

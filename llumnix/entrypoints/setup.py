@@ -24,13 +24,13 @@ from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, get_llumnix_env_vars
-from llumnix.ray_utils import get_manager_name, execute_actor_method_sync_with_retries, get_scaler_name
+from llumnix.ray_utils import get_manager_name, get_scaler_name
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, InstanceArgs, LlumnixEngineArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.entrypoints.utils import LaunchMode, EntrypointsContext
-from llumnix.utils import get_ip_address, log_instance_exception
+from llumnix.utils import get_ip_address, log_instance_exception, ray_get_with_timeout
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.constants import MAX_RAY_RESTART_TIMES, RAY_RESTART_INTERVAL, SUBPROCESS_RUN_TIMEOUT
 from llumnix import envs as llumnix_envs
@@ -144,9 +144,8 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
 
     request_output_queue_type: QueueType = QueueType(entrypoints_args.request_output_queue_type)
     node_id = ray.get_runtime_context().get_node_id()
-    instance_ids, instances = execute_actor_method_sync_with_retries(
-        scaler.init_instances.remote, 'Scaler', 'init_instances',
-        request_output_queue_type, instance_args, engine_args, node_id
+    instance_ids, instances = ray_get_with_timeout(
+        scaler.init_instances.remote(request_output_queue_type, instance_args, engine_args, node_id)
     )
 
     available_instance_ids = []
@@ -159,9 +158,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
         # pylint: disable=broad-except
         except Exception as e:
             log_instance_exception(e, instance_id, "init_llumnix_components")
-            execute_actor_method_sync_with_retries(
-                manager.scale_down.remote, 'Manager', 'scale_down', instance_id
-            )
+            ray_get_with_timeout(manager.scale_down.remote(instance_id))
 
     if len(available_instance_ids) > 0:
         logger.info("Init Llumnix components done, {} instances are ready, instance_ids: {}."
@@ -171,10 +168,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
     if request_output_queue_type == QueueType.RAYQUEUE:
         # Init rayqueue in manager to ensure the job id of all actors are the same as manager.
         # We found that when the job id of rayqueue is inherited from driver process, it may raise job id unequal error sometimes.
-        request_output_queue = execute_actor_method_sync_with_retries(
-            scaler.init_request_output_queue_server.remote, 'Scaler', 'init_request_output_queue_server',
-            ip, request_output_queue_type
-        )
+        request_output_queue = ray_get_with_timeout(scaler.init_request_output_queue_server.remote(ip, request_output_queue_type))
     else:
         # zmq context cannot be serialized, so init zmq queue server in driver.
         request_output_queue = init_request_output_queue_server(ip, request_output_queue_type)

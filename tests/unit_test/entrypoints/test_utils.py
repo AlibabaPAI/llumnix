@@ -21,7 +21,7 @@ from llumnix.arg_utils import ManagerArgs, InstanceArgs, EntrypointsArgs, Launch
 from llumnix.entrypoints.setup import launch_ray_cluster
 from llumnix.utils import get_ip_address
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.ray_utils import get_manager_name, execute_actor_method_sync_with_retries, execute_actor_method_async_with_retries
+from llumnix.ray_utils import get_manager_name
 from llumnix.manager import Manager
 from llumnix.scaler import Scaler
 
@@ -56,12 +56,3 @@ def test_init_zmq(ray_env):
     ip = '127.0.0.1'
     request_output_queue = init_request_output_queue_server(ip, 'zmq')
     assert request_output_queue is not None
-
-def test_retry_manager_method_sync(ray_env, manager):
-    ret = execute_actor_method_sync_with_retries(manager.is_ready.remote, "Manager", 'is_ready')
-    assert ret is True
-
-@pytest.mark.asyncio
-async def test_retry_manager_method_async(ray_env, manager):
-    ret = await execute_actor_method_async_with_retries(manager.is_ready.remote, "Manager", 'is_ready')
-    assert ret is True

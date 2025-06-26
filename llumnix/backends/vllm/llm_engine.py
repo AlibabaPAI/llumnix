@@ -43,11 +43,11 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import RequestOutputForwardingMode, OutputMediator
 from llumnix.utils import make_async
-from llumnix.ray_utils import get_instance_name, asyncio_wait_for_with_timeout
+from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
-from llumnix.utils import RequestIDType, MigrationResponse
+from llumnix.utils import RequestIDType, MigrationResponse, asyncio_wait_for_with_timeout
 from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)
@@ -425,7 +425,7 @@ class BackendVLLM(BackendInterface):
              RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
         if backend_request.status == RequestStatus.RUNNING_MIGRATING:
             backend_request.reset_status()
-            self.add_running_request(backend_request)
+            await self.add_running_request(backend_request)
         else: # WAITING_MIGRATING:
             self.add_waiting_request(backend_request)
 
@@ -519,15 +519,15 @@ class BackendVLLM(BackendInterface):
     def should_abort_migration(self, *args, **kwargs) -> bool:
         return self.engine.scheduler[0].should_abort_migration(*args, **kwargs)
 
-    def add_running_request(self, backend_request: LlumnixRequest) -> None:
+    async def add_running_request(self, backend_request: LlumnixRequest) -> None:
         # Although add_running_request is always be called in last stage migration,
         # there exists migrating_out_seq_group_metadata in worker only when last stage do_send is executed,
         # so the request id does not always exists.
         if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
             # pylint: disable=protected-access
-            asyncio.create_task(
-                self._run_workers_async(
-                    "restore_migrating_out_seq_group_metadata", backend_request.request_id))
+            await self._run_workers_async(
+                "restore_migrating_out_seq_group_metadata", backend_request.request_id
+            )
         return self.engine.scheduler[0].add_running_request(backend_request)
 
     def add_waiting_request(self, *args, **kwargs) -> None:

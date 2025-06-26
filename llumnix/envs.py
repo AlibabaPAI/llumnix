@@ -21,7 +21,8 @@ from llumnix.constants import (
     BLOCKDEMANDFACTOR_BUSY_THRESHOLD,
     REMAININGSTEPS_BUSY_THRESHOLD,
     DECODE_COMPUTE_BOUND_BATCH_SIZE,
-    DEFAULT_METRICS_EXPORT_INTERVAL_SEC
+    DEFAULT_METRICS_EXPORT_INTERVAL_SEC,
+    RAY_TASK_RETRY_DELAY_MS
 )
 
 if TYPE_CHECKING:
@@ -86,7 +87,7 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     "DATASET_PATH":
     lambda: os.getenv("DATASET_PATH", DATASET_PATH),
 
-    # used for scale up
+    # used in scale up
     "SERVER_READY_TIMEOUT":
     lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", str(SERVER_READY_TIMEOUT)),
     "INSTANCE_READY_TIMEOUT":
@@ -115,6 +116,10 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("REMAININGSTEPS_BUSY_THRESHOLD", str(REMAININGSTEPS_BUSY_THRESHOLD)),
     "DECODE_COMPUTE_BOUND_BATCH_SIZE":
     lambda: os.getenv("DECODE_COMPUTE_BOUND_BATCH_SIZE", str(DECODE_COMPUTE_BOUND_BATCH_SIZE)),
+
+    # used in retry manager and scaler method
+    "RAY_TASK_RETRY_DELAY_MS":
+    lambda: os.getenv("RAY_TASK_RETRY_DELAY_MS", str(RAY_TASK_RETRY_DELAY_MS)),
 }
 
 

@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 
 from vllm.v1.executor.ray_distributed_executor import RayDistributedExecutor
 from vllm.v1.outputs import ModelRunnerOutput
@@ -38,11 +39,14 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
         Returns:
             The model runner output.
         """
+        t0 = time.time()
         # Build the compiled DAG for the first time.
         if self.forward_dag is None:  # type: ignore
             self.forward_dag = self._compiled_ray_dag(enable_asyncio=True)
 
         refs = await self.forward_dag.execute_async(scheduler_output)  # type: ignore
 
+        t1 = time.time()
+        self.last_inference_latency = (t1 - t0) * 1000
         # The returned refs is a list of futures.
         return await refs[0]

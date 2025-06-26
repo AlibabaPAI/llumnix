@@ -151,13 +151,14 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
                 "vllm_config"].parallel_config
             if parallel_config.data_parallel_size > 1 or dp_rank > 0:
                 # Set data parallel rank for this engine process.
+                # TODO(zhaozhiyu): use EngineCoreLlumnix
                 parallel_config.data_parallel_rank = dp_rank
                 parallel_config.data_parallel_rank_local = local_dp_rank
                 engine_core = AsyncDPEngineCoreProc(*args, **kwargs)
             else:
                 engine_core = AsyncEngineCoreProc(*args, **kwargs)
 
-            asyncio.run(engine_core.run_busy_loop_async())
+            asyncio.create_task(engine_core.run_busy_loop_async())
 
         except SystemExit:
             logger.debug("EngineCore exiting.")

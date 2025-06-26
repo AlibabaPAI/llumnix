@@ -112,7 +112,7 @@ class LlumnixClientVLLM(LlumnixClient):
         except Exception as e:
             if instance_id in self.instances:
                 self._handle_generate_by_instance_error(request_id, instance_id, e)
-                return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
+            return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
 
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)

@@ -252,8 +252,8 @@ def ray_get_with_timeout(object_refs, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
 def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
     return asyncio.wait_for(fut, *args, timeout=timeout, **kwargs)
 
-async def async_wrapper(ray_call, *args, **kwargs):
-    return await ray_call(*args, **kwargs)
+async def async_wrapper_for_ray_remote_call(ray_remote_call, *args, **kwargs):
+    return await ray_remote_call(*args, **kwargs)
 
 def execute_method_with_timeout(method, timeout, *args, **kwargs):
     with ThreadPoolExecutor(max_workers=1) as executor:

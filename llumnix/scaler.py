@@ -59,7 +59,6 @@ from llumnix.ray_utils import (
     actor_exists,
     get_instance_name,
     PLACEMENT_GROUP_NAME_PREFIX,
-    execute_actor_method_async_with_retries,
 )
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (
@@ -67,6 +66,7 @@ from llumnix.constants import (
     AUTO_SCALE_UP_INTERVAL,
     CHECK_DEPLOYMENT_STATES_INTERVAL,
     WATCH_DEPLOYMENT_INTERVAL,
+    MAX_ACTOR_METHOD_RETRIES,
 )
 from llumnix import envs as llumnix_envs
 from llumnix.entrypoints.utils import LaunchMode
@@ -274,9 +274,7 @@ class Scaler:
             if pg_created and (not server_exists or not instance_exists):
                 logger.warning("Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
                                .format(instance_id, pg_created, server_exists, instance_exists))
-                await execute_actor_method_async_with_retries(
-                    self.manager.scale_down.remote, 'Manager', 'scale_down', instance_id
-                )
+                await asyncio_wait_for_with_timeout(self.manager.scale_down.remote(instance_id))
 
         while True:
             try:
@@ -330,8 +328,8 @@ class Scaler:
                 )
 
     async def _check_pd_deployment_states(self) -> str:
-        prefill_instance_id_set, decode_instance_id_set = await execute_actor_method_async_with_retries(
-            self.manager.get_prefill_decode_instance_id_set.remote, 'Manager', 'get_prefill_decode_instance_id_set'
+        prefill_instance_id_set, decode_instance_id_set = await asyncio_wait_for_with_timeout(
+            self.manager.get_prefill_decode_instance_id_set.remote()
         )
         cur_num_prefill_instances = len(prefill_instance_id_set)
         cur_num_decode_instances = len(decode_instance_id_set)
@@ -349,9 +347,7 @@ class Scaler:
                         self.pdd_config.pd_ratio, cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
 
         if scale_down_instance_id:
-            await execute_actor_method_async_with_retries(
-                self.manager.scale_down.remote, 'Manager', 'scale_down', scale_down_instance_id
-            )
+            await asyncio_wait_for_with_timeout(self.manager.scale_down.remote(scale_down_instance_id))
 
         return scale_down_instance_id
 
@@ -446,9 +442,8 @@ class Scaler:
                     instance,
                 )
                 await asyncio.wait_for(server.is_ready.remote(), timeout=float(llumnix_envs.SERVER_READY_TIMEOUT))
-                await execute_actor_method_async_with_retries(
-                    self.manager.scale_up.remote, 'Manager', 'scale_up',
-                    instance_id, instance, instance_type, placement_group, server
+                await asyncio_wait_for_with_timeout(
+                    self.manager.scale_up.remote(instance_id, instance, instance_type, placement_group, server)
                 )
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
@@ -558,9 +553,8 @@ class Scaler:
                                           instance_type: InstanceType, placement_group: PlacementGroup):
             try:
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
-                await execute_actor_method_async_with_retries(
-                    self.manager.scale_up.remote, 'Manager', 'scale_up',
-                    instance_id, instance, instance_type, placement_group
+                await asyncio_wait_for_with_timeout(
+                    self.manager.scale_up.remote(instance_id, instance, instance_type, placement_group)
                 )
             except asyncio.TimeoutError:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
@@ -630,6 +624,7 @@ class Scaler:
     def is_ready(self) -> bool:
         return True
 
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     async def clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]]):
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
@@ -654,11 +649,9 @@ class Scaler:
 
         if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg:
             # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
-            cur_num_prefill_instances, cur_num_decode_instances = \
-                await execute_actor_method_async_with_retries(
-                    self.manager.get_num_prefill_decode_instances.remote,
-                    'Manager', 'get_num_prefill_decode_instances'
-                )
+            cur_num_prefill_instances, cur_num_decode_instances = await asyncio_wait_for_with_timeout(
+                self.manager.get_num_prefill_decode_instances.remote()
+            )
             next_instance_args.instance_type = self._get_next_instance_type(
                 cur_num_prefill_instances, cur_num_decode_instances, self.pdd_config.pd_ratio, instance_type,)
 
@@ -715,5 +708,6 @@ class Scaler:
 
         return instance_type
 
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     def clear_gloo_backend_ray_resources(self):
         clear_gloo_backend_ray_resources()

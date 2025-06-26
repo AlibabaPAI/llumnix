@@ -42,7 +42,7 @@ from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (
     random_uuid,
     run_coroutine_in_new_thread,
-    async_wrapper,
+    async_wrapper_for_ray_remote_call,
     asyncio_wait_for_with_timeout,
     RequestIDType,
     log_instance_exception,
@@ -52,11 +52,15 @@ from llumnix.ray_utils import (
     INSTANCE_NAME_PREFIX,
     get_placement_group_name,
     log_actor_ray_info,
-    execute_actor_method_async_with_retries,
     get_scaler_name,
 )
 from llumnix.entrypoints.utils import LaunchMode
-from llumnix.constants import NO_INSTANCE_RETRY_GENERATE_INTERVAL, WAIT_ALL_MIGRATIONS_DONE_INTERVAL
+from llumnix.constants import (
+    NO_INSTANCE_RETRY_GENERATE_INTERVAL,
+    WAIT_ALL_MIGRATIONS_DONE_INTERVAL,
+    MAX_ACTOR_METHOD_RETRIES,
+)
+
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.entrypoints.api_server_actor import APIServerActor
 
@@ -150,19 +154,29 @@ class Manager:
         target_instance_id = prefill_instance_id
 
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
+        asyncio.create_task(
+            self._generate_with_exception_handling(
+                request_id, server_info, request_expected_steps, target_instance_id, *args, **kwargs
+            )
+        )
+
+    async def _generate_with_exception_handling(self,
+                                                request_id: RequestIDType,
+                                                server_info: ServerInfo,
+                                                request_expected_steps: int,
+                                                target_instance_id: str,
+                                                *args, **kwargs):
         try:
-            asyncio.create_task(
-                asyncio_wait_for_with_timeout(
-                    async_wrapper(
-                        self.instances[target_instance_id].generate.remote,
-                        request_id, server_info, request_expected_steps, *args, **kwargs
-                    )
+            await asyncio_wait_for_with_timeout(
+                async_wrapper_for_ray_remote_call(
+                    self.instances[target_instance_id].generate.remote,
+                    request_id, server_info, request_expected_steps, *args, **kwargs
                 )
             )
         # pylint: disable=broad-except
         except Exception as e:
-            log_instance_exception(e, prefill_instance_id, "generate", request_id)
-            self.scale_down(prefill_instance_id)
+            log_instance_exception(e, target_instance_id, "generate", request_id)
+            self.scale_down(target_instance_id)
             await asyncio.create_task(self.generate(request_id, server_info, *args, **kwargs))
 
     @classmethod
@@ -214,7 +228,7 @@ class Manager:
                     self.global_scheduler.update_instance_infos([ret])
             else:
                 log_instance_exception(ret, instance_id, "_poll_instance_info_loop")
-                await self.scale_down(instance_id)
+                self.scale_down(instance_id)
 
         def get_instance_info_done_callback_wrapper(instance_id: str, fut) -> None:
             ret = fut.result()[0]
@@ -260,13 +274,7 @@ class Manager:
                 self.instance_migrating[migrate_instance_pair[0]] = False
             if migrate_instance_pair[1] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[1]] = False
-            if isinstance(ret, Exception):
-                has_error_pair = await self._check_instance_error(migrate_instance_pair)
-                for i, has_error in enumerate(has_error_pair):
-                    if has_error:
-                        instance_id = migrate_instance_pair[i]
-                        await self.scale_down(instance_id)
-            else:
+            if not isinstance(ret, Exception):
                 migrate_out_request_ids = ret
                 if not self.enable_pd_disagg:
                     logger.info("Instance {}->{} migrate done, migrate request {}".format(
@@ -309,6 +317,7 @@ class Manager:
                 exc_info=True, stack_info=True
             )
 
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     async def scale_up(self,
                  instance_id: Union[str, Iterable[str]],
                  instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
@@ -360,7 +369,8 @@ class Manager:
 
         return self.num_instances
 
-    async def scale_down(self, instance_id: Union[str, Iterable[str]], rebuild_migration_backend: bool = True) -> None:
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
+    def scale_down(self, instance_id: Union[str, Iterable[str]], rebuild_migration_backend: bool = True) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
@@ -368,62 +378,68 @@ class Manager:
         indeed_update = False
         no_pending_instance = self.pending_rebuild_migration_instances == 0
 
+        clear_instance_ids = []
         for ins_id in instance_ids:
-            await execute_actor_method_async_with_retries(
-                self.scaler.clear_instance_ray_resources.remote, 'Scaler', 'clear_instance_ray_resources', ins_id
-            )
             if ins_id in self.instances:
                 indeed_update = True
-                if ins_id in self.instances:
-                    self.instances.pop(ins_id)
-                    if ins_id in self.pgs:
-                        self.pgs.pop(ins_id)
-                    else:
-                        logger.warning("instance {} is not in pgs".format(ins_id))
-                    if self.servers:
-                        if ins_id in self.servers:
-                            self.servers.pop(ins_id)
-                        else:
-                            logger.warning("instance {} is not in servers".format(ins_id))
-                else:
-                    logger.warning("instance {} is not in instances".format(ins_id))
-                if ins_id in self.instance_migrating:
-                    del self.instance_migrating[ins_id]
-                else:
-                    logger.warning("instance {} is not in instance_migrating".format(ins_id))
-                if self.log_instance_info:
-                    if ins_id in self.instance_last_logged_empty:
-                        del self.instance_last_logged_empty[ins_id]
-                    else:
-                        logger.warning("instance {} is not in instance_last_logged_empty".format(ins_id))
+                clear_instance_ids.append(ins_id)
                 self.pending_rebuild_migration_instances += 1
+                self.instances.pop(ins_id)
+            else:
+                logger.warning("instance {} is not in instances".format(ins_id))
 
-        self.global_scheduler.scale_down(instance_ids)
-        self.num_instances = len(self.instances)
+            if ins_id in self.pgs:
+                self.pgs.pop(ins_id)
+            else:
+                logger.warning("instance {} is not in pgs".format(ins_id))
+
+            if self.servers and ins_id in self.servers:
+                self.servers.pop(ins_id)
+            else:
+                logger.warning("instance {} is not in servers".format(ins_id))
+
+            if ins_id in self.instance_migrating:
+                del self.instance_migrating[ins_id]
+            else:
+                logger.warning("instance {} is not in instance_migrating".format(ins_id))
+
+            if self.log_instance_info:
+                if ins_id in self.instance_last_logged_empty:
+                    del self.instance_last_logged_empty[ins_id]
+                else:
+                    logger.warning("instance {} is not in instance_last_logged_empty".format(ins_id))
+
+        if indeed_update:
+            self.global_scheduler.scale_down(instance_ids)
+            self.num_instances = len(self.instances)
+
+        asyncio.create_task(
+            asyncio_wait_for_with_timeout(
+                async_wrapper_for_ray_remote_call(self.scaler.clear_instance_ray_resources.remote, clear_instance_ids)
+            )
+        )
 
         if self.enable_migration and self.is_group_kind_migration_backend:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
-                await execute_actor_method_async_with_retries(
-                    self.scaler.clear_gloo_backend_ray_resources.remote, 'Scaler', 'clear_gloo_backend_ray_resources',
+                asyncio.create_task(
+                    asyncio_wait_for_with_timeout(
+                        self.scaler.clear_gloo_backend_ray_resources.remote()
+                    )
                 )
             elif indeed_update and no_pending_instance and rebuild_migration_backend and not self.instance_args.simulator_mode:
                 asyncio.create_task(self._rebuild_migration_backend())
 
-        asyncio.create_task(
-            execute_actor_method_async_with_retries(
-                self.scaler.clear_instance_ray_resources.remote, 'Scaler', 'clear_instance_ray_resources', instance_ids
-            )
-        )
-
         return self.num_instances
 
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     def get_num_prefill_decode_instances(self):
         num_prefill_instances = len(self.global_scheduler.prefill_instance_info)
         num_decode_instances = len(self.global_scheduler.decode_instance_info)
 
         return num_prefill_instances, num_decode_instances
 
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     def get_prefill_decode_instance_id_set(self):
         prefill_instance_id_set = set(self.global_scheduler.prefill_instance_info.keys())
         decode_instance_id_set = set(self.global_scheduler.decode_instance_info.keys())
@@ -440,8 +456,8 @@ class Manager:
 
         async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):
             tasks = []
-            for instance_name in alive_instances:
-                llumlet_handle = self.instances[instance_name]
+            for instance_id in alive_instances:
+                llumlet_handle = self.instances[instance_id]
                 tasks.append(
                     asyncio_wait_for_with_timeout(
                         llumlet_handle.execute_engine_method_async.remote("_run_workers_async", task_name, *args, **kwargs),
@@ -449,29 +465,25 @@ class Manager:
                 )
             rets = await asyncio.gather(*tasks, return_exceptions=True)
             dead_instances = set()
-            for instance_name, ret in zip(alive_instances, rets):
+            for instance_id, ret in zip(alive_instances, rets):
                 if isinstance(ret, Exception):
-                    instance_id = instance_name[:len(INSTANCE_NAME_PREFIX)]
                     log_instance_exception(ret, instance_id, "_rebuild_migration_backend")
-                    dead_instances.add(instance_name)
+                    dead_instances.add(instance_id)
             if len(dead_instances) > 0:
-                await self.scale_down(dead_instances, rebuild_migration_backend=False)
-                await execute_actor_method_async_with_retries(
-                    self.scaler.clear_gloo_backend_ray_resources.remote, 'Scaler', 'clear_gloo_backend_ray_resources',
-                )
+                self.scale_down(dead_instances, rebuild_migration_backend=False)
+                await asyncio_wait_for_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote())
             return dead_instances
 
+        await asyncio_wait_for_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote())
         alive_instances = sorted(self.instances.keys())
         pending_task = self.pending_rebuild_migration_instances
         group_name = None
-        await execute_actor_method_async_with_retries(
-            self.scaler.clear_gloo_backend_ray_resources.remote, 'Scaler', 'clear_gloo_backend_ray_resources',
-        )
 
         while len(alive_instances) > 0 and self.pending_rebuild_migration_instances > 0:
             dead_instances = set()
             group_name = random_uuid()
             instance_rank = {instance_id: index for index, instance_id in enumerate(alive_instances)}
+            # TODO(KuilongCui): Fix potential self.instances update between bellow two awaits.
             dead_instances.update(await run_task(
                 alive_instances, "rebuild_migration_backend", instance_rank, group_name))
             if len(dead_instances) == 0 and self.pending_rebuild_migration_instances == pending_task:
@@ -553,29 +565,6 @@ class Manager:
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
         await self.scale_up(instance_ids, instances, instance_types, placement_groups)
-
-    async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
-        def check_instance_error_done_callback(idx: int, instance_id: str, fut):
-            ret = fut.result()[0]
-            if not isinstance(ret, Exception):
-                logger.info("Instance {} is alive.".format(instance_id))
-                results[idx] = False
-            else:
-                log_instance_exception(ret, instance_id, "_check_instance_error")
-                results[idx] = True
-
-        results = [None, None]
-        tasks = []
-        for idx, instance_id in enumerate(migrate_instance_pairs):
-            task = asyncio.gather(
-                asyncio_wait_for_with_timeout(self.instances[instance_id].is_ready.remote()),
-                return_exceptions=True
-            )
-            task.add_done_callback(partial(check_instance_error_done_callback, idx, instance_id))
-            tasks.append(task)
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        return results
 
     def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:
         # pylint: disable=consider-using-with

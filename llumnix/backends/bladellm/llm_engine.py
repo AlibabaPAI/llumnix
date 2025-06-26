@@ -453,7 +453,7 @@ class AsyncLLMEngineLlumnixMixin:
         for stub in self.worker_migration_stubs:
             method = getattr(stub, worker_method)
             coros.append(method(*args, **kwargs))
-        result = await asyncio.gather(*coros, return_exceptions=True)
+        result = await asyncio.gather(*coros)
         return result
 
     async def wake_engine(self):
@@ -758,7 +758,7 @@ class BackendBladeLLM(BackendInterface):
     def pre_alloc_cache(self, *args, **kwargs) -> MigrationResponse:
         return self.engine.scheduler.pre_alloc_cache(*args, **kwargs)
 
-    def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
+    async def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
         self.engine.trans_wrapper.add_request(backend_request.request_id, backend_request.server_info)
         self.engine._req_tracker.req_metrics_map[backend_request.request_id] = backend_request.req_metrics
         return self.engine.scheduler.add_running_request(backend_request)
@@ -818,7 +818,7 @@ class BackendBladeLLM(BackendInterface):
         backend_request.reset_migration_states_dst()
         self.engine._back_queue[request_id] = self.engine.resp_queue
         self.engine._req_tracker.req_metrics_map[request_id] = backend_request.req_metrics
-        self.add_running_request(backend_request)
+        await self.add_running_request(backend_request)
 
         self.engine.scheduler.llumnix_metrics.scheduler_step_metrics(self.engine.scheduler)
         if self.engine._migration_semaphore.locked():

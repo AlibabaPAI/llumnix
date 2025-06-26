@@ -215,7 +215,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def add_running_request(self, backend_request: LlumnixRequest) -> None:
+    async def add_running_request(self, backend_request: LlumnixRequest) -> None:
         """
         Add a backend request to the running queue of backend.
 

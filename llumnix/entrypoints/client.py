@@ -29,11 +29,14 @@ from llumnix.ray_utils import (
     get_actor_names_by_name_prefix,
     INSTANCE_NAME_PREFIX,
     get_instance,
-    execute_actor_method_async_with_retries,
-    asyncio_wait_for_with_timeout,
 )
 from llumnix.logging.logger import init_logger
-from llumnix.utils import RequestIDType, log_instance_exception, log_manager_exception
+from llumnix.utils import (
+    RequestIDType,
+    asyncio_wait_for_with_timeout,
+    log_instance_exception,
+    log_manager_exception,
+)
 
 logger = init_logger(__name__)
 
@@ -86,9 +89,7 @@ class LlumnixClient(ABC):
         raise NotImplementedError
 
     async def is_ready(self) -> bool:
-        return await execute_actor_method_async_with_retries(
-            self.manager.is_ready.remote, "Manager", "is_ready"
-        )
+        return await asyncio_wait_for_with_timeout(self.manager.is_ready.remote())
 
     def cleanup(self):
         self.request_output_queue.cleanup()

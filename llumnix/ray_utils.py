@@ -15,8 +15,6 @@ from typing import Any, Union, Dict, List
 import glob
 import os
 import pickle
-import time
-import asyncio
 
 import ray
 import ray.actor
@@ -30,9 +28,7 @@ from ray.experimental.internal_kv import (
 import ray.exceptions
 
 from llumnix.logging.logger import init_logger
-from llumnix.constants import (MAX_ACTOR_METHOD_RETRY_TIMES, RETRY_ACTOR_METHOD_INTERVAL,
-                               WAIT_PLACEMENT_GROUP_TIMEOUT)
-from llumnix.utils import ray_get_with_timeout, asyncio_wait_for_with_timeout
+from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
 
 logger = init_logger(__name__)
 
@@ -300,45 +296,3 @@ def log_actor_ray_info(actor_class_name: str) -> None:
     # pylint: disable=broad-except
     except Exception:
         logger.exception("Error in log_actor_ray_info (actor_class_name: {})".format(actor_class_name))
-
-def execute_actor_method_sync_with_retries(ray_remote_call, actor_name, method_name, *args, **kwargs):
-    for attempt in range(MAX_ACTOR_METHOD_RETRY_TIMES):
-        try:
-            ret = ray_get_with_timeout(ray_remote_call(*args, **kwargs))
-            break
-        # pylint: disable=broad-except
-        except Exception as e:
-            if attempt < MAX_ACTOR_METHOD_RETRY_TIMES - 1:
-                logger.warning("{} is unavailable, exception: {}, sleep {}s, and retry {} again.".format(
-                    actor_name, e, RETRY_ACTOR_METHOD_INTERVAL, method_name))
-                time.sleep(RETRY_ACTOR_METHOD_INTERVAL)
-            else:
-                logger.error(
-                    "{} is still unavailable after {} times retries, "
-                    "exception type: {}, exception message: {}.".format(
-                        actor_name, MAX_ACTOR_METHOD_RETRY_TIMES, type(e).__name__, e
-                    )
-                )
-                raise
-    return ret
-
-async def execute_actor_method_async_with_retries(ray_remote_call, actor_name, method_name, *args, **kwargs):
-    for attempt in range(MAX_ACTOR_METHOD_RETRY_TIMES):
-        try:
-            ret = await asyncio_wait_for_with_timeout(ray_remote_call(*args, **kwargs))
-            break
-        # pylint: disable=broad-except
-        except Exception as e:
-            if attempt < MAX_ACTOR_METHOD_RETRY_TIMES - 1:
-                logger.warning("{} is unavailable, exception: {}, sleep {}s, and retry {} again.".format(
-                    actor_name, e, RETRY_ACTOR_METHOD_INTERVAL, method_name))
-                await asyncio.sleep(RETRY_ACTOR_METHOD_INTERVAL)
-            else:
-                logger.error(
-                    "{} is still unavailable after {} times retries, "
-                    "exception type: {}, exception message: {}.".format(
-                        actor_name, MAX_ACTOR_METHOD_RETRY_TIMES, type(e).__name__, e
-                    )
-                )
-                raise
-    return ret

@@ -1,4 +1,4 @@
-name: vllm_debug_mode_test
+name: bladellm_trace_request_test
 
 on:
   pull_request:
@@ -17,15 +17,15 @@ jobs:
       with:
         all_but_latest: true
 
-  vllm_debug_mode_test:
+  bladellm_trace_request_test:
     needs: cancel_previous_workflows
-    runs-on: [self-hosted,non-rdma]
+    runs-on: [self-hosted,rdma]
     timeout-minutes: 45
     steps:
     - name: Checkout
       uses: actions/checkout@v4
     - name: Kill Running Containers
       run: |
-        [[ -n $(docker ps -q) ]] && docker stop $(docker ps -q) || echo "No running containers"
+        [[ -n $(docker ps -q) ]] && (docker stop -t 10 $(docker ps -q) || docker kill $(docker ps -q)) || echo "No running containers"
     - name: Build And Test
-      run: ./tools/run_test.sh vllm_debug_mode_test
+      run: ./tools/run_test.sh bladellm_trace_request_test

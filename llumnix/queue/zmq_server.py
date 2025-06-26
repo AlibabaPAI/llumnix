@@ -28,7 +28,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import (RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RETRY_BIND_ADDRESS_INTERVAL,
                                MAX_BIND_ADDRESS_RETRY_TIMES, ZMQ_IO_THREADS, ZMQ_RPC_TIMEOUT)
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import get_ip_address, get_free_port, is_request_debug_mode
+from llumnix.utils import get_ip_address, get_free_port, is_traced_request
 
 logger = init_logger(__name__)
 
@@ -178,8 +178,8 @@ class ZmqServer(QueueServerBase):
         # while client raises exception to outside (but ActorOutputForwarder will not die).
         try:
             item = put_nowait_queue_request.item
-            if is_request_debug_mode(item):
-                set_timestamp(item, 'queue_server_receive_timestamp', time.time())
+            set_timestamp(item, 'queue_client_send_timestamp', put_nowait_queue_request.send_time)
+            set_timestamp(item, 'queue_server_receive_timestamp', time.perf_counter())
             self.put_nowait(item)
             await asyncio.wait_for(
                 self.socket.send_multipart(
@@ -204,8 +204,10 @@ class ZmqServer(QueueServerBase):
     async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
         try:
             items = put_nowait_batch_queue_request.items
-            if is_request_debug_mode(item):
-                set_timestamp(items, 'queue_server_receive_timestamp', time.time())
+            for item in items:
+                if is_traced_request(item):
+                    set_timestamp(item, 'queue_client_send_timestamp', put_nowait_batch_queue_request.send_time)
+                    set_timestamp(item, 'queue_server_receive_timestamp', time.perf_counter())
             self.put_nowait_batch(items)
             await asyncio.wait_for(
                 self.socket.send_multipart(

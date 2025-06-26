@@ -26,6 +26,8 @@ from tests.e2e_test.utils import (
     generate_vllm_serve_command,
     wait_for_llumnix_service_ready,
     generate_bladellm_serve_command,
+    shutdown_llumnix_service,
+    check_log_exception,
 )
 from tests.utils import try_convert_to_local_path
 
@@ -67,17 +69,15 @@ test_times = 0
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", [try_convert_to_local_path("Qwen/Qwen2.5-7B")])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-@pytest.mark.parametrize("enable_llumnix_debug_mode", [True, False])
-@pytest.mark.parametrize("enable_request_debug_mode", [True, False])
+@pytest.mark.parametrize("enable_request_trace", [True, False])
 @pytest.mark.parametrize("is_stream", [True, False])
-async def test_debug_mode(
+async def test_request_trace(
     ray_env,
     shutdown_llumnix_service,
     check_log_exception,
     model,
     engine,
-    enable_llumnix_debug_mode,
-    enable_request_debug_mode,
+    enable_request_trace,
     is_stream,
 ):
     engine = engine.split("_")[1]
@@ -99,7 +99,6 @@ async def test_debug_mode(
     else:
         generate_serve_command_func = generate_bladellm_serve_command
 
-
     ip_ports = []
 
     launch_commands = []
@@ -114,7 +113,6 @@ async def test_debug_mode(
             port=base_port,
             model=model,
             enforce_eager=True,
-            enable_debug_mode=enable_llumnix_debug_mode,
             enable_pd_disagg=enable_pd_disagg,
             enable_simulator=enable_simulator,
             tensor_parallel_size=tensor_parallel_size,
@@ -137,32 +135,33 @@ async def test_debug_mode(
 
         request = get_requests(api, is_stream)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            headers = {"X-Llumnix-Debug-Mode": "true"} if enable_request_debug_mode else {}
+            headers = {"X-Llumnix-Trace": "true"} if enable_request_trace else {}
             async with session.post(url, json=request, headers=headers) as resp:
                 if not is_stream:
                     output = await resp.json()
-                    if enable_request_debug_mode and enable_llumnix_debug_mode:
-                        assert 'llumnix_debug_info' in output and output['llumnix_debug_info'], 'llumnix debug info is missing'
-                    if not enable_request_debug_mode:
-                        assert 'llumnix_debug_info' not in output, 'reqeust debug mode is not enabled but return llumnix debug info'
-                    if not enable_llumnix_debug_mode:
-                        assert 'llumnix_debug_info' not in output, 'llumnix debug mode is not enabled but return llumnix debug info'
+                    if enable_request_trace:
+                        assert 'llumnix_trace_info' in output and output['llumnix_trace_info'], 'llumnix debug info is missing'
+                    if not enable_request_trace:
+                        assert 'llumnix_trace_info' not in output, 'reqeust trace mode is not enabled but return llumnix trace info'
                 if is_stream:
                     has_debug_info = False
                     async for chunk_bytes in resp.content:
                         chunk = chunk_bytes.decode("utf-8").removeprefix("data:")
                         try:
+                            if chunk.strip() in ("", "[DONE]"):
+                                continue
                             chunk_json = json.loads(chunk.strip())
-                            if 'llumnix_debug_info' in chunk_json and chunk_json['llumnix_debug_info']:
+                            if (
+                                "llumnix_trace_info" in chunk_json
+                                and chunk_json["llumnix_trace_info"]
+                            ):
                                 has_debug_info = True
                         except json.JSONDecodeError:
-                            print(f'json decode error, {chunk.strip()}')
-                    if enable_request_debug_mode and enable_llumnix_debug_mode:
-                        assert has_debug_info, 'llumnix debug info is missing'
-                    if not enable_request_debug_mode:
-                        assert not has_debug_info, 'reqeust debug mode is not enabled but return llumnix debug info'
-                    if not enable_llumnix_debug_mode:
-                        assert not has_debug_info, 'llumnix debug mode is not enabled but return llumnix debug info'
+                            print(f"json decode error, {chunk.strip()}")
+                    if enable_request_trace:
+                        assert has_debug_info, 'llumnix trace info is missing'
+                    if not enable_request_trace:
+                        assert not has_debug_info, 'reqeust trace mode is not enabled but return llumnix trace info'
     await asyncio.sleep(1)
 
     test_times += 1

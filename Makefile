@@ -89,13 +89,13 @@ vllm_correctness_test: check_pytest_installed
 bladellm_correctness_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
 
-.PHONY: vllm_debug_mode_test
-vllm_debug_mode_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_debug_mode.py
+.PHONY: vllm_trace_request_test
+vllm_trace_request_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_trace_request.py
 
-.PHONY: bladellm_debug_mode_test
-bladellm_debug_mode_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_debug_mode.py
+.PHONY: bladellm_trace_request_test
+bladellm_trace_request_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_trace_request.py
 
 .PHONY: vllm_bench_test
 vllm_bench_test: check_pytest_installed

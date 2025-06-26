@@ -28,7 +28,6 @@ if __name__ == "__main__":
     connect_to_ray_cluster()
 
     parser: LlumnixArgumentParser = LlumnixArgumentParser()
-    parser.add_argument('--api-server-count', '-asc', type=int, help='How many API server processes to run.')
     parser.add_argument("--server-log-level", type=str, choices=['debug', 'info', 'warning', 'error'])
     parser.add_argument('--disable-keep-serve-process-alive', action='store_true')
 

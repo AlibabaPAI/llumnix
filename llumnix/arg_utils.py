@@ -231,14 +231,27 @@ class EntrypointsArgs:
 
 
 @dataclass
-class VLLMV1EntrypointsArgs(EntrypointsArgs):
+class VLLMV1EntrypointsArgs:
+    host: str = None
+    port: int = None
+    ssl_keyfile: str = None
+    ssl_certfile: str = None
+    server_log_level: str = None
+    launch_ray_cluster: bool = None
+    ray_cluster_port: int = None
+    disable_log_to_driver: bool = None
+    request_output_queue_type: str = None
+    disable_log_requests_server: bool = None
+    log_request_timestamps: bool = None
+    config_file: str = None
+    disable_keep_serve_process_alive: bool = None
+    # vLLM V1 required args
     ssl_ca_certs: str = None
     ssl_cert_reqs: int = None
     allowed_origins: List[str] = None
     allow_credentials: bool = None
     allowed_methods: List[str] = None
     allowed_headers: List[str] = None
-    api_server_count: int = None
     tool_call_parser: str = None
     tool_parser_plugin: str = None
     log_config_file: str = None
@@ -283,7 +296,31 @@ class VLLMV1EntrypointsArgs(EntrypointsArgs):
         from vllm.entrypoints.openai.cli_args import make_arg_parser
         parser = make_arg_parser(parser)
 
-        parser = EntrypointsArgs.add_cli_args(parser)
+        parser.add_argument('--launch-ray-cluster',
+                            action='store_true',
+                            help='if launch ray cluster')
+        parser.add_argument("--ray-cluster-port",
+                            type=int,
+                            help='ray cluster port')
+        parser.add_argument('--disable-log-to-driver',
+                            action='store_true',
+                            help='disable redirecting all worker logs to driver')
+        parser.add_argument("--request-output-queue-type",
+                            type=str,
+                            choices=['rayqueue', 'zmq'],
+                            help='queue type for request output queue')
+        parser.add_argument("--request-output-queue-port",
+                            type=int,
+                            help='port number for the zmq request output queue')
+        parser.add_argument('--disable-log-requests-server',
+                            action='store_true',
+                            help='disable logging requests in server')
+        parser.add_argument("--log-request-timestamps",
+                            action='store_true',
+                            help='if log request timestamps')
+        parser.add_argument("--config-file",
+                            type=str,
+                            help="path to config file of arguments")
 
         return parser
 

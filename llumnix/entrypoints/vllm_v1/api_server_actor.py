@@ -17,10 +17,16 @@ from dataclasses import fields
 
 import uvloop
 
+import ray
+from ray.util.placement_group import PlacementGroup
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+
 from llumnix.arg_utils import VLLMV1EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.entrypoints.api_server_actor import APIServerActor
+from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
+from llumnix.ray_utils import log_actor_ray_info, get_server_name
 from llumnix.logging.logger import init_logger
 from llumnix.utils import get_ip_address
 
@@ -28,18 +34,23 @@ logger = init_logger(__name__)
 
 
 class APIServerActorVLLMV1(APIServerActor):
-    def __init__(self,
-                 instance_id: str,
-                 entrypoints_args: VLLMV1EntrypointsArgs,
-                 engine_args: VLLMV1EngineArgs,
-                 scaler: "ray.actor.ActorHandle",
-                 manager: "ray.actor.ActorHandle",
-                 instance: "ray.actor.ActorHandle"):
-        # Set up listen address and socket
-        self.listen_address, self.sock = setup_server(entrypoints_args)
-        
-        super().__init__(instance_id, entrypoints_args, engine_args,
-                         scaler, manager, instance)
+    # def __init__(self,
+    #              instance_id: str,
+    #              entrypoints_args: VLLMV1EntrypointsArgs,
+    #              engine_args: VLLMV1EngineArgs,
+    #              scaler: "ray.actor.ActorHandle",
+    #              manager: "ray.actor.ActorHandle",
+    #              instance: "ray.actor.ActorHandle"):
+    #     super().__init__(instance_id, entrypoints_args, engine_args,
+    #                      scaler, manager, instance)
+    #     # Shutdown only the API server processes on garbage collection
+    #     # The extra processes are managed by their owners
+    #     self._finalizer = weakref.finalize(self, shutdown, self.processes)
+
+    def _start_server_thread(self):
+        # vLLM V1 needs a separate process to run the server since it needs to add signal handlers.
+        # So this method acts different from the APIServerActor.
+        self._run_server(self.entrypoints_args, self.engine_args, self.entrypoints_context)
 
     def _set_host(self, entrypoints_args: VLLMV1EntrypointsArgs, engine_args):
         if entrypoints_args.host not in ("127.0.0.1", "0.0.0.0"):
@@ -53,16 +64,19 @@ class APIServerActorVLLMV1(APIServerActor):
                     entrypoints_args: VLLMV1EntrypointsArgs,
                     engine_args: VLLMV1EngineArgs,
                     entrypoints_context: EntrypointsContext):
+        # Set up listen address and socket
+        self.listen_address, self.sock = setup_server(entrypoints_args)
+
         # If dp_size == 1, client_index will always be 0
         self.client_index = 0
         self.server_id = entrypoints_context.server_info.server_id
 
-        # NOTE(shejiarui): Hard code here. The logic of handshake will be removed soom.
-        client_config = {
-            "input_address": "ipc:///tmp/58dd6824-0fbc-4221-865d-70ce72247d85",
-            "output_address": "ipc:///tmp/eac4f94c-d6c2-4fb6-a35c-3b0c4ddcf52c",
-            "client_index": self.client_index
-        }
+        # NOTE(shejiarui): Hard code here. The logic of handshake will be removed soon.
+        # client_config = {
+        #     "input_address": "ipc:///tmp/58dd6824-0fbc-4221-865d-70ce72247d85",
+        #     "output_address": "ipc:///tmp/eac4f94c-d6c2-4fb6-a35c-3b0c4ddcf52c",
+        #     "client_index": self.client_index
+        # }
         
         serve_args = engine_args.load_engine_args()
         for field in fields(VLLMV1EntrypointsArgs):
@@ -74,15 +88,17 @@ class APIServerActorVLLMV1(APIServerActor):
         self.proc = spawn_context.Process(
             target=_run_server_proc, 
             name=f"Server_{self.server_id}",  
-            args=(self.listen_address, self.sock, serve_args, client_config))
+            args=(self.listen_address, self.sock, serve_args))
         self.proc.start()
 
     def _stop_server(self):
-        def stop_server():
-            self.server.should_exit = True
+        if self.proc.is_alive():
+            self.proc.terminate()
+        # def stop_server():
+        #     self.server.should_exit = True
 
-        if self.loop.is_running():
-            self.loop.call_soon_threadsafe(stop_server)
+        # if self.loop.is_running():
+        #     self.loop.call_soon_threadsafe(stop_server)
 
 
 def setup_server(entrypoints_args: VLLMV1EntrypointsArgs):

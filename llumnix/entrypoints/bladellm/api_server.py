@@ -21,6 +21,7 @@ from aiohttp_sse import sse_response
 
 
 from blade_llm.service.args import ServingArgs
+from blade_llm.service.communications.response import AsyncRespStreamer
 from blade_llm.service.server import Entrypoint,SSEResponse
 from blade_llm.service.error_handler import handle_http_error
 from blade_llm.protocol import (
@@ -62,7 +63,7 @@ class LlumnixEntrypoint(Entrypoint):
     async def oai_chat_completions(self, request: web.Request):
         # TODO(litan.ls): configurable request id header key
         oai_req, server_req = await self._web_request_to_oai_chat_request(request)
-        if request.headers.get(LLUMNIX_TRACE_HEADER, False):
+        if request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1'):
             # collect and return request lantencys
             server_req = LlumnixServerRequest.from_server_request(server_req, True)
         model_name = oai_req.model or ''
@@ -75,13 +76,15 @@ class LlumnixEntrypoint(Entrypoint):
                 streamer = result.async_stream()
                 async for stream_resp in streamer:
                     try:
-                        resp_cls = (
-                            LlumnixOAIChatCompletionsResponse
-                            if isinstance(
-                                stream_resp, LlumnixGenerateStreamResponse
+                        if isinstance(stream_resp, LlumnixGenerateStreamResponse):
+                            resp_cls = LlumnixOAIChatCompletionsResponse
+                            set_timestamp(
+                                stream_resp.llumnix_trace_info.token_timestamps,
+                                "api_server_generate_timestamp_end",
+                                time.perf_counter(),
                             )
-                            else OAIChatCompletionsResponse
-                        )
+                        else:
+                            resp_cls = OAIChatCompletionsResponse
                         await sse.send(
                             resp_cls.from_gen_response(
                                 server_req.external_id,
@@ -103,25 +106,31 @@ class LlumnixEntrypoint(Entrypoint):
                     await sse.write_eof()
 
         else:
+            # pylint: disable=no-else-return
             if oai_req.n > 1:
                 # TODO(litan.ls): support multiple generation
                 return web.Response(text='Do no support to generate multiple completions.', status=500)
-            # pylint: disable=no-else-return
             else:
                 tokens = []
                 llumnix_trace_infos = []
-                streamer = result.async_stream()
-                streamed_responses = [r async for r in streamer]
-                for r in streamed_responses:
+                streamer: AsyncRespStreamer = result.async_stream()
+                last_response = None
+                async for r in streamer:
+                    last_response = r
                     tokens.extend(r.tokens)
                     if isinstance(r, LlumnixGenerateStreamResponse):
                         llumnix_trace_info = r.llumnix_trace_info
+                        set_timestamp(
+                                llumnix_trace_info.token_timestamps,
+                                "api_server_generate_timestamp_end",
+                                time.perf_counter(),
+                            )
                         llumnix_trace_info.calc_latency()
                         llumnix_trace_infos.append(llumnix_trace_info)
                 finish_reason = (
-                    streamed_responses[-1].detail.finish_reason.to_oai() if streamed_responses[-1].detail else ''
+                    last_response.detail.finish_reason.to_oai() if last_response.detail else ''
                 )
-                token_usage = streamed_responses[-1].usage
+                token_usage = last_response.usage
                 response_cls = LlumnixOAIChatCompletionsResponse if llumnix_trace_infos else OAIChatCompletionsResponse
                 response = response_cls(
                     id=server_req.external_id,
@@ -166,7 +175,7 @@ class LlumnixEntrypoint(Entrypoint):
         server_req.arrive_time = time.time()
 
         # process llumnix header
-        if request.headers.get(LLUMNIX_TRACE_HEADER, False):
+        if request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1'):
             # collect and return request lantencys
             server_req: LlumnixServerRequest = LlumnixServerRequest.from_server_request(server_req, True)
 
@@ -178,11 +187,15 @@ class LlumnixEntrypoint(Entrypoint):
                 streamer = result.async_stream()
                 async for stream_resp in streamer:
                     try:
-                        response_cls = (
-                            LlumnixOAICompletionsResponse
-                            if isinstance(stream_resp, LlumnixGenerateStreamResponse)
-                            else OAICompletionsResponse
-                        )
+                        if isinstance(stream_resp, LlumnixGenerateStreamResponse):
+                            response_cls = LlumnixOAICompletionsResponse
+                            set_timestamp(
+                                stream_resp.llumnix_trace_info.token_timestamps,
+                                "api_server_generate_timestamp_end",
+                                time.perf_counter(),
+                            )
+                        else:
+                            response_cls = OAICompletionsResponse
                         await sse.send(
                             response_cls.from_gen_response(
                                 external_request_id, stream_resp, model=model_name
@@ -191,7 +204,7 @@ class LlumnixEntrypoint(Entrypoint):
                     except (asyncio.CancelledError, ConnectionResetError):
                         connection_alive = False
                         logger.info('Streaming cancelled or connection reset.')
-                        logger.error('Request {} with response: {}', server_req, stream_resp)
+                        logger.error('Request {} with response: {}'.format(server_req, stream_resp))
                         await self._client.drop_request(internal_request_id)
                         break
                 if connection_alive:
@@ -206,17 +219,23 @@ class LlumnixEntrypoint(Entrypoint):
                 tokens = []
                 llumnix_trace_infos = []
                 streamer = result.async_stream()
-                streamed_responses = [r async for r in streamer]
-                for r in streamed_responses:
+                last_response = None
+                async for r in streamer:
+                    last_response = r
                     tokens.extend(r.tokens)
                     if isinstance(r, LlumnixGenerateStreamResponse):
                         llumnix_trace_info = r.llumnix_trace_info
+                        set_timestamp(
+                            llumnix_trace_info.token_timestamps,
+                            "api_server_generate_timestamp_end",
+                            time.perf_counter(),
+                        )
                         llumnix_trace_info.calc_latency()
                         llumnix_trace_infos.append(llumnix_trace_info)
                 finish_reason = (
-                    streamed_responses[-1].detail.finish_reason.to_oai() if streamed_responses[-1].detail else ''
+                    last_response.detail.finish_reason.to_oai() if last_response.detail else ''
                 )
-                token_usage = streamed_responses[-1].usage
+                token_usage = last_response.usage
                 response_cls = LlumnixOAICompletionsResponse if llumnix_trace_infos else OAICompletionsResponse
                 response = response_cls(
                     id=external_request_id,
@@ -243,7 +262,7 @@ class LlumnixEntrypoint(Entrypoint):
     async def generate_benchmark(self, request: web.Request):
         assert isinstance(self._client, LlumnixClientBladeLLM)
         oai_req, server_req = await self._web_request_to_oai_chat_request(request)
-        if request.headers.get(LLUMNIX_TRACE_HEADER, False):
+        if request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1'):
             # collect and return request lantencys
             server_req = LlumnixServerRequest.from_server_request(server_req, True)
         start = time.perf_counter()

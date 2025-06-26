@@ -228,7 +228,7 @@ class OutputMediator:
     async def put_request_outputs_to_server(
         self,
         server_request_outputs: List[LlumnixRequestOuput],
-        server_info_dict: List[ServerInfo]
+        server_info_dict: Dict[str, ServerInfo]
     ) -> None:
         if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
             await asyncio_wait_for_with_timeout(

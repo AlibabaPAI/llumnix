@@ -96,8 +96,13 @@ class PagedSchedulerLlumnix(PagedScheduler):
         super().add_gen_group(gen_group_llumnix, *args, **kwargs)
 
     def drop_request(self, req_id: int):
-        if req_id in self.id2group:
-            self.id2group[req_id]._status = RequestStatus.FINISHED
+        if isinstance(req_id, list):
+            for r_id in req_id:
+                if r_id in self.id2group:
+                    self.id2group[r_id]._status = RequestStatus.FINISHED
+        else:
+            if req_id in self.id2group:
+                self.id2group[req_id]._status = RequestStatus.FINISHED
         self.trans_wrapper.remove_request_server_info(req_id, self.step_counter + 1)
         super().drop_request(req_id)
 

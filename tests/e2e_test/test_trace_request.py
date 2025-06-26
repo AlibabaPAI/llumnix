@@ -69,6 +69,7 @@ test_times = 0
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", [try_convert_to_local_path("Qwen/Qwen2.5-7B")])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
+@pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 @pytest.mark.parametrize("enable_request_trace", [True, False])
 @pytest.mark.parametrize("is_stream", [True, False])
 async def test_request_trace(
@@ -77,6 +78,7 @@ async def test_request_trace(
     check_log_exception,
     model,
     engine,
+    request_output_queue_type,
     enable_request_trace,
     is_stream,
 ):
@@ -144,7 +146,7 @@ async def test_request_trace(
                     if not enable_request_trace:
                         assert 'llumnix_trace_info' not in output, 'reqeust trace mode is not enabled but return llumnix trace info'
                 if is_stream:
-                    has_debug_info = False
+                    has_trace_info = False
                     async for chunk_bytes in resp.content:
                         chunk = chunk_bytes.decode("utf-8").removeprefix("data:")
                         try:
@@ -155,13 +157,13 @@ async def test_request_trace(
                                 "llumnix_trace_info" in chunk_json
                                 and chunk_json["llumnix_trace_info"]
                             ):
-                                has_debug_info = True
+                                has_trace_info = True
                         except json.JSONDecodeError:
                             print(f"json decode error, {chunk.strip()}")
                     if enable_request_trace:
-                        assert has_debug_info, 'llumnix trace info is missing'
+                        assert has_trace_info, 'llumnix trace info is missing'
                     if not enable_request_trace:
-                        assert not has_debug_info, 'reqeust trace mode is not enabled but return llumnix trace info'
+                        assert not has_trace_info, 'reqeust trace mode is not enabled but return llumnix trace info'
     await asyncio.sleep(1)
 
     test_times += 1

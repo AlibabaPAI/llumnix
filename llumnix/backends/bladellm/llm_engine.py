@@ -392,8 +392,11 @@ class AsyncLLMEngineLlumnixMixin:
                 request_group_id = gen_group.request_group_id
                 if request_group_id in self.request_metrics_queue_dict and request_group_id in self._back_queue:
                     worker_metrics = resp_list[0].worker_step_metrics
-                    worker_forward_time = worker_metrics.worker_bubble_time_us / 1000 + worker_metrics.prepare_step_ms + \
-                        worker_metrics.model_forward_ms + worker_metrics.post_step_ms
+                    worker_forward_time = (
+                        worker_metrics.prepare_step_ms
+                        + worker_metrics.model_forward_ms
+                        + worker_metrics.post_step_ms
+                    )
                     set_timestamp(step_timestamps, 'engine_step_timestamp_end', worker_forward_time / 1000)
                     set_timestamp(step_timestamps, 'engine_step_postprocess_timestamp_end', worker_forward_time / 1000)
                     set_timestamp(step_timestamps, 'engine_process_model_outputs_timestamp_begin', time.perf_counter())

@@ -33,7 +33,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.server_info import ServerInfo
-from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, is_traced_request, disable_request_trace, enable_request_trace
+from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, is_traced_request, enable_request_trace
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.entrypoints.client import LlumnixClient
 from llumnix.backends.bladellm.protocol import LlumnixServerRequest, LlumnixGenerateStreamResponse

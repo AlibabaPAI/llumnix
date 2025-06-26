@@ -55,7 +55,7 @@ class APIServerActor(ABC):
             self.host, self.request_output_queue_type)
 
         self._setup_entrypoints_context(self.scaler, self.manager, self.instance_id, self.instance)
-        self._start_server_thread()
+        self._start_server()
         self._wait_server()
 
     def __repr__(self):
@@ -72,12 +72,9 @@ class APIServerActor(ABC):
         self.entrypoints_context = setup_entrypoints_context(
             self.entrypoints_args, scaler, manager, [instance_id], [instance], self.request_output_queue)
 
-    def _start_server_thread(self):
-        self.run_server_thread = threading.Thread(
-            target=self._run_server, args=(self.entrypoints_args, self.engine_args, self.entrypoints_context),
-            daemon=True, name="run_server"
-        )
-        self.run_server_thread.start()
+    @abstractmethod
+    def _start_server(self):
+        raise NotImplementedError
 
     @abstractmethod
     def _set_host(self, entrypoints_args: EntrypointsArgs, engine_args):

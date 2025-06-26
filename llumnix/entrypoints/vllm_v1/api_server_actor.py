@@ -47,9 +47,8 @@ class APIServerActorVLLMV1(APIServerActor):
     #     # The extra processes are managed by their owners
     #     self._finalizer = weakref.finalize(self, shutdown, self.processes)
 
-    def _start_server_thread(self):
+    def _start_server(self):
         # vLLM V1 needs a separate process to run the server since it needs to add signal handlers.
-        # So this method acts different from the APIServerActor.
         self._run_server(self.entrypoints_args, self.engine_args, self.entrypoints_context)
 
     def _set_host(self, entrypoints_args: VLLMV1EntrypointsArgs, engine_args):

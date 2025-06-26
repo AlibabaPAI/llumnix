@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import asyncio
+import threading
 
 import uvicorn
 
@@ -32,6 +33,13 @@ class APIServerActorVLLM(APIServerActor):
         if entrypoints_args.host not in ("127.0.0.1", "0.0.0.0"):
             entrypoints_args.host = get_ip_address()
         self.host = entrypoints_args.host
+
+    def _start_server(self):
+        self.run_server_thread = threading.Thread(
+            target=self._run_server, args=(self.entrypoints_args, self.engine_args, self.entrypoints_context),
+            daemon=True, name="run_server"
+        )
+        self.run_server_thread.start()
 
     def _set_health_api(self):
         self.health_api = "health"

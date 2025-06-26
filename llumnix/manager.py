@@ -456,19 +456,27 @@ class Manager:
 
         async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):
             tasks = []
-            for instance_id in alive_instances:
-                llumlet_handle = self.instances[instance_id]
-                tasks.append(
-                    asyncio_wait_for_with_timeout(
-                        llumlet_handle.execute_engine_method_async.remote("_run_workers_async", task_name, *args, **kwargs),
-                    )
-                )
-            rets = await asyncio.gather(*tasks, return_exceptions=True)
             dead_instances = set()
-            for instance_id, ret in zip(alive_instances, rets):
-                if isinstance(ret, Exception):
-                    log_instance_exception(ret, instance_id, "_rebuild_migration_backend")
+
+            for instance_id in alive_instances:
+                llumlet_handle = self.instances.get(instance_id, None)
+                if llumlet_handle is not None:
+                    tasks.append(
+                        asyncio_wait_for_with_timeout(
+                            llumlet_handle.execute_engine_method_async.remote("_run_workers_async", task_name, *args, **kwargs),
+                        )
+                    )
+                else:
                     dead_instances.add(instance_id)
+                    break
+
+            if len(dead_instances) == 0:
+                rets = await asyncio.gather(*tasks, return_exceptions=True)
+                for instance_id, ret in zip(alive_instances, rets):
+                    if isinstance(ret, Exception):
+                        log_instance_exception(ret, instance_id, "_rebuild_migration_backend")
+                        dead_instances.add(instance_id)
+
             if len(dead_instances) > 0:
                 self.scale_down(dead_instances, rebuild_migration_backend=False)
                 await asyncio_wait_for_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote())

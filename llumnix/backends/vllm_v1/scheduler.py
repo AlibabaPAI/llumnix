@@ -18,6 +18,8 @@ from collections import deque
 
 from vllm.v1.core.sched.scheduler import Scheduler
 from vllm.v1.core.sched.output import SchedulerOutput
+from vllm.v1.engine import EngineCoreOutputs
+from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request
 
 from llumnix.instance_info import InstanceInfo
@@ -25,6 +27,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.utils import MigrationResponse
+from llumnix.request_output import LlumnixRequestOutputs
 
 logger = init_logger(__name__)
 
@@ -129,7 +132,7 @@ class SchedulerLlumnix(Scheduler):
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
         )
-        
+
         if scheduler_output is not None:
             for new_req in scheduler_output.scheduled_new_reqs:
                 instance_info.running_seq_lens.append(new_req.num_computed_tokens)
@@ -144,3 +147,6 @@ class SchedulerLlumnix(Scheduler):
         scheduler_output = super().schedule()
         self.update_instance_info_callback(self._get_instance_info(scheduler_output))
         return scheduler_output
+    
+    def add_request(self, request: Request) -> None:
+        return super().add_request(request)

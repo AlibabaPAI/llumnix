@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import time
-from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any
+from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any, Coroutine
 from collections import defaultdict
 import asyncio
 import queue
@@ -20,7 +20,6 @@ import gc
 
 import ray
 from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 import ray.actor
 
 from vllm.engine.arg_utils import AsyncEngineArgs
@@ -44,6 +43,7 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
+from llumnix.backends.utils import RequestOutputForwardingMode, OutputMediator
 from llumnix.utils import make_async, ray_get_with_timeout
 from llumnix.ray_utils import get_instance_name, asyncio_wait_for_with_timeout
 from llumnix.llumlet.request import LlumnixRequest
@@ -51,13 +51,49 @@ from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
 from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import RequestIDType, MigrationResponse
+from llumnix.request_output import LlumnixRequestOutputs
+
 
 logger = init_logger(__name__)
 
+class ServerInfoTable:
+    """
+    Manages a lookup table that maps a client_index (integer) to ServerInfo.
+    Supports efficient add, delete, and lookup operations.
+    """
 
-class EngineCoreProcLlumnix(AsyncEngineCoreProc):
+    def __init__(self):
+        self._servers: Dict[int, ServerInfo] = {}
+
+    def add_server_info(self, client_index: int, server_info: ServerInfo):
+        self._servers[client_index] = server_info
+
+    def delete_server_info(self, client_index: int):
+        if client_index in self._servers:
+            del self._servers[client_index]
+
+    def get_server_info(self, client_index: int) -> Optional[ServerInfo]:
+        return self._servers.get(client_index)
+
+    def list_all_servers(self) -> Dict[int, ServerInfo]:
+        return self._servers.copy()
+
+    def __len__(self) -> int:
+        return len(self._servers)
+
+    def __contains__(self, client_index: int) -> bool:
+        return client_index in self._servers
+
+
+class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     def __init__(self,
                  instance_id: str,
+                 placement_group: PlacementGroup,
+                 request_output_queue_type: QueueType,
+                 disable_async_output_proc: bool,
+                 backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
+                 abort_request_callback: Coroutine,
                  vllm_config: VllmConfig,
                  on_head_node: bool,
                  handshake_address: str,
@@ -71,7 +107,18 @@ class EngineCoreProcLlumnix(AsyncEngineCoreProc):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
+        self.output_mediator = OutputMediator(
+            instance_id,
+            request_output_queue_type,
+            request_output_forwarding_mode,
+            abort_request_callback,
+            placement_group,
+            backend_type,
+        )
+        
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
+        self.disable_async_output_proc = disable_async_output_proc
+        self.server_info_table = ServerInfoTable()
 
         assert isinstance(self.scheduler, SchedulerLlumnix), \
             "EngineCore.scheduler failed to set to SchedulerLlumnix"
@@ -86,8 +133,10 @@ class EngineCoreProcLlumnix(AsyncEngineCoreProc):
         migration_config: MigrationConfig,
         engine_args: AsyncEngineArgs,
         backend_type: BackendType,
+        request_output_forwarding_mode: RequestOutputForwardingMode,
+        abort_request_callback: Coroutine,
         latency_mem: Optional[LatencyMemData] = None,
-    ) -> "EngineCoreProcLlumnix":
+    ) -> "AsyncEngineCoreProcLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
         # FIXME(zhaozhiyu): I don't where speculative_config is set, just overload it
         engine_args.speculative_config = None
@@ -108,11 +157,18 @@ class EngineCoreProcLlumnix(AsyncEngineCoreProc):
             logger.debug("executor_class set to LlumnixRayDistributedExecutor")
         else:
             raise ValueError('Unsupported executor backend')
+        
         handshake_address = get_engine_client_zmq_addr(
             False, engine_config.parallel_config.data_parallel_master_ip, engine_config.parallel_config.data_parallel_rpc_port
         )
         engine = cls(
             instance_id=instance_id,
+            placement_group=placement_group,
+            request_output_queue_type=request_output_queue_type,
+            disable_async_output_proc=engine_args.disable_async_output_proc,
+            backend_type=backend_type,
+            request_output_forwarding_mode=request_output_forwarding_mode,
+            abort_request_callback=abort_request_callback,
             vllm_config=engine_config,
             on_head_node=True,
             handshake_address=handshake_address,
@@ -121,21 +177,64 @@ class EngineCoreProcLlumnix(AsyncEngineCoreProc):
         )
         return engine
 
-    # TODO(zhaozhiyu): need to verify instance info update
-    def _process_request_output(
-            self,
-            output: Tuple[int, EngineCoreOutputs],
+    async def _put_engine_core_outputs(
+        self,
+        outputs: Dict[int, EngineCoreOutputs]
     ):
-        client_index, outputs = output
-
-        # TODO(zhaozhiyu): check where this timestamp is used, determine whether to set timestamp in outputs or in each request_output
-        set_timestamp(outputs, 'engine_step_timestamp_begin', self.step_begin_time)
-        set_timestamp(outputs, 'engine_step_timestamp_end', self.step_end_time)
-
-        for request_output in outputs.outputs:
-            if request_output.finished:
-                logger.info("Engine finished request {}".format(request_output.request_id))
-
+        # collects engine_core_output from all clients
+        engine_core_output_all = []
+        for engine_core_outputs in outputs.values():
+            for engine_core_output in engine_core_outputs.outputs:
+                engine_core_output_all.append(engine_core_output)
+                if engine_core_output.finished:
+                    logger.info("Engine finished request {}".format(engine_core_output.request_id))
+                
+        set_timestamp(engine_core_output_all, 'engine_step_timestamp_begin', self.step_begin_time)
+        set_timestamp(engine_core_output_all, 'engine_step_timestamp_end', self.step_end_time)
+        set_timestamp(engine_core_output_all, 'engine_put_queue_timestamp', time.time())
+        
+        if outputs:
+            server_request_outputs, server_info_dict = self._gen_server_request_outputs(outputs)
+            if server_request_outputs:
+                await self.output_mediator.put_request_outputs_to_server(server_request_outputs, server_info_dict)
+        
+        set_timestamp(engine_core_output_all, 'engine_step_postprocess_timestamp_end', time.time())
+        
+    def _gen_server_request_outputs(
+        self,
+        engine_core_outputs_dict: Dict[int, EngineCoreOutputs]
+    ) -> Tuple[Dict[str, LlumnixRequestOutputs], Dict[str, ServerInfo]]:
+        server_request_outputs = {}
+        server_info_dict = {}
+        for client_index, engine_core_outputs in engine_core_outputs_dict.items():
+            server_info = self.server_info_table.get_server_info(client_index)
+            server_id = server_info.server_id
+            
+            current_completion_tokens_dict = {}
+            for engine_core_output in engine_core_outputs.outputs:
+                request_id = engine_core_output.request_id
+                request = self.scheduler.requests.get(request_id)
+                if not request:
+                    # request finished, this output is the last
+                    # FIXME(zhaozhiyu): deal with last output properly
+                    current_completion_tokens_dict[request_id] = -1
+                else:
+                    current_completion_tokens_dict[request_id] = len(request.output_token_ids)
+                    logger.info("%s", f"request {request_id}, current completion tokens: {len(request.output_token_ids)}")
+            
+            server_request_outputs[server_id] = LlumnixRequestOutputs(
+                instance_id=self.instance_id,
+                engine_outputs=engine_core_outputs,
+                current_completion_tokens_dict=current_completion_tokens_dict,
+                request_timestamps_dict=None,
+            )
+            if server_id not in server_info_dict:
+                server_info_dict[server_id] = server_info
+            
+        return server_request_outputs, server_info_dict
+        
+    def _update_instance_info(self):
+        """Update instance info from executor and scheduler after step"""
         instance_info: InstanceInfo = self.instance_info # type: ignore
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
@@ -144,7 +243,7 @@ class EngineCoreProcLlumnix(AsyncEngineCoreProc):
                                       instance_info.num_seqs,
                                       sum(instance_info.running_seq_lens),
                                       self.model_executor.last_inference_latency)
-        reqs: List[LlumnixRequestVLLMV1] = self.scheduler.running
+        reqs: List[Request] = self.scheduler.running
         if reqs:
             tot_blocks = defaultdict(list)
             for req in reqs:
@@ -164,21 +263,17 @@ class EngineCoreProcLlumnix(AsyncEngineCoreProc):
 
         self.instance_info = instance_info
 
-        set_timestamp(outputs, 'engine_put_queue_timestamp', time.time())
-        self.output_queue.put_nowait((client_index, outputs))
-        # set_timestamp(outputs, 'engine_step_postprocess_timestamp_end', time.time())
-
-    def _process_engine_step(self) -> bool:
-        """Overloading EngineCore._process_engine_step() to update instance info"""
+    async def _process_engine_step_async(self) -> bool:
+        """Overloading super()._process_engine_step_async() to update instance info"""
 
         # Step the engine core.
         self.step_begin_time = time.time()
-        outputs, model_executed = self.step_fn()
+        outputs, model_executed = await self.step_fn_async()
         self.step_end_time = time.time()
-        # Put EngineCoreOutputs into the output queue.
-        for output in (outputs.items() if outputs else ()):
-            self._process_request_output(output)
-
+        # Update instance info after step
+        self._update_instance_info()
+        # Put EngineCoreOutputs into output_mediator
+        await self._put_engine_core_outputs(outputs)
         return model_executed
 
     def stop(self) -> None:
@@ -203,19 +298,9 @@ class EngineCoreProcLlumnix(AsyncEngineCoreProc):
         *args, **kwargs,
     ):
         request_type = EngineCoreRequestType.ADD
-        request = kwargs["engine_core_request"]
+        request: EngineCoreRequest = kwargs["engine_core_request"]
+        self.server_info_table.add_server_info(request.client_index, server_info)
         await self.input_queue.put((request_type, request))
-        # FIXME(zhaozhiyu): input_queue.put is async, below should be run after req is added to scheduler
-        # request: LlumnixRequestVLLMV1 = self.scheduler.waiting[-1]
-        # set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
-        # self.scheduler.waiting[-1] = LlumnixRequestVLLMV1(
-        #     request_id, server_info, expected_steps,
-        #     request.prompt_token_ids, request.mm_inputs,
-        #     request.mm_hashes, request.mm_positions,
-        #     request.sampling_params, request.eos_token_id,
-        #     request.client_index, request.lora_request,
-        #     request.structured_output_request, request.cache_salt
-        # )
 
 
 class BackendVLLMV1(BackendInterface):
@@ -231,12 +316,16 @@ class BackendVLLMV1(BackendInterface):
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args() # type: ignore
         self.migration_config = instance_args.create_migration_config()
         # FIXME(zhaozhiyu): check args
-        self.engine: EngineCoreProcLlumnix = EngineCoreProcLlumnix.from_engine_args(engine_args=engine_args,
-                                                                          request_output_queue_type=request_output_queue_type,
-                                                                          migration_config=self.migration_config,
-                                                                          instance_id=instance_id,
-                                                                          placement_group=placement_group,
-                                                                          backend_type=BackendType.VLLM)
+        self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
+            instance_id=instance_id,
+            placement_group=placement_group,
+            request_output_queue_type=request_output_queue_type,
+            migration_config=self.migration_config,            
+            engine_args=engine_args,
+            backend_type=BackendType.VLLM_V1,
+            request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
+            abort_request_callback=self.abort_request,
+        )
         asyncio.create_task(self.engine.run_busy_loop_async())
         
         self.instance_id = instance_id
@@ -309,7 +398,6 @@ class BackendVLLMV1(BackendInterface):
     async def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
             request_id = (request_id,)
-        # EngineCore.abort_requests(request_ids: list[str])
         request_ids: List[str] = list(request_id)
         return self.engine.abort_requests(request_ids)
 

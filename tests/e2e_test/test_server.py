@@ -16,6 +16,7 @@ from typing import Type, TypeVar, Generator, Dict, Any, List
 import uuid
 from multiprocessing import Pool
 import time
+import random
 
 import pytest
 import requests
@@ -100,11 +101,11 @@ def server(request):
     model = try_convert_to_local_path('Qwen/Qwen2.5-7B')
     ip = get_ip_address()
     if not request.param == "pd_server":
-        base_port = 45000
+        base_port = 45000 + random.randint(0,49)
         max_instances = 2
         args = generate_bladellm_non_pd_serve_args(model, ip, base_port, max_instances)
     else:
-        base_port = 45050
+        base_port = 45050 + random.randint(0,49)
         max_instances = 4
         args = generate_bladellm_pdd_serve_args(model, ip, base_port, max_instances)
     ip_ports = []

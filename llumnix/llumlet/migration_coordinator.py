@@ -199,7 +199,7 @@ class MigrationCoordinator:
                 self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 migrated_request.append(migrate_out_request.request_id)
             else:
-                self.backend_engine.add_running_request(migrate_out_request)
+                await self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
                 status = MigrationStatus.ABORTED_DST
         else: # ABORTED_SRC or ABORTED_DST
@@ -326,7 +326,7 @@ class MigrationCoordinator:
         if not response.success:
             # migrate in instance failed to pre alloc
             if is_last_stage:
-                self.backend_engine.add_running_request(migrate_out_request)
+                await self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
             return MigrationStatus.ABORTED_DST
 
@@ -343,7 +343,7 @@ class MigrationCoordinator:
         )
         if not response.success:
             if is_last_stage:
-                self.backend_engine.add_running_request(migrate_out_request)
+                await self.backend_engine.add_running_request(migrate_out_request)
                 self.backend_engine.pop_migrating_out_request_last_stage(migrate_out_request)
             return MigrationStatus.ABORTED_DST
 

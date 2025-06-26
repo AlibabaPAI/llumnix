@@ -271,13 +271,7 @@ class Manager:
                 self.instance_migrating[migrate_instance_pair[0]] = False
             if migrate_instance_pair[1] in self.instance_migrating:
                 self.instance_migrating[migrate_instance_pair[1]] = False
-            if isinstance(ret, Exception):
-                has_error_pair = await self._check_instance_error(migrate_instance_pair)
-                for i, has_error in enumerate(has_error_pair):
-                    if has_error:
-                        instance_id = migrate_instance_pair[i]
-                        await self.scale_down(instance_id)
-            else:
+            if not isinstance(ret, Exception):
                 migrate_out_request_ids = ret
                 if not self.enable_pd_disagg:
                     logger.info("Instance {}->{} migrate done, migrate request {}".format(
@@ -573,29 +567,6 @@ class Manager:
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
         self.scale_up(instance_ids, instances, instance_types, placement_groups)
-
-    async def _check_instance_error(self, migrate_instance_pairs: Tuple[str, str]) -> List[bool]:
-        def check_instance_error_done_callback(idx: int, instance_id: str, fut):
-            ret = fut.result()[0]
-            if not isinstance(ret, Exception):
-                logger.info("Instance {} is alive.".format(instance_id))
-                results[idx] = False
-            else:
-                log_instance_exception(ret, instance_id, "_check_instance_error")
-                results[idx] = True
-
-        results = [None, None]
-        tasks = []
-        for idx, instance_id in enumerate(migrate_instance_pairs):
-            task = asyncio.gather(
-                asyncio_wait_for_with_timeout(self.instances[instance_id].is_ready.remote()),
-                return_exceptions=True
-            )
-            task.add_done_callback(partial(check_instance_error_done_callback, idx, instance_id))
-            tasks.append(task)
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        return results
 
     def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:
         # pylint: disable=consider-using-with

@@ -452,7 +452,7 @@ class AsyncLLMEngineLlumnixMixin:
         for stub in self.worker_migration_stubs:
             method = getattr(stub, worker_method)
             coros.append(method(*args, **kwargs))
-        result = await asyncio.gather(*coros, return_exceptions=True)
+        result = await asyncio.gather(*coros)
         return result
 
     async def wake_engine(self):

@@ -52,64 +52,62 @@ _C.SERVER.RAY_CLUSTER_PORT = 6379
 _C.SERVER.DISABLE_LOG_TO_DRIVER = False
 
 # ----------------------------- V1 CONFIGURATION ------------------------------
-# ...
+# The CA certificates file.
 _C.SERVER.SSL_CA_CERTS = None
-# ... default set to int(ssl.CERT_NONE)
+# Whether client certificate is required. Default set to int(ssl.CERT_NONE).
 _C.SERVER.SSL_CERT_REQS = 0
-# ...
+# Refresh SSL Context when SSL certificate files change
 _C.SERVER.ENABLE_SSL_REFRESH = False
-# ...
+# Allowed origins.
 _C.SERVER.ALLOWED_ORIGINS = ["*"]
-# ...
+# Allow credentials.
 _C.SERVER.ALLOWED_CREDENTIALS = False
-# ...
+# Allowed methods.
 _C.SERVER.ALLOWED_METHODS = ["*"]
-# ...
+# Allowed headers.
 _C.SERVER.ALLOWED_HEADERS = ["*"]
-# ...
-_C.SERVER.API_SERVER_COUNT = 1
-# ...
-_C.SERVER.TOOL_PARSER_PLUGIN = None
-# ...
-_C.SERVER.LOG_CONFIG_FILE = None
-# ...
-_C.SERVER.ROOT_PATH = None
-# ...
-_C.SERVER.DISABLE_FASTAPI_DOCS = False
-# ...
-_C.SERVER.API_KEY = None
-# ...
-_C.SERVER.ENABLE_REQUEST_ID_HEADERS = False
-# ...
-_C.SERVER.MIDDLEWARE = []
-# ...
-_C.SERVER.UVICORN_LOG_LEVEL = "info"
-# ...
-_C.SERVER.DISABLE_UNICORN_ACCESS_LOG = False
-# ...
-_C.SERVER.DISABLE_FRONTED_MULTIPROCESSING = False
-# ...
-_C.SERVER.MAX_LOG_LEN = None
-# ...
-_C.SERVER.CHAT_TEMPLATE = None
-# ...
-_C.SERVER.LORA_MODULES = None
-# ...
-_C.SERVER.PROMPT_ADAPTERS = None
-# ...
-_C.SERVER.ENABLE_AUTO_TOOL_CHOICE = False
-# ...
-_C.SERVER.ENABLE_PROMPT_TOKENS_DETAILS = False
-# ...
-_C.SERVER.RETURN_TOKENS_AS_TOKEN_IDS = False
-# ...
-_C.SERVER.RESPONSE_ROLE = "assistant"
-# ...
-_C.SERVER.CHAT_TEMPLATE_CONTENT_FORMAT = "auto"
-# ...
-_C.SERVER.ENABLE_SERVER_LOAD_TRACKING = False
-# ...
+# Select the tool call parser depending on the model.
 _C.SERVER.TOOL_CALL_PARSER = None
+# Special the tool parser plugin write to parse the model-generated tool into OpenAI API format.
+_C.SERVER.TOOL_PARSER_PLUGIN = None
+# Path to logging config JSON file for both vllm and uvicorn
+_C.SERVER.LOG_CONFIG_FILE = None
+# FastAPI root_path when app is behind a path based routing proxy.
+_C.SERVER.ROOT_PATH = None
+# Disable FastAPI's OpenAPI schema, Swagger UI, and ReDoc endpoint.
+_C.SERVER.DISABLE_FASTAPI_DOCS = False
+# If provided, the server will require this key in the headers.
+_C.SERVER.API_KEY = None
+# If specified, API server will add X-Request-Id header to responses.
+_C.SERVER.ENABLE_REQUEST_ID_HEADERS = False
+# Additional ASGI middleware to apply to the app.
+_C.SERVER.MIDDLEWARE = []
+# Log level for uvicorn.
+_C.SERVER.UVICORN_LOG_LEVEL = "info"
+# Disable uvicorn access log.
+_C.SERVER.DISABLE_UNICORN_ACCESS_LOG = False
+# If specified, will run the OpenAI frontend server in the same process as the model serving engine.
+_C.SERVER.DISABLE_FRONTED_MULTIPROCESSING = False
+# Max number of prompt characters or prompt ID numbers being printed in log.
+_C.SERVER.MAX_LOG_LEN = None
+# The file path to the chat template
+_C.SERVER.CHAT_TEMPLATE = None
+# LoRA module configurations in either 'name=path' format or JSON format.
+_C.SERVER.LORA_MODULES = None
+# Prompt adapter configurations in the format name=path.
+_C.SERVER.PROMPT_ADAPTERS = None
+# Enable auto tool choice for supported models.
+_C.SERVER.ENABLE_AUTO_TOOL_CHOICE = False
+# If set to True, enable prompt_tokens_details in usage.
+_C.SERVER.ENABLE_PROMPT_TOKENS_DETAILS = False
+# When ``--max-logprobs`` is specified, represents single tokens as strings of the form 'token_id:{token_id}'.
+_C.SERVER.RETURN_TOKENS_AS_TOKEN_IDS = False
+# The role name to return if ``request.add_generation_prompt=true``.
+_C.SERVER.RESPONSE_ROLE = "assistant"
+# The format to render message content within a chat template.
+_C.SERVER.CHAT_TEMPLATE_CONTENT_FORMAT = "auto"
+# If set to True, enable tracking server_load_metrics in the app state.
+_C.SERVER.ENABLE_SERVER_LOAD_TRACKING = False
 
 # -----------------------------------------------------------------------------
 # MANAGER CONFIGURATION

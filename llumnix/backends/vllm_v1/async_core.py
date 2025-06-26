@@ -85,37 +85,47 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         self.engines_running = False
 
         logger.debug("EngineCore handshake address: %s", handshake_address)
-        with self._perform_handshake(handshake_address, identity, on_head_node,
-                                     vllm_config) as addresses:
-            self.client_count = len(addresses.outputs)
+        # from vllm.v1.utils import EngineZmqAddresses
+        # addresses = EngineZmqAddresses(
+        #     inputs=["ipc:///tmp/58dd6824-0fbc-4221-865d-70ce72247d85"],
+        #     outputs=["ipc:///tmp/eac4f94c-d6c2-4fb6-a35c-3b0c4ddcf52c"]
+        # )
+        # with self._perform_handshake(handshake_address, identity, on_head_node,
+        #                              vllm_config) as addresses:
+        # self.client_count = len(addresses.outputs)
 
-            # Set up data parallel environment.
-            self.has_coordinator = addresses.coordinator_output is not None
-            logger.debug("client_count: %s", str(self.client_count))
-            self._init_data_parallel(vllm_config)
+        # Set up data parallel environment.
+        # self.has_coordinator = addresses.coordinator_output is not None
+        self.has_coordinator = False
+        # logger.debug("client_count: %s", str(self.client_count))
+        self._init_data_parallel(vllm_config)
 
-            AsyncEngineCore.__init__(self, vllm_config, executor_class, log_stats,
+        AsyncEngineCore.__init__(self, vllm_config, executor_class, log_stats,
                              executor_fail_callback)
 
         self.step_fn = (self.step if self.batch_queue is None else
                         self.step_with_batch_queue)
         self.step_fn_async = self.step_async
 
+        # In Llumnix, we use Manager to send request and 
+        # use ray queue/zmq queue to put output back to Server,
+        # so there is no need to start those threads
+        # ==========================================================
         # Background Threads and Queues for IO. These enable us to
         # overlap ZMQ socket IO with GPU since they release the GIL,
         # and to overlap some serialization/deserialization with the
         # model forward pass.
         # Threads handle Socket <-> Queues and core_busy_loop uses Queue.
-        threading.Thread(target=self.process_input_sockets,
-                         args=(addresses.inputs, addresses.coordinator_input,
-                               identity),
-                         daemon=True).start()
-        self.output_thread = threading.Thread(
-            target=self.process_output_sockets,
-            args=(addresses.outputs, addresses.coordinator_output,
-                  self.engine_index),
-            daemon=True)
-        self.output_thread.start()
+        # threading.Thread(target=self.process_input_sockets,
+        #                  args=(addresses.inputs, addresses.coordinator_input,
+        #                        identity),
+        #                  daemon=True).start()
+        # self.output_thread = threading.Thread(
+        #     target=self.process_output_sockets,
+        #     args=(addresses.outputs, addresses.coordinator_output,
+        #           self.engine_index),
+        #     daemon=True)
+        # self.output_thread.start()
 
 
     @staticmethod

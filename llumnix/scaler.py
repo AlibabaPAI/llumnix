@@ -271,12 +271,13 @@ class Scaler:
                     new_pg,
                     instance_type=get_service_instance_type(service_name),
                 )
-            elif self.engine_args.backend_type == BackendType.VLLM_V1:
-                # NOTE(shejiarui): For vLLM V1, we use a specific function to pull up 
-                # instances and servers at the same time since they need to handshake.
-                # When we remove the handshake logic, we may not need this extra function.
-                await self._init_server_and_instance_v1(new_instance_id, self.entrypoints_args, 
-                                                        self.instance_args, self.engine_args, new_pg)
+            # elif self.engine_args.backend_type == BackendType.VLLM_V1:
+            #     # NOTE(shejiarui): For vLLM V1, we use a specific function to pull up 
+            #     # instances and servers at the same time since they need to handshake.
+            #     # When we remove the handshake logic, we may not need this extra function.
+            #     # TODO(shejiarui): No need to use this function anymore.
+            #     await self._init_server_and_instance_v1(new_instance_id, self.entrypoints_args, 
+            #                                             self.instance_args, self.engine_args, new_pg)
             else:
                 # If not prefill/decode service, we do not specify the instance type,
                 # and the instance type is decided by _get_next_instance_type.

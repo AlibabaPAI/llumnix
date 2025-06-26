@@ -361,15 +361,13 @@ def log_worker_exception(e: Exception, instance_id: str, rank: str, method_name:
 
 
 def is_traced_request(
-    item: Union[
-        "ServerInfo", "LlumnixServerRequest", Dict[str, Any], "SamplingParams"
-    ],
+    item: Union["LlumnixRequestOuput", "ServerInfo", "LlumnixServerRequest", Dict[str, Any], "SamplingParams"],
 ):
     if isinstance(item, dict):
         return item.get(LLUMNIX_TRACE_REQUEST, False)
-    return hasattr(item, REQUEST_TIMESTAMPS) or (
-        hasattr(item, LLUMNIX_TRACE_REQUEST) and getattr(item, LLUMNIX_TRACE_REQUEST)
-    )
+    return (
+        hasattr(item, REQUEST_TIMESTAMPS) and getattr(item, REQUEST_TIMESTAMPS)
+    ) or (hasattr(item, LLUMNIX_TRACE_REQUEST) and getattr(item, LLUMNIX_TRACE_REQUEST))
 
 
 def disable_request_trace(item: Union["ServerInfo", "LlumnixServerRequest"]):

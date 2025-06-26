@@ -19,7 +19,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import random_uuid, is_traced_request
+from llumnix.utils import random_uuid
 
 
 # TODO(KuilongCui): make rayqueueserver and api server stay in the same node

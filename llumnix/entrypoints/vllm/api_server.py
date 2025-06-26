@@ -88,13 +88,13 @@ async def generate(request: Request) -> Response:
     """
     request_dict = await request.json()
     prompt = request_dict.pop("prompt")
-    stream = bool(request_dict.pop("stream", False))
+    stream = request_dict.pop("stream", False)
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
     # collect and return request lantencys
     request_trace_param = {
-        LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, False)
+        LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1')
     }
 
     # Use LlumnixClientVLLM's generate and abort api to replace with vLLM AsyncLLMEngine's generate and abort api.
@@ -176,7 +176,7 @@ async def generate_benchmark(request: Request) -> Response:
 
     # collect and return request lantencys
     request_trace_param = {
-        LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, False)
+        LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1')
     }
 
     results_generator = await llumnix_client.generate(prompt, sampling_params, request_id, **request_trace_param)

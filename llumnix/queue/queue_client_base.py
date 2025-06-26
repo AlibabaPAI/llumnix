@@ -30,7 +30,7 @@ class QueueClientBase(ABC):
     def is_metric_enable(self):
         return self.metric_sample_every_n_records > 0
 
-    def need_record_latency(self):
+    def need_record_latency_metric(self):
         if self.is_metric_enable():
             self.metric_index = (
                 self.metric_index + 1

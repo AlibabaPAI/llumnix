@@ -132,9 +132,16 @@ class ZmqClient(QueueClientBase):
                         error_message="Unable to start RPC Server")
 
     async def put_nowait(self, item: Any, server_info: ServerInfo):
-        #TODO vllm debug flag is in item, but bladellm debug flag is in server_info
         queue_request = RPCPutNoWaitQueueRequest(item=item)
-        if is_traced_request(server_info) or is_traced_request(item) or self.need_record_latency():
+        need_record_trace_timestamp = False
+        if isinstance(item, list):
+            for obj in item:
+                if is_traced_request(obj):
+                    need_record_trace_timestamp = True
+                    break
+        else:
+            need_record_trace_timestamp = is_traced_request(item)
+        if need_record_trace_timestamp or self.need_record_latency_metric():
             queue_request.send_time = time.perf_counter()
         await self._send_one_way_rpc_request(
                         request=queue_request,
@@ -144,7 +151,7 @@ class ZmqClient(QueueClientBase):
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
         batch_queue_request = RPCPutNoWaitBatchQueueRequest(items=items)
-        if is_traced_request(server_info) or is_traced_request(items) or self.need_record_latency():
+        if is_traced_request(server_info) or is_traced_request(items) or self.need_record_latency_metric():
             batch_queue_request.send_time = time.perf_counter()
         await self._send_one_way_rpc_request(
                         request=batch_queue_request,

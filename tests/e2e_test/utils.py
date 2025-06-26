@@ -39,7 +39,6 @@ def generate_vllm_launch_command(
     model: str = try_convert_to_local_path("facebook/opt-125m"),
     max_model_len: int = 4096,
     log_instance_info: bool = False,
-    enable_debug_mode: bool = False,
     request_migration_policy: str = 'SR',
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
@@ -61,7 +60,6 @@ def generate_vllm_launch_command(
         f"--initial-instances {instances_num} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
-        f"{'--enable-debug-mode ' if enable_debug_mode else ''}"
         f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
@@ -97,7 +95,6 @@ def generate_vllm_serve_command(
     model: str = try_convert_to_local_path("facebook/opt-125m"),
     max_model_len: int = 4096,
     log_instance_info: bool = False,
-    enable_debug_mode: bool = False,
     request_migration_policy: str = 'SR',
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
@@ -120,7 +117,6 @@ def generate_vllm_serve_command(
         f"--port {port} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
-        f"{'--enable-debug-mode ' if enable_debug_mode else ''}"
         f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
@@ -161,7 +157,6 @@ def generate_bladellm_launch_command(
     port: int = 37000,
     max_num_batched_tokens: int = 4096,
     enable_llumnix: bool = True,
-    enable_debug_mode: bool = False,
     enable_pd_disagg: bool = False,
     enable_migration: bool = True,
     dispatch_policy: str = "load",
@@ -191,7 +186,6 @@ def generate_bladellm_launch_command(
         f"--attn_cls ragged_flash "
         f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
         f"--disable_frontend_multiprocessing "
-        f"{'--enable-debug-mode ' if enable_debug_mode else ''}"
         f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "
         f"{'--disable_cuda_graph' if enforce_eager else ''} "
         f"{'--enable_disagg' if enable_pd_disagg else ''} "
@@ -219,7 +213,6 @@ def generate_bladellm_serve_command(
     max_num_batched_tokens: int = 16000,
     enable_llumnix: bool = True,
     enable_pd_disagg: bool = False,
-    enable_debug_mode: bool = False,
     enable_migration: bool = True,
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
@@ -244,7 +237,6 @@ def generate_bladellm_serve_command(
         f"--log_level INFO "
         f"-tp {tensor_parallel_size} "
         f"--attn_cls ragged_flash "
-        f"{'--enable-debug-mode ' if enable_debug_mode else ''}"
         f"--ragged_flash_max_batch_tokens {max_num_batched_tokens} "
         f"--disable_frontend_multiprocessing "
         f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "

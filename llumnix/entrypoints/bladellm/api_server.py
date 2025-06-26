@@ -49,7 +49,7 @@ from llumnix.backends.bladellm.protocol import (
     LlumnixGenerateStreamResponse,
     LlumnixOAIChatCompletionsResponse,
 )
-from llumnix.constants import LLUMNIX_DEBUG_MODE_HEADER
+from llumnix.constants import LLUMNIX_TRACE_HEADER
 
 logger = init_logger(__name__)
 
@@ -62,7 +62,7 @@ class LlumnixEntrypoint(Entrypoint):
     async def oai_chat_completions(self, request: web.Request):
         # TODO(litan.ls): configurable request id header key
         oai_req, server_req = await self._web_request_to_oai_chat_request(request)
-        if llumnix_client.enable_debug_mode and request.headers.get(LLUMNIX_DEBUG_MODE_HEADER, False):
+        if request.headers.get(LLUMNIX_TRACE_HEADER, False):
             # collect and return request lantencys
             server_req = LlumnixServerRequest.from_server_request(server_req, True)
         model_name = oai_req.model or ''
@@ -95,7 +95,7 @@ class LlumnixEntrypoint(Entrypoint):
                     except (asyncio.CancelledError, ConnectionResetError):
                         connection_alive = False
                         logger.info('Streaming cancelled or connection reset.')
-                        logger.error('Request {} with response: {}', server_req, stream_resp)
+                        logger.error('Request {} with response: {}'.format(server_req, stream_resp))
                         await self._client.drop_request(server_req.id)
                         break
                 if connection_alive:
@@ -106,23 +106,23 @@ class LlumnixEntrypoint(Entrypoint):
             if oai_req.n > 1:
                 # TODO(litan.ls): support multiple generation
                 return web.Response(text='Do no support to generate multiple completions.', status=500)
-            # pylint: enable=no-else-return
+            # pylint: disable=no-else-return
             else:
                 tokens = []
-                llumnix_debug_infos = []
+                llumnix_trace_infos = []
                 streamer = result.async_stream()
                 streamed_responses = [r async for r in streamer]
                 for r in streamed_responses:
                     tokens.extend(r.tokens)
                     if isinstance(r, LlumnixGenerateStreamResponse):
-                        llumnix_debug_info = r.llumnix_debug_info
-                        llumnix_debug_info.calc_latency()
-                        llumnix_debug_infos.append(llumnix_debug_info)
+                        llumnix_trace_info = r.llumnix_trace_info
+                        llumnix_trace_info.calc_latency()
+                        llumnix_trace_infos.append(llumnix_trace_info)
                 finish_reason = (
                     streamed_responses[-1].detail.finish_reason.to_oai() if streamed_responses[-1].detail else ''
                 )
                 token_usage = streamed_responses[-1].usage
-                response_cls = LlumnixOAIChatCompletionsResponse if llumnix_debug_infos else OAIChatCompletionsResponse
+                response_cls = LlumnixOAIChatCompletionsResponse if llumnix_trace_infos else OAIChatCompletionsResponse
                 response = response_cls(
                     id=server_req.external_id,
                     model=model_name,
@@ -144,8 +144,8 @@ class LlumnixEntrypoint(Entrypoint):
                     object="chat.completion",
                     usage=token_usage,
                 )
-                if llumnix_debug_infos:
-                    response.llumnix_debug_info = llumnix_debug_infos
+                if llumnix_trace_infos:
+                    response.llumnix_trace_info = llumnix_trace_infos
             return web.json_response(text=response.model_dump_json(by_alias=True))
 
     @handle_http_error
@@ -166,7 +166,7 @@ class LlumnixEntrypoint(Entrypoint):
         server_req.arrive_time = time.time()
 
         # process llumnix header
-        if llumnix_client.enable_debug_mode and request.headers.get(LLUMNIX_DEBUG_MODE_HEADER, False):
+        if request.headers.get(LLUMNIX_TRACE_HEADER, False):
             # collect and return request lantencys
             server_req: LlumnixServerRequest = LlumnixServerRequest.from_server_request(server_req, True)
 
@@ -197,27 +197,27 @@ class LlumnixEntrypoint(Entrypoint):
                 if connection_alive:
                     await sse.send('[DONE]')
                     await sse.write_eof()
-        # pylint: enable=no-else-return
+        # pylint: disable=no-else-return
         else:
             if oai_req.n > 1:
                 # TODO(litan.ls): support multiple generation
                 return web.Response(text='Do no support to generate multiple completions.', status=500)
             else:
                 tokens = []
-                llumnix_debug_infos = []
+                llumnix_trace_infos = []
                 streamer = result.async_stream()
                 streamed_responses = [r async for r in streamer]
                 for r in streamed_responses:
                     tokens.extend(r.tokens)
                     if isinstance(r, LlumnixGenerateStreamResponse):
-                        llumnix_debug_info = r.llumnix_debug_info
-                        llumnix_debug_info.calc_latency()
-                        llumnix_debug_infos.append(llumnix_debug_info)
+                        llumnix_trace_info = r.llumnix_trace_info
+                        llumnix_trace_info.calc_latency()
+                        llumnix_trace_infos.append(llumnix_trace_info)
                 finish_reason = (
                     streamed_responses[-1].detail.finish_reason.to_oai() if streamed_responses[-1].detail else ''
                 )
                 token_usage = streamed_responses[-1].usage
-                response_cls = LlumnixOAICompletionsResponse if llumnix_debug_infos else OAICompletionsResponse
+                response_cls = LlumnixOAICompletionsResponse if llumnix_trace_infos else OAICompletionsResponse
                 response = response_cls(
                     id=external_request_id,
                     model=model_name,
@@ -234,19 +234,19 @@ class LlumnixEntrypoint(Entrypoint):
                         )
                     ],
                     usage=token_usage,
-                    llumnix_debug_info=None
+                    llumnix_trace_info=None
                 )
-                if llumnix_debug_infos:
-                    response.llumnix_debug_info = llumnix_debug_infos
+                if llumnix_trace_infos:
+                    response.llumnix_trace_info = llumnix_trace_infos
             return web.json_response(text=response.model_dump_json(by_alias=True))
 
     async def generate_benchmark(self, request: web.Request):
         assert isinstance(self._client, LlumnixClientBladeLLM)
         oai_req, server_req = await self._web_request_to_oai_chat_request(request)
-        if llumnix_client.enable_debug_mode and request.headers.get(LLUMNIX_DEBUG_MODE_HEADER, False):
+        if request.headers.get(LLUMNIX_TRACE_HEADER, False):
             # collect and return request lantencys
             server_req = LlumnixServerRequest.from_server_request(server_req, True)
-        start = time.time()
+        start = time.perf_counter()
         results_generator = await self._client.add_request(server_req)
 
         # Non-streaming case
@@ -257,11 +257,11 @@ class LlumnixEntrypoint(Entrypoint):
 
         async for r in output_streamer:
             token_timestamps = (
-                r.llumnix_debug_info.token_timestamps
+                r.llumnix_trace_info.token_timestamps
                 if isinstance(r, LlumnixGenerateStreamResponse)
                 else None
             )
-            now = time.time()
+            now = time.perf_counter()
             per_token_latency.append([now, (now - start)*1000])
             start = now
             tokens.extend(r.tokens)

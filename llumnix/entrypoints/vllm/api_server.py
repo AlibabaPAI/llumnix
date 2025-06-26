@@ -17,6 +17,7 @@ import time
 import asyncio
 import json
 
+from dataclasses import asdict
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
@@ -28,11 +29,11 @@ from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.vllm.arg_utils import add_cli_args, get_args, VLLMEngineArgs
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 from llumnix.logging.logger import init_logger
-from llumnix.utils import random_uuid
+from llumnix.utils import is_traced_request, random_uuid
 from llumnix.config import get_llumnix_config
 from llumnix.backends.backend_interface import BackendType
-from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
-from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE
+from llumnix.entrypoints.utils import LaunchMode, is_gpu_available, LlumnixTraceInfo
+from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE, LLUMNIX_TRACE_HEADER, LLUMNIX_TRACE_REQUEST
 from llumnix.metrics.timestamps import set_timestamp
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
@@ -86,12 +87,19 @@ async def generate(request: Request) -> Response:
     """
     request_dict = await request.json()
     prompt = request_dict.pop("prompt")
-    stream = request_dict.pop("stream", False)
+    stream = bool(request_dict.pop("stream", False))
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
+    # collect and return request lantencys
+    request_trace_param = {
+        LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, False)
+    }
+
     # Use LlumnixClientVLLM's generate and abort api to replace with vLLM AsyncLLMEngine's generate and abort api.
-    results_generator = await llumnix_client.generate(prompt, sampling_params, request_id)
+    results_generator = await llumnix_client.generate(
+        prompt, sampling_params, request_id, **request_trace_param
+    )
 
     # Streaming case
     async def stream_results() -> AsyncGenerator[bytes, None]:
@@ -101,6 +109,17 @@ async def generate(request: Request) -> Response:
                 prompt + output.text for output in request_output.outputs
             ]
             ret = {"text": text_outputs}
+            if is_traced_request(request_output):
+                set_timestamp(
+                    request_output,
+                    "api_server_generate_timestamp_end",
+                    time.perf_counter(),
+                )
+                llumnix_trace_info = LlumnixTraceInfo(
+                    latencys=request_output.request_timestamps.to_latency_breakdown_dict(),
+                    token_timestamps=request_output.request_timestamps,
+                )
+                ret["llumnix_trace_info"] = asdict(llumnix_trace_info)
             yield (json.dumps(ret) + "\0").encode("utf-8")
 
     if stream:
@@ -108,17 +127,32 @@ async def generate(request: Request) -> Response:
 
     # Non-streaming case
     final_output = None
+    llumnix_trace_infos = []
     async for request_output in results_generator.generator():
         if await request.is_disconnected():
             # Abort the request if the client disconnects.
             await llumnix_client.abort(request_id)
             return Response(status_code=499)
         final_output = request_output
+        if is_traced_request(request_output):
+            set_timestamp(
+                request_output,
+                "api_server_generate_timestamp_end",
+                time.perf_counter(),
+            )
+            llumnix_trace_info = LlumnixTraceInfo(
+                latencys=request_output.request_timestamps.to_latency_breakdown_dict(),
+                token_timestamps=request_output.request_timestamps,
+            )
+            llumnix_trace_infos.append(asdict(llumnix_trace_info))
 
     assert final_output is not None
     prompt = final_output.prompt
     text_outputs = [prompt + output.text for output in final_output.outputs]
     ret = {"text": text_outputs}
+    if llumnix_trace_infos:
+        ret["llumnix_trace_info"] = llumnix_trace_infos
+    print(f"ret in api_server is: {ret}")
     return JSONResponse(ret)
 
 @app.post("/generate_benchmark")
@@ -137,9 +171,14 @@ async def generate_benchmark(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
-    start = time.time()
+    start = time.perf_counter()
 
-    results_generator = await llumnix_client.generate(prompt, sampling_params, request_id)
+    # collect and return request lantencys
+    request_trace_param = {
+        LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, False)
+    }
+
+    results_generator = await llumnix_client.generate(prompt, sampling_params, request_id, **request_trace_param)
 
     # Non-streaming case
     final_output = None
@@ -150,12 +189,12 @@ async def generate_benchmark(request: Request) -> Response:
             # Abort the request if the client disconnects.
             await llumnix_client.abort(request_id)
             return Response(status_code=499)
-        now = time.time()
+        now = time.perf_counter()
         per_token_latency.append([now, (now - start)*1000])
         start = now
         final_output = request_output
-        set_timestamp(request_output, 'api_server_generate_timestamp_end', now)
-        if hasattr(request_output, 'request_timestamps'):
+        if is_traced_request(request_output):
+            set_timestamp(request_output, 'api_server_generate_timestamp_end', now)
             per_token_latency_breakdown_list.append(request_output.request_timestamps.to_latency_breakdown_dict())
     assert final_output is not None
 

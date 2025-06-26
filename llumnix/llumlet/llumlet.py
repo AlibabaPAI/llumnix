@@ -51,11 +51,9 @@ class Llumlet:
         self.instance_args: InstanceArgs = instance_args
         self.enable_migration = instance_args.enable_migration
         self.actor_name = get_instance_name(instance_id)
-        self.instance_load_calculator = InstanceLoadCalculator(
-            dispatch_load_metric=instance_args.dispatch_load_metric,
-            migration_load_metric=instance_args.migration_load_metric,
-            enable_defrag=instance_args.enable_defrag
-        )
+
+        self.instance_load_calculator = InstanceLoadCalculator(instance_args=self.instance_args)
+
         self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
                                                                     placement_group,
                                                                     request_output_queue_type,
@@ -133,6 +131,7 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         instance_info: InstanceInfo = self.backend_engine.engine.instance_info
         instance_info.instance_type = self.instance_args.instance_type
+        instance_info.enable_defrag = self.instance_args.enable_defrag
         self.instance_load_calculator.compute_instance_load(instance_info)
         return instance_info
 

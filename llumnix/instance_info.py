@@ -11,15 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
 import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Tuple
-import numpy as np
+from typing import Iterable, List, Tuple
 
 from llumnix.logging.logger import init_logger
+from llumnix.load_computation import LoadCalculatorFactory, BaseLoad, DummyLoad
 from llumnix.llumlet.request import RequestInferenceType
+from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
 
@@ -28,6 +28,8 @@ class InstanceType(str, Enum):
     NO_CONSTRAINTS = "no_constraints"
     PREFILL = "prefill"
     DECODE = "decode"
+    PREFILL_AS_DECODE = "prefill_as_decode"
+    DECODE_AS_PREFILL = "decode_as_prefill"
 
 
 @dataclass
@@ -43,6 +45,7 @@ class InstanceInfo:
     running_seq_lens: List[int] = field(default_factory=list)
     last_inference_latency: float = None
     inference_type: RequestInferenceType = None
+    decode_batch_size: int = None
 
     num_total_gpu_blocks: int = 0
     num_watermark_blocks: int = 0
@@ -63,64 +66,74 @@ class InstanceInfo:
     num_trans_wrapper_cached_request: int = 0
 
     # on-demand init infos
-    dispatch_load_metric: float = -np.inf
-    migration_load_metric: float = np.inf
-    migration_load_metric_after_migrate_in: float = -np.inf
-    migration_load_metric_after_migrate_out: float = np.inf
+    dispatch_load_metric: BaseLoad = DummyLoad()
+    dispatch_prefill_as_decode_load_metric: BaseLoad = DummyLoad() # used for adaptive pd
+    dispatch_decode_as_prefill_load_metric: BaseLoad = DummyLoad() # used for adaptive pd
+    migration_load_metric: BaseLoad = DummyLoad()
+    migration_load_metric_after_migrate_in: BaseLoad = DummyLoad()
+    migration_load_metric_after_migrate_out: BaseLoad = DummyLoad()
 
     # lazy init infos
-    num_available_gpu_blocks: int = 0
-    num_available_gpu_blocks_waiting: int = 0
-
-    # manual init infos
     profiling_data: Tuple[str, int, int, float] = None
+
+    # instance level info for load computation
+    enable_defrag: bool = False
 
     def __post_init__(self) -> None:
         self.num_available_gpu_blocks = self.num_total_gpu_blocks - self.num_used_gpu_blocks
         self.num_available_gpu_blocks_waiting = self.num_available_gpu_blocks - self.num_blocks_all_waiting_requests
 
+    def __hash__(self):
+        return hash(self.instance_id)
+
+
+def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
+                        key_attr: str,
+                        descending: bool = False) -> List[InstanceInfo]:
+    return sorted(
+        available_instance_infos,
+        key=lambda instance_info: (
+            getattr(instance_info, key_attr),
+            instance_info.instance_id
+        ),
+        reverse=descending
+    )
+
 
 class InstanceLoadCalculator:
-    def __init__(self, dispatch_load_metric: str, migration_load_metric: str, enable_defrag: bool) -> None:
-        self.dispatch_load_calculator = DispatchLoadComputation(dispatch_load_metric)
-        self.migration_load_calculator = MigrationLoadComputation(migration_load_metric, enable_defrag)
+    def __init__(self, instance_args: InstanceArgs) -> None:
+        dispach_load_metric = instance_args.dispatch_load_metric
+        if instance_args.instance_type == InstanceType.PREFILL:
+            dispach_load_metric = instance_args.dispatch_prefill_load_metric
+        elif instance_args.instance_type == InstanceType.DECODE:
+            dispach_load_metric = instance_args.dispatch_decode_load_metric
+
+        self.dispatch_load_calculator = LoadCalculatorFactory.get_load_calculator(dispach_load_metric)
+        self.migration_load_calculator = LoadCalculatorFactory.get_load_calculator(instance_args.migration_load_metric)
+
+        self.enable_adaptive_pd = instance_args.enable_adaptive_pd
+        if self.enable_adaptive_pd:
+            self.dispatch_prefill_as_decode_load_calculator = \
+                LoadCalculatorFactory.get_load_calculator(instance_args.dispatch_prefill_as_decode_load_metric)
+            self.dispatch_decode_load_as_prefill_load_calculator = \
+                LoadCalculatorFactory.get_load_calculator(instance_args.dispatch_decode_as_prefill_load_metric)
 
     def compute_instance_load(self, instance_info: InstanceInfo):
         instance_info.dispatch_load_metric = self.dispatch_load_calculator.compute_instance_load(instance_info)
         instance_info.migration_load_metric = self.migration_load_calculator.compute_instance_load(instance_info)
-        instance_info.migration_load_metric_after_migrate_out = self.migration_load_calculator.\
-            compute_instance_load_after_migrate(instance_info, is_migrate_in=False)
-        instance_info.migration_load_metric_after_migrate_in = self.migration_load_calculator.\
-            compute_instance_load_after_migrate(instance_info, is_migrate_in=True)
 
+        instance_info.migration_load_metric_after_migrate_out = \
+            self._compute_load_after_migrate(instance_info, is_migrate_in=False)
+        instance_info.migration_load_metric_after_migrate_in = \
+            self._compute_load_after_migrate(instance_info, is_migrate_in=True)
 
-class LoadComputationStrategy(ABC):
-    def __init__(self, load_metric: str, enable_defrag: bool = False) -> None:
-        self.load_metric = load_metric
-        self.enable_defrag = enable_defrag
+        if self.enable_adaptive_pd:
+            instance_info.dispatch_prefill_as_decode_load_metric = \
+                self.dispatch_prefill_as_decode_load_calculator.compute_instance_load(instance_info)
+            instance_info.dispatch_decode_as_prefill_load_metric = \
+                self.dispatch_decode_load_as_prefill_load_calculator.compute_instance_load(instance_info)
 
-    @abstractmethod
-    def compute_instance_load(self, instance_info: InstanceInfo) -> float:
-        pass
-
-
-class DispatchLoadComputation(LoadComputationStrategy):
-    def compute_instance_load(self, instance_info: InstanceInfo) -> float:
-        instance_load = -np.inf
-        if self.load_metric == 'usage_ratio':
-            instance_load = (instance_info.num_used_gpu_blocks + instance_info.num_blocks_all_waiting_requests) \
-                / instance_info.num_total_gpu_blocks
-        elif self.load_metric == 'remaining_steps':
-            num_requests = instance_info.num_running_requests + instance_info.num_waiting_requests
-            num_available_gpu_blocks = instance_info.num_available_gpu_blocks - instance_info.num_blocks_all_waiting_requests
-            if num_requests == 0:
-                return -np.inf
-            instance_load = (num_available_gpu_blocks / num_requests)*(-1)
-        return instance_load
-
-
-class MigrationLoadComputation(LoadComputationStrategy):
-    def compute_instance_load_after_migrate(self, instance_info: InstanceInfo, is_migrate_in: bool) -> float:
+    def _compute_load_after_migrate(self, instance_info: InstanceInfo, is_migrate_in: bool) -> BaseLoad:
         instance_info_after_migrate = copy.deepcopy(instance_info)
         num_blocks_last_running_request = instance_info_after_migrate.num_blocks_last_running_request
 
@@ -131,35 +144,12 @@ class MigrationLoadComputation(LoadComputationStrategy):
             instance_info_after_migrate.num_running_requests -= 1
             instance_info_after_migrate.num_available_gpu_blocks += num_blocks_last_running_request
 
-        return self.compute_instance_load(instance_info_after_migrate)
-
-    def compute_instance_load(self, instance_info: InstanceInfo) -> float:
-        instance_load = -np.inf
-        if self.load_metric == 'usage_ratio':
-            instance_load = (instance_info.num_used_gpu_blocks + instance_info.num_blocks_first_waiting_request) \
-                / instance_info.num_total_gpu_blocks
-        elif self.load_metric == 'remaining_steps':
-            if not self.enable_defrag:
-                num_requests = instance_info.num_running_requests
-                num_available_gpu_blocks = instance_info.num_available_gpu_blocks
-            else:
-                num_requests = instance_info.num_running_requests
-                if instance_info.num_waiting_requests != 0:
-                    num_requests += 1
-                num_available_gpu_blocks = instance_info.num_available_gpu_blocks - \
-                    instance_info.num_blocks_first_waiting_request
-            if num_requests == 0:
-                return -np.inf
-            instance_load = (num_available_gpu_blocks / num_requests) * (-1)
-        return instance_load
+        return self.migration_load_calculator.compute_instance_load(instance_info_after_migrate)
 
 
-# TODO(KuilongCui): currently scaling and dispatch use the same load calculator, leave
-# it in the future to refine
-class ScalingLoadComputation(LoadComputationStrategy):
+class ScalingLoadComputation:
     def __init__(self, load_metric):
-        super().__init__(load_metric)
-        self.load_calculator = DispatchLoadComputation(load_metric)
+        self.load_calculator = LoadCalculatorFactory.get_load_calculator(load_metric)
 
     def compute_instance_load(self, instance_info: InstanceInfo) -> float:
         return self.load_calculator.compute_instance_load(instance_info)

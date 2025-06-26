@@ -372,7 +372,6 @@ class Summary(MetricWrapperBase):
 
     def observe_time(self, labels: Dict[str, str] = None):
         """Return a Timer context object to record excution time of a scope."""
-        print(f"observe_time {self.name} {self.metrics_sampling_interval}")
         return TimeRecorder(metrics=self, enabled=self.increase_index_and_check_need_sample(), labels=labels)
 
     def collect(self) -> List[MetricEntry]:

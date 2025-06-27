@@ -101,14 +101,40 @@ def get_instance_num_blocks():
 
     return instance_num_blocks_list
 
+config_schema = "engine, migration_request_status, tensor_parallel_size, migration_backend, use_ray_spmd_worker"
+
+def generate_migration_test_config():
+    vllm_config = [
+        ("engine_vLLM", "running", 1, "gloo", False),
+
+        # migrate waiting
+        ("engine_vLLM", "waiting", 1, "gloo", False),
+
+        # spmd
+        ("engine_vLLM", "running", 1, "gloo", True),
+
+        # spmd and migrate waiting
+        ("engine_vLLM", "waiting", 1, "gloo", True),
+    ]
+
+    bladellm_config = [
+        ("engine_BladeLLM", "running", 1, "grpc", False),
+
+        # migration backend
+        ("engine_BladeLLM", "running", 1, "kvtransfer", False),
+
+        # tp=2
+        ("engine_BladeLLM", "running", 2, "grpc", False),
+        ("engine_BladeLLM", "running", 2, "kvtransfer", False),
+    ]
+
+    return vllm_config + bladellm_config
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for migration bench")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
-@pytest.mark.parametrize("migration_request_status", ['running', 'waiting'])
-@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
-@pytest.mark.parametrize("migration_backend", ['gloo', 'grpc', 'kvtransfer'])
-@pytest.mark.parametrize("use_ray_spmd_worker", [True, False])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
+@pytest.mark.parametrize(config_schema, generate_migration_test_config())
 async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model,
                                    migration_request_status, tensor_parallel_size, migration_backend,
                                    use_ray_spmd_worker, engine):
@@ -116,27 +142,9 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
 
     num_prompts = 500
 
-    if any(item in request.node.name for item in ["waiting", "grpc"]) or \
+    if any(item in request.node.name for item in ["waiting", "kvtransfer"]) or \
         tensor_parallel_size == 2:
         num_prompts = int(num_prompts/10)
-
-    if "BladeLLM" in engine and use_ray_spmd_worker:
-        conftest.SKIP_REASON = "use_ray_spmd_worker is vLLM config, just skip it in BladeLLM."
-
-    if "BladeLLM" in engine and migration_request_status == 'waiting':
-        conftest.SKIP_REASON = "BladeLLM does not support migrating waiting request temporarily."
-
-    if "BladeLLM" in engine and migration_backend not in ['grpc', 'kvtransfer']:
-        conftest.SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
-
-    if "vLLM" in engine and tensor_parallel_size == 2:
-        conftest.SKIP_REASON = "vLLM tensor_parallel_size=2 has already been tested in the correctness test."
-
-    if "vLLM" in engine and migration_backend != 'gloo':
-        conftest.SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
-
-    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
-        pytest.skip(conftest.SKIP_REASON)
 
     if use_ray_spmd_worker:
         os.environ["VLLM_USE_RAY_SPMD_WORKER"] = "1"

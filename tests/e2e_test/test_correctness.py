@@ -117,85 +117,65 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
 
     return bladellm_outputs
 
+config_schema = "engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator," \
+"enable_pd_disagg, launch_mode, request_output_forwarding_mode"
+
+def generate_correctness_test_config():
+    vllm_config = [
+        ("engine_vLLM", "gloo", 1, True, False, False, "global", "thread"),
+
+        # migration backend
+        ("engine_vLLM", "gloo", 1, True, False, True, "global", "thread"),
+        ("engine_vLLM", "rayrpc", 1, True, False, True, "global", "thread"),
+        ("engine_vLLM", "nccl", 1, True, False, True, "global", "thread"),
+
+        # migration tp=2
+        ("engine_vLLM", "gloo", 2, True, False, True, "global", "thread"),
+        ("engine_vLLM", "rayrpc", 2, True, False, True, "global", "thread"),
+
+        # disable migration
+        ("engine_vLLM", "gloo", 1, False, False, False, "global", "thread"),
+
+        # simulation
+        ("engine_vLLM", "gloo", 1, True, True, False, "global", "thread"),
+
+        # local launch mode
+        ("engine_vLLM", "gloo", 1, True, False, False, "local", "thread"),
+
+        # actor token forward
+        ("engine_vLLM", "gloo", 1, True, False, False, "global", "actor"),
+    ]
+
+    bladellm_config = [
+        ("engine_BladeLLM", "grpc", 1, True, False, False, "global", "thread"),
+
+        # tp=2
+        ("engine_BladeLLM", "grpc", 2, True, False, False, "global", "thread"),
+
+        # disable migration
+        ("engine_BladeLLM", "grpc", 1, False, False, False, "global", "thread"),
+
+        # engine pd
+        ("engine_BladeLLM", "grpc", 1, True, False, True, "global", "thread"),
+
+        # local launch mode
+        ("engine_BladeLLM", "grpc", 1, True, False, False, "local", "thread"),
+
+        # actor token forward
+        ("engine_BladeLLM", "grpc", 1, True, False, False, "global", "actor"),
+    ]
+
+    return vllm_config + bladellm_config
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
-@pytest.mark.parametrize("request_output_forwarding_mode", ['thread', 'actor'])
-@pytest.mark.parametrize("launch_mode", ['global', 'local'])
-@pytest.mark.parametrize("enable_pd_disagg", [False, True])
-@pytest.mark.parametrize("enable_simulator", [False, True])
-@pytest.mark.parametrize("enable_migration", [False, True])
-@pytest.mark.parametrize("tensor_parallel_size", [1, 2])
-@pytest.mark.parametrize("migration_backend", ['rayrpc', 'gloo', 'nccl', 'kvtransfer'])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
+@pytest.mark.parametrize(config_schema, generate_correctness_test_config())
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
-                           launch_mode, enable_pd_disagg, enable_simulator, tensor_parallel_size,
-                           enable_migration, migration_backend, request_output_forwarding_mode, engine):
+                           engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator,
+                           enable_pd_disagg, launch_mode, request_output_forwarding_mode):
     engine = engine.split("_")[1]
-
-    if "BladeLLM" in engine:
-        # TODO(KuilongCui): add bladellm migration correctness test for grpc and kvtransfer
-        if migration_backend not in ['grpc', 'kvtransfer']:
-            conftest.SKIP_REASON = f"BladeLLM does not support migration backend {migration_backend}"
-
-        if launch_mode == "local" and tensor_parallel_size == 2:
-            conftest.SKIP_REASON = "Only test tensor parallelism in global launch mode."
-
-        if enable_simulator:
-            conftest.SKIP_REASON = "Simulator for BladeLLM is not supported yet."
-
-        if enable_migration and enable_pd_disagg:
-            conftest.SKIP_REASON = "Llumnix does not support migration for BladeLLM when prefill-decode disaggregation is enabled."
-
-        if not enable_migration:
-            if launch_mode != "global" or tensor_parallel_size != 1:
-                conftest.SKIP_REASON = "The only configuration tested under Migration=False in BladeLLM \
-                    is with tensor parallelism set to 1, and global launch mode."
-
-    if "vLLM" in engine:
-        if enable_pd_disagg:
-            enable_migration = True
-
-        if migration_backend not in ['rayrpc', 'gloo', 'nccl']:
-            conftest.SKIP_REASON = f"vLLM does not support migration backend {migration_backend}."
-
-        if tensor_parallel_size == 2 and migration_backend == 'nccl':
-            conftest.SKIP_REASON = "When the migration backend is nccl, tensor parallelism is not supported."
-
-        if launch_mode == "local":
-            if tensor_parallel_size > 1:
-                conftest.SKIP_REASON = "Only test tensor parallelism in global launch mode."
-
-            if migration_backend != "gloo":
-                conftest.SKIP_REASON = "Only test gloo in local launch mode for vLLM."
-
-            if enable_simulator:
-                conftest.SKIP_REASON = "Simulator will not be tested in local launch mode for vLLM."
-
-        if enable_simulator:
-            if migration_backend != "gloo":
-                conftest.SKIP_REASON = "Only test simulator in gloo migration backend for vLLM."
-
-            if enable_pd_disagg:
-                conftest.SKIP_REASON = "Simulator is not supported in pd disaggregation mode for vLLM."
-
-            if tensor_parallel_size == 2:
-                conftest.SKIP_REASON = "Simulator in TP = 2 will not be tested."
-
-        if not enable_migration:
-            if launch_mode != "global" or not enable_pd_disagg or migration_backend != "gloo" \
-                or tensor_parallel_size != 1 or enable_simulator:
-                conftest.SKIP_REASON = "The only configuration tested under enable_migration=False in vLLM \
-                    is with tensor parallelism set to 1, prefill-decode disaggregation enabled, global \
-                    launch mode and using the Gloo backend for migration."
-
-    if request_output_forwarding_mode == "actor":
-        if migration_backend not in ["gloo", "kvtransfer"] or tensor_parallel_size == 2 or not enable_migration or \
-            enable_simulator or enable_pd_disagg or launch_mode != "global":
-            conftest.SKIP_REASON = "Only test one basic case for actor request outout forwarding mode."
-
-    if conftest.SKIP_REASON is not None and len(conftest.SKIP_REASON) > 0:
-        pytest.skip(conftest.SKIP_REASON)
 
     global test_times
 
@@ -215,7 +195,6 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         generate_launch_command_func = generate_vllm_launch_command
         generate_serve_command_func = generate_vllm_serve_command
         url = f'http://{ip}:{base_port}/generate'
-        enable_migration = True
 
         if not enable_pd_disagg and len(engine_prompt_output) == 0:
             engine_prompt_output = engine_pdd_prompt_output
@@ -232,7 +211,6 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         generate_launch_command_func = generate_bladellm_launch_command
         generate_serve_command_func = generate_bladellm_serve_command
         url = f'http://{ip}:{base_port}/v1/chat/completions'
-        enable_migration = not enable_pd_disagg
 
         if not enable_pd_disagg and len(engine_prompt_output) == 0:
             engine_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_migration)
@@ -253,7 +231,10 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     ip=ip,
                                                     port=prefill_port,
                                                     enforce_eager=True,
+                                                    migration_backend=migration_backend,
                                                     enable_pd_disagg=enable_pd_disagg,
+                                                    enable_simulator=enable_simulator,
+                                                    request_output_forwarding_mode=request_output_forwarding_mode,
                                                     instance_type="prefill",
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
@@ -266,7 +247,10 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     model=model,
                                                     ip=ip,
                                                     port=decode_port,
+                                                    migration_backend=migration_backend,
                                                     enforce_eager=True,
+                                                    enable_simulator=enable_simulator,
+                                                    request_output_forwarding_mode=request_output_forwarding_mode,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="decode",
                                                     enable_migration=enable_migration,
@@ -278,7 +262,11 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     model=model,
                                                     ip=ip,
                                                     port=base_port,
+                                                    migration_backend=migration_backend,
+                                                    enable_pd_disagg=enable_pd_disagg,
                                                     enforce_eager=True,
+                                                    enable_simulator=enable_simulator,
+                                                    request_output_forwarding_mode=request_output_forwarding_mode,
                                                     enable_migration=enable_migration,
                                                     tensor_parallel_size=tensor_parallel_size))
     else:
@@ -290,8 +278,10 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                port=base_port,
                                                model=model,
                                                enforce_eager=True,
+                                               migration_backend=migration_backend,
                                                enable_pd_disagg=enable_pd_disagg,
                                                enable_simulator=enable_simulator,
+                                               request_output_forwarding_mode=request_output_forwarding_mode,
                                                tensor_parallel_size=tensor_parallel_size,
                                                enable_migration=enable_migration,
                                                max_instances=instance_count))

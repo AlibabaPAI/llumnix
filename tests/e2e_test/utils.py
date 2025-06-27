@@ -108,6 +108,7 @@ def generate_vllm_serve_command(
     enable_migration: bool = True,
     enforce_eager: bool = False,
     max_instances: int = 4,
+    request_output_forwarding_mode: str = "thread",
     **kwargs
 ):
     command = (
@@ -138,6 +139,7 @@ def generate_vllm_serve_command(
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
+        f"--request-output-forwarding-mode {request_output_forwarding_mode} "
         f"--config-file {config_path} "
         f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
@@ -221,6 +223,7 @@ def generate_bladellm_serve_command(
     max_instances: int = 4,
     request_output_queue_type: str = "zmq",
     enforce_eager: bool = False,
+    request_output_forwarding_mode: str = "thread",
     **kwargs
 ):
     command = (
@@ -248,6 +251,7 @@ def generate_bladellm_serve_command(
         f"{'--enable-migration' if enable_migration and not enable_pd_disagg else ''} "
         f"--migration-backend {migration_backend} "
         f"--request-output-queue-type {request_output_queue_type} "
+        f"--request-output-forwarding-mode {request_output_forwarding_mode} "
         f"--enable-port-increment "
         f"--max-instances {max_instances} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"

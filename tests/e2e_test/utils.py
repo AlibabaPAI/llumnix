@@ -50,6 +50,7 @@ def generate_vllm_launch_command(
     config_file: str = "configs/vllm.yml",
     enable_migration: bool = True,
     enforce_eager: bool = False,
+    request_output_forwarding_mode: str = "thread",
     **kwargs
 ):
     command = (
@@ -77,6 +78,7 @@ def generate_vllm_launch_command(
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"--config-file {config_file} "
         f"--instance-type {instance_type} "
+        f"--request-output-forwarding-mode {request_output_forwarding_mode} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
@@ -170,6 +172,7 @@ def generate_bladellm_launch_command(
     cuda_visiable_device: Optional[str] = None,
     request_output_queue_type: str = "zmq",
     enforce_eager: bool = False,
+    request_output_forwarding_mode: str = "thread",
     **kwargs
 ):
     command = (
@@ -199,6 +202,7 @@ def generate_bladellm_launch_command(
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_MIGRATION {enable_migration and not enable_pd_disagg} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
+        f"INSTANCE.REQUEST_OUTPUT_FORWARDING_MODE {request_output_forwarding_mode} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     print(f"Going to run command: {command}")

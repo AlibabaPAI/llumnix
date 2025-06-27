@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import asyncio
-import threading
 
 from aiohttp import web
 from aiohttp.web_runner import _raise_graceful_exit
@@ -37,13 +36,6 @@ class APIServerActorBladeLLM(APIServerActor):
             engine_args.host = get_ip_address()
         self.host = engine_args.host
         wait_port_free(entrypoints_args.port)
-
-    def _start_server(self):
-        self.run_server_thread = threading.Thread(
-            target=self._run_server, args=(self.entrypoints_args, self.engine_args, self.entrypoints_context),
-            daemon=True, name="run_server"
-        )
-        self.run_server_thread.start()
 
     def _set_health_api(self):
         self.health_api = ""

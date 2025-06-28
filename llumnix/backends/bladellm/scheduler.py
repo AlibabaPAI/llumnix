@@ -77,8 +77,13 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     def step(self) -> SchedulerStepOutput:
         self.step_counter += 1
-        step_out = super().step()
+        step_out: SchedulerStepOutput = super().step()
         self.llumnix_metrics.scheduler_step_metrics(self)
+
+        # migration may trigger empty scheduler, don't reset engine
+        if step_out.reset and step_out.hunger_timeout_ms and step_out.hunger_timeout_ms > 0:
+            step_out.reset = False
+
         return step_out
 
     # migration related method

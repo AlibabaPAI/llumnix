@@ -170,7 +170,7 @@ def generate_bladellm_launch_command(
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
     engine_disagg_transfer_type: str = "rdma",
-    max_gpu_memory_utilization: float = 0.70,
+    max_gpu_memory_utilization: float = 0.60,
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     cuda_visiable_device: Optional[str] = None,
@@ -232,7 +232,7 @@ def generate_bladellm_serve_command(
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
     engine_disagg_transfer_type: str = "rdma",
-    max_gpu_memory_utilization: float = 0.70, # TODO(s5u13b): Fix OOM in TP=2.
+    max_gpu_memory_utilization: float = 0.60, # TODO(s5u13b): Fix OOM in TP=2.
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
     max_instances: int = 4,

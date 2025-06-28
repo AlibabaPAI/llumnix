@@ -251,7 +251,6 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
             engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
 
         if enable_engine_semi_pd_disagg and len(engine_semi_pd_prompt_output) == 0:
-            await run_bladellm(model, True, False) # magic run_pd_bladellm to initialize kvt
             engine_semi_pd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
 
     ip_ports = []

@@ -29,6 +29,7 @@ from vllm.outputs import RequestOutput
 from vllm.config import VllmConfig
 from vllm import SamplingParams
 from vllm.v1.utils import CoreEngine
+from vllm.v1.request import EngineCoreRequest
 
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
@@ -57,7 +58,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         LlumnixClient.__init__(self, entrypoints_context, loop)
         AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
         self.engine_core_output_stash: Dict[int, Tuple[List[EngineCoreOutput], int, int]] = {}
-            
+
     async def generate(self,
                        prompt: str,
                        sampling_params: SamplingParams,
@@ -129,6 +130,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
 
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)
+        
+    async def add_requset_async(self, request: EngineCoreRequest):
+        await self.generate("", request.sampling_params, request.request_id, engine_core_request=request)
 
     def abort_request(self, request_id: str) -> None:
         instance_id, instance = self._get_instance_for_abort(request_id)

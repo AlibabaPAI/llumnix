@@ -200,6 +200,6 @@ class Llumlet:
             raise e
 
         if asyncio.iscoroutinefunction(executor):
-            return await executor(*args, **kwargs)
+            return await executor(*args)
         else:
-            return executor(*args, **kwargs)
+            return executor(*args)

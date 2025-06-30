@@ -21,7 +21,7 @@ RAY_RPC_TIMEOUT: float = 10.0
 NUM_GPUS_VLLM_GPU_ACTOR = 0.5
 # NOTE(shejiarui): llumnix/scaler.py, llumnix/llumlet.py, llumnix/backends/vllm_v1/executor.py
 # ServerActor, Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
-NUM_GPUS_VLLM_V1_GPU_ACTOR = 0.33
+NUM_GPUS_VLLM_V1_GPU_ACTOR = 0.25 # TODO(shejiarui)
 # llumnix/llumlet.py, llumnix/scaler.py, llumnix/backends/bladellm/worker.py
 # Llumlet, ActorOutputMediator, APIServerActor and Worker share the same 1 gpu in the first bundle of PlacementGroup.
 NUM_GPUS_BLADELLM_GPU_ACTOR = 0.25
@@ -38,7 +38,7 @@ WAIT_PLACEMENT_GROUP_TIMEOUT: float = 5.0
 CHECK_DEPLOYMENT_STATES_INTERVAL: float = 30.0
 WATCH_DEPLOYMENT_INTERVAL: float = 10.0
 INSTANCE_READY_TIMEOUT: float = 300.0
-SERVER_READY_TIMEOUT: float = 60.0
+SERVER_READY_TIMEOUT: float = 30.0
 
 # llumnix/global_scheduler/dispatch_scheduler.py
 DISPATCH_LOG_FREQUENCY: int = 100

@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Coroutine
+from typing import Dict, List, Coroutine, Union, Mapping
 import asyncio
 import time
 import os
@@ -33,13 +33,14 @@ from llumnix.logging.logger import init_logger
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType
-from llumnix.request_output import LlumnixRequestOuput
+from llumnix.request_output import LlumnixRequestOuput, LlumnixRequestOutputs
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.utils import ray_get_with_timeout, exception_wrapper_async
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
+OutputsType = Union[List[LlumnixRequestOuput], LlumnixRequestOutputs]
 
 class RequestOutputForwardingMode(str, Enum):
     ACTOR = "actor"
@@ -53,7 +54,7 @@ class StopPutQueueSignal:
 class BaseOutputMediator(ABC):
     @abstractmethod
     async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, List[LlumnixRequestOuput]],
+                                    server_request_outputs: Mapping[str, OutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         raise NotImplementedError
 
@@ -65,7 +66,7 @@ class BaseOutputMediator(ABC):
         self,
         request_output_queue_type: QueueType,
         request_output_queue_client: QueueClientBase,
-        server_request_outputs: Dict[str, List[LlumnixRequestOuput]],
+        server_request_outputs: Mapping[str, OutputsType],
         server_info_dict: Dict[str, ServerInfo],
     ) -> List[RequestIDType]:
         tasks = []
@@ -106,7 +107,7 @@ class ActorOutputMediator(BaseOutputMediator):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, List[LlumnixRequestOuput]],
+                                    server_request_outputs: Mapping[str, OutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         # fake metric, for alignment
         for req_outputs in server_request_outputs.values():
@@ -142,7 +143,7 @@ class ThreadOutputMediator(BaseOutputMediator):
         self.put_queue_loop_thread.start()
 
     async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, List[LlumnixRequestOuput]],
+                                    server_request_outputs: Mapping[str, OutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         for req_outputs in server_request_outputs.values():
             set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.time())
@@ -171,7 +172,7 @@ class ThreadOutputMediator(BaseOutputMediator):
 
     async def _put_nowait_to_servers(
         self,
-        server_request_outputs: Dict[str, List[LlumnixRequestOuput]],
+        server_request_outputs: Mapping[str, OutputsType],
         server_info_dict: Dict[str, ServerInfo],
     ) -> None:
         aborted_request_ids = await self.put_nowait_to_servers_func(
@@ -212,7 +213,7 @@ class OutputMediator:
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR if backend_type == BackendType.BLADELLM else 0
             self.actor_mediator: ActorOutputMediator = ray.remote(
                 num_cpus=1,
-                num_gpus=num_gpus,
+                num_gpus=0.1,
                 scheduling_strategy=scheduling_strategy,
                 name=f"ActorOutputMediator_{instance_id}"
             )(ActorOutputMediator).remote(instance_id, request_output_queue_type)
@@ -225,8 +226,8 @@ class OutputMediator:
 
     async def put_request_outputs_to_server(
         self,
-        server_request_outputs: List[LlumnixRequestOuput],
-        server_info_dict: List[ServerInfo]
+        server_request_outputs: Mapping[str, OutputsType],
+        server_info_dict: Dict[str, ServerInfo]
     ) -> None:
         if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
             await asyncio_wait_for_with_timeout(
@@ -258,6 +259,14 @@ def init_backend_engine(instance_id: str,
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.vllm.llm_engine import BackendVLLM
         backend_engine = BackendVLLM(instance_id,
+                                     placement_group,
+                                     request_output_queue_type,
+                                     instance_args,
+                                     llumnix_engine_args)
+    elif backend_type == BackendType.VLLM_V1:
+        # pylint: disable=import-outside-toplevel
+        from llumnix.backends.vllm_v1.llm_engine import BackendVLLMV1
+        backend_engine = BackendVLLMV1(instance_id,
                                      placement_group,
                                      request_output_queue_type,
                                      instance_args,

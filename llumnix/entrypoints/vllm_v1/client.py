@@ -11,15 +11,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 import copy
 import math
 import time
 import asyncio
-from typing import Dict, List
+import weakref
+
+from vllm.v1.engine import EngineCoreOutputs, EngineCoreOutput
+from vllm.v1.engine.core_client import AsyncMPClient
+from vllm.v1.executor.abstract import Executor
 
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
+from vllm.config import VllmConfig
 from vllm import SamplingParams
+from vllm.v1.utils import CoreEngine
 
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
@@ -27,31 +34,42 @@ from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.server_info import ServerInfo
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.utils import asyncio_wait_for_with_timeout
-from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
+from llumnix.request_output import LlumnixRequestOutputs
 from llumnix.entrypoints.client import LlumnixClient
 
 logger = init_logger(__name__)
 
-
-class LlumnixClientVLLM(LlumnixClient):
-    def __init__(self, entrypoints_context: EntrypointsContext, loop: asyncio.AbstractEventLoop):
-        self.request_stream: Dict[str, AsyncStream] = {}
-        super().__init__(entrypoints_context, loop)
-
+class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
+    def __init__(
+        self,
+        entrypoints_context: EntrypointsContext,
+        loop: asyncio.AbstractEventLoop,
+        vllm_config: VllmConfig,
+        executor_class: type[Executor],
+        log_stats: bool,
+        client_addresses: dict[str, str] | None = None,
+        client_index: int = 0,
+    ):
+        # self.request_stream: Dict[str, AsyncStream] = {}
+        
+        AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
+        
+        self.engine_core_output_stash: Dict[int, Tuple[List[EngineCoreOutput], int, int]] = {}
+        
+        LlumnixClient.__init__(self, entrypoints_context, loop)
+        
+            
     async def generate(self,
                        prompt: str,
                        sampling_params: SamplingParams,
                        request_id: str,
                        *args,
-                       **kwargs) -> AsyncStream:
+                       **kwargs):
         if sampling_params.n > 1:
             raise ValueError("Unsupported feature: multiple sequence decoding")
         logger.info("Client received request {}".format(request_id))
         # pylint: disable=unexpected-keyword-arg
-        results_generator = AsyncStream(request_id, cancel=self.abort_request)
-        self.request_stream[request_id] = results_generator
         server_info_copy = copy.deepcopy(self.server_info)
-
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
             await self._generate_by_manager(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
@@ -62,10 +80,7 @@ class LlumnixClientVLLM(LlumnixClient):
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
-                return results_generator
             await self._generate_by_instance(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
-
-        return results_generator
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,
@@ -126,58 +141,161 @@ class LlumnixClientVLLM(LlumnixClient):
         else:
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
                 request_id, instance_id, instance))
-
+            
     async def get_request_outputs_loop(self):
+        """Process output order and put EngineCoreOutputs to local queue"""
         while True:
-            request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
-            for request_response in request_responses:
-                request_output: RequestOutput = request_response.get_engine_output()
-                set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
-                request_id = request_response.request_id
-                # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-                if request_id not in self.request_stream:
-                    continue
-                # Update when request_id is in self.request_streams.
-                self.request_instance[request_id] = request_response.instance_id
-
-                processed_output = self._process_output_order(request_id, request_output)
+            llumnix_request_outputs: LlumnixRequestOutputs = await self.request_output_queue.get()
+            outputs: List[EngineCoreOutput] = []
+            for engine_core_output in llumnix_request_outputs.engine_outputs.outputs:
+                set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
+                request_id = engine_core_output.request_id
+                self.request_instance[request_id] = llumnix_request_outputs.instance_id
+                processed_output = self._process_output_order(
+                    request_id, engine_core_output,
+                    llumnix_request_outputs.current_completion_tokens_dict
+                )
                 if not processed_output:
                     continue
-                self.request_stream[request_id].put(processed_output)
-                if request_output.finished:
+                outputs.extend(processed_output)
+                last_output = processed_output[-1]
+                self.request_stream_last_completion_tokens[request_id] = \
+                    llumnix_request_outputs.current_completion_tokens_dict[request_id]
+                if engine_core_output.finished:
                     logger.info("Client finished request {}.".format(request_id))
                     self._clear_client_request_states(request_id)
+            llumnix_request_outputs.engine_outputs.outputs = outputs
+            if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:
+                self.outputs_queue.put_nowait(llumnix_request_outputs)
+    
+    async def get_output_async(self) -> LlumnixRequestOutputs:
+        self._ensure_output_queue_task()
+        # If an exception arises in process_outputs_socket task,
+        # it is forwarded to the outputs_queue so we can raise it
+        # from this (run_output_handler) task to shut down the server.
+        assert self.outputs_queue is not None
+        outputs = await self.outputs_queue.get()
+        logger.debug("get outputs: %s", str(outputs))
+        if isinstance(outputs, Exception):
+            raise self._format_exception(outputs) from None
+        return outputs
+    
+    def _ensure_output_queue_task(self):
+        resources = self.resources
+        if resources.output_queue_task is not None:
+            return
+        
+        outputs_queue = self.outputs_queue # AsyncMPClient, AsyncMPClient -> AsyncLLM
+        request_output_queue = self.request_output_queue # LlumnixClient, Llumlet -> LlumnixClient
+        request_instance = self.request_instance # LlumnixClient
+        _self_ref = weakref.ref(self)
+        async def get_request_outputs_loop():
+            """Process output order and put EngineCoreOutputs to local queue"""
+            try:
+                while True:
+                    # Check if self is alive
+                    _self = _self_ref()
+                    if not _self:
+                        # Client has been garbage collected, abort.
+                        break
+                    llumnix_request_outputs: LlumnixRequestOutputs = await request_output_queue.get()
+                    outputs: List[EngineCoreOutput] = []
+                    for engine_core_output in llumnix_request_outputs.engine_outputs.outputs:
+                        set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
+                        request_id = engine_core_output.request_id
+                        request_instance[request_id] = llumnix_request_outputs.instance_id
+                        processed_output = _self._process_output_order(
+                            request_id, engine_core_output,
+                            llumnix_request_outputs.current_completion_tokens_dict
+                        )
+                        if not processed_output:
+                            continue
+                        outputs.extend(processed_output)
+                        if engine_core_output.finished:
+                            logger.info("Client finished request {}.".format(request_id))
+                            _self._clear_client_request_states(request_id)
+                    llumnix_request_outputs.engine_outputs.outputs = outputs
+                    if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:
+                        outputs_queue.put_nowait(llumnix_request_outputs)
+            except Exception as e:
+                outputs_queue.put_nowait(e)
+        
+        resources.output_queue_task = asyncio.create_task(
+            get_request_outputs_loop(), name="EngineCoreOutputQueueTask")
 
     def _clear_client_request_states(self, request_id: str):
         super()._clear_client_request_states(request_id)
-        if request_id in self.request_stream:
-            self.request_stream[request_id].finish()
-            del self.request_stream[request_id]
-        else:
-            logger.error("Request {} not found.".format(request_id))
+        self.engine_core_output_stash.pop(request_id, None)
 
-    def _process_output_order(self, request_id: str, request_output: RequestOutput) -> RequestOutput:
-        current_completion_tokens = None
-        if hasattr(request_output, "outputs") and len(request_output.outputs) > 0:
-            current_completion_tokens = len(request_output.outputs[-1].token_ids)
-
+    def _process_output_order(
+        self,
+        request_id: str,
+        engine_core_output: EngineCoreOutput,
+        current_completion_tokens_dict: Dict[str, int],
+    ) -> List[EngineCoreOutput]:
+        current_completion_tokens = current_completion_tokens_dict.get(request_id)
+        current_new_tokens = len(engine_core_output.new_token_ids)
+        
         if not current_completion_tokens:
-            # request_output has no outputs, return the request_output directly.
-            return request_output
-
+            # No usage info, return the request_output directly.
+            return [engine_core_output]
+        
         last_completion_tokens = self.request_stream_last_completion_tokens.get(request_id, 0)
-        if current_completion_tokens <= last_completion_tokens:
-            # process the out-of-order output
+        support_completion_tokens = last_completion_tokens + current_new_tokens
+        if current_completion_tokens > support_completion_tokens:
             logger.info(
-                "request {} out-of-order output, last num completion tokens is {}"
-                ", num current completion tokens is {}, skip current output...".format(
-                    request_id, last_completion_tokens, current_completion_tokens
-                )
+                "request {} out-of-order output, last completion tokens is {}"
+                ", current completion tokens is {}, current tokens is {}, stash current output..."
+                .format(request_id, last_completion_tokens, current_completion_tokens, current_new_tokens)
             )
-            if hasattr(request_output, 'request_timestamps'):
-                logger.info("out-of-order request({}) output timestamps: {}".format(
-                    request_id, request_output.request_timestamps.to_latency_breakdown_dict()))
-            return None
-        self.request_stream_last_completion_tokens[request_id] = current_completion_tokens
-
-        return request_output
+            if hasattr(engine_core_output, 'request_timestamps'):
+                logger.info(
+                    "out-of-order request({}) output timestamps: {}".format(
+                    request_id, engine_core_output.request_timestamps.to_latency_breakdown_dict()
+                    )
+                )
+            self.engine_core_output_stash.setdefault(request_id, []).append(
+                (engine_core_output, current_completion_tokens, current_new_tokens)
+            )
+            return []
+        
+        if current_completion_tokens == support_completion_tokens:
+            if not self.engine_core_output_stash.get(request_id):
+                # no history output in stash
+                return [engine_core_output]
+            
+            output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
+            output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
+            last_correct_output_index = 0
+            for output, completion_tokens, new_tokens in output_stash:
+                if completion_tokens > current_completion_tokens + new_tokens:
+                    break
+                last_correct_output_index += 1
+                current_completion_tokens = completion_tokens
+            if last_correct_output_index == 0:
+                return [engine_core_output]
+            
+            res = [engine_core_output] + [output_info[0] for output_info in output_stash[:last_correct_output_index]]
+            self.engine_core_output_stash[request_id] = output_stash[last_correct_output_index:]
+            
+            return res
+        
+        if current_completion_tokens == -1:
+            # last output of request
+            if not self.engine_core_output_stash.get(request_id):
+                # no history output in stash
+                return [engine_core_output]
+            
+            output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
+            output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
+            # drain output_stash
+            res = [engine_core_output] + [output_info[0] for output_info in output_stash]
+            self.engine_core_output_stash[request_id] = []
+            
+            return res
+            
+        return [engine_core_output]
+    
+    async def call_utility_async(self, method: str, *args) -> Any:
+        instance = list(self.instances.values())[0]
+        return await instance.call_engine_utility_async(method, *args)

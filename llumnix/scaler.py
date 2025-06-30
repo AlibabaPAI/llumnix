@@ -511,6 +511,18 @@ class Scaler:
                 manager,
                 instance,
             )
+        elif backend_type == BackendType.VLLM_V1:
+            from llumnix.entrypoints.vllm_v1.api_server_actor import APIServerActorVLLMV1
+            api_server = APIServerActorVLLMV1.from_args(
+                0,
+                instance_id,
+                placement_group,
+                entrypoints_args,
+                engine_args,
+                scaler,
+                manager,
+                instance,
+            )
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
             api_server = APIServerActorVLLM.from_args(

@@ -48,7 +48,7 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
         return pickle.dumps(engine_args)
 
     def load_engine_args(self):
-        engine_args = pickle.load(self.engine_args)
+        engine_args = pickle.loads(self.engine_args)
         return engine_args
 
     def get_world_size(self):

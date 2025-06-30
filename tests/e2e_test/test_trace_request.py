@@ -16,7 +16,7 @@ import random
 import subprocess
 import asyncio
 import json
-import aiohttp
+import requests
 import pytest
 
 from llumnix.utils import get_ip_address, wait_port_free
@@ -133,37 +133,50 @@ async def test_request_trace(
 
     for api in engine_apis[engine]:
         url = f"{endpoint}{api}"
-        timeout = aiohttp.ClientTimeout(total=60)
 
         request = get_requests(api, is_stream)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            headers = {"X-Llumnix-Trace": "true"} if enable_request_trace else {}
-            async with session.post(url, json=request, headers=headers) as resp:
-                if not is_stream:
-                    output = await resp.json()
-                    if enable_request_trace:
-                        assert 'llumnix_trace_info' in output and output['llumnix_trace_info'], 'llumnix debug info is missing'
-                    if not enable_request_trace:
-                        assert 'llumnix_trace_info' not in output, 'reqeust trace mode is not enabled but return llumnix trace info'
-                if is_stream:
-                    has_trace_info = False
-                    async for chunk_bytes in resp.content:
-                        chunk = chunk_bytes.decode("utf-8").removeprefix("data:")
-                        try:
-                            if chunk.strip() in ("", "[DONE]"):
-                                continue
-                            chunk_json = json.loads(chunk.strip())
-                            if (
-                                "llumnix_trace_info" in chunk_json
-                                and chunk_json["llumnix_trace_info"]
-                            ):
-                                has_trace_info = True
-                        except json.JSONDecodeError:
-                            print(f"json decode error, {chunk.strip()}")
-                    if enable_request_trace:
-                        assert has_trace_info, 'llumnix trace info is missing'
-                    if not enable_request_trace:
-                        assert not has_trace_info, 'reqeust trace mode is not enabled but return llumnix trace info'
+        headers = {"X-Llumnix-Trace": "true"} if enable_request_trace else {}
+        with requests.post(
+            url, json=request, stream=is_stream, headers=headers, timeout=60
+        ) as resp:
+            if not is_stream:
+                output = resp.json()
+                if enable_request_trace:
+                    assert (
+                        "llumnix_trace_info" in output and output["llumnix_trace_info"]
+                    ), "llumnix debug info is missing"
+                if not enable_request_trace:
+                    assert (
+                        "llumnix_trace_info" not in output
+                    ), "reqeust trace mode is not enabled but return llumnix trace info"
+            if is_stream:
+                has_trace_info = False
+                for chunk_bytes in resp.iter_content(
+                    chunk_size=None, decode_unicode=False
+                ):
+                    chunk = (
+                        chunk_bytes.decode("utf-8")
+                        .removeprefix("data:")
+                        .replace("\x00", "")
+                        .strip()
+                    )
+                    try:
+                        if chunk in ("", "[DONE]"):
+                            continue
+                        chunk_json = json.loads(str(chunk.strip()))
+                        if (
+                            "llumnix_trace_info" in chunk_json
+                            and chunk_json["llumnix_trace_info"]
+                        ):
+                            has_trace_info = True
+                    except json.JSONDecodeError:
+                        print(f"json decode error, {chunk.strip()}")
+                if enable_request_trace:
+                    assert has_trace_info, "llumnix trace info is missing"
+                if not enable_request_trace:
+                    assert (
+                        not has_trace_info
+                    ), "reqeust trace mode is not enabled but return llumnix trace info"
     await asyncio.sleep(1)
 
     test_times += 1

@@ -294,10 +294,9 @@ def test_load_registered_service(ray_env, load_registered_service, enable_pd_dis
     )
     # Scaler will get scaler actor handle inside the constructor.
     _ = DummyScaler.options(name=get_scaler_name()).remote()
-    scaler = Scaler(None, manager_args, None, None, None)
+    scaler = Scaler(None, manager_args, None, None, LaunchArgs(backend_type=BackendType.VLLM, launch_mode=LaunchMode.LOCAL))
     for instance_type in instance_type_list:
-        get_engine_args = scaler.llumnix_engine_args_factory.gen_next_engine_args(
-            BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType(instance_type)), 0)
+        get_engine_args = scaler.llumnix_engine_args_factory.gen_next_engine_args(engine_args, instance_type, 0)
         if load_registered_service:
             assert get_engine_args.load_engine_args().model == instance_type
         else:

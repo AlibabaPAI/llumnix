@@ -128,45 +128,11 @@ class LlumnixEngineArgsFactory:
                     instance_type, self.load_registered_service_path
                 )
 
+    @abstractmethod
     def gen_next_engine_args(
-        self,
-        backend_type: BackendType,
-        current_engine_args: LlumnixEngineArgs,
-        next_instance_args: 'InstanceArgs',
-        port_offset: int,
+        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, 'InstanceType']
     ) -> LlumnixEngineArgs:
-        instance_type = next_instance_args.instance_type
-        if self.load_registered_service:
-            current_engine_args = self.engine_args_dict[instance_type]
-
-        if backend_type == BackendType.BLADELLM:
-            # pylint: disable=import-outside-toplevel
-            from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
-            from llumnix.instance_info import InstanceType
-
-            next_engine_args = BladeLLMEngineArgs(current_engine_args)
-            if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
-                next_engine_args.revised_args.disagg_options_inst_role = (
-                    instance_type.value if isinstance(instance_type, InstanceType)
-                    else instance_type
-                )
-            if self.pdd_config.enable_engine_semi_pd_disagg and not self.load_registered_service:
-                next_engine_args.revised_args.semi_pd_prefill_server_port += port_offset
-            return next_engine_args
-
-        if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
-            # pylint: disable=import-outside-toplevel
-            from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
-            next_engine_args = VLLMEngineArgs(current_engine_args, current_engine_args.backend_type)
-            return next_engine_args
-
-        if backend_type == BackendType.VLLM_V1:
-            # pylint: disable=import-outside-toplevel
-            from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
-            next_engine_args = VLLMV1EngineArgs(current_engine_args, current_engine_args.backend_type)
-            return next_engine_args
-
-        raise TypeError("Unsupported engine args type when generating next engine args")
+        raise NotImplementedError
 
 
 def ensure_args_default_none(args):

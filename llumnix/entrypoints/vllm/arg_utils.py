@@ -19,27 +19,37 @@ from vllm.config import EngineConfig, ParallelConfig
 
 from llumnix.logging.logger import init_logger
 from llumnix.backends.backend_interface import BackendType
-from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, InstanceArgs,
+from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixEngineArgsFactory,
                                LlumnixArgumentParser, LlumnixEngineArgs, load_registered_engine_args,
                                init_llumnix_args, post_init_llumnix_args)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.internal_config import MigrationConfig
+from llumnix.instance_info import InstanceType
 from llumnix.config import LlumnixConfig
 
 logger = init_logger(__name__)
 
 
+class VLLMEngineArgsFactory(LlumnixEngineArgsFactory):
+    # pylint: disable=unused-argument
+    def gen_next_engine_args(
+        self,
+        current_engine_args: LlumnixEngineArgs,
+        instance_type: Union[str, InstanceType]
+    ) -> LlumnixEngineArgs:
+        if self.load_registered_service:
+            current_engine_args = self.engine_args_dict[instance_type]
+        return copy.deepcopy(current_engine_args)
+
+
 class VLLMEngineArgs(LlumnixEngineArgs):
     def __init__(self,
-                 engine_args: Union[AsyncEngineArgs, LlumnixEngineArgs],
+                 engine_args: AsyncEngineArgs,
                  backend_type: BackendType = BackendType.VLLM) -> None:
         engine_args = self._get_engine_args(engine_args)
         super().__init__(engine_args=engine_args, backend_type=backend_type)
 
-    def _get_engine_args(self,
-                         engine_args: Union[AsyncEngineArgs, LlumnixEngineArgs]):
-        if isinstance(engine_args, LlumnixEngineArgs):
-            return copy.deepcopy(engine_args.engine_args)
+    def _get_engine_args(self, engine_args: AsyncEngineArgs):
         return engine_args
 
     def load_engine_args(self):

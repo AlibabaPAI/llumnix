@@ -116,19 +116,20 @@ class Scaler:
             self.launch_mode: LaunchMode = launch_args.launch_mode
             self.backend_type: BackendType = launch_args.backend_type
 
+            engine_args_factory_cls = self._get_engine_args_factory_cls(self.backend_type)
+            self.llumnix_engine_args_factory: LlumnixEngineArgsFactory = engine_args_factory_cls(
+                enable_port_increment=self.enable_port_increment,
+                load_registered_service=self.load_registered_service,
+                load_registered_service_path=self.load_registered_service_path,
+                pdd_config=self.pdd_config,
+            )
+
         if self.enable_port_increment:
             self.port_offset = 0
             if self.enable_port_offset_store:
                 # TODO(s5u13b): Do not use ray interval kv.
                 value = get_data_from_ray_internal_kv("scaler.port_offset")
                 self.port_offset = int(value)
-
-        self.llumnix_engine_args_factory = LlumnixEngineArgsFactory(
-            enable_port_increment=self.enable_port_increment,
-            load_registered_service=self.load_registered_service,
-            load_registered_service_path=self.load_registered_service_path,
-            pdd_config=self.pdd_config,
-        )
 
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
@@ -162,6 +163,24 @@ class Scaler:
             asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
             if self.pdd_config.enable_pd_disagg:
                 asyncio.create_task(self._check_pd_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
+
+    def _get_engine_args_factory_cls(self, instance_type: BackendType) -> LlumnixEngineArgsFactory:
+        engine_args_factory_cls = None
+
+        # pylint: disable=import-outside-toplevel
+        if instance_type == BackendType.VLLM:
+            from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgsFactory
+            engine_args_factory_cls = VLLMEngineArgsFactory
+        elif instance_type == BackendType.VLLM_V1:
+            from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgsFactory
+            engine_args_factory_cls = VLLMV1EngineArgsFactory
+        elif instance_type == BackendType.BLADELLM:
+            from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgsFactory
+            engine_args_factory_cls = BladeLLMEngineArgsFactory
+        else:
+            raise ValueError("Unsupported instance type: {}.".format(instance_type))
+
+        return engine_args_factory_cls
 
     @classmethod
     def from_args(cls,
@@ -466,7 +485,6 @@ class Scaler:
         next_instance_args = await self._get_next_instance_args(instance_args, instance_type)
         next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
         next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
-            backend_type=backend_type,
             current_engine_args=engine_args,
             next_instance_args=next_instance_args,
             port_offset=self.port_offset,

@@ -114,5 +114,5 @@ DECODE_COMPUTE_BOUND_BATCH_SIZE: float = 128
 
 # debug mode
 LLUMNIX_TRACE_REQUEST = "llumnix_trace_request"
-REQUEST_TIMESTAMPS = 'request_timestamps'
+REQUEST_TIMESTAMPS_ATTR_STR = 'request_timestamps'
 LLUMNIX_TRACE_HEADER = 'X-Llumnix-Trace'

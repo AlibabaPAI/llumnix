@@ -26,7 +26,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.server_info import ServerInfo
-from llumnix.constants import REQUEST_TIMESTAMPS, WAIT_MANAGER_INTERVAL, LLUMNIX_TRACE_REQUEST
+from llumnix.constants import REQUEST_TIMESTAMPS_ATTR_STR, WAIT_MANAGER_INTERVAL, LLUMNIX_TRACE_REQUEST
 from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception, is_traced_request, enable_request_trace, log_instance_exception
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.entrypoints.client import LlumnixClient
@@ -144,7 +144,7 @@ class LlumnixClientVLLM(LlumnixClient):
                 for request_response in request_responses:
                     request_output: RequestOutput = request_response.get_engine_output()
                     if request_response.request_timestamps is not None:
-                        setattr(request_output, REQUEST_TIMESTAMPS, request_response.request_timestamps)
+                        setattr(request_output, REQUEST_TIMESTAMPS_ATTR_STR, request_response.request_timestamps)
                         set_timestamp(request_output, 'api_server_get_queue_timestamp', time.perf_counter())
                     request_id = request_response.request_id
                     # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.

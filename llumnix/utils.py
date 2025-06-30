@@ -32,7 +32,7 @@ import ray
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
-from llumnix.constants import RAY_RPC_TIMEOUT, LLUMNIX_TRACE_REQUEST, REQUEST_TIMESTAMPS
+from llumnix.constants import RAY_RPC_TIMEOUT, LLUMNIX_TRACE_REQUEST, REQUEST_TIMESTAMPS_ATTR_STR
 
 
 logger = init_logger(__name__)
@@ -424,7 +424,7 @@ def is_traced_request(
     if isinstance(item, dict):
         return item.get(LLUMNIX_TRACE_REQUEST, False)
     return (
-        hasattr(item, REQUEST_TIMESTAMPS) and getattr(item, REQUEST_TIMESTAMPS)
+        hasattr(item, REQUEST_TIMESTAMPS_ATTR_STR) and getattr(item, REQUEST_TIMESTAMPS_ATTR_STR)
     ) or (hasattr(item, LLUMNIX_TRACE_REQUEST) and getattr(item, LLUMNIX_TRACE_REQUEST))
 
 

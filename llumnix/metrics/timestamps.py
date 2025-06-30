@@ -13,7 +13,7 @@
 
 from dataclasses import dataclass
 from typing import Dict, Any, Iterable
-from llumnix.constants import REQUEST_TIMESTAMPS
+from llumnix.constants import REQUEST_TIMESTAMPS_ATTR_STR
 
 
 def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
@@ -25,7 +25,7 @@ def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
         _set_timestamp_single_obj(item, timestamp_attr, timestamp)
 
 def _set_timestamp_single_obj(item: Any, timestamp_attr: str, timestamp: float):
-    if hasattr(item, REQUEST_TIMESTAMPS):
+    if hasattr(item, REQUEST_TIMESTAMPS_ATTR_STR):
         if hasattr(item.request_timestamps, timestamp_attr):
             setattr(item.request_timestamps, timestamp_attr, timestamp)
     elif hasattr(item, timestamp_attr):

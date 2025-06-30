@@ -43,10 +43,10 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
-from llumnix.ray_utils import get_instance_name, asyncio_wait_for_with_timeout
+from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT, REQUEST_TIMESTAMPS
+from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT, REQUEST_TIMESTAMPS_ATTR_STR
 from llumnix.utils import make_async, BackendType, is_traced_request, RequestIDType, MigrationResponse, asyncio_wait_for_ray_remote_call_with_timeout
 from llumnix.request_output import LlumnixRequestOuput
 
@@ -262,9 +262,9 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         for request_output, server_info in zip(request_outputs, server_infos):
             server_id = server_info.server_id
             request_timestamps = None
-            if hasattr(request_output, REQUEST_TIMESTAMPS):
-                request_timestamps = getattr(request_output, REQUEST_TIMESTAMPS)
-                delattr(request_output, REQUEST_TIMESTAMPS)
+            if hasattr(request_output, REQUEST_TIMESTAMPS_ATTR_STR):
+                request_timestamps = getattr(request_output, REQUEST_TIMESTAMPS_ATTR_STR)
+                delattr(request_output, REQUEST_TIMESTAMPS_ATTR_STR)
             llumnix_resquest_output = LlumnixRequestOuput(
                 request_output.request_id, self.instance_id, request_output, request_timestamps
             )

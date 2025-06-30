@@ -38,11 +38,9 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
             backend_type=backend_type,
         )
 
-        # pylint: disable=import-outside-toplevel
-        from blade_llm.service.args import ServingArgs
+        self.revised_args = RevisedArgs() if not hasattr(engine_args, 'revised_args') else engine_args.revised_args
 
-        self.revised_args = RevisedArgs() if isinstance(engine_args, ServingArgs) else engine_args.revised_args
-        if isinstance(engine_args, ServingArgs):
+        if hasattr(engine_args, 'semi_pd_options') and engine_args.semi_pd_options:
             self.revised_args.semi_pd_prefill_server_port = engine_args.semi_pd_options.prefill_server_port
 
     def _get_world_size(self, engine_args: Union["ServingArgs", LlumnixEngineArgs]):

@@ -31,9 +31,7 @@ class LlumnixRequestOuput:
 class LlumnixRequestOutputs:
     """Wrapper of vLLM v1 EngineCoreOutputs"""
     def __init__(self, instance_id: str, engine_outputs: Any, 
-                 current_completion_tokens_dict: Dict[RequestIDType, int],
                  request_timestamps_dict: Dict[RequestIDType, RequestTimestamps] = None):
         self.instance_id = instance_id
         self.engine_outputs = engine_outputs
-        self.current_completion_tokens_dict = current_completion_tokens_dict
         self.request_timestamps_dict = request_timestamps_dict

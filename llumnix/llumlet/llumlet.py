@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import asyncio
-from typing import List, Union, Iterable
+from typing import List, Union, Iterable, Any
 import time
 
 import ray
@@ -182,3 +182,19 @@ class Llumlet:
     async def execute_migration_method_async(self, method, *args, **kwargs):
         executor = getattr(self.migration_coordinator, method)
         return await executor(*args, **kwargs)
+    
+    async def call_engine_utility_async(self, method: str, *args) -> Any:
+        # As per the hint, the target object containing utility functions
+        # is self.backend_engine.engine.
+        target_engine = self.backend_engine.engine
+
+        try:
+            executor = getattr(target_engine, method)
+        except AttributeError as e:
+            logger.error(f"Utility method '{method}' not found on backend engine {target_engine}.")
+            raise e
+
+        if asyncio.iscoroutinefunction(executor):
+            return await executor(*args, **kwargs)
+        else:
+            return executor(*args, **kwargs)

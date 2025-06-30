@@ -79,7 +79,7 @@ def test_gen_next_engine_args_vllm_from_registered_service():
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.DECODE)
+        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.DECODE), 0
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(

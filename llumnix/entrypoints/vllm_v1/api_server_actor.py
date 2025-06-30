@@ -12,27 +12,16 @@
 # limitations under the License.
 
 import signal
-import multiprocessing
-import threading
 from dataclasses import fields
 
 import uvloop
 
 import ray
-from ray.util.placement_group import PlacementGroup
-from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-
-# from vllm.v1.engine.async_llm import AsyncLLM
-# from vllm.v1.executor.abstract import Executor
 
 from llumnix.arg_utils import VLLMV1EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.entrypoints.api_server_actor import APIServerActor
-from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
-from llumnix.ray_utils import (log_actor_ray_info, get_server_name,
-                               get_scaler_name, get_manager_name,
-                               get_instance_name)
 from llumnix.logging.logger import init_logger
 from llumnix.utils import get_ip_address
 
@@ -91,20 +80,6 @@ class APIServerActorVLLMV1(APIServerActor):
         uvloop.run(
             run_server_worker(self.listen_address, self.sock, 
                               serve_args, client_config))
-
-    # def run_server_proc(self,
-    #                     listen_address, 
-    #                     sock, 
-    #                     args, 
-    #                     client_config=None,
-    #                     **uvicorn_kwargs) -> None:
-    #     # Set global variable in vLLM
-    #     import vllm.v1.engine.core_client
-    #     from vllm.entrypoints.openai.api_server import run_server_worker
-    #     vllm.v1.engine.core_client.entrypoints_context = self.entrypoints_context
-    #     uvloop.run(
-    #         run_server_worker(listen_address, sock, 
-    #                         args, client_config, **uvicorn_kwargs))
 
     def _stop_server(self):
         def stop_server():

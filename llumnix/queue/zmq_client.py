@@ -139,7 +139,8 @@ class ZmqClient(QueueClientBase):
         set_timestamp(item, 'queue_client_send_timestamp', time.time())
         await self._send_one_way_rpc_request(
                         request=RPCPutNoWaitQueueRequest(item=item),
-                        ip=server_info.request_output_queue_ip,
+                        # ip=server_info.request_output_queue_ip,
+                        ip="127.0.0.1", # TODO(shejiarui) fix this
                         port=server_info.request_output_queue_port,
                         error_message="Unable to put items into queue.")
 

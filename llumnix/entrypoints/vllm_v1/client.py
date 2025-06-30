@@ -131,7 +131,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)
         
-    async def add_requset_async(self, request: EngineCoreRequest):
+    async def add_requset_async(self, request: EngineCoreRequest) -> None:
         await self.generate("", request.sampling_params, request.request_id, engine_core_request=request)
 
     def abort_request(self, request_id: str) -> None:
@@ -163,7 +163,6 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 self.request_instance[request_id] = llumnix_request_outputs.instance_id
                 processed_output = self._process_output_order(
                     request_id, engine_core_output,
-                    llumnix_request_outputs.current_completion_tokens_dict
                 )
                 if not processed_output:
                     continue
@@ -176,10 +175,10 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                     self._clear_client_request_states(request_id)
             llumnix_request_outputs.engine_outputs.outputs = outputs
             if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:
-                self.outputs_queue.put_nowait(llumnix_request_outputs)
+                self.outputs_queue.put_nowait(llumnix_request_outputs.engine_outputs)
     
     async def get_output_async(self) -> LlumnixRequestOutputs:
-        self._ensure_output_queue_task()
+        # self._ensure_output_queue_task()
         # If an exception arises in process_outputs_socket task,
         # it is forwarded to the outputs_queue so we can raise it
         # from this (run_output_handler) task to shut down the server.
@@ -241,15 +240,16 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         self,
         request_id: str,
         engine_core_output: EngineCoreOutput,
-        current_completion_tokens_dict: Dict[str, int],
     ) -> List[EngineCoreOutput]:
-        current_completion_tokens = current_completion_tokens_dict.get(request_id)
-        current_new_tokens = len(engine_core_output.new_token_ids)
-        
+        current_completion_tokens = None
+        if hasattr(engine_core_output, 'num_output_tokens'):
+            engine_core_output.num_output_tokens
+            
         if not current_completion_tokens:
-            # No usage info, return the request_output directly.
+            # No num_output_tokens info, return the engine_core_output directly.
             return [engine_core_output]
-        
+            
+        current_new_tokens = len(engine_core_output.new_token_ids)
         last_completion_tokens = self.request_stream_last_completion_tokens.get(request_id, 0)
         support_completion_tokens = last_completion_tokens + current_new_tokens
         if current_completion_tokens > support_completion_tokens:
@@ -264,9 +264,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                     request_id, engine_core_output.request_timestamps.to_latency_breakdown_dict()
                     )
                 )
-            self.engine_core_output_stash.setdefault(request_id, []).append(
-                (engine_core_output, current_completion_tokens, current_new_tokens)
-            )
+            self.engine_core_output_stash.setdefault(request_id, []).append(engine_core_output)
             return []
         
         if current_completion_tokens == support_completion_tokens:
@@ -274,33 +272,21 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 # no history output in stash
                 return [engine_core_output]
             
-            output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
-            output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
+            output_stash: List[EngineCoreOutput] = self.engine_core_output_stash[request_id]
+            output_stash.sort(key=lambda x: x.num_output_tokens) # sort by completion_tokens
             last_correct_output_index = 0
-            for output, completion_tokens, new_tokens in output_stash:
+            for output in output_stash:
+                new_tokens = len(output.new_token_ids)
+                completion_tokens = output.num_output_tokens
                 if completion_tokens > current_completion_tokens + new_tokens:
                     break
                 last_correct_output_index += 1
-                current_completion_tokens = completion_tokens
+                current_completion_tokens = output.num_output_tokens
             if last_correct_output_index == 0:
                 return [engine_core_output]
             
-            res = [engine_core_output] + [output_info[0] for output_info in output_stash[:last_correct_output_index]]
+            res = [engine_core_output] + [output for output in output_stash[:last_correct_output_index]]
             self.engine_core_output_stash[request_id] = output_stash[last_correct_output_index:]
-            
-            return res
-        
-        if current_completion_tokens == -1:
-            # last output of request
-            if not self.engine_core_output_stash.get(request_id):
-                # no history output in stash
-                return [engine_core_output]
-            
-            output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
-            output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
-            # drain output_stash
-            res = [engine_core_output] + [output_info[0] for output_info in output_stash]
-            self.engine_core_output_stash[request_id] = []
             
             return res
             

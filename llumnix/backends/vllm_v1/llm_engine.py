@@ -45,7 +45,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import RequestOutputForwardingMode, OutputMediator
 from llumnix.utils import make_async, ray_get_with_timeout
-from llumnix.ray_utils import get_instance_name, asyncio_wait_for_with_timeout
+from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
@@ -138,7 +138,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         latency_mem: Optional[LatencyMemData] = None,
     ) -> "AsyncEngineCoreProcLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
-        # FIXME(zhaozhiyu): I don't where speculative_config is set, just overload it
+        # FIXME(zhaozhiyu): don't known where speculative_config is set, just overload it
         engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
@@ -210,22 +210,9 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             server_info = self.server_info_table.get_server_info(client_index)
             server_id = server_info.server_id
             
-            current_completion_tokens_dict = {}
-            for engine_core_output in engine_core_outputs.outputs:
-                request_id = engine_core_output.request_id
-                request = self.scheduler.requests.get(request_id)
-                if not request:
-                    # request finished, this output is the last
-                    # FIXME(zhaozhiyu): deal with last output properly
-                    current_completion_tokens_dict[request_id] = -1
-                else:
-                    current_completion_tokens_dict[request_id] = len(request.output_token_ids)
-                    logger.info("%s", f"request {request_id}, current completion tokens: {len(request.output_token_ids)}")
-            
             server_request_outputs[server_id] = LlumnixRequestOutputs(
                 instance_id=self.instance_id,
                 engine_outputs=engine_core_outputs,
-                current_completion_tokens_dict=current_completion_tokens_dict,
                 request_timestamps_dict=None,
             )
             if server_id not in server_info_dict:

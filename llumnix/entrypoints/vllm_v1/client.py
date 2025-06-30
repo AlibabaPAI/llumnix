@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 import copy
 import math
 import time
@@ -28,6 +28,7 @@ from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
 from vllm.config import VllmConfig
 from vllm import SamplingParams
+from vllm.v1.utils import CoreEngine
 
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
@@ -53,12 +54,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     ):
         # self.request_stream: Dict[str, AsyncStream] = {}
         
-        AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
-        
-        self.engine_core_output_stash: Dict[str, List[EngineCoreOutput]] = {}
-        
         LlumnixClient.__init__(self, entrypoints_context, loop)
-        
+        AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
+        self.engine_core_output_stash: Dict[int, Tuple[List[EngineCoreOutput], int, int]] = {}
             
     async def generate(self,
                        prompt: str,
@@ -128,11 +126,6 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             if instance_id in self.instances:
                 self._handle_generate_by_instance_error(request_id, instance_id, e)
             return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
-        
-    async def abort_requests_async(self, request_ids: list[str]):
-        for request_id in request_ids:
-            await self._abort(request_id)
-            
 
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)
@@ -166,6 +159,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 self.request_instance[request_id] = llumnix_request_outputs.instance_id
                 processed_output = self._process_output_order(
                     request_id, engine_core_output,
+                    llumnix_request_outputs.current_completion_tokens_dict
                 )
                 if not processed_output:
                     continue
@@ -181,6 +175,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 self.outputs_queue.put_nowait(llumnix_request_outputs)
     
     async def get_output_async(self) -> LlumnixRequestOutputs:
+        self._ensure_output_queue_task()
         # If an exception arises in process_outputs_socket task,
         # it is forwarded to the outputs_queue so we can raise it
         # from this (run_output_handler) task to shut down the server.
@@ -191,6 +186,48 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             raise self._format_exception(outputs) from None
         return outputs
     
+    def _ensure_output_queue_task(self):
+        resources = self.resources
+        if resources.output_queue_task is not None:
+            return
+        
+        outputs_queue = self.outputs_queue # AsyncMPClient, AsyncMPClient -> AsyncLLM
+        request_output_queue = self.request_output_queue # LlumnixClient, Llumlet -> LlumnixClient
+        request_instance = self.request_instance # LlumnixClient
+        _self_ref = weakref.ref(self)
+        async def get_request_outputs_loop():
+            """Process output order and put EngineCoreOutputs to local queue"""
+            try:
+                while True:
+                    # Check if self is alive
+                    _self = _self_ref()
+                    if not _self:
+                        # Client has been garbage collected, abort.
+                        break
+                    llumnix_request_outputs: LlumnixRequestOutputs = await request_output_queue.get()
+                    outputs: List[EngineCoreOutput] = []
+                    for engine_core_output in llumnix_request_outputs.engine_outputs.outputs:
+                        set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
+                        request_id = engine_core_output.request_id
+                        request_instance[request_id] = llumnix_request_outputs.instance_id
+                        processed_output = _self._process_output_order(
+                            request_id, engine_core_output,
+                            llumnix_request_outputs.current_completion_tokens_dict
+                        )
+                        if not processed_output:
+                            continue
+                        outputs.extend(processed_output)
+                        if engine_core_output.finished:
+                            logger.info("Client finished request {}.".format(request_id))
+                            _self._clear_client_request_states(request_id)
+                    llumnix_request_outputs.engine_outputs.outputs = outputs
+                    if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:
+                        outputs_queue.put_nowait(llumnix_request_outputs)
+            except Exception as e:
+                outputs_queue.put_nowait(e)
+        
+        resources.output_queue_task = asyncio.create_task(
+            get_request_outputs_loop(), name="EngineCoreOutputQueueTask")
 
     def _clear_client_request_states(self, request_id: str):
         super()._clear_client_request_states(request_id)
@@ -200,16 +237,15 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         self,
         request_id: str,
         engine_core_output: EngineCoreOutput,
+        current_completion_tokens_dict: Dict[str, int],
     ) -> List[EngineCoreOutput]:
-        current_completion_tokens = None
-        if hasattr(engine_core_output, 'num_output_tokens'):
-            engine_core_output.num_output_tokens
-            
-        if not current_completion_tokens:
-            # No num_output_tokens info, return the engine_core_output directly.
-            return [engine_core_output]
-            
+        current_completion_tokens = current_completion_tokens_dict.get(request_id)
         current_new_tokens = len(engine_core_output.new_token_ids)
+        
+        if not current_completion_tokens:
+            # No usage info, return the request_output directly.
+            return [engine_core_output]
+        
         last_completion_tokens = self.request_stream_last_completion_tokens.get(request_id, 0)
         support_completion_tokens = last_completion_tokens + current_new_tokens
         if current_completion_tokens > support_completion_tokens:
@@ -224,7 +260,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                     request_id, engine_core_output.request_timestamps.to_latency_breakdown_dict()
                     )
                 )
-            self.engine_core_output_stash.setdefault(request_id, []).append(engine_core_output)
+            self.engine_core_output_stash.setdefault(request_id, []).append(
+                (engine_core_output, current_completion_tokens, current_new_tokens)
+            )
             return []
         
         if current_completion_tokens == support_completion_tokens:
@@ -232,25 +270,38 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 # no history output in stash
                 return [engine_core_output]
             
-            output_stash: List[EngineCoreOutput] = self.engine_core_output_stash[request_id]
-            output_stash.sort(key=lambda x: x.num_output_tokens) # sort by completion_tokens
+            output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
+            output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
             last_correct_output_index = 0
-            for output in output_stash:
-                new_tokens = len(output.new_token_ids)
-                completion_tokens = output.num_output_tokens
+            for output, completion_tokens, new_tokens in output_stash:
                 if completion_tokens > current_completion_tokens + new_tokens:
                     break
                 last_correct_output_index += 1
-                current_completion_tokens = output.num_output_tokens
+                current_completion_tokens = completion_tokens
             if last_correct_output_index == 0:
                 return [engine_core_output]
             
-            res = [engine_core_output] + [output for output in output_stash[:last_correct_output_index]]
+            res = [engine_core_output] + [output_info[0] for output_info in output_stash[:last_correct_output_index]]
             self.engine_core_output_stash[request_id] = output_stash[last_correct_output_index:]
+            
+            return res
+        
+        if current_completion_tokens == -1:
+            # last output of request
+            if not self.engine_core_output_stash.get(request_id):
+                # no history output in stash
+                return [engine_core_output]
+            
+            output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
+            output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
+            # drain output_stash
+            res = [engine_core_output] + [output_info[0] for output_info in output_stash]
+            self.engine_core_output_stash[request_id] = []
             
             return res
             
         return [engine_core_output]
     
-    async def call_utility_async(self, method: str, *args) -> copy.Any:
-        return await super().call_utility_async(method, *args)
+    async def call_utility_async(self, method: str, *args) -> Any:
+        instance = list(self.instances.values())[0]
+        return await instance.call_engine_utility_async(method, *args)

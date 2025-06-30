@@ -329,6 +329,7 @@ def get_kv_tranfer_context(statemanager: RaggedFlashStateManager) -> Tuple[int, 
     return kv_transfer_token_bytes, kv_transfer_block_bytes
 
 
+# TODO(KuilongCui): Fix KVT migration backend bug
 class KvTransferMigrationBackend(MigrationBackendBase):
     def __init__(self,
                  rank: int,

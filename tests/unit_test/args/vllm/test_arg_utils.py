@@ -54,7 +54,7 @@ def test_gen_next_engine_args_vllm():
         )
     )
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.NO_CONSTRAINTS)
+        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.NO_CONSTRAINTS), 0
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(engine_args.engine_args)
@@ -71,7 +71,7 @@ def test_gen_next_engine_args_vllm_from_registered_service():
 
     engine_args = None
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.PREFILL)
+        BackendType.VLLM, engine_args, InstanceArgs(instance_type=InstanceType.PREFILL), 0
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(

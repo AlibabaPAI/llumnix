@@ -13,7 +13,7 @@
 
 from dataclasses import dataclass, field
 import pickle
-from typing import Union
+from typing import Optional, Union
 import copy
 
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
@@ -88,10 +88,10 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
 @dataclass
 class RevisedArgs:
     # bladellm engine args need to revised
-    disagg_options_inst_role: str = field(default=None)
-    engine_disagg_inst_id: str = field(default=None)
-    semi_pd_prefill_server_port: int = 0
-    semi_pd_inst_id: str = field(default=None)
+    disagg_options_inst_role: Optional[str] = field(default=None)
+    engine_disagg_inst_id: Optional[str] = field(default=None)
+    semi_pd_prefill_server_port: Optional[int] = field(default=0)
+    semi_pd_inst_id: Optional[str] = field(default=None)
 
 
 def add_cli_args(parser: LlumnixArgumentParser, add_engine_args: bool = True) -> LlumnixArgumentParser:

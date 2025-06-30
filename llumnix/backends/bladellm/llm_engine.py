@@ -684,7 +684,9 @@ class BackendBladeLLM(BackendInterface):
         assert "server_request" in kwargs and kwargs["server_request"]
         server_request = ServerRequest(**json.loads(kwargs["server_request"]))
         # The instance ID of the decode instance. If provided, engine will skip dispatch decode instance after prefilling.
-        server_request.decode_instances = [kwargs.get("decode_instance_id", ""),]
+        decode_instance_id = kwargs.get("decode_instance_id", "")
+        if decode_instance_id:
+            server_request.decode_instances = [decode_instance_id]
         await self.engine.add_request(server_info, server_request)
 
     async def abort_request(self, request_id: Union[int, Iterable[int]]) -> None:

@@ -373,7 +373,6 @@ class BackendVLLMV1(BackendInterface):
         # pylint: disable=protected-access
         return await make_async(self.engine.model_executor._run_workers)(*args, timeout=timeout, **kwargs)
 
-    # TODO(zhaozhiyu): determine whether handshake result check is needed
     async def is_ready(self):
         return True
 

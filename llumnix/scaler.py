@@ -80,6 +80,7 @@ from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.manager import Manager
+from llumnix.entrypoints.dp_manager import DPManager
 
 logger = init_logger(__name__)
 
@@ -303,6 +304,12 @@ class Scaler:
                         new_pg,
                         instance_type=get_service_instance_type(service_name),
                     )
+                elif self.engine_args.backend_type == BackendType.VLLM_V1 and \
+                     self.engine_args.get_dp_args().dp_size > 1:
+                    # Currently data parallelism only support vLLM V1
+                    dp_manager = DPManager.from_args(new_instance_id, self.entrypoints_args, 
+                                                     self.instance_args, self.engine_args, new_pg)
+                    ray.get(dp_manager.is_ready.remote())
                 else:
                     # If not prefill/decode service, we do not specify the instance type,
                     # and the instance type is decided by _get_next_instance_type.
@@ -510,6 +517,22 @@ class Scaler:
                 block=block,
                 node_id=node_id,
                 resources=resources,
+            )
+        elif self.engine_args.backend_type == BackendType.VLLM_V1 and \
+             engine_args.get_dp_args().dp_size > 1:
+            dp_size = engine_args.get_dp_args().dp_size
+            world_size = engine_args.get_world_size()
+            # CPU: [lumlet + ActorOutputMediator + (ApiServerActor)] * dp_size
+            # GPU: world_size * dp_size
+            placement_group = initialize_placement_group(
+                placement_group_name,
+                num_cpus=(2+int(init_server)) * dp_size,
+                num_gpus=world_size * dp_size,
+                dp_size=dp_size,
+                detached=True,
+                block=block,
+                node_id=node_id,
+                dp_size=dp_size
             )
         else:
             placement_group = initialize_placement_group(

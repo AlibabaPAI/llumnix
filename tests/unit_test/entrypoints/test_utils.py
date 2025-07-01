@@ -17,13 +17,14 @@ import ray
 
 from vllm.engine.arg_utils import EngineArgs
 
-from llumnix.arg_utils import ManagerArgs, InstanceArgs, EntrypointsArgs, LaunchArgs
+from llumnix.arg_utils import ManagerArgs, InstanceArgs, EntrypointsArgs, LaunchArgs, LaunchMode
 from llumnix.entrypoints.setup import launch_ray_cluster
 from llumnix.utils import get_ip_address
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.ray_utils import get_manager_name
 from llumnix.manager import Manager
 from llumnix.scaler import Scaler
+from llumnix.backends.backend_interface import BackendType
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -33,7 +34,8 @@ from tests.conftest import ray_env
 def manager():
     engine_args = EngineArgs(model="facebook/opt-125m", download_dir="/mnt/model", worker_use_ray=True, enforce_eager=True)
     scaler: Scaler = Scaler.from_args(
-        EntrypointsArgs(), ManagerArgs(), InstanceArgs(), engine_args, LaunchArgs())
+        EntrypointsArgs(), ManagerArgs(), InstanceArgs(), engine_args,
+        LaunchArgs(backend_type=BackendType.VLLM, launch_mode=LaunchMode.LOCAL))
     ray.get(scaler.is_ready.remote())
     manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
     ray.get(manager.is_ready.remote())

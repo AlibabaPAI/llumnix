@@ -60,19 +60,18 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
             backend_type=backend_type,
         )
 
-        self.revised_args = RevisedArgs() if not hasattr(engine_args, 'revised_args') else engine_args.revised_args
-
-        if hasattr(engine_args, 'semi_pd_options') and engine_args.semi_pd_options:
+        self.revised_args = RevisedArgs()
+        if engine_args.semi_pd_options:
             self.revised_args.semi_pd_prefill_server_port = engine_args.semi_pd_options.prefill_server_port
 
     def _get_world_size(self, engine_args: "ServingArgs"):
         return engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
 
     def _get_instance_id(self, engine_args: "ServingArgs"):
-        if not isinstance(engine_args, LlumnixEngineArgs):
-            if engine_args.disagg_options is not None:
-                return engine_args.disagg_options.inst_id
-        return None
+        instance_id = None
+        if engine_args.disagg_options is not None:
+            instance_id = engine_args.disagg_options.inst_id
+        return instance_id
 
     def _get_engine_args(self, engine_args: "ServingArgs"):
         # Since importing the bladellm engine arguments requires available GPU,

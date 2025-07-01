@@ -181,63 +181,10 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             llumnix_request_outputs.engine_outputs.outputs = outputs
             if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:
                 self.outputs_queue.put_nowait(llumnix_request_outputs.engine_outputs)
-                self.outputs_queue.put_nowait(llumnix_request_outputs)
-    
-    async def get_output_async(self) -> LlumnixRequestOutputs:
-        # self._ensure_output_queue_task()
-        # If an exception arises in process_outputs_socket task,
-        # it is forwarded to the outputs_queue so we can raise it
-        # from this (run_output_handler) task to shut down the server.
-        assert self.outputs_queue is not None
-        outputs = await self.outputs_queue.get()
-        logger.debug("get outputs: %s", str(outputs))
-        if isinstance(outputs, Exception):
-            raise self._format_exception(outputs) from None
-        return outputs
     
     def _ensure_output_queue_task(self):
+        # Overload AsyncMPClient._ensure_output_queue_task
         pass
-    #     resources = self.resources
-    #     if resources.output_queue_task is not None:
-    #         return
-        
-        outputs_queue = self.outputs_queue # AsyncMPClient, AsyncMPClient -> AsyncLLM
-        request_output_queue = self.request_output_queue # LlumnixClient, Llumlet -> LlumnixClient
-        request_instance = self.request_instance # LlumnixClient
-        _self_ref = weakref.ref(self)
-        async def get_request_outputs_loop():
-            """Process output order and put EngineCoreOutputs to local queue"""
-            try:
-                while True:
-                    # Check if self is alive
-                    _self = _self_ref()
-                    if not _self:
-                        # Client has been garbage collected, abort.
-                        break
-                    llumnix_request_outputs: LlumnixRequestOutputs = await request_output_queue.get()
-                    outputs: List[EngineCoreOutput] = []
-                    for engine_core_output in llumnix_request_outputs.engine_outputs.outputs:
-                        set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
-                        request_id = engine_core_output.request_id
-                        request_instance[request_id] = llumnix_request_outputs.instance_id
-                        processed_output = _self._process_output_order(
-                            request_id, engine_core_output,
-                            # llumnix_request_outputs.current_completion_tokens_dict
-                        )
-                        if not processed_output:
-                            continue
-                        outputs.extend(processed_output)
-                        if engine_core_output.finished:
-                            logger.info("Client finished request {}.".format(request_id))
-                            _self._clear_client_request_states(request_id)
-                    llumnix_request_outputs.engine_outputs.outputs = outputs
-                    if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:
-                        outputs_queue.put_nowait(llumnix_request_outputs)
-            except Exception as e:
-                outputs_queue.put_nowait(e)
-        
-    #     resources.output_queue_task = asyncio.create_task(
-    #         get_request_outputs_loop(), name="EngineCoreOutputQueueTask")
 
     def _clear_client_request_states(self, request_id: str):
         super()._clear_client_request_states(request_id)

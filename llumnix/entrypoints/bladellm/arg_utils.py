@@ -13,23 +13,45 @@
 
 from dataclasses import dataclass, field
 import pickle
-from typing import Optional, Union
+from typing import Optional
 import copy
 
-from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
-                               InstanceArgs, LlumnixEngineArgs, init_llumnix_args,
+from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser, InstanceArgs,
+                               LlumnixEngineArgs, init_llumnix_args, LlumnixEngineArgsFactory,
                                load_registered_engine_args, post_init_llumnix_args)
 from llumnix.backends.backend_interface import BackendType
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.logging.logger import init_logger
+from llumnix.instance_info import InstanceType
 from llumnix.config import LlumnixConfig
 
 logger = init_logger(__name__)
 
 
+class BladeLLMEngineArgsFactory(LlumnixEngineArgsFactory):
+    def gen_next_engine_args(
+        self,
+        current_engine_args: LlumnixEngineArgs,
+        next_instance_args: InstanceArgs,
+        port_offset: int = 0
+    ) -> LlumnixEngineArgs:
+        instance_type = next_instance_args.instance_type
+        if self.load_registered_service:
+            current_engine_args = self.engine_args_dict[instance_type]
+
+        next_engine_args = copy.deepcopy(current_engine_args)
+        if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
+            next_engine_args.revised_args.disagg_options_inst_role = (
+                instance_type.value if isinstance(instance_type, InstanceType)
+                else instance_type
+            )
+        if self.pdd_config.enable_engine_semi_pd_disagg and not self.load_registered_service:
+            next_engine_args.revised_args.semi_pd_prefill_server_port += port_offset
+        return next_engine_args
+
 class BladeLLMEngineArgs(LlumnixEngineArgs):
     def __init__(self,
-                 engine_args: Union["ServingArgs", LlumnixEngineArgs],
+                 engine_args: "ServingArgs",
                  backend_type: BackendType = BackendType.BLADELLM):
         self.world_size = self._get_world_size(engine_args)
         self.instance_id = self._get_instance_id(engine_args)
@@ -38,27 +60,22 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
             backend_type=backend_type,
         )
 
-        self.revised_args = RevisedArgs() if not hasattr(engine_args, 'revised_args') else engine_args.revised_args
-
-        if hasattr(engine_args, 'semi_pd_options') and engine_args.semi_pd_options:
+        self.revised_args = RevisedArgs()
+        if engine_args.semi_pd_options:
             self.revised_args.semi_pd_prefill_server_port = engine_args.semi_pd_options.prefill_server_port
 
-    def _get_world_size(self, engine_args: Union["ServingArgs", LlumnixEngineArgs]):
-        if isinstance(engine_args, LlumnixEngineArgs):
-            return engine_args.world_size
+    def _get_world_size(self, engine_args: "ServingArgs"):
         return engine_args.tensor_parallel_size * engine_args.pipeline_parallel_size
 
-    def _get_instance_id(self, engine_args: Union["ServingArgs", LlumnixEngineArgs]):
-        if not isinstance(engine_args, LlumnixEngineArgs):
-            if engine_args.disagg_options is not None:
-                return engine_args.disagg_options.inst_id
-        return None
+    def _get_instance_id(self, engine_args: "ServingArgs"):
+        instance_id = None
+        if engine_args.disagg_options is not None:
+            instance_id = engine_args.disagg_options.inst_id
+        return instance_id
 
-    def _get_engine_args(self, engine_args: Union["ServingArgs", LlumnixEngineArgs]):
+    def _get_engine_args(self, engine_args: "ServingArgs"):
         # Since importing the bladellm engine arguments requires available GPU,
         # serialize the engine parameters before passing them to the manager.
-        if isinstance(engine_args, LlumnixEngineArgs):
-            return copy.deepcopy(engine_args.engine_args)
         return pickle.dumps(engine_args)
 
     def load_engine_args(self):
@@ -90,7 +107,7 @@ class RevisedArgs:
     # bladellm engine args need to revised
     disagg_options_inst_role: Optional[str] = field(default=None)
     engine_disagg_inst_id: Optional[str] = field(default=None)
-    semi_pd_prefill_server_port: Optional[int] = field(default=0)
+    semi_pd_prefill_server_port: int = field(default=0)
     semi_pd_inst_id: Optional[str] = field(default=None)
 
 

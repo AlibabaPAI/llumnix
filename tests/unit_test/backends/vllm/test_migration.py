@@ -351,7 +351,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
                 instance_args=instance_args,
                 request_output_queue_type=request_output_queue_type,
                 placement_group=placement_group,
-                llumnix_engine_args=VLLMEngineArgs(engine_args),
+                llumnix_engine_args=engine_args,
             )
         while True:
             res = ray.get(llumlet_2.is_ready.remote())

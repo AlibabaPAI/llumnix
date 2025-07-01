@@ -37,6 +37,7 @@ SCALER_NAME = "scaler"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
+DPMANAGER_NAME = "dpmanager_"
 
 
 def get_manager_name() -> str:
@@ -54,6 +55,8 @@ def get_server_name(instance_id: str) -> str:
 def get_instance_name(instance_id: str) -> str:
     return f"{INSTANCE_NAME_PREFIX}{instance_id}"
 
+def get_dpmanager_name(instance_id: str) -> str:
+    return f"{DPMANAGER_NAME}{instance_id}"
 
 # pylint: disable=dangerous-default-value
 def initialize_placement_group(
@@ -63,6 +66,7 @@ def initialize_placement_group(
     detached: bool = False,
     block: bool = True,
     node_id: str = None,
+    dp_size: int = 1,
     resources: Dict[str, float] = {}
 ) -> PlacementGroup:
     """Initialize the distributed cluster probably with Ray.
@@ -96,13 +100,88 @@ def initialize_placement_group(
 
     try:
         # Create a new placement group
-        # bundle_0: All GPU Actors + Worker_0, bundle_1-N-1: Worker_1...Worker_N-1
-        if num_gpus >= 1:
+        if dp_size > 1:
+            # bundle_N: DP rank N, CPU Actors + Worker * world_size
+            num_cpu_per_dp = num_cpus // dp_size
+            world_size = num_gpus // dp_size
+            placement_group_specs_per_dp = [{"CPU": num_cpu_per_dp, "GPU": world_size}]
+            placement_group_specs = []
+            for _ in range(dp_size):
+                placement_group_specs += placement_group_specs_per_dp
+            logger.info(f"[sjr] {placement_group_specs=}")
+        elif num_gpus >= 1:
+            # bundle_0: All CPU Actors + Worker_0, bundle_1-N-1: Worker_1...Worker_N-1
             placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
         else:
             placement_group_specs = [{"CPU": num_cpus}]
         if resources:
             placement_group_specs += [resources]
+        # pylint: disable=self-assigning-variable
+        placement_group_specs = (placement_group_specs)
+
+        logger.debug("placement_group_specs: {}".format(placement_group_specs))
+
+        # PACK (not STRICT_PACK) to support multi-node placement group.
+        if node_id is None:
+            current_placement_group = ray.util.placement_group(
+                placement_group_specs, "PACK", name=placement_group_name, lifetime=lifetime)
+        else:
+            current_placement_group = ray.util.placement_group(
+                placement_group_specs, "STRICT_PACK", name=placement_group_name, lifetime=lifetime, _soft_target_node_id=node_id)
+        # Wait until PG is ready - this will block until all
+        # requested resources are available, and will timeout
+        # if they cannot be provisioned.
+        if block:
+            try:
+                ray.get(current_placement_group.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
+            except ray.exceptions.GetTimeoutError:
+                logger.warning("Waiting for new placement group {} ready timeout.".format(placement_group_name))
+                return None
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in initialize_placement_group (placement_group_name: {})".format(placement_group_name))
+        return None
+
+    return current_placement_group
+
+# Merge to initialize_placement_group
+def initialize_placement_group_dp(
+    placement_group_name: str,
+    num_cpus: int,
+    num_gpus: int,
+    dp_size: int,
+    detached: bool = False,
+    block: bool = True,
+    node_id: str = None,
+    resources: Dict[str, float] = {}
+) -> PlacementGroup:
+    """Initialize the distributed cluster for data parallelism probably with Ray.
+    Currently only support vLLM V1.
+    """
+    if ray is None:
+        raise ImportError(
+            "Ray is not installed. Please install Ray to use distributed "
+            "serving.")
+
+    lifetime = "detached" if detached else None
+
+    num_gpus_in_cluster = ray.cluster_resources().get("GPU", 0)
+    if num_gpus > num_gpus_in_cluster:
+        raise ValueError(
+            "The number of required GPUs {} exceeds the total number of "
+            "available GPUs {} in the cluster.".format(num_gpus, num_gpus_in_cluster))
+    
+    try:
+        # Create a new placement group
+        # bundle_N: DP rank N, APIServer + Llumlet + Worker * world_size
+        num_cpu_per_dp = num_cpus // dp_size
+        world_size = num_gpus // dp_size
+        placement_group_specs_per_dp = [{"CPU": num_cpu_per_dp, "GPU": world_size}]
+        placement_group_specs = []
+        for _ in range(dp_size):
+            placement_group_specs += placement_group_specs_per_dp
+        if resources:
+            placement_group_specs += [resources]
+        logger.info(f"[sjr] {placement_group_specs=}")
         # pylint: disable=self-assigning-variable
         placement_group_specs = (placement_group_specs)
 

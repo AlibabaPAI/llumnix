@@ -130,7 +130,10 @@ class LlumnixEngineArgsFactory:
 
     @abstractmethod
     def gen_next_engine_args(
-        self, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, 'InstanceType']
+        self,
+        current_engine_args: LlumnixEngineArgs,
+        next_instance_args: 'InstanceArgs',
+        port_offset: int = 0,
     ) -> LlumnixEngineArgs:
         raise NotImplementedError
 

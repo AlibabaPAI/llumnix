@@ -13,7 +13,7 @@
 
 from dataclasses import dataclass, field
 import pickle
-from typing import Optional, Union
+from typing import Optional
 import copy
 
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser, InstanceArgs,
@@ -32,8 +32,10 @@ class BladeLLMEngineArgsFactory(LlumnixEngineArgsFactory):
     def gen_next_engine_args(
         self,
         current_engine_args: LlumnixEngineArgs,
-        instance_type: Union[str, InstanceType]
+        next_instance_args: InstanceArgs,
+        port_offset: int = 0
     ) -> LlumnixEngineArgs:
+        instance_type = next_instance_args.instance_type
         if self.load_registered_service:
             current_engine_args = self.engine_args_dict[instance_type]
 
@@ -43,6 +45,8 @@ class BladeLLMEngineArgsFactory(LlumnixEngineArgsFactory):
                 instance_type.value if isinstance(instance_type, InstanceType)
                 else instance_type
             )
+        if self.pdd_config.enable_engine_semi_pd_disagg and not self.load_registered_service:
+            next_engine_args.revised_args.semi_pd_prefill_server_port += port_offset
         return next_engine_args
 
 class BladeLLMEngineArgs(LlumnixEngineArgs):
@@ -104,7 +108,7 @@ class RevisedArgs:
     # bladellm engine args need to revised
     disagg_options_inst_role: Optional[str] = field(default=None)
     engine_disagg_inst_id: Optional[str] = field(default=None)
-    semi_pd_prefill_server_port: Optional[int] = field(default=0)
+    semi_pd_prefill_server_port: int = field(default=0)
     semi_pd_inst_id: Optional[str] = field(default=None)
 
 

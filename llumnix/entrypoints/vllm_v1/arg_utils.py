@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Tuple, Union
+from typing import Tuple
 import copy
 import pickle
 
@@ -22,7 +22,6 @@ from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, InstanceArgs, Llumn
                                init_llumnix_args, post_init_llumnix_args)
 from llumnix.entrypoints.utils import LaunchMode
 from llumnix.internal_config import MigrationConfig
-from llumnix.instance_info import InstanceType
 from llumnix.config import LlumnixConfig
 
 logger = init_logger(__name__)
@@ -33,9 +32,11 @@ class VLLMV1EngineArgsFactory(LlumnixEngineArgsFactory):
     def gen_next_engine_args(
         self,
         current_engine_args: LlumnixEngineArgs,
-        instance_type: Union[str, InstanceType]
+        next_instance_args: InstanceArgs,
+        port_offset: int = 0
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
+            instance_type = next_instance_args.instance_type
             current_engine_args = self.engine_args_dict[instance_type]
         return copy.deepcopy(current_engine_args)
 

@@ -50,7 +50,6 @@ from llumnix.utils import (
 from llumnix.ray_utils import (
     get_manager_name,
     INSTANCE_NAME_PREFIX,
-    get_placement_group_name,
     log_actor_ray_info,
     get_scaler_name,
 )
@@ -62,7 +61,6 @@ from llumnix.constants import (
 )
 
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.entrypoints.api_server_actor import APIServerActor
 
 logger = init_logger(__name__)
 
@@ -123,9 +121,6 @@ class Manager:
         self.num_instances = 0
         self.instances: Dict[str, Llumlet] = {}
         self.pgs: Dict[str, PlacementGroup] = {}
-        self.servers: Dict[str, APIServerActor] = None
-        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
-            self.servers = {}
         self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
 
@@ -326,44 +321,35 @@ class Manager:
 
     @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     async def scale_up(self,
-                 instance_id: Union[str, Iterable[str]],
-                 instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
-                 instance_type: Union[InstanceType, Iterable[InstanceType]],
-                 placement_group: Union[PlacementGroup, Iterable[PlacementGroup]],
-                 server: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]] = None) -> None:
+                       instance_id: Union[str, Iterable[str]],
+                       instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
+                       instance_type: Union[InstanceType, Iterable[InstanceType]]) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
             instance_actor_handle = [instance_actor_handle,]
             instance_type = [instance_type,]
-            placement_group = [placement_group,]
-            server = [server,] if server is not None else [None]
 
         instance_ids = list(instance_id)
         instance_actor_handles: List[Llumlet] = list(instance_actor_handle)
         instance_types = list(instance_type)
-        placement_groups = list(placement_group)
-        servers = list(server) if server is not None else [None]*len(instance_ids)
 
         no_pending_instance = (self.pending_rebuild_migration_instances == 0)
         indeed_update = not set(instance_ids).issubset(self.instances.keys())
 
-        def scale_up_done_callback(manager: 'Manager', instance_ids, instance_actor_handles,
-                                   placement_groups, servers) -> None:
+        def scale_up_done_callback(manager: 'Manager', instance_ids, instance_actor_handles) -> None:
             for idx, ins_id in enumerate(instance_ids):
                 if ins_id not in manager.instances:
                     instance_actor = instance_actor_handles[idx]
                     manager.instances[ins_id] = instance_actor
-                    manager.pgs[ins_id] = placement_groups[idx]
-                    if manager.servers is not None and servers is not None:
-                        manager.servers[ins_id] = servers[idx]
                     manager.instance_migrating[ins_id] = False
                     if manager.log_instance_info:
                         manager.instance_last_logged_empty[ins_id] = False
                     manager.pending_rebuild_migration_instances += 1
 
         if indeed_update:
-            await self.global_scheduler.scale_up(instance_ids, instance_actor_handles, instance_types, placement_groups,
-                                                 servers, partial(scale_up_done_callback, manager=self))
+            await self.global_scheduler.scale_up(
+                instance_ids, instance_actor_handles, instance_types, partial(scale_up_done_callback, manager=self)
+            )
             self.num_instances = len(self.instances)
 
         # When scaling up, we need to rebuild the migration backend. But if initially self.pending_rebuild_migration_instances != 0,
@@ -385,25 +371,13 @@ class Manager:
         indeed_update = False
         no_pending_instance = self.pending_rebuild_migration_instances == 0
 
-        clear_instance_ids = []
         for ins_id in instance_ids:
             if ins_id in self.instances:
                 indeed_update = True
-                clear_instance_ids.append(ins_id)
                 self.pending_rebuild_migration_instances += 1
                 self.instances.pop(ins_id)
             else:
                 logger.warning("instance {} is not in instances".format(ins_id))
-
-            if ins_id in self.pgs:
-                self.pgs.pop(ins_id)
-            else:
-                logger.warning("instance {} is not in pgs".format(ins_id))
-
-            if self.servers and ins_id in self.servers:
-                self.servers.pop(ins_id)
-            else:
-                logger.warning("instance {} is not in servers".format(ins_id))
 
             if ins_id in self.instance_migrating:
                 del self.instance_migrating[ins_id]
@@ -422,7 +396,7 @@ class Manager:
 
         asyncio.create_task(
             asyncio_wait_for_with_timeout(
-                async_wrapper_for_ray_remote_call(self.scaler.clear_instance_ray_resources.remote, clear_instance_ids)
+                async_wrapper_for_ray_remote_call(self.scaler.clear_instance_ray_resources.remote, instance_ids)
             )
         )
 
@@ -530,7 +504,6 @@ class Manager:
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
                 try:
-                    placement_groups.append(ray.util.get_placement_group(get_placement_group_name(instance_id)))
                     instance_ids.append(instance_id)
                     instances.append(instance_actor_handle)
                     instance_types.append(ret)
@@ -563,7 +536,6 @@ class Manager:
         instance_ids = []
         instances = []
         instance_types = []
-        placement_groups = []
         tasks = []
         for instance_actor_name, instance_actor_handle in \
             zip(available_instance_actor_names,available_instance_actor_handles):
@@ -579,7 +551,7 @@ class Manager:
                 tasks.append(task)
         await asyncio.gather(*tasks)
         # The only function that can add instance actor handles to manager.
-        await self.scale_up(instance_ids, instances, instance_types, placement_groups)
+        await self.scale_up(instance_ids, instances, instance_types)
 
     def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:
         # pylint: disable=consider-using-with

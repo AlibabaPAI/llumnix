@@ -16,10 +16,6 @@ from functools import partial
 from typing import Callable, Dict, List, Optional, Tuple, Union, Iterable, Set
 import math
 
-import ray
-import ray.actor
-from ray.util.placement_group import PlacementGroup
-
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.instance_info import InstanceInfo, InstanceType
@@ -197,17 +193,12 @@ class GlobalScheduler:
                        instance_id: Union[str, Iterable[str]],
                        instance_actor: Union[Llumlet, List[Llumlet]],
                        instance_type: Union[InstanceType, List[InstanceType]],
-                       placement_group: Union[PlacementGroup, Iterable[PlacementGroup]],
-                       server: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
                        manage_scale_up_callback: Optional[Callable]) -> int:
         if isinstance(instance_id, str):
             instance_id, instance_actor, instance_type = [instance_id], [instance_actor], [instance_type]
-            placement_group, server = [placement_group], [server]
         instance_ids, instance_actors, instance_types = list(instance_id), list(instance_actor), list(instance_type)
-        placement_groups, servers = list(placement_group), list(server)
 
         available_instance_ids, available_instance_actors, available_instance_types = [], [], []
-        available_placement_groups, available_servers = [], []
 
         def self_assign_id_success_callback(fut, instance_idx: int, scale_up_info: List[List], available_scale_up_info: List[List]):
             ret = fut.result()[0]
@@ -224,9 +215,8 @@ class GlobalScheduler:
                     partial(
                         self_assign_id_success_callback,
                         instance_idx=ins_idx,
-                        scale_up_info=[instance_ids, instance_actors, instance_types, placement_groups, servers],
-                        available_scale_up_info=[available_instance_ids, available_instance_actors,
-                                                 available_instance_types, available_placement_groups, available_servers])
+                        scale_up_info=[instance_ids, instance_actors, instance_types],
+                        available_scale_up_info=[available_instance_ids, available_instance_actors, available_instance_types])
                     )
                 tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -243,9 +233,8 @@ class GlobalScheduler:
         if manage_scale_up_callback:
             manage_scale_up_callback(
                 instance_ids=available_instance_ids,
-                instance_actor_handles=available_instance_actors,
-                placement_groups=available_placement_groups,
-                servers=available_servers)
+                instance_actor_handles=available_instance_actors
+            )
 
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances

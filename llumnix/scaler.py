@@ -267,10 +267,12 @@ class Scaler:
             else:
                 # If not prefill/decode service, we do not specify the instance type,
                 # and the instance type is decided by _get_next_instance_type.
-                await self._init_server_and_instance(new_instance_id, self.entrypoints_args, self.instance_args,
-                                                     self.engine_args, new_pg)
-            logger.info("Deploy server and instance to new placement group done, "
-                        "instance_id: {}.".format(new_instance_id))
+                await self._init_server_and_instance(
+                    new_instance_id, self.entrypoints_args, self.instance_args, self.engine_args, new_pg
+                )
+            logger.info(
+                "Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id)
+            )
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_instance_deployment_states(instance_id: str, server_exists: bool, instance_exists: bool):
@@ -281,11 +283,11 @@ class Scaler:
             if not server_exists and instance_exists:
                 instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
                 try:
-                    await asyncio_wait_for_with_timeout(instance.is_ready.remote())
-                # Instance exception could be handled by manager, so check states loop omits exception case here.
+                    await asyncio_wait_for_with_timeout(instance.is_ready.remote(), timeout=llumnix_envs.INSTANCE_READY_TIMEOUT)
+                # Instance exception could be handled by manager/scaler, so check states loop omits exception case here.
                 # pylint: disable=bare-except
                 except:
-                    return
+                    pass
             logger.info("watch instance {} deployment states, server_exists: {}, instance_exists: {}".format(
                 instance_id, server_exists, instance_exists))
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
@@ -462,7 +464,7 @@ class Scaler:
                 )
                 await asyncio.wait_for(server.is_ready.remote(), timeout=float(llumnix_envs.SERVER_READY_TIMEOUT))
                 await asyncio_wait_for_with_timeout(
-                    self.manager.scale_up.remote(instance_id, instance, instance_type, placement_group, server)
+                    self.manager.scale_up.remote(instance_id, instance, instance_type)
                 )
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
@@ -574,12 +576,11 @@ class Scaler:
                              engine_args: LlumnixEngineArgs,
                              node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
-        async def instance_ready_scale_up(instance_id: str, instance: Llumlet,
-                                          instance_type: InstanceType, placement_group: PlacementGroup):
+        async def instance_ready_scale_up(instance_id: str, instance: Llumlet, instance_type: InstanceType):
             try:
                 await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
                 await asyncio_wait_for_with_timeout(
-                    self.manager.scale_up.remote(instance_id, instance, instance_type, placement_group)
+                    self.manager.scale_up.remote(instance_id, instance, instance_type)
                 )
             except asyncio.TimeoutError:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
@@ -637,7 +638,6 @@ class Scaler:
                     instance_id,
                     instance,
                     instance_args.instance_type,
-                    placement_group
                 )
             )
 

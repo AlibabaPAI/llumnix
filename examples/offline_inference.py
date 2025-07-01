@@ -77,7 +77,7 @@ instance_ids, instances = ray.get(scaler.init_instances.remote(
     QueueType("rayqueue"), instance_args, vllm_engine_args, node_id))
 num_instance = 0
 while num_instance == 0:
-    num_instance = ray.get(manager.scale_up.remote([], [], [], []))
+    num_instance = ray.get(manager.scale_up.remote([], [], []))
     time.sleep(1.0)
 
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.

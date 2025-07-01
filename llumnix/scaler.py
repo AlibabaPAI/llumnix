@@ -133,8 +133,8 @@ class Scaler:
                 pdd_config=self.pdd_config,
             )
 
+        self.port_offset = 0
         if self.enable_port_increment:
-            self.port_offset = 0
             if self.enable_port_offset_store:
                 # TODO(s5u13b): Do not use ray interval kv.
                 value = get_data_from_ray_internal_kv("scaler.port_offset")

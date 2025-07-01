@@ -53,7 +53,7 @@ class LlumnixClientVLLM(LlumnixClient):
         self.request_stream[request_id] = results_generator
         server_info_copy = copy.deepcopy(self.server_info)
         if is_traced_request(kwargs):
-            enable_request_trace(server_info_copy) # move request debug mode flag to server_info
+            enable_request_trace(server_info_copy) # move request trace flag to server_info
         kwargs.pop(LLUMNIX_TRACE_REQUEST, None)
 
         # If manager is unavailable, request will be directly added to the llumlet held by api server.

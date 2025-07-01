@@ -74,17 +74,18 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         logger.info("request id is replaced from [{},{}] to {}".format(request.id, request.external_id, llumnix_req_id))
         internal_request = copy.deepcopy(request)
         internal_request.id = llumnix_req_id
-        resp_stream = await self._generate(llumnix_req_id, self.msg_encoder.encode(internal_request))
+        resp_stream = await self._generate(llumnix_req_id, internal_request)
         return resp_stream
 
-    async def _generate(self, request_id: int, request: bytes) -> LLMResponse:
+    async def _generate(self, request_id: int, request: bytes | ServerRequest | LlumnixServerRequest) -> LLMResponse:
         logger.info("Client receive request {}.".format(request_id))
         results_queue = asyncio.Queue()
         self.request_stream[request_id] = results_queue
         server_info_copy = copy.deepcopy(self.server_info)
         if is_traced_request(request):
-            enable_request_trace(server_info_copy) # move request debug mode flag to server_info
-
+            enable_request_trace(server_info_copy) # move request trace flag to server_info
+        if not isinstance(request, bytes):
+            request = self.msg_encoder.encode(request)
         # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:

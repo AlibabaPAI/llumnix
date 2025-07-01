@@ -142,7 +142,6 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
-        logger.info("engine_config: {}".format(engine_config))
         # Hack to pass placement_group for init workers.
         engine_config.parallel_config.placement_group = placement_group
         # Initialize the cluster and specify the executor class.
@@ -158,9 +157,6 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         else:
             raise ValueError('Unsupported executor backend')
         
-        handshake_address = get_engine_client_zmq_addr(
-            False, engine_config.parallel_config.data_parallel_master_ip, engine_config.parallel_config.data_parallel_rpc_port
-        )
         engine = cls(
             instance_id=instance_id,
             placement_group=placement_group,
@@ -171,7 +167,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             abort_request_callback=abort_request_callback,
             vllm_config=engine_config,
             on_head_node=True,
-            handshake_address=handshake_address,
+            handshake_address=None, # handshake is removed in llumnix
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
         )
@@ -302,7 +298,6 @@ class BackendVLLMV1(BackendInterface):
         self.engine_disagg_inst_id = instance_id
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args() # type: ignore
         self.migration_config = instance_args.create_migration_config()
-        # FIXME(zhaozhiyu): check args
         self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
             instance_id=instance_id,
             placement_group=placement_group,
@@ -436,7 +431,7 @@ class BackendVLLMV1(BackendInterface):
         # Although add_running_request is always be called in last stage migration,
         # there exists migrating_out_seq_group_metadata in worker only when last stage do_send is executed,
         # so the request id does not always exists.
-        if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
             # pylint: disable=protected-access
             asyncio.create_task(
                 self._run_workers_async(
@@ -460,7 +455,7 @@ class BackendVLLMV1(BackendInterface):
         # When free_src_request is called, it means that all migration operations is successful.
         # However, there exists migrating_out_seq_group_metadata in worker only when migrating running request,
         # so the request id does not always exists.
-        if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
             # pylint: disable=protected-access
             asyncio.create_task(
                 self._run_workers_async(

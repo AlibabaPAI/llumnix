@@ -290,10 +290,10 @@ class MigrationCoordinator:
         logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
         migrated_request = []
 
-        if migrate_out_request.status == RequestStatus.RUNNING:
+        if migrate_out_request.llumnix_status == RequestStatus.RUNNING:
             migrate_out_request.migration_start_time = time.time()
             status = await self._migrate_out_running_request(dst_instance_actor, dst_instance_id, migrate_out_request)
-        elif migrate_out_request.status == RequestStatus.WAITING:
+        elif migrate_out_request.llumnix_status == RequestStatus.WAITING:
             migrate_out_request.migration_start_time = time.time()
             status = await self._migrate_out_waiting_request(dst_instance_actor, dst_instance_id, migrate_out_request)
         else:
@@ -311,7 +311,7 @@ class MigrationCoordinator:
                 status = MigrationStatus.ABORTED_DST
         else: # ABORTED_SRC or ABORTED_DST
             migrate_out_request.reset_migration_states_src()
-            migrate_out_request.reset_status()
+            migrate_out_request.reset_llumnix_status()
             # If src instance aborts itself, dst instance should free the pre allocated cache in pre_alloc_cache.
             if status == MigrationStatus.ABORTED_SRC:
                 await self._dst_free_pre_alloc_cache(dst_instance_actor, dst_instance_id, migrate_out_request.request_id)
@@ -345,7 +345,7 @@ class MigrationCoordinator:
                         dst_instance_actor,
                         dst_instance_id,
                         migrate_out_request.request_id,
-                        migrate_out_request.status,
+                        migrate_out_request.llumnix_status,
                         migrate_out_request.request_arrival_time,
                         migrate_out_request.prefill_num_blocks,
                         migrate_out_request.token_ids,
@@ -403,7 +403,7 @@ class MigrationCoordinator:
                             dst_instance_actor,
                             dst_instance_id,
                             migrate_out_request.request_id,
-                            migrate_out_request.status,
+                            migrate_out_request.llumnix_status,
                             migrate_out_request.request_arrival_time,
                             stage_block_num,
                             incremental_token_ids,
@@ -423,7 +423,7 @@ class MigrationCoordinator:
                             dst_instance_actor,
                             dst_instance_id,
                             migrate_out_request.request_id,
-                            migrate_out_request.status,
+                            migrate_out_request.llumnix_status,
                             migrate_out_request.request_arrival_time,
                             stage_block_num,
                             incremental_token_ids,

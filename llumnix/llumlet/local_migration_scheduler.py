@@ -46,7 +46,7 @@ class LocalMigrationScheduler:
         running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
         required_migration_requests = []
         for request in reversed(running):
-            if request.status == RequestStatus.RUNNING \
+            if request.llumnix_status == RequestStatus.RUNNING \
                 and request.inference_type == RequestInferenceType.DECODE \
                 and request.output_len >= request.expected_steps:
                 required_migration_requests.append(request)
@@ -55,7 +55,7 @@ class LocalMigrationScheduler:
     def _filter_running_queue(self, running, min_request_len, max_request_len):
         filtered_running = [
             request for request in running \
-                if request.status == RequestStatus.RUNNING \
+                if request.llumnix_status == RequestStatus.RUNNING \
                     and request.inference_type == RequestInferenceType.DECODE \
                     and min_request_len < request.request_len < max_request_len \
                     and (not request.is_migrating) \
@@ -65,7 +65,7 @@ class LocalMigrationScheduler:
     def _filter_waiting_queue(self, waiting, min_request_len, max_request_len):
         filtered_waiting = [
             request for request in waiting \
-                if request.status == RequestStatus.WAITING \
+                if request.llumnix_status == RequestStatus.WAITING \
                     and request.try_schedule_times >= 1 \
                     and min_request_len < request.request_len < max_request_len \
                     and (not request.is_migrating) \

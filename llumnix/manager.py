@@ -195,12 +195,7 @@ class Manager:
             name=get_manager_name(),
             namespace="llumnix",
             lifetime="detached"
-        )(cls).options(
-            scheduling_strategy=NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
-                soft=False,
-            )
-        )
+        )(cls)
         manager = manager_class.remote(
             entrypoints_args,
             manager_args,

@@ -13,6 +13,7 @@
 
 import sys
 import os
+import time
 
 import ray
 
@@ -61,6 +62,9 @@ def launch_job_on_gpu_node(module, main_func):
         # get args
         original_argv = sys.argv[1:]
         ray.get(remote_launch_task.remote(module, original_argv, main_func))
+        # add loop here to avoid log loss afer remote_launch_task exits unexpectedly
+        while True:
+            time.sleep(1)
     else:
         logger.info(
             "Current node has CPU resources but no GPU resources, not support now."

@@ -371,11 +371,9 @@ class Manager:
         indeed_update = False
         no_pending_instance = self.pending_rebuild_migration_instances == 0
 
-        clear_instance_ids = []
         for ins_id in instance_ids:
             if ins_id in self.instances:
                 indeed_update = True
-                clear_instance_ids.append(ins_id)
                 self.pending_rebuild_migration_instances += 1
                 self.instances.pop(ins_id)
             else:
@@ -398,7 +396,7 @@ class Manager:
 
         asyncio.create_task(
             asyncio_wait_for_with_timeout(
-                async_wrapper_for_ray_remote_call(self.scaler.clear_instance_ray_resources.remote, clear_instance_ids)
+                async_wrapper_for_ray_remote_call(self.scaler.clear_instance_ray_resources.remote, instance_ids)
             )
         )
 

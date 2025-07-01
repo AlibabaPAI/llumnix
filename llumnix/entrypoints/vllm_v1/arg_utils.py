@@ -12,7 +12,6 @@
 # limitations under the License.
 
 from typing import Tuple, Union
-from dataclasses import dataclass
 import copy
 import pickle
 

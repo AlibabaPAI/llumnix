@@ -16,7 +16,6 @@ from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any, Cor
 from collections import defaultdict
 import asyncio
 import queue
-import gc
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -100,7 +99,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                  executor_class: type[Executor],
                  log_stats: bool,
                  engine_index: int = 0) -> None:
-        
+
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
         super().__init__(vllm_config, on_head_node, handshake_address, executor_class, log_stats, engine_index)
@@ -115,7 +114,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             placement_group,
             backend_type,
         )
-        
+
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         self.disable_async_output_proc = disable_async_output_proc
         self.server_info_table = ServerInfoTable()
@@ -156,7 +155,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             logger.debug("executor_class set to LlumnixRayDistributedExecutor")
         else:
             raise ValueError('Unsupported executor backend')
-        
+
         engine = cls(
             instance_id=instance_id,
             placement_group=placement_group,
@@ -184,18 +183,18 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 engine_core_output_all.append(engine_core_output)
                 if engine_core_output.finished:
                     logger.info("Engine finished request {}".format(engine_core_output.request_id))
-                
+
         set_timestamp(engine_core_output_all, 'engine_step_timestamp_begin', self.step_begin_time)
         set_timestamp(engine_core_output_all, 'engine_step_timestamp_end', self.step_end_time)
         set_timestamp(engine_core_output_all, 'engine_put_queue_timestamp', time.time())
-        
+
         if outputs:
             server_request_outputs, server_info_dict = self._gen_server_request_outputs(outputs)
             if server_request_outputs:
                 await self.output_mediator.put_request_outputs_to_server(server_request_outputs, server_info_dict)
-        
+
         set_timestamp(engine_core_output_all, 'engine_step_postprocess_timestamp_end', time.time())
-        
+
     def _gen_server_request_outputs(
         self,
         engine_core_outputs_dict: Dict[int, EngineCoreOutputs]
@@ -205,7 +204,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         for client_index, engine_core_outputs in engine_core_outputs_dict.items():
             server_info = self.server_info_table.get_server_info(client_index)
             server_id = server_info.server_id
-            
+
             server_request_outputs[server_id] = LlumnixRequestOutputs(
                 instance_id=self.instance_id,
                 engine_outputs=engine_core_outputs,
@@ -213,9 +212,9 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             )
             if server_id not in server_info_dict:
                 server_info_dict[server_id] = server_info
-            
+
         return server_request_outputs, server_info_dict
-        
+
     def _update_instance_info(self):
         """Update instance info from executor and scheduler after step"""
         instance_info: InstanceInfo = self.instance_info # type: ignore
@@ -238,7 +237,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 block_ids: List[List[int]] = self.scheduler.kv_cache_manager.get_block_ids(req.request_id)
                 for group_id, group in enumerate(block_ids):
                     tot_blocks[group_id].extend(group)
-            
+
             num_blocks_last_running_request = 0
             for group_id, group in tot_blocks.items():
                 num_blocks_last_running_request += len(set(group))
@@ -261,7 +260,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
 
     def stop(self) -> None:
         super().shutdown()
-        
+
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
         # These fields are updated after step.
         if self.instance_info is not None:
@@ -302,14 +301,14 @@ class BackendVLLMV1(BackendInterface):
             instance_id=instance_id,
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
-            migration_config=self.migration_config,            
+            migration_config=self.migration_config,
             engine_args=engine_args,
             backend_type=BackendType.VLLM_V1,
             request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
             abort_request_callback=self.abort_request,
         )
         asyncio.create_task(self.engine.run_busy_loop_async())
-        
+
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.vllm_config.parallel_config.world_size:

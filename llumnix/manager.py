@@ -141,6 +141,13 @@ class Manager:
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
+        def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str):
+            if not self.manager_args.enable_engine_semi_pd_disagg:
+                target_instance_id = prefill_instance_id
+            else:
+                target_instance_id = decode_instance_id
+            return target_instance_id
+
         self.manager_metrics.manager_request_qps.increase(
             labels={"server_id": server_info.server_id}
         )
@@ -149,9 +156,9 @@ class Manager:
                 NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
-        prefill_instance_id, _, request_expected_steps = \
+        prefill_instance_id, decode_instance_id, request_expected_steps = \
             self.global_scheduler.dispatch(request_id, dispatch_kwargs=kwargs)
-        target_instance_id = prefill_instance_id
+        target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id)
 
         set_timestamp(server_info, 'manager_generate_timestamp', time.time())
         asyncio.create_task(

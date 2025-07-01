@@ -57,6 +57,7 @@ class GlobalScheduler:
                                                     global_scheduler_config.topk_random_dispatch,
                                                     global_scheduler_config.enable_pd_disagg,
                                                     global_scheduler_config.enable_engine_pd_disagg,
+                                                    global_scheduler_config.enable_engine_semi_pd_disagg,
                                                     global_scheduler_config.enable_adaptive_pd,
                                                     self.global_scheduler_metrics.dispatch_latency)
 
@@ -86,7 +87,7 @@ class GlobalScheduler:
     def _enable_pd(self):
         return self.global_scheduler_config.enable_pd_disagg \
             or self.global_scheduler_config.enable_engine_pd_disagg \
-            or self.global_scheduler_config.enable_adaptive_pd
+            or self.global_scheduler_config.enable_engine_semi_pd_disagg
 
     def _log_request_dispatch_info(self,
                                    request_id: str,
@@ -135,6 +136,11 @@ class GlobalScheduler:
             if self.global_scheduler_config.enable_engine_pd_disagg:
                 addition_dispatch_info["decode_instance_id"] = \
                     self.instance_id_2_engine_inner_inst_id[decode_instance_id]
+            elif self.global_scheduler_config.enable_engine_semi_pd_disagg:
+                addition_dispatch_info["semi_p_inst_id"] = \
+                    self.instance_id_2_engine_inner_inst_id.get(prefill_instance_id, None)
+                addition_dispatch_info["semi_d_inst_id"] = \
+                    self.instance_id_2_engine_inner_inst_id.get(decode_instance_id, None)
 
             self.global_scheduler_metrics.dispatch_counter.increase(
                 labels={"instance_id": prefill_instance_id}
@@ -173,7 +179,7 @@ class GlobalScheduler:
         return scale_up_num, scale_down_num
 
     async def _set_engine_self_assigned_id(self, ins_id: str, instance_actor: Llumlet):
-        if self.global_scheduler_config.enable_engine_pd_disagg:
+        if self.global_scheduler_config.enable_engine_pd_disagg or self.global_scheduler_config.enable_engine_semi_pd_disagg:
             try:
                 self.instance_id_2_engine_inner_inst_id[ins_id] = \
                     await asyncio_wait_for_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())

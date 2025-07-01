@@ -1,4 +1,4 @@
-FROM blade-llm:0.11.0.dev119_g2b436d6b
+FROM blade-llm:local-latest
 
 ARG BRANCH="main"
 

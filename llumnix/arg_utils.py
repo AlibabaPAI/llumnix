@@ -72,7 +72,6 @@ class LlumnixArgumentParser(argparse.ArgumentParser):
 
 
 class LlumnixEngineArgs(ABC):
-
     def __init__(
         self, engine_args, backend_type: BackendType
     ) -> None:
@@ -130,8 +129,13 @@ class LlumnixEngineArgsFactory:
                 )
 
     def gen_next_engine_args(
-        self, backend_type: BackendType, current_engine_args: LlumnixEngineArgs, instance_type: Union[str, 'InstanceType']
+        self,
+        backend_type: BackendType,
+        current_engine_args: LlumnixEngineArgs,
+        next_instance_args: 'InstanceArgs',
+        port_offset: int,
     ) -> LlumnixEngineArgs:
+        instance_type = next_instance_args.instance_type
         if self.load_registered_service:
             current_engine_args = self.engine_args_dict[instance_type]
 
@@ -146,6 +150,8 @@ class LlumnixEngineArgsFactory:
                     instance_type.value if isinstance(instance_type, InstanceType)
                     else instance_type
                 )
+            if self.pdd_config.enable_engine_semi_pd_disagg and not self.load_registered_service:
+                next_engine_args.revised_args.semi_pd_prefill_server_port += port_offset
             return next_engine_args
 
         if backend_type in [BackendType.VLLM, BackendType.SIM_VLLM]:
@@ -293,6 +299,7 @@ class ManagerArgs:
     # init from instance args
     is_group_kind_migration_backend: bool = None
     enable_engine_pd_disagg: bool = None
+    enable_engine_semi_pd_disagg: bool = None
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -336,7 +343,7 @@ class ManagerArgs:
             assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
 
         if args.enable_adaptive_pd:
-            assert args.enable_pd_disagg or args.enable_engine_pd_disagg, \
+            assert args.enable_pd_disagg or args.enable_engine_semi_pd_disagg, \
                 "Adaptive prefill-decode disaggregation is only supported when prefill-decode disaggregation, " \
                 "set --enable-pd-disagg or --enable-engine-pd-disagg to enable prefill-decode disaggregation."
 
@@ -346,8 +353,12 @@ class ManagerArgs:
         assert not (args.enable_engine_pd_disagg and args.enable_pd_disagg), "Engine-based prefill-decode disaggregation and \
             Llumnix-based prefill-decode disaggregation are mutually exclusive."
 
+        assert not (args.enable_engine_pd_disagg and args.enable_engine_semi_pd_disagg), "Prefill-decode engine and semi engine are exclusive."
+
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
+        self.enable_engine_pd_disagg = instance_args.enable_engine_pd_disagg
+        self.enable_engine_semi_pd_disagg = instance_args.enable_engine_semi_pd_disagg
 
     def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
         # Create the GlobalScheduler Configuration.
@@ -362,6 +373,7 @@ class ManagerArgs:
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
                                                         self.enable_engine_pd_disagg,
+                                                        self.enable_engine_semi_pd_disagg,
                                                         self.enable_adaptive_pd,
                                                         self.is_group_kind_migration_backend)
         return global_scheduler_config
@@ -369,6 +381,7 @@ class ManagerArgs:
     def create_pdd_config(self) -> PDDConfig:
         pdd_config = PDDConfig(self.enable_pd_disagg,
                                self.enable_engine_pd_disagg,
+                               self.enable_engine_semi_pd_disagg,
                                self.pd_ratio,
                                self.enable_pdd_node_affinity_scheduling)
         return pdd_config
@@ -522,6 +535,7 @@ class InstanceArgs:
 
     # init from engine args
     enable_engine_pd_disagg: bool = None
+    enable_engine_semi_pd_disagg: bool = None
 
     # init from manager args
     enable_migration: bool = None
@@ -550,7 +564,11 @@ class InstanceArgs:
 
     def init_from_engine_args(self, engine_args, backend_type: BackendType):
         if backend_type == BackendType.BLADELLM:
+            # pylint: disable=import-outside-toplevel
+            from blade_llm.service.args import ServingArgs
+            assert isinstance(engine_args, ServingArgs)
             self.enable_engine_pd_disagg = engine_args.enable_disagg
+            self.enable_engine_semi_pd_disagg = engine_args.enable_semi_pd_mode
             # for local launch mode
             if self.enable_engine_pd_disagg:
                 self.instance_type = engine_args.disagg_options.inst_role

@@ -45,7 +45,7 @@ class InstanceInfo:
     running_seq_lens: List[int] = field(default_factory=list)
     last_inference_latency: float = None
     inference_type: RequestInferenceType = None
-    decode_batch_size: int = None
+    decode_batch_size: int = 0
 
     num_total_gpu_blocks: int = 0
     num_watermark_blocks: int = 0

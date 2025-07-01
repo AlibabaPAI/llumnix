@@ -28,5 +28,5 @@ jobs:
         nvidia-docker run --rm -t --net host --ipc host \
           -v ${PWD}:/workspace \
           -w /workspace \
-          registry.cn-beijing.aliyuncs.com/llumnix/llumnix-vllm-dev:202504241348_image_54729fe \
-          sh -c "make vllm_install > /dev/null && make lint"
+          registry.cn-beijing.aliyuncs.com/llumnix/llumnix-bladellm-dev:202506261954_rebase_bladellm_0624_6efc1e8 \
+          sh -c "make lint"

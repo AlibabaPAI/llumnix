@@ -12,6 +12,7 @@
 # limitations under the License.
 
 
+from functools import partial
 import random
 import subprocess
 import asyncio
@@ -26,7 +27,7 @@ from llumnix.utils import get_ip_address, wait_port_free
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env, cleanup_ray_env_func
-from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command, generate_special_test_config,
                                   wait_for_llumnix_service_ready, generate_bladellm_launch_command,
                                   shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
                                   generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
@@ -43,6 +44,7 @@ prompts = [
 
 engine_prompt_output = {}
 engine_pdd_prompt_output = {}
+engine_semi_pd_prompt_output = {}
 
 test_times = 0
 
@@ -64,17 +66,17 @@ def run_vllm(model):
         vllm_output[output.prompt] = output.prompt + output.outputs[0].text
     return vllm_output
 
-async def run_bladellm(model, enable_pd_disagg, enable_migration):
+async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
+    global test_times
     ip = get_ip_address()
     base_port = 35000 + test_times * 100
 
-    if not enable_pd_disagg:
+    if not enable_pd_disagg and not enable_engine_semi_pd_disagg:
         launch_command = generate_bladellm_launch_command(
             model=model,
             ip=ip,
             port=base_port,
-            enable_llumnix=False,
-            enable_migration=enable_migration
+            enable_llumnix=False
         )
         subprocess.run(launch_command, shell=True, check=True)
     else:
@@ -83,9 +85,12 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
             ip=ip,
             port=base_port,
             enable_llumnix=False,
-            enable_pd_disagg=True,
+            enable_pd_disagg=enable_pd_disagg,
+            enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+            semi_pd_ins_id="prefill",
             instance_type="prefill",
-            enable_migration=enable_migration
+            enforce_eager=True,
+            cuda_visiable_device="0"
         )
         subprocess.run(prefill_launch_command, shell=True, check=True)
         decode_launch_command = generate_bladellm_launch_command(
@@ -93,9 +98,11 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
             ip=ip,
             port=base_port+100,
             enable_llumnix=False,
-            enable_pd_disagg=True,
+            enable_pd_disagg=enable_pd_disagg,
+            enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+            semi_pd_ins_id="decode",
             instance_type="decode",
-            enable_migration=enable_migration,
+            enforce_eager=True,
             cuda_visiable_device="1"
         )
         subprocess.run(decode_launch_command, shell=True, check=True)
@@ -115,54 +122,77 @@ async def run_bladellm(model, enable_pd_disagg, enable_migration):
     shutdown_llumnix_service_func()
     await asyncio.sleep(3)
 
+    test_times += 1
+
     return bladellm_outputs
 
 config_schema = "engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator," \
-"enable_pd_disagg, launch_mode, request_output_forwarding_mode"
+"enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_engine_semi_pd_disagg, enable_adaptive_pd"
+
+generate_special_correctness_test_config = partial(generate_special_test_config, schema=config_schema)
+
 
 def generate_correctness_test_config():
+    vllm_base_config = ["engine_vLLM", "gloo", 1, True, False, False, "global", "thread", False, False]
+
     vllm_config = [
-        ("engine_vLLM", "gloo", 1, True, False, False, "global", "thread"),
+        vllm_base_config,
 
-        # migration backend
-        ("engine_vLLM", "gloo", 1, True, False, True, "global", "thread"),
-        ("engine_vLLM", "rayrpc", 1, True, False, True, "global", "thread"),
-        ("engine_vLLM", "nccl", 1, True, False, True, "global", "thread"),
+        # migration backend and pd
+        generate_special_correctness_test_config([("migration_backend", "gloo"), ("enable_pd_disagg", True)], vllm_base_config),
+        generate_special_correctness_test_config([("migration_backend", "rayrpc"), ("enable_pd_disagg", True)], vllm_base_config),
+        generate_special_correctness_test_config([("migration_backend", "nccl"), ("enable_pd_disagg", True)], vllm_base_config),
 
-        # migration tp=2
-        ("engine_vLLM", "gloo", 2, True, False, True, "global", "thread"),
-        ("engine_vLLM", "rayrpc", 2, True, False, True, "global", "thread"),
+        # migration and tp=2
+        generate_special_correctness_test_config(
+            [("migration_backend", "gloo"), ("tensor_parallel_size", 2), ("enable_pd_disagg", True)],
+            vllm_base_config),
+        generate_special_correctness_test_config(
+            [("migration_backend", "rayrpc"), ("tensor_parallel_size", 2), ("enable_pd_disagg", True)],
+            vllm_base_config),
 
         # disable migration
-        ("engine_vLLM", "gloo", 1, False, False, False, "global", "thread"),
+        generate_special_correctness_test_config([("enable_migration", False)], vllm_base_config),
 
         # simulation
-        ("engine_vLLM", "gloo", 1, True, True, False, "global", "thread"),
+        generate_special_correctness_test_config([("enable_simulator", False)], vllm_base_config),
 
         # local launch mode
-        ("engine_vLLM", "gloo", 1, True, False, False, "local", "thread"),
+        generate_special_correctness_test_config([("launch_mode", "local")], vllm_base_config),
+        generate_special_correctness_test_config([("launch_mode", "local"), ("enable_pd_disagg", True)], vllm_base_config),
 
         # actor token forward
-        ("engine_vLLM", "gloo", 1, True, False, False, "global", "actor"),
+        generate_special_correctness_test_config([("request_output_forwarding_mode", "actor")], vllm_base_config),
+
+        # adaptive pd
+        generate_special_correctness_test_config([("enable_pd_disagg", True), ("enable_adaptive_pd", True)], vllm_base_config),
     ]
 
+    bladellm_base_config = ["engine_BladeLLM", "grpc", 1, True, False, False, "global", "thread", False, False]
+
     bladellm_config = [
-        ("engine_BladeLLM", "grpc", 1, True, False, False, "global", "thread"),
+        bladellm_base_config,
 
         # tp=2
-        ("engine_BladeLLM", "grpc", 2, True, False, False, "global", "thread"),
+        generate_special_correctness_test_config([("tensor_parallel_size", 2)], bladellm_base_config),
 
         # disable migration
-        ("engine_BladeLLM", "grpc", 1, False, False, False, "global", "thread"),
+        generate_special_correctness_test_config([("enable_migration", False)], bladellm_base_config),
 
         # engine pd
-        ("engine_BladeLLM", "grpc", 1, True, False, True, "global", "thread"),
+        generate_special_correctness_test_config([("enable_pd_disagg", True)], bladellm_base_config),
 
         # local launch mode
-        ("engine_BladeLLM", "grpc", 1, True, False, False, "local", "thread"),
+        generate_special_correctness_test_config([("launch_mode", "local")], bladellm_base_config),
 
         # actor token forward
-        ("engine_BladeLLM", "grpc", 1, True, False, False, "global", "actor"),
+        generate_special_correctness_test_config([("request_output_forwarding_mode", "actor")], bladellm_base_config),
+
+        # semi pd
+        generate_special_correctness_test_config([("enable_engine_semi_pd_disagg", True)], bladellm_base_config),
+
+        # adaptive pd
+        generate_special_correctness_test_config([("enable_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)], bladellm_base_config),
     ]
 
     return vllm_config + bladellm_config
@@ -174,7 +204,8 @@ def generate_correctness_test_config():
 @pytest.mark.parametrize(config_schema, generate_correctness_test_config())
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator,
-                           enable_pd_disagg, launch_mode, request_output_forwarding_mode):
+                           enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_engine_semi_pd_disagg,
+                           enable_adaptive_pd):
     engine = engine.split("_")[1]
 
     global test_times
@@ -188,6 +219,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
     global engine_prompt_output
     global engine_pdd_prompt_output
+    global engine_semi_pd_prompt_output
 
     if engine == "vLLM":
         generate_request_func = generate_vllm_request
@@ -212,11 +244,14 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         generate_serve_command_func = generate_bladellm_serve_command
         url = f'http://{ip}:{base_port}/v1/chat/completions'
 
-        if not enable_pd_disagg and len(engine_prompt_output) == 0:
-            engine_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_migration)
+        if not enable_pd_disagg and not enable_engine_semi_pd_disagg and len(engine_prompt_output) == 0:
+            engine_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
 
         if enable_pd_disagg and len(engine_pdd_prompt_output) == 0:
-            engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_migration)
+            engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
+
+        if enable_engine_semi_pd_disagg and len(engine_semi_pd_prompt_output) == 0:
+            engine_semi_pd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
 
     ip_ports = []
 
@@ -233,6 +268,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     enforce_eager=True,
                                                     migration_backend=migration_backend,
                                                     enable_pd_disagg=enable_pd_disagg,
+                                                    enable_adaptive_pd=enable_adaptive_pd,
                                                     enable_simulator=enable_simulator,
                                                     request_output_forwarding_mode=request_output_forwarding_mode,
                                                     instance_type="prefill",
@@ -250,6 +286,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     migration_backend=migration_backend,
                                                     enforce_eager=True,
                                                     enable_simulator=enable_simulator,
+                                                    enable_adaptive_pd=enable_adaptive_pd,
                                                     request_output_forwarding_mode=request_output_forwarding_mode,
                                                     enable_pd_disagg=enable_pd_disagg,
                                                     instance_type="decode",
@@ -264,6 +301,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                     port=base_port,
                                                     migration_backend=migration_backend,
                                                     enable_pd_disagg=enable_pd_disagg,
+                                                    enable_adaptive_pd=enable_adaptive_pd,
                                                     enforce_eager=True,
                                                     enable_simulator=enable_simulator,
                                                     request_output_forwarding_mode=request_output_forwarding_mode,
@@ -280,6 +318,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                enforce_eager=True,
                                                migration_backend=migration_backend,
                                                enable_pd_disagg=enable_pd_disagg,
+                                               enable_adaptive_pd=enable_adaptive_pd,
+                                               enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
                                                enable_simulator=enable_simulator,
                                                request_output_forwarding_mode=request_output_forwarding_mode,
                                                tensor_parallel_size=tensor_parallel_size,
@@ -300,7 +340,13 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         llumnix_output[prompt] = response
 
     # compare
-    raw_output = engine_prompt_output if not enable_pd_disagg else engine_pdd_prompt_output
+    if not enable_pd_disagg and not engine_semi_pd_prompt_output:
+        raw_output = engine_prompt_output
+    elif enable_pd_disagg:
+        raw_output = engine_pdd_prompt_output
+    else:
+        raw_output = engine_semi_pd_prompt_output
+
     if not enable_simulator:
         for prompt in prompts:
             assert llumnix_output[prompt] == raw_output[prompt]

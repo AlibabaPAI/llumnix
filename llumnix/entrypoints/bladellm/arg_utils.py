@@ -13,7 +13,7 @@
 
 from dataclasses import dataclass, field
 import pickle
-from typing import Union
+from typing import Optional, Union
 import copy
 
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser,
@@ -33,12 +33,15 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
                  backend_type: BackendType = BackendType.BLADELLM):
         self.world_size = self._get_world_size(engine_args)
         self.instance_id = self._get_instance_id(engine_args)
-        engine_args = self._get_engine_args(engine_args)
         super().__init__(
-            engine_args=engine_args,
+            engine_args=self._get_engine_args(engine_args),
             backend_type=backend_type,
         )
-        self.revised_args = RevisedArgs()
+
+        self.revised_args = RevisedArgs() if not hasattr(engine_args, 'revised_args') else engine_args.revised_args
+
+        if hasattr(engine_args, 'semi_pd_options') and engine_args.semi_pd_options:
+            self.revised_args.semi_pd_prefill_server_port = engine_args.semi_pd_options.prefill_server_port
 
     def _get_world_size(self, engine_args: Union["ServingArgs", LlumnixEngineArgs]):
         if isinstance(engine_args, LlumnixEngineArgs):
@@ -71,6 +74,11 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
             if revised_args.engine_disagg_inst_id:
                 engine_args.disagg_options.inst_id = revised_args.engine_disagg_inst_id
             engine_args.disagg_options.select_decode_policy = DecodeRoutingPolicy.EXTERNAL_ROUTE
+        if engine_args.enable_semi_pd_mode:
+            if revised_args.semi_pd_inst_id:
+                engine_args.semi_pd_options.inst_id = revised_args.semi_pd_inst_id
+            if revised_args.semi_pd_prefill_server_port:
+                engine_args.semi_pd_options.prefill_server_port = revised_args.semi_pd_prefill_server_port
         return engine_args
 
     def get_world_size(self):
@@ -80,8 +88,10 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
 @dataclass
 class RevisedArgs:
     # bladellm engine args need to revised
-    disagg_options_inst_role: str = field(default=None)
-    engine_disagg_inst_id: str = field(default=None)
+    disagg_options_inst_role: Optional[str] = field(default=None)
+    engine_disagg_inst_id: Optional[str] = field(default=None)
+    semi_pd_prefill_server_port: Optional[int] = field(default=0)
+    semi_pd_inst_id: Optional[str] = field(default=None)
 
 
 def add_cli_args(parser: LlumnixArgumentParser, add_engine_args: bool = True) -> LlumnixArgumentParser:

@@ -82,7 +82,6 @@ def generate_bladellm_pdd_serve_args(
         f"--enable_llumnix",
         f"--disable_frontend_multiprocessing",
         f"--disable_signal_handler",
-        f"--disable_cuda_graph",
         f"--enable_disagg",
         f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]}",
         f"--disagg_pd.inst_role=prefill", # useless, setted in scaler

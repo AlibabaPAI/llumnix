@@ -264,7 +264,7 @@ class Scaler:
             if not server_exists and instance_exists:
                 instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
                 try:
-                    await asyncio_wait_for_with_timeout(instance.is_ready.remote())
+                    await asyncio_wait_for_with_timeout(instance.is_ready.remote(), timeout=llumnix_envs.INSTANCE_READY_TIMEOUT)
                 # Instance exception could be handled by manager/scaler, so check states loop omits exception case here.
                 # pylint: disable=bare-except
                 except:

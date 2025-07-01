@@ -96,7 +96,7 @@ class SchedulerLlumnix(Scheduler):
     def free_src_request(self, backend_request: LlumnixRequestVLLMV1) -> None:
         raise NotImplementedError("free_src_request is not implemented in vllm v1")
 
-    # TODO(zhaozhiyu): update waiting_time, num_watermark_blocks, inference_type
+    # TODO(zhaozhiyu): update waiting_time
     def _get_instance_info(self, scheduler_output: Optional[SchedulerOutput] = None) -> InstanceInfo:
         num_total_gpu_blocks = self.cache_config.num_gpu_blocks
         num_free_gpu_blocks = self.kv_cache_manager.block_pool.get_num_free_blocks()
@@ -134,15 +134,26 @@ class SchedulerLlumnix(Scheduler):
         )
 
         if scheduler_output is not None:
+            logger.debug("scheduler_output.num_scheduled_tokens=%s", str(scheduler_output.num_scheduled_tokens))
             for new_req in scheduler_output.scheduled_new_reqs:
                 instance_info.running_seq_lens.append(new_req.num_computed_tokens)
                 instance_info.num_seqs = len(instance_info.running_seq_lens)
-            # FIXME(zhaozhiyu) figure out how vllm v1 determine the inference type
-            instance_info.inference_type = RequestInferenceType.UNKNOWN
+            if scheduler_output.num_scheduled_tokens == {}:
+                instance_info.inference_type = RequestInferenceType.UNKNOWN
+            elif all(v > 1 for v in scheduler_output.num_scheduled_tokens.values()):
+                # all num_scheduler_tokens > 1, prefill
+                instance_info.inference_type = RequestInferenceType.PREFILL
+            elif all(v == 1 for v in scheduler_output.num_scheduled_tokens.values()):
+                # all num_scheduler_token == 1, decode
+                instance_info.inference_type = RequestInferenceType.DECODE
+            elif all(v >= 1 for v in scheduler_output.num_scheduled_tokens.values()):
+                instance_info.inference_type = RequestInferenceType.PREFILL_AND_DECODE
+            else:
+                instance_info.inference_type = RequestInferenceType.UNKNOWN
+                
             instance_info.num_batched_tokens = scheduler_output.total_num_scheduled_tokens # type: ignore
         return instance_info
 
-    # TODO(zhaozhiyu): adapt vllm v1, remove sequence group
     def schedule(self) -> SchedulerOutput:
         scheduler_output = super().schedule()
         self.update_instance_info_callback(self._get_instance_info(scheduler_output))

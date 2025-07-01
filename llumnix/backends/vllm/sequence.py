@@ -62,9 +62,9 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
         return self.arrival_time
 
     @property
-    def status(self) -> RequestStatus:
-        if self._status:
-            return self._status
+    def llumnix_status(self) -> RequestStatus:
+        if self._llumnix_status:
+            return self._llumnix_status
         status = self.get_seqs()[0].status
         if status == SequenceStatus.RUNNING:
             request_status = RequestStatus.RUNNING

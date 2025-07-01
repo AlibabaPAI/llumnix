@@ -64,7 +64,7 @@ class APIServerActorVLLMV1(APIServerActor):
         client_config = {
             "client_index": self.client_index
         }
-        
+
         serve_args = engine_args.load_engine_args()
         for field in fields(VLLMV1EntrypointsArgs):
             setattr(serve_args, field.name, getattr(entrypoints_args, field.name))
@@ -78,7 +78,7 @@ class APIServerActorVLLMV1(APIServerActor):
         from vllm.entrypoints.openai.api_server import run_server_worker
         vllm.v1.engine.core_client.entrypoints_context = self.entrypoints_context
         uvloop.run(
-            run_server_worker(self.listen_address, self.sock, 
+            run_server_worker(self.listen_address, self.sock,
                               serve_args, client_config))
 
     def _stop_server(self):
@@ -92,7 +92,7 @@ class APIServerActorVLLMV1(APIServerActor):
 def setup_server(entrypoints_args: VLLMV1EntrypointsArgs):
     """
     Validate API server args, set up signal handler, create socket ready to serve.
-    
+
     Main logic copied from vLLM's `setup_server`, removed some unnecessary logic.
     """
     # pylint: disable=import-outside-toplevel

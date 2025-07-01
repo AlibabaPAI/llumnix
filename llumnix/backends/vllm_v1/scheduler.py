@@ -11,15 +11,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import time
-import bisect
 from typing import Dict, List, Optional, Tuple, Deque
-from collections import deque
 
 from vllm.v1.core.sched.scheduler import Scheduler
 from vllm.v1.core.sched.output import SchedulerOutput
-from vllm.v1.engine import EngineCoreOutputs
-from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request
 
 from llumnix.instance_info import InstanceInfo
@@ -27,7 +22,6 @@ from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.utils import MigrationResponse
-from llumnix.request_output import LlumnixRequestOutputs
 
 logger = init_logger(__name__)
 
@@ -40,7 +34,7 @@ class SchedulerLlumnix(Scheduler):
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
         self.update_instance_info_callback(self._get_instance_info())
-    
+
     def get_running_queue(self) -> List[Request]:
         return self.running
 
@@ -96,7 +90,6 @@ class SchedulerLlumnix(Scheduler):
     def free_src_request(self, backend_request: LlumnixRequestVLLMV1) -> None:
         raise NotImplementedError("free_src_request is not implemented in vllm v1")
 
-    # TODO(zhaozhiyu): update waiting_time
     def _get_instance_info(self, scheduler_output: Optional[SchedulerOutput] = None) -> InstanceInfo:
         num_total_gpu_blocks = self.cache_config.num_gpu_blocks
         num_free_gpu_blocks = self.kv_cache_manager.block_pool.get_num_free_blocks()
@@ -108,7 +101,7 @@ class SchedulerLlumnix(Scheduler):
             for req in self.waiting:
                 num_prompt_tokens = req.num_prompt_tokens
                 num_blocks = num_prompt_tokens / self.cache_config.block_size
-                # FIXME(zhaozhiyu): arrival_time is not accessible through req, should be acessed in output_processor
+                # TODO(zhaozhiyu): arrival_time should be accessed in EngineCoreRequest
                 waiting_time = 0
                 num_blocks_waiting_requests.append(num_blocks)
                 waiting_time_waiting_requests.append(waiting_time)
@@ -127,7 +120,7 @@ class SchedulerLlumnix(Scheduler):
             gpu_cache_usage=gpu_cache_usage,
             num_running_requests=len(self.running),
             num_waiting_requests=len(self.waiting),
-            num_killed_requests=0, # num_killed_requests should be obtained from IterationStats
+            num_killed_requests=0, # TODO(zhaozhiyu): num_killed_requests should be obtained from IterationStats
             num_blocks_first_waiting_request=num_blocks_first_waiting_request,
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
@@ -150,7 +143,7 @@ class SchedulerLlumnix(Scheduler):
                 instance_info.inference_type = RequestInferenceType.PREFILL_AND_DECODE
             else:
                 instance_info.inference_type = RequestInferenceType.UNKNOWN
-                
+
             instance_info.num_batched_tokens = scheduler_output.total_num_scheduled_tokens # type: ignore
         return instance_info
 
@@ -158,6 +151,4 @@ class SchedulerLlumnix(Scheduler):
         scheduler_output = super().schedule()
         self.update_instance_info_callback(self._get_instance_info(scheduler_output))
         return scheduler_output
-    
-    def add_request(self, request: Request) -> None:
-        return super().add_request(request)
+

@@ -22,9 +22,6 @@ logger = init_logger(__name__)
 class AsyncEngineCore(EngineCore):
     """Extension of EngineCore to add async methods."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     async def execute_model_async(self, scheduler_output: SchedulerOutput):
         logger.debug("[execute_model_async]")
         try:
@@ -38,7 +35,7 @@ class AsyncEngineCore(EngineCore):
 
     async def step_async(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
         """Schedule, execute, and make output."""
-        
+
         logger.debug("[step_async]")
         kvconn = self.scheduler.get_kv_connector()
         if kvconn:
@@ -60,7 +57,7 @@ class AsyncEngineCore(EngineCore):
         return await make_async(self.execute_dummy_batch)()
 
 
-class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):    
+class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
     """ZMQ-wrapper for running EngineCore in background process."""
 
     ENGINE_CORE_DEAD = b'ENGINE_CORE_DEAD'
@@ -128,7 +125,6 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
                 "vllm_config"].parallel_config
             if parallel_config.data_parallel_size > 1 or dp_rank > 0:
                 # Set data parallel rank for this engine process.
-                # TODO(zhaozhiyu): use EngineCoreLlumnix
                 parallel_config.data_parallel_rank = dp_rank
                 parallel_config.data_parallel_rank_local = local_dp_rank
                 engine_core = AsyncDPEngineCoreProc(*args, **kwargs)
@@ -163,7 +159,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
             # 2) Step the engine core and return the outputs.
             await self._process_engine_step_async()
             logger.debug("[run_busy_loop_async] after _process_engine_step_async")
-            
+
     async def _process_input_queue_async(self):
         """
         Asynchronously processes the input queue.
@@ -176,7 +172,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
             if logger.isEnabledFor(DEBUG) and self.input_queue.empty():
                 logger.debug("EngineCore waiting for work.")
                 waited = True
-            
+
             # Asynchronously get an item from the queue.
             # This will pause the task if the queue is empty, allowing the
             # event loop to run other tasks, without blocking the thread.

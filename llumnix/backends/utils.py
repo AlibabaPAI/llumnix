@@ -218,7 +218,7 @@ class OutputMediator:
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR if backend_type == BackendType.BLADELLM else 0
             self.actor_mediator: ActorOutputMediator = ray.remote(
                 num_cpus=1,
-                num_gpus=0.1,
+                num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
                 name=f"ActorOutputMediator_{instance_id}"
             )(ActorOutputMediator).remote(instance_id, request_output_queue_type)
@@ -268,7 +268,7 @@ def init_backend_engine(instance_id: str,
                                      llumnix_engine_args)
     elif backend_type == BackendType.VLLM_V1:
         # pylint: disable=import-outside-toplevel
-        from llumnix.llumnix.backends.vllm_v1.core import BackendVLLMV1
+        from llumnix.backends.vllm_v1.core import BackendVLLMV1
         backend_engine = BackendVLLMV1(instance_id,
                                      placement_group,
                                      request_output_queue_type,

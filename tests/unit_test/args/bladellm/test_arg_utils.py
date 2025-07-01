@@ -16,8 +16,8 @@ from unittest.mock import patch
 from blade_llm.service.args import ServingArgs, DisaggOptions, SemiPDOptions
 from blade_llm.utils.load_model_options import LoadModelOptions
 
-from llumnix.arg_utils import LlumnixEngineArgsFactory, LlumnixEngineArgs, InstanceArgs
-from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs
+from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
+from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs, BladeLLMEngineArgsFactory
 from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
 from llumnix.backends.backend_interface import BackendType
@@ -34,7 +34,7 @@ def mocked_load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineAr
 
 
 def test_gen_next_engine_args_baldellm():
-    llumnix_engine_args_factory = LlumnixEngineArgsFactory(
+    llumnix_engine_args_factory = BladeLLMEngineArgsFactory(
         enable_port_increment=False,
         load_registered_service=False,
         load_registered_service_path="",
@@ -44,9 +44,9 @@ def test_gen_next_engine_args_baldellm():
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
     engine_args = BladeLLMEngineArgs(serving_args)
-    next_instance_agrs = InstanceArgs(instance_type=InstanceType.NO_CONSTRAINTS)
-    next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.BLADELLM, engine_args, next_instance_agrs, 0
+    next_instance_args = InstanceArgs(instance_type=InstanceType.NO_CONSTRAINTS)
+    next_engine_args: BladeLLMEngineArgs = llumnix_engine_args_factory.gen_next_engine_args(
+        engine_args, next_instance_args, 0
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.load_engine_args()) == asdict(
@@ -56,7 +56,7 @@ def test_gen_next_engine_args_baldellm():
 
 def test_gen_next_engine_args_baldellm_from_registered_service():
     with patch("llumnix.arg_utils.load_engine_args", new=mocked_load_engine_args):
-        llumnix_engine_args_factory = LlumnixEngineArgsFactory(
+        llumnix_engine_args_factory = BladeLLMEngineArgsFactory(
             enable_port_increment=True,
             load_registered_service=True,
             load_registered_service_path="",
@@ -65,7 +65,7 @@ def test_gen_next_engine_args_baldellm_from_registered_service():
 
     engine_args = None
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.BLADELLM, engine_args, InstanceArgs(instance_type=InstanceType.PREFILL), 0
+        engine_args, InstanceArgs(instance_type=InstanceType.PREFILL), 0
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.load_engine_args()) == asdict(
@@ -75,7 +75,7 @@ def test_gen_next_engine_args_baldellm_from_registered_service():
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.BLADELLM, engine_args, InstanceArgs(instance_type=InstanceType.DECODE), 0
+        engine_args, InstanceArgs(instance_type=InstanceType.DECODE), 0
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.load_engine_args()) == asdict(
@@ -87,7 +87,7 @@ def test_gen_next_engine_args_baldellm_from_registered_service():
 
 def test_gen_next_engine_args_baldellm_enable_port_increment():
     with patch("llumnix.arg_utils.load_engine_args", new=mocked_load_engine_args):
-        llumnix_engine_args_factory = LlumnixEngineArgsFactory(
+        llumnix_engine_args_factory = BladeLLMEngineArgsFactory(
             enable_port_increment=True,
             load_registered_service=False,
             load_registered_service_path="",
@@ -101,8 +101,8 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
     )
     engine_args = BladeLLMEngineArgs(serving_args)
     instance_args = InstanceArgs(instance_type=InstanceType.PREFILL)
-    next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.BLADELLM, engine_args, instance_args, 1
+    next_engine_args: BladeLLMEngineArgs = llumnix_engine_args_factory.gen_next_engine_args(
+        engine_args, instance_args, 1
     )
     assert next_engine_args is not engine_args
     assert next_engine_args.revised_args.semi_pd_prefill_server_port == 8
@@ -113,7 +113,7 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
 
 def test_gen_next_engine_args_baldellm_enable_pdd():
     with patch("llumnix.arg_utils.load_engine_args", new=mocked_load_engine_args):
-        llumnix_engine_args_factory = LlumnixEngineArgsFactory(
+        llumnix_engine_args_factory = BladeLLMEngineArgsFactory(
             enable_port_increment=True,
             load_registered_service=False,
             load_registered_service_path="",
@@ -125,7 +125,7 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
     )
     engine_args = BladeLLMEngineArgs(serving_args)
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.BLADELLM, engine_args, InstanceArgs(instance_type=InstanceType.PREFILL), 0
+        engine_args, InstanceArgs(instance_type=InstanceType.PREFILL), 0
     )
     assert next_engine_args is not engine_args
     assert (
@@ -134,7 +134,7 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
     )
 
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        BackendType.BLADELLM, engine_args, InstanceArgs(instance_type=InstanceType.DECODE), 0
+        engine_args, InstanceArgs(instance_type=InstanceType.DECODE), 0
     )
     assert next_engine_args is not engine_args
     assert (

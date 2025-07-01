@@ -15,24 +15,27 @@ import time
 import asyncio
 import uuid
 
-
+import msgspec
 from aiohttp import web
 from aiohttp_sse import sse_response
 
 
 from blade_llm.service.args import ServingArgs
-from blade_llm.service.communications.response import AsyncRespStreamer
-from blade_llm.service.server import Entrypoint,SSEResponse
+from blade_llm.service.server import Entrypoint, SSEResponse
 from blade_llm.service.error_handler import handle_http_error
 from blade_llm.protocol import (
+    Logprob,
+    OAIChatCompletionsChoice,
+    OAIChatCompletionsResponse,
     OAICompletionsChoice,
     OAICompletionsRequest,
-    OAILogprobs,
     OAICompletionsResponse,
-    OAIChatCompletionsResponse,
-    OAIChatCompletionsChoice
+    OAILogprobs,
+    Token,
+    TokenUsage,
 )
 from blade_llm.service.otel_provider import extract_trace_headers
+from blade_llm.service.request_parser import extract_kvt_meta
 
 
 from llumnix.config import get_llumnix_config
@@ -50,6 +53,7 @@ from llumnix.backends.bladellm.protocol import (
     LlumnixGenerateStreamResponse,
     LlumnixOAIChatCompletionsResponse,
 )
+
 from llumnix.constants import LLUMNIX_TRACE_HEADER
 
 logger = init_logger(__name__)
@@ -63,10 +67,11 @@ class LlumnixEntrypoint(Entrypoint):
     async def oai_chat_completions(self, request: web.Request):
         # TODO(litan.ls): configurable request id header key
         oai_req, server_req = await self._web_request_to_oai_chat_request(request)
+        model_name = oai_req.model or ''
+
         if request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1'):
             # collect and return request lantencys
             server_req = LlumnixServerRequest.from_server_request(server_req, True)
-        model_name = oai_req.model or ''
 
         result = await self._client.add_request(server_req)
         if oai_req.stream:
@@ -113,11 +118,35 @@ class LlumnixEntrypoint(Entrypoint):
             else:
                 tokens = []
                 llumnix_trace_infos = []
-                streamer: AsyncRespStreamer = result.async_stream()
+                streamer = result.async_stream()
                 last_response = None
                 async for r in streamer:
                     last_response = r
-                    tokens.extend(r.tokens)
+                    tokens.extend(
+                        [
+                            Token(
+                                id=token.id,
+                                text=token.text,
+                                logprob=token.logprob,
+                                is_special=token.is_special,
+                                bytes=token.bytes,
+                                top_logprobs=[
+                                    Logprob(
+                                        id=top_logprob.id,
+                                        text=top_logprob.text,
+                                        logprob=top_logprob.logprob,
+                                        bytes=top_logprob.bytes,
+                                    )
+                                    for top_logprob in token.top_logprobs
+                                ]
+                                if token.top_logprobs is not None
+                                else None,
+                            )
+                            for token in r.tokens
+                        ]
+                        if isinstance(r.tokens[0], msgspec.Struct)
+                        else r.tokens
+                    )
                     if isinstance(r, LlumnixGenerateStreamResponse):
                         llumnix_trace_info = r.llumnix_trace_info
                         set_timestamp(
@@ -151,7 +180,11 @@ class LlumnixEntrypoint(Entrypoint):
                         )
                     ],
                     object="chat.completion",
-                    usage=token_usage,
+                    usage=TokenUsage(
+                        prompt_tokens=token_usage.prompt_tokens,
+                        completion_tokens=token_usage.completion_tokens,
+                        total_tokens=token_usage.total_tokens,
+                    ),
                 )
                 if llumnix_trace_infos:
                     response.llumnix_trace_info = llumnix_trace_infos
@@ -163,6 +196,7 @@ class LlumnixEntrypoint(Entrypoint):
         # TODO(litan.ls): configurable request id header key
         external_request_id = request.headers.get('X-DashScope-RequestId') or str(uuid.uuid4())
         decode_inst_str = request.headers.get('X-Decode-Instance') or ''
+        kvt_meta_info = extract_kvt_meta(request.headers)
         decode_instances = [part.strip() for part in decode_inst_str.split(",") if part.strip()]
         trace_headers = extract_trace_headers(request.headers)
         internal_request_id = next(self._counter)
@@ -170,7 +204,11 @@ class LlumnixEntrypoint(Entrypoint):
         oai_req = self.request_parser.parse(payload_json, OAICompletionsRequest, self._generation_conf_processor)
         model_name = oai_req.model or ''
         server_req = oai_req.to_server_request(
-            internal_request_id, external_request_id, decode_instances, trace_headers
+            internal_request_id,
+            external_request_id,
+            decode_instances,
+            trace_headers,
+            kvt_meta_info=kvt_meta_info,
         )
         server_req.arrive_time = time.time()
 
@@ -180,7 +218,6 @@ class LlumnixEntrypoint(Entrypoint):
             server_req: LlumnixServerRequest = LlumnixServerRequest.from_server_request(server_req, True)
 
         result = await self._client.add_request(server_req)
-
         if oai_req.stream:
             async with sse_response(request, response_cls=SSEResponse) as sse:
                 connection_alive = True
@@ -222,7 +259,31 @@ class LlumnixEntrypoint(Entrypoint):
                 last_response = None
                 async for r in streamer:
                     last_response = r
-                    tokens.extend(r.tokens)
+                    tokens.extend(
+                        [
+                            Token(
+                                id=token.id,
+                                text=token.text,
+                                logprob=token.logprob,
+                                is_special=token.is_special,
+                                bytes=token.bytes,
+                                top_logprobs=[
+                                    Logprob(
+                                        id=top_logprob.id,
+                                        text=top_logprob.text,
+                                        logprob=top_logprob.logprob,
+                                        bytes=top_logprob.bytes,
+                                    )
+                                    for top_logprob in token.top_logprobs
+                                ]
+                                if token.top_logprobs is not None
+                                else None,
+                            )
+                            for token in r.tokens
+                        ]
+                        if isinstance(r.tokens[0], msgspec.Struct)
+                        else r.tokens
+                    )
                     if isinstance(r, LlumnixGenerateStreamResponse):
                         llumnix_trace_info = r.llumnix_trace_info
                         set_timestamp(
@@ -252,8 +313,11 @@ class LlumnixEntrypoint(Entrypoint):
                             ),
                         )
                     ],
-                    usage=token_usage,
-                    llumnix_trace_info=None
+                    usage=TokenUsage(
+                        prompt_tokens=token_usage.prompt_tokens,
+                        completion_tokens=token_usage.completion_tokens,
+                        total_tokens=token_usage.total_tokens,
+                    ),
                 )
                 if llumnix_trace_infos:
                     response.llumnix_trace_info = llumnix_trace_infos

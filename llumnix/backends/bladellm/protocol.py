@@ -12,12 +12,13 @@
 # limitations under the License.
 
 from typing import List, Union, Type, Optional
+import msgspec
 from pydantic import Field, BaseModel
 
+from blade_llm.protocol_msgspec import ServerRequest as _ServerRequest
+from blade_llm.protocol_msgspec import GenerateStreamResponse as _GenerateStreamResponse
 from blade_llm.protocol import (
     OAICompletionsResponse,
-    ServerRequest,
-    GenerateStreamResponse,
     OAIChatCompletionsResponse,
 )
 
@@ -30,15 +31,17 @@ class LlumnixBaseResponse(BaseModel):
     )
 
 
-class LlumnixGenerateStreamResponse(GenerateStreamResponse, LlumnixBaseResponse):
+class LlumnixGenerateStreamResponse(_GenerateStreamResponse):
+
+    llumnix_trace_info: Optional[Union[LlumnixTraceInfo, List[LlumnixTraceInfo]]] = None
 
     @classmethod
     def from_generate_stream_response(
         cls: Type["LlumnixGenerateStreamResponse"],
-        gen_resp: GenerateStreamResponse,
+        gen_resp: _GenerateStreamResponse,
         llumnix_trace_info: LlumnixTraceInfo = None,
     ):
-        oai_data = gen_resp.model_dump(by_alias=True)
+        oai_data = msgspec.structs.asdict(gen_resp)
         llumnix_generate_stream_response = LlumnixGenerateStreamResponse(**oai_data)
         llumnix_generate_stream_response.llumnix_trace_info = llumnix_trace_info
         return llumnix_generate_stream_response
@@ -106,14 +109,14 @@ class LlumnixOAIChatCompletionsResponse(
         return llumnix_oai_chat_completions_response
 
 
-class LlumnixServerRequest(ServerRequest):
+class LlumnixServerRequest(_ServerRequest):
     llumnix_trace_request: bool = Field(default=False, title="Enable llumnix debug mode.")
 
     @classmethod
     def from_server_request(
-        cls: Type["LlumnixServerRequest"], request: ServerRequest, trace_request: bool
+        cls: Type["LlumnixServerRequest"], request: _ServerRequest, trace_request: bool
     ):
-        server_request_data = request.model_dump(by_alias=True)
+        server_request_data = msgspec.structs.asdict(request)
         llumxix_server_request = LlumnixServerRequest(**server_request_data)
         llumxix_server_request.llumnix_trace_request = trace_request
         return llumxix_server_request

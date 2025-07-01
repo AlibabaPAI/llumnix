@@ -25,8 +25,8 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
         self._inference_type = RequestInferenceType.PREFILL
 
     @property
-    def status(self) -> RequestStatus:
-        return self._status
+    def llumnix_status(self) -> RequestStatus:
+        return self._llumnix_status
 
     @property
     def inference_type(self) -> RequestInferenceType:
@@ -46,7 +46,7 @@ class GenerationGroupStateLlumnix(GenerationGroupState, LlumnixRequest):
 
     @property
     def finished(self) -> bool:
-        return self._status == RequestStatus.FINISHED
+        return self._llumnix_status == RequestStatus.FINISHED
 
     @property
     def request_arrival_time(self) -> float:

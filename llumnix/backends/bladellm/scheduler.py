@@ -147,7 +147,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
                 self.running.pop(index)
                 self._detokenizer.remove_state(request_id)
                 self.id2group.pop(request_id, None)
-                gen_group.set_status(RequestStatus.RUNNING_MIGRATING)
+                gen_group.set_llumnix_status(RequestStatus.RUNNING_MIGRATING)
                 return True
         return False
 
@@ -163,7 +163,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         self.migrating_out_request_last_stage[backend_request.request_group_id] = backend_request
 
     def add_running_request(self, backend_request: GenerationGroupStateLlumnix) -> None:
-        backend_request.set_status(RequestStatus.RUNNING)
+        backend_request.set_llumnix_status(RequestStatus.RUNNING)
         self.id2group[backend_request.request_id] = backend_request
         self._detokenizer.add_new_request(
             backend_request.paged_reqs[0].req_proto,

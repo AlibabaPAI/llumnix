@@ -20,7 +20,7 @@ class MockRequest(LlumnixRequest):
     def __init__(self, request_id, length, expected_steps, status=RequestStatus.RUNNING) -> None:
         super().__init__(request_id=request_id, server_info=None, expected_steps=expected_steps)
         self.length = length
-        self._status = status
+        self._llumnix_status = status
         self._inference_type = RequestInferenceType.DECODE
         self._finished = False
         self.try_schedule_times = 0
@@ -51,8 +51,8 @@ class MockRequest(LlumnixRequest):
         pass
 
     @property
-    def status(self) -> RequestStatus:
-        return self._status
+    def llumnix_status(self) -> RequestStatus:
+        return self._llumnix_status
 
     @property
     def prefill_num_blocks(self) -> int:

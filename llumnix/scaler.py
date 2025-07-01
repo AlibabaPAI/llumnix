@@ -265,10 +265,10 @@ class Scaler:
                 instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
                 try:
                     await asyncio_wait_for_with_timeout(instance.is_ready.remote())
-                # Instance exception could be handled by manager, so check states loop omits exception case here.
+                # Instance exception could be handled by manager/scaler, so check states loop omits exception case here.
                 # pylint: disable=bare-except
                 except:
-                    return
+                    pass
             logger.info("watch instance {} deployment states, server_exists: {}, instance_exists: {}".format(
                 instance_id, server_exists, instance_exists))
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)

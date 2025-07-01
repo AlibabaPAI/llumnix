@@ -80,14 +80,14 @@ async def test_get_instance_self_assigned_id():
     instance_id = random_uuid()
     env_instance_id = random_uuid()
     llumlet_actor = MockLlumlet.remote(env_instance_id)
-    await global_scheduler.scale_up(instance_id, llumlet_actor, InstanceType.NO_CONSTRAINTS, None, None, None)
+    await global_scheduler.scale_up(instance_id, llumlet_actor, InstanceType.NO_CONSTRAINTS, None)
     assert global_scheduler.instance_id_2_engine_inner_inst_id[instance_id] == env_instance_id
 
 @pytest.mark.asyncio
 async def test_add_instance_and_remove_instance():
     global_scheduler = init_global_scheduler(enable_pd_disagg=True)
     # test prefill instance
-    await global_scheduler.scale_up('instance_1', None, InstanceType.NO_CONSTRAINTS, None, None, None)
+    await global_scheduler.scale_up('instance_1', None, InstanceType.NO_CONSTRAINTS, None)
     assert global_scheduler.num_instances == 1
     assert len(global_scheduler.instance_info) == 1
     assert len(global_scheduler.instance_id_set) == 1
@@ -106,12 +106,12 @@ async def test_add_instance_and_remove_instance():
     assert global_scheduler.prefill_instance_num_requests.get("instance_1", None) is None
     assert global_scheduler.decode_instance_num_requests.get("instance_1", None) is None
 
-    await global_scheduler.scale_up('instance_2', None, InstanceType.PREFILL, None, None, None)
+    await global_scheduler.scale_up('instance_2', None, InstanceType.PREFILL, None)
     assert len(global_scheduler.prefill_instance_num_requests) == 1
     assert global_scheduler.prefill_instance_num_requests['instance_2'] == 0
     assert len(global_scheduler.prefill_instance_info) == 1
     assert len(global_scheduler.instance_id_set) == 1
-    await global_scheduler.scale_up('instance_3', None, InstanceType.PREFILL, None, None, None)
+    await global_scheduler.scale_up('instance_3', None, InstanceType.PREFILL, None)
     assert len(global_scheduler.prefill_instance_num_requests) == 2
     assert global_scheduler.prefill_instance_num_requests['instance_3'] == 0
     assert len(global_scheduler.prefill_instance_info) == 2
@@ -125,7 +125,7 @@ async def test_add_instance_and_remove_instance():
     assert len(global_scheduler.instance_info) == 0
 
     # test decode instance
-    await global_scheduler.scale_up('instance_1', None, InstanceType.DECODE, None, None, None)
+    await global_scheduler.scale_up('instance_1', None, InstanceType.DECODE, None)
     assert len(global_scheduler.decode_instance_info) == 1
     assert len(global_scheduler.prefill_instance_info) == 0
     global_scheduler.scale_down('instance_1')
@@ -136,9 +136,9 @@ async def test_add_instance_and_remove_instance():
     assert len(global_scheduler.prefill_instance_info) == 0
     assert len(global_scheduler.decode_instance_info) == 0
 
-    await global_scheduler.scale_up('instance_2', None, InstanceType.DECODE, None, None, None)
+    await global_scheduler.scale_up('instance_2', None, InstanceType.DECODE, None)
     assert len(global_scheduler.decode_instance_info) == 1
-    await global_scheduler.scale_up('instance_3', None, InstanceType.DECODE, None, None, None)
+    await global_scheduler.scale_up('instance_3', None, InstanceType.DECODE, None)
     assert len(global_scheduler.decode_instance_info) == 2
     assert global_scheduler.num_instances == 2
     assert len(global_scheduler.decode_instance_num_requests) == 2
@@ -155,8 +155,7 @@ async def test_add_instance_and_remove_instance():
     instance_infos = init_instance_infos(initial_instances)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
     num_instances = await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids),
-                                                    [InstanceType.NO_CONSTRAINTS]*len(instance_ids),
-                                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+                                                    [InstanceType.NO_CONSTRAINTS]*len(instance_ids), None)
     assert num_instances == initial_instances
     instance_infos = init_instance_infos(initial_instances)
     instance_ids_1 = [instance_info.instance_id for instance_info in instance_infos]
@@ -177,8 +176,7 @@ async def test_update_instance_infos():
     assert len(global_scheduler.decode_instance_info) == 0
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
     await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids),
-                                    [InstanceType.NO_CONSTRAINTS]*len(instance_ids),
-                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+                                    [InstanceType.NO_CONSTRAINTS]*len(instance_ids), None)
     global_scheduler.update_instance_infos(instance_infos)
     assert len(global_scheduler.instance_id_set) == initial_instances
     assert len(global_scheduler.instance_info) == initial_instances
@@ -197,8 +195,7 @@ async def test_update_instance_infos():
 
     instance_infos = init_instance_infos(initial_instances, InstanceType.PREFILL)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.PREFILL]*len(instance_ids),
-                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.PREFILL]*len(instance_ids), None)
     global_scheduler.update_instance_infos(instance_infos)
     assert len(global_scheduler.instance_id_set) == initial_instances * 2
     assert len(global_scheduler.instance_info) == initial_instances * 2
@@ -215,8 +212,7 @@ async def test_update_instance_infos():
 
     instance_infos = init_instance_infos(initial_instances, InstanceType.DECODE)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.DECODE]*len(instance_ids),
-                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.DECODE]*len(instance_ids), None)
     global_scheduler.update_instance_infos(instance_infos)
     assert len(global_scheduler.instance_id_set) == initial_instances * 3
     assert len(global_scheduler.instance_info) == initial_instances * 3
@@ -236,8 +232,7 @@ async def test_dispatch_and_expected_steps(global_scheduler: GlobalScheduler):
     initial_instances = 4
     instance_infos = init_instance_infos(initial_instances)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.NO_CONSTRAINTS]*len(instance_ids),
-                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.NO_CONSTRAINTS]*len(instance_ids), None)
     global_scheduler.update_instance_infos(instance_infos)
     addition_dispatch_info = {}
     instance_id, _, request_expected_steps = global_scheduler.dispatch(0, addition_dispatch_info)
@@ -251,8 +246,7 @@ async def test_dispatch_pd_disagg_and_expected_steps():
     initial_instances = 4
     instance_infos = init_instance_infos(initial_instances, InstanceType.NO_CONSTRAINTS)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
-    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.NO_CONSTRAINTS]*len(instance_ids),
-                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+    await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids), [InstanceType.NO_CONSTRAINTS]*len(instance_ids), None)
     global_scheduler.update_instance_infos(instance_infos)
 
     addition_dispatch_info = {}
@@ -268,8 +262,7 @@ async def test_dispatch_engine_pd_disagg_and_expected_steps():
     instance_infos: List[InstanceInfo] = init_instance_infos(initial_instances, InstanceType.NO_CONSTRAINTS)
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
     llumlet_actors = [MockLlumlet.remote(instance_info.instance_id) for instance_info in instance_infos]
-    await global_scheduler.scale_up(instance_ids, llumlet_actors, [InstanceType.NO_CONSTRAINTS]*len(instance_ids),
-                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+    await global_scheduler.scale_up(instance_ids, llumlet_actors, [InstanceType.NO_CONSTRAINTS]*len(instance_ids), None)
     global_scheduler.update_instance_infos(instance_infos)
 
     addition_dispatch_info = {}
@@ -286,7 +279,7 @@ async def test_dispatch_adaptive_pd_disagg_and_expected_steps():
     prefill_instance_info = InstanceInfo(instance_id=prefill_instance_id, instance_type=InstanceType.PREFILL)
     KvBlocksRatioLoad.BUSY_THRESHOLD = 100
     prefill_instance_info.dispatch_load_metric = KvBlocksRatioLoad(10)
-    await global_scheduler.scale_up(prefill_instance_id, None, InstanceType.PREFILL, None, None, None)
+    await global_scheduler.scale_up(prefill_instance_id, None, InstanceType.PREFILL, None)
     global_scheduler.update_instance_infos([prefill_instance_info])
     global_scheduler.instance_id_2_engine_inner_inst_id[prefill_instance_id] = prefill_instance_id
 
@@ -294,7 +287,7 @@ async def test_dispatch_adaptive_pd_disagg_and_expected_steps():
     decode_instance_info = InstanceInfo(instance_id=decode_instance_id, instance_type=InstanceType.DECODE)
     RemainingStepsLoad.BUSY_THRESHOLD = 0
     decode_instance_info.dispatch_load_metric = RemainingStepsLoad(10)
-    await global_scheduler.scale_up(decode_instance_id, None, InstanceType.DECODE, None, None, None)
+    await global_scheduler.scale_up(decode_instance_id, None, InstanceType.DECODE, None)
     global_scheduler.update_instance_infos([decode_instance_info])
     global_scheduler.instance_id_2_engine_inner_inst_id[decode_instance_id] = decode_instance_id
 
@@ -326,8 +319,7 @@ async def test_pair_migration(global_scheduler: GlobalScheduler):
     instance_load_calculator.compute_instance_load(instance_info_migrate_out)
     instance_infos = [instance_info_migrate_in, instance_info_migrate_out]
     await global_scheduler.scale_up(instance_ids, [None]*len(instance_ids),
-                                    [InstanceType.NO_CONSTRAINTS]*len(instance_ids),
-                                    [None]*len(instance_ids), [None]*len(instance_ids), None)
+                                    [InstanceType.NO_CONSTRAINTS]*len(instance_ids), None)
     global_scheduler.update_instance_infos(instance_infos)
 
     migrate_instace_pairs = global_scheduler.pair_migration(PairMigrationConstraints.NO_CONSTRAINTS)

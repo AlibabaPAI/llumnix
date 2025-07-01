@@ -11,24 +11,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional, Union
-
 from vllm.v1.request import Request
 from vllm.v1.request import RequestStatus as RequestStatusVLLMV1
-from vllm.multimodal.inputs import MultiModalKwargs, PlaceholderRange
-from vllm.sampling_params import SamplingParams
-from vllm.v1.engine import EngineCoreEvent
-from vllm.v1.structured_output.request import StructuredOutputRequest
-from vllm.v1.utils import ConstantList
 
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 
 
 class LlumnixRequestVLLMV1(Request, LlumnixRequest):
     def __init__(self, request_id, server_info, expected_steps: int, *args, **kwargs) -> None:
         Request.__init__(self, request_id, *args, **kwargs)
         LlumnixRequest.__init__(self, request_id, server_info, expected_steps)
-    
+
     @property
     def prompt_len(self) -> int:
         return self.num_prompt_tokens

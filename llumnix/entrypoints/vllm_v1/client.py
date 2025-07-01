@@ -11,24 +11,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 import copy
 import math
 import time
 import asyncio
 
 import ray.actor
-import weakref
 
-from vllm.v1.engine import EngineCoreOutputs, EngineCoreOutput
+from vllm.v1.engine import EngineCoreOutput
 from vllm.v1.engine.core_client import AsyncMPClient
 from vllm.v1.executor.abstract import Executor
 
 from vllm.engine.async_llm_engine import AsyncStream
-from vllm.outputs import RequestOutput
 from vllm.config import VllmConfig
 from vllm import SamplingParams
-from vllm.v1.utils import CoreEngine
 from vllm.v1.request import EngineCoreRequest
 
 from llumnix.logging.logger import init_logger
@@ -54,7 +51,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         client_index: int = 0,
     ):
         # self.request_stream: Dict[str, AsyncStream] = {}
-        
+
         LlumnixClient.__init__(self, entrypoints_context, loop)
         AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
         self.engine_core_output_stash: Dict[int, Tuple[List[EngineCoreOutput], int, int]] = {}
@@ -130,7 +127,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
 
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)
-        
+
     async def add_request_async(self, request: EngineCoreRequest) -> None:
         # Rewrite from AsyncMPClient
         await self.generate("", request.sampling_params, request.request_id, engine_core_request=request)
@@ -174,14 +171,14 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                     continue
                 outputs.extend(processed_output)
                 last_output = processed_output[-1]
-                self.request_stream_last_completion_tokens[request_id] = engine_core_output.num_output_tokens
-                if engine_core_output.finished:
+                self.request_stream_last_completion_tokens[request_id] = last_output.num_output_tokens
+                if last_output.finished:
                     logger.info("Client finished request {}.".format(request_id))
                     self._clear_client_request_states(request_id)
             llumnix_request_outputs.engine_outputs.outputs = outputs
             if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:
                 self.outputs_queue.put_nowait(llumnix_request_outputs.engine_outputs)
-    
+
     def _ensure_output_queue_task(self):
         # Overload AsyncMPClient._ensure_output_queue_task
         pass
@@ -199,11 +196,11 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         current_completion_tokens = None
         if hasattr(engine_core_output, 'num_output_tokens'):
             engine_core_output.num_output_tokens
-            
+
         if not current_completion_tokens:
             # No num_output_tokens info, return the engine_core_output directly.
             return [engine_core_output]
-            
+
         current_new_tokens = len(engine_core_output.new_token_ids)
         last_completion_tokens = self.request_stream_last_completion_tokens.get(request_id, 0)
         support_completion_tokens = last_completion_tokens + current_new_tokens
@@ -221,84 +218,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 )
             self.engine_core_output_stash.setdefault(request_id, []).append(engine_core_output)
             return []
-        # current_completion_tokens = current_completion_tokens_dict.get(request_id)
-        # current_new_tokens = len(engine_core_output.new_token_ids)
-        
-        # if not current_completion_tokens:
-        #     # No usage info, return the request_output directly.
-        #     return [engine_core_output]
-        
-        # last_completion_tokens = self.request_stream_last_completion_tokens.get(request_id, 0)
-        # support_completion_tokens = last_completion_tokens + current_new_tokens
-        # if current_completion_tokens > support_completion_tokens:
-        #     logger.info(
-        #         "request {} out-of-order output, last completion tokens is {}"
-        #         ", current completion tokens is {}, current tokens is {}, stash current output..."
-        #         .format(request_id, last_completion_tokens, current_completion_tokens, current_new_tokens)
-        #     )
-        #     if hasattr(engine_core_output, 'request_timestamps'):
-        #         logger.info(
-        #             "out-of-order request({}) output timestamps: {}".format(
-        #             request_id, engine_core_output.request_timestamps.to_latency_breakdown_dict()
-        #             )
-        #         )
-        #     self.engine_core_output_stash.setdefault(request_id, []).append(
-        #         (engine_core_output, current_completion_tokens, current_new_tokens)
-        #     )
-        #     return []
-        
-        # if current_completion_tokens == support_completion_tokens:
-        #     if not self.engine_core_output_stash.get(request_id):
-        #         # no history output in stash
-        #         return [engine_core_output]
-            
-            output_stash: List[EngineCoreOutput] = self.engine_core_output_stash[request_id]
-            output_stash.sort(key=lambda x: x.num_output_tokens) # sort by completion_tokens
-            last_correct_output_index = 0
-            for output in output_stash:
-                new_tokens = len(output.new_token_ids)
-                completion_tokens = output.num_output_tokens
-                if completion_tokens > current_completion_tokens + new_tokens:
-                    break
-                last_correct_output_index += 1
-                current_completion_tokens = output.num_output_tokens
-            if last_correct_output_index == 0:
-                return [engine_core_output]
-        #     output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
-        #     output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
-        #     last_correct_output_index = 0
-        #     for output, completion_tokens, new_tokens in output_stash:
-        #         if completion_tokens > current_completion_tokens + new_tokens:
-        #             break
-        #         last_correct_output_index += 1
-        #         current_completion_tokens = completion_tokens
-        #     if last_correct_output_index == 0:
-        #         return [engine_core_output]
-            
-            res = [engine_core_output] + [output for output in output_stash[:last_correct_output_index]]
-            self.engine_core_output_stash[request_id] = output_stash[last_correct_output_index:]
-        #     res = [engine_core_output] + [output_info[0] for output_info in output_stash[:last_correct_output_index]]
-        #     self.engine_core_output_stash[request_id] = output_stash[last_correct_output_index:]
-            
-            return res
-        #     return res
-        
-        # if current_completion_tokens == -1:
-        #     # last output of request
-        #     if not self.engine_core_output_stash.get(request_id):
-        #         # no history output in stash
-        #         return [engine_core_output]
-            
-        #     output_stash: List[Tuple[EngineCoreOutput, int, int]] = self.engine_core_output_stash[request_id]
-        #     output_stash.sort(key=lambda x: x[1]) # sort by completion_tokens
-        #     # drain output_stash
-        #     res = [engine_core_output] + [output_info[0] for output_info in output_stash]
-        #     self.engine_core_output_stash[request_id] = []
-            
-        #     return res
-            
+
         return [engine_core_output]
-    
+
     async def call_utility_async(self, method: str, *args) -> Any:
         instance = list(self.instances.values())[0]
         return await instance.call_engine_utility_async.remote(method, *args)

@@ -40,7 +40,7 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
     instance_id: str = None
     migration_config: MigrationConfig = None
     last_inference_latency: int = 0
-    
+
     async def execute_model_async(
         self,
         scheduler_output,

@@ -182,9 +182,7 @@ def setup_entrypoints_context(entrypoints_args, scaler, manager, instance_ids, i
         instances_dict[ins_id] = instances[idx]
 
     server_id = random_uuid()
-    ip = get_ip_address()
-    if ip != entrypoints_args.host:
-        ip = entrypoints_args.host
+    ip = entrypoints_args.host
     port = request_output_queue.port
     server_info = ServerInfo(
         server_id,

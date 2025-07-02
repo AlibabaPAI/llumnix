@@ -42,6 +42,7 @@ class APIServerActorVLLMV1(APIServerActor):
                  instance: "ray.actor.ActorHandle"):
         # Set up listen address and socket
         self.listen_address, self.sock = setup_server(entrypoints_args)
+        self.client_index = entrypoints_args.client_index
         super().__init__(instance_id, entrypoints_args, engine_args,
                          scaler, manager, instance)
 
@@ -57,10 +58,6 @@ class APIServerActorVLLMV1(APIServerActor):
                     entrypoints_args: VLLMV1EntrypointsArgs,
                     engine_args: VLLMV1EngineArgs,
                     entrypoints_context: EntrypointsContext):
-        # If dp_size == 1, client_index will always be 0
-        self.client_index = 0
-        self.server_id = entrypoints_context.server_info.server_id
-
         client_config = {
             "client_index": self.client_index
         }

@@ -150,6 +150,10 @@ class Scaler:
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
 
+        # Mantain a monotonically increasing `client_index` for vLLM V1 APIServer.
+        # It will be passed to APIServerActor through EntrypointsArgs
+        self.api_server_client_index_v1 = 0
+
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
 
@@ -616,6 +620,9 @@ class Scaler:
             )
         elif backend_type == BackendType.VLLM_V1:
             from llumnix.entrypoints.vllm_v1.api_server_actor import APIServerActorVLLMV1
+            # Set `client_index` here.
+            entrypoints_args.client_index = self.api_server_client_index_v1
+            self.api_server_client_index_v1 += 1
             # To avoid triton runtime error, assign GPU to api server.
             api_server = APIServerActorVLLMV1.from_args(
                 NUM_GPUS_VLLM_V1_GPU_ACTOR,

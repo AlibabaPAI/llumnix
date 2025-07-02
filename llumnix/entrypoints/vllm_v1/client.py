@@ -18,7 +18,7 @@ import time
 import asyncio
 
 from vllm.v1.engine import EngineCoreOutput, EngineCoreOutputs
-from vllm.v1.engine.core_client import AsyncMPClient
+from vllm.v1.engine.core_client import AsyncMPClient, DPAsyncMPClient
 from vllm.v1.executor.abstract import Executor
 
 from vllm.engine.async_llm_engine import AsyncStream
@@ -223,3 +223,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     async def call_utility_async(self, method: str, *args) -> Any:
         instance = list(self.instances.values())[0]
         return await instance.call_engine_utility_async.remote(method, *args)
+
+
+class LlumnixDPClientVLLMV1(LlumnixClientVLLMV1, DPAsyncMPClient):
+    pass

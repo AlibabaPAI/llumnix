@@ -34,7 +34,8 @@ from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, RequestInferenceType
 from llumnix.backends.backend_interface import BackendInterface, EngineState
-from llumnix.backends.vllm_v1.async_core import AsyncEngineCoreProc
+from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc, 
+                                                 AsyncDPEngineCoreProc)
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.backends.profiling import LatencyMemData
@@ -287,6 +288,116 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         await self.input_queue.put((request_type, request))
 
 
+# TODO(shejiarui): Add a common parent class for AsyncEngineCoreProc and AsyncDPEngineCoreProc
+class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlumnix):
+    def __init__(self,
+                 instance_id: str,
+                 placement_group: PlacementGroup,
+                 request_output_queue_type: QueueType,
+                 disable_async_output_proc: bool,
+                 backend_type: BackendType,
+                 request_output_forwarding_mode: RequestOutputForwardingMode,
+                 abort_request_callback: Coroutine,
+                 vllm_config: VllmConfig,
+                 on_head_node: bool,
+                 handshake_address: str,
+                 executor_class: type[Executor],
+                 log_stats: bool,):
+        
+        # Change EngineCore.scheduler to SchedulerLlumnix
+        vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
+        AsyncDPEngineCoreProc().__init__(vllm_config, on_head_node, 
+                                         handshake_address, executor_class, log_stats)
+        self.instance_id = instance_id
+        self.step_counter = Counter()
+        self.instance_info = None
+        self.output_mediator = OutputMediator(
+            instance_id,
+            request_output_queue_type,
+            request_output_forwarding_mode,
+            abort_request_callback,
+            placement_group,
+            backend_type,
+        )
+        
+        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
+        self.disable_async_output_proc = disable_async_output_proc
+        self.server_info_table = ServerInfoTable()
+
+        assert isinstance(self.scheduler, SchedulerLlumnix), \
+            "EngineCore.scheduler failed to set to SchedulerLlumnix"
+
+    @classmethod
+    def from_engine_args(
+        cls,
+        instance_id: str,
+        placement_group: PlacementGroup,
+        request_output_queue_type: QueueType,
+        migration_config: MigrationConfig,
+        engine_args: AsyncEngineArgs,
+        backend_type: BackendType,
+        request_output_forwarding_mode: RequestOutputForwardingMode,
+        abort_request_callback: Coroutine,
+        latency_mem: Optional[LatencyMemData] = None,
+    ) -> "AsyncDPEngineCoreProcLlumnix":
+        """Creates an DPEngineCoreProc from the engine arguments."""
+        # TODO(shejiarui): set it to None in EngineArgs
+        engine_args.speculative_config = None
+        # Create the engine configs.
+        engine_config = engine_args.create_engine_config()
+        logger.info("engine_config: {}".format(engine_config))
+        # Hack to pass placement_group for init workers.
+        engine_config.parallel_config.placement_group = placement_group
+        # Initialize the cluster and specify the executor class.
+        # pylint: disable=import-outside-toplevel
+        if latency_mem is not None:
+            raise NotImplementedError('vLLM v1 sim_executor not implemented yet')
+        elif engine_config.parallel_config.use_ray:
+            from llumnix.backends.vllm_v1.executor import LlumnixRayDistributedExecutor
+            executor_class = LlumnixRayDistributedExecutor
+            executor_class.migration_config = migration_config
+            executor_class.instance_id = instance_id
+            logger.debug("executor_class set to LlumnixRayDistributedExecutor")
+        else:
+            raise ValueError('Unsupported executor backend')
+
+        engine = cls(
+            instance_id=instance_id,
+            placement_group=placement_group,
+            request_output_queue_type=request_output_queue_type,
+            disable_async_output_proc=engine_args.disable_async_output_proc,
+            backend_type=backend_type,
+            request_output_forwarding_mode=request_output_forwarding_mode,
+            abort_request_callback=abort_request_callback,
+            vllm_config=engine_config,
+            on_head_node=None,
+            handshake_address=None,
+            executor_class=executor_class,
+            log_stats=not engine_args.disable_log_stats,
+        )
+        return engine
+
+    async def _process_engine_step_async(self) -> bool:
+        """Overloading super()._process_engine_step_async() to update instance info"""
+
+        # Step the engine core.
+        self.step_begin_time = time.time()
+        outputs, model_executed = await self.step_fn_async()
+        self.step_end_time = time.time()
+        # Update instance info after step
+        self._update_instance_info()
+        # Put EngineCoreOutputs into output_mediator
+        await self._put_engine_core_outputs(outputs)
+        
+        self._maybe_publish_request_counts()
+        if model_executed:
+            return 
+
+        if self.engines_running:
+            self._dppart.new_step()
+            self.execute_dummy_batch()
+        return
+
 class BackendVLLMV1(BackendInterface):
     def __init__(
         self,
@@ -299,16 +410,29 @@ class BackendVLLMV1(BackendInterface):
         self.engine_disagg_inst_id = instance_id
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args() # type: ignore
         self.migration_config = instance_args.create_migration_config()
-        self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
-            instance_id=instance_id,
-            placement_group=placement_group,
-            request_output_queue_type=request_output_queue_type,
-            migration_config=self.migration_config,
-            engine_args=engine_args,
-            backend_type=BackendType.VLLM_V1,
-            request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
-            abort_request_callback=self.abort_request,
-        )
+        if engine_args.data_parallel_size > 1:
+            self.engine: AsyncDPEngineCoreProcLlumnix = AsyncDPEngineCoreProcLlumnix.from_engine_args(
+                instance_id=instance_id,
+                placement_group=placement_group,
+                request_output_queue_type=request_output_queue_type,
+                migration_config=self.migration_config,            
+                engine_args=engine_args,
+                backend_type=BackendType.VLLM_V1,
+                request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
+                abort_request_callback=self.abort_request,
+            )
+        else:
+            # FIXME(zhaozhiyu): check args
+            self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
+                instance_id=instance_id,
+                placement_group=placement_group,
+                request_output_queue_type=request_output_queue_type,
+                migration_config=self.migration_config,            
+                engine_args=engine_args,
+                backend_type=BackendType.VLLM_V1,
+                request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
+                abort_request_callback=self.abort_request,
+            )
         asyncio.create_task(self.engine.run_busy_loop_async())
 
         self.instance_id = instance_id

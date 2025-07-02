@@ -152,13 +152,10 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
 
         # Loop until process is sent a SIGINT or SIGTERM
         while True:
-            logger.debug("[run_busy_loop_async] before _process_input_queue_async")
             # 1) Poll the input queue until there is work to do.
             await self._process_input_queue_async()
-            logger.debug("[run_busy_loop_async] before _process_engine_step_async")
             # 2) Step the engine core and return the outputs.
             await self._process_engine_step_async()
-            logger.debug("[run_busy_loop_async] after _process_engine_step_async")
 
     async def _process_input_queue_async(self):
         """
@@ -167,8 +164,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         """
         waited = False
         # Loop and wait for work if the engine has no pending requests.
-        # while not self.engines_running and not self.scheduler.has_requests():
-        while not self.scheduler.has_requests():
+        while not self.engines_running and not self.scheduler.has_requests():
             if logger.isEnabledFor(DEBUG) and self.input_queue.empty():
                 logger.debug("EngineCore waiting for work.")
                 waited = True
@@ -204,52 +200,30 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
 
 
 class AsyncDPEngineCoreProc(AsyncEngineCoreProc, DPEngineCoreProc):
-    def __init__(self, *args, **kwargs):
-        AsyncEngineCoreProc.__init__(self, *args, **kwargs)
+    def __init__(self,
+                 vllm_config: VllmConfig,
+                 on_head_node: bool,
+                 handshake_address: str,
+                 executor_class: type[Executor],
+                 log_stats: bool,):
+        # Counts forward-passes of the model so that we can synchronize
+        # finished with DP peers every N steps.
+        self.counter = 0
+        self.current_wave = 0
+        self.last_counts = (0, 0)
 
-    async def run_busy_loop_async(self):
-        """Core busy loop of the EngineCore for data parallel case."""
+        # Initialize the engine.
+        dp_rank = vllm_config.parallel_config.data_parallel_rank
+        AsyncEngineCoreProc.__init__(self, vllm_config, on_head_node, handshake_address,
+                                     executor_class, log_stats, dp_rank)
 
-        # Loop until process is sent a SIGINT or SIGTERM
-        while True:
-            # 1) Poll the input queue until there is work to do.
-            self._process_input_queue()
+    async def _process_engine_step_async(self):
+        forward_executed = await AsyncEngineCoreProc._process_engine_step(self)
+        self._maybe_publish_request_counts()
+        if forward_executed:
+            return
 
-            local_unfinished_reqs = self.scheduler.has_unfinished_requests()
-
-            if local_unfinished_reqs:
-                # 2) Step the engine core.
-                await self._process_engine_step_async()
-
-                # Check if we have now finished all requests.
-                local_unfinished_reqs = (
-                    self.scheduler.has_unfinished_requests())
-            else:
-                if self.scheduler.has_finished_requests():
-                    # There are no unfinished requests, but there are some
-                    # finished requests remaining to be removed from the
-                    # batch state. This engine step won't perform a forward
-                    # pass but will flush the finished requests to ensure
-                    # up-to-date state is returned in the engine outputs.
-                    await self._process_engine_step_async()
-
-                if not self.engines_running:
-                    # All engines are idle.
-                    continue
-
-                # There must be unfinished requests in DP peers, run a
-                # dummy forward pass.
-                await self.execute_dummy_batch_async()
-
-            # 3) All-reduce operation to determine global unfinished reqs.
-            self.engines_running = self._has_global_unfinished_reqs(
-                local_unfinished_reqs)
-
-            if not self.engines_running:
-                if self.local_dp_rank == 0:
-                    # Notify client that we are pausing the loop.
-                    logger.debug("Wave %d finished, pausing engine loop.",
-                                 self.current_wave)
-                    self.output_queue.put_nowait(
-                        EngineCoreOutputs(wave_complete=self.current_wave))
-                self.current_wave += 1
+        if self.engines_running:
+            self._dppart.new_step()
+            self.execute_dummy_batch()
+        return

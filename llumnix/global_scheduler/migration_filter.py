@@ -57,7 +57,8 @@ class MigrationInstanceFilter:
     def get_filter(self, filter_name: str) -> Optional[MigrationFilterPolicy]:
         return self.registered_filters.get(filter_name, None)
 
-    def filter_instances(self, instance_infos: List[InstanceInfo],
+    def filter_instances(self,
+                         instance_infos: List[InstanceInfo],
                          pair_migration_type: PairMigrationConstraints) -> Tuple[List[InstanceInfo], List[InstanceInfo]]:
         src_filter_conditions = [filter.filter_src_condition(self.filter_config, pair_migration_type)
                                  for filter in self.registered_filters.values()]

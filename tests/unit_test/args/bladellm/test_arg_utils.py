@@ -20,7 +20,7 @@ from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
 from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs, BladeLLMEngineArgsFactory
 from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType
 
 
 # pylint: disable=unused-argument

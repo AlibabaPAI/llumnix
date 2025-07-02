@@ -16,11 +16,10 @@ import copy
 import pickle
 
 from llumnix.logging.logger import init_logger
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType, LaunchMode
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixEngineArgsFactory,
                                LlumnixArgumentParser, LlumnixEngineArgs, load_registered_engine_args,
                                init_llumnix_args, post_init_llumnix_args)
-from llumnix.entrypoints.utils import LaunchMode
 from llumnix.internal_config import MigrationConfig
 from llumnix.config import LlumnixConfig
 

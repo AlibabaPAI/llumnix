@@ -11,19 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from enum import Enum
 from typing import Dict
 import subprocess
 
 from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
-
-
-# Put it in utils.py to avoid circular import.
-class LaunchMode(str, Enum):
-    LOCAL = "LOCAL"
-    GLOBAL = "GLOBAL"
 
 
 # Use "" type hint to avoid circular import.

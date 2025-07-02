@@ -26,11 +26,12 @@ from vllm import envs as vllm_envs
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import MigrationConfig
+from llumnix.backends.utils import EngineState
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
-from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM, EngineState
+from llumnix.backends.vllm.llm_engine import LLMEngineLlumnix, BackendVLLM
 from llumnix.backends.profiling import ProfilingDatabase, LatencyMemData, ProfilingResult, SimParallelConfig
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType
 
 logger = init_logger(__name__)
 

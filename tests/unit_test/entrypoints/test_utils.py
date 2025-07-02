@@ -19,12 +19,11 @@ from vllm.engine.arg_utils import EngineArgs
 
 from llumnix.arg_utils import ManagerArgs, InstanceArgs, EntrypointsArgs, LaunchArgs, LaunchMode
 from llumnix.entrypoints.setup import launch_ray_cluster
-from llumnix.utils import get_ip_address
+from llumnix.utils import get_ip_address, BackendType
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.ray_utils import get_manager_name
 from llumnix.manager import Manager
 from llumnix.scaler import Scaler
-from llumnix.backends.backend_interface import BackendType
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

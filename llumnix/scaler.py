@@ -25,7 +25,6 @@ from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.backend_interface import BackendType
 from llumnix.arg_utils import (
     EntrypointsArgs,
     InstanceArgs,
@@ -40,6 +39,8 @@ from llumnix.utils import (
     random_uuid,
     get_service_instance_type,
     asyncio_wait_for_with_timeout,
+    BackendType,
+    LaunchMode,
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -70,7 +71,6 @@ from llumnix.constants import (
     MAX_ACTOR_METHOD_RETRIES,
 )
 from llumnix import envs as llumnix_envs
-from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server

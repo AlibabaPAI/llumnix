@@ -25,20 +25,27 @@ from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
-from llumnix.backends.backend_interface import BackendInterface, BackendType
+from llumnix.backends.backend_interface import BackendInterface
 from llumnix.queue.queue_type import QueueType
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.server_info import ServerInfo
 from llumnix.logging.logger import init_logger
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType
+from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType, BackendType
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.utils import ray_get_with_timeout, exception_wrapper_async
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
+
+
+class EngineState(str, Enum):
+    INIT = "INIT"
+    CRASHED = "CRASHED"
+    RUNNING = "RUNNING"
+    STOPPED = "STOPPED"
 
 
 class RequestOutputForwardingMode(str, Enum):

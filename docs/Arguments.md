@@ -34,6 +34,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag}]
             [--migrate-out-threshold MIGRATE_OUT_THRESHOLD]
+            [--max-migration-concurrency MAX_MIGRATION_CONCURRENCY]
             [--request-migration-policy {LCR,SR,LR,FCW,FCWSR}]
             [--enable-scaling]
             [--min-instances MIN_INSTANCES]
@@ -185,6 +186,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--migrate-out-threshold`
 - Migrate out instance load threshold.
 - Default: 3.0
+
+`--max-migration-concurrency`
+- Max migration concurrency.
+- Default: 1
 
 `--request-migration-policy`
 - Request migration policy.

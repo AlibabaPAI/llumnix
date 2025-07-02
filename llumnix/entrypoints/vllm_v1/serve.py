@@ -19,8 +19,7 @@ from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs, add_cli_args
 from llumnix.entrypoints.setup import connect_to_ray_cluster
 from llumnix.config import get_llumnix_config
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
-from llumnix.entrypoints.utils import LaunchMode
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType, LaunchMode
 from llumnix.entrypoints.setup import setup_llumnix
 
 

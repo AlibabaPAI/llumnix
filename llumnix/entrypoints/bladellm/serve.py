@@ -19,8 +19,7 @@ from llumnix.entrypoints.bladellm.arg_utils import add_cli_args, get_args, Blade
 from llumnix.arg_utils import LaunchArgs, LlumnixArgumentParser
 from llumnix.logging.logger import init_logger
 from llumnix.config import get_llumnix_config
-from llumnix.entrypoints.utils import LaunchMode
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType, LaunchMode
 from llumnix.entrypoints.setup import setup_llumnix
 from llumnix.entrypoints.bladellm.utils import launch_job_on_gpu_node
 

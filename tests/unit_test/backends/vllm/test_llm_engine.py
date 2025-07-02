@@ -35,10 +35,9 @@ from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, BackendType
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.backends.utils import RequestOutputForwardingMode
-from llumnix.backends.backend_interface import BackendType
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env

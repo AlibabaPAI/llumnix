@@ -19,7 +19,7 @@ import asyncio
 
 import ray.actor
 
-from vllm.v1.engine import EngineCoreOutput
+from vllm.v1.engine import EngineCoreOutput, EngineCoreOutputs
 from vllm.v1.engine.core_client import AsyncMPClient
 from vllm.v1.executor.abstract import Executor
 
@@ -127,9 +127,17 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
 
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)
+        
+    async def get_output_async(self) -> EngineCoreOutputs:
+        outputs = await super().get_output_async()
+        for output in outputs.outputs:
+            print(f"[zzy] APIServer (client_index={self.client_index}, server_id={self.server_info.server_id}) get output of request {output.request_id}")
+        return outputs
 
     async def add_request_async(self, request: EngineCoreRequest) -> None:
         # Rewrite from AsyncMPClient
+        print(f"[zzy] APIServer (client_index={self.client_index}, server_id={self.server_info.server_id}) received requset {request.request_id}")
+        request.client_index = self.client_index
         await self.generate("", request.sampling_params, request.request_id, engine_core_request=request)
 
     async def abort_requests_async(self, request_ids: list[str]) -> None:

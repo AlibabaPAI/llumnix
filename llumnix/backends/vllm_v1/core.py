@@ -283,6 +283,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         request: EngineCoreRequest = kwargs["engine_core_request"]
         self.server_info_table.add_server_info(request.client_index, server_info)
         await self.input_queue.put((request_type, request))
+        # self.scheduler.running[-1] = LlumnixRequest(Request, =...)
 
 
 class BackendVLLMV1(BackendInterface):

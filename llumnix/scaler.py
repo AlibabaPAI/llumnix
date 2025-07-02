@@ -42,6 +42,7 @@ from llumnix.utils import (
     asyncio_wait_for_with_timeout,
 )
 from llumnix.ray_utils import (
+    get_manager_name,
     initialize_placement_group,
     get_server_name,
     get_data_from_ray_internal_kv,
@@ -101,13 +102,18 @@ class Scaler:
         self.pdd_config: PDDConfig = manager_args.create_pdd_config()
 
         self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
-        self.manager = Manager.from_args(
-            entrypoints_args=entrypoints_args,
-            manager_args=manager_args,
-            instance_args=instance_args,
-            engine_args=engine_args,
-            launch_args=launch_args,
-        )
+        try:
+            self.manager = Manager.from_args(
+                entrypoints_args=entrypoints_args,
+                manager_args=manager_args,
+                instance_args=instance_args,
+                engine_args=engine_args,
+                launch_args=launch_args,
+            )
+            logger.info("Init Manager actor.")
+        except ValueError:
+            logger.info("Manager actor already exists, get existed manager actor.")
+            self.manager = ray.get_actor(get_manager_name(), namespace="llumnix")
         # Start scaling after manager is ready.
         ray.get(self.manager.is_ready.remote())
 

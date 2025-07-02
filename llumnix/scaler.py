@@ -307,9 +307,9 @@ class Scaler:
                 elif self.engine_args.backend_type == BackendType.VLLM_V1 and \
                      self.engine_args.get_dp_args().dp_size > 1:
                     # Currently data parallelism only support vLLM V1
+                    # TODO(shejiarui): what will happen if DPManager cause Exception?
                     dp_manager = DPManager.from_args(new_instance_id, self.entrypoints_args, 
                                                      self.instance_args, self.engine_args, new_pg)
-                    ray.get(dp_manager.is_ready.remote())
                 else:
                     # If not prefill/decode service, we do not specify the instance type,
                     # and the instance type is decided by _get_next_instance_type.
@@ -532,7 +532,6 @@ class Scaler:
                 detached=True,
                 block=block,
                 node_id=node_id,
-                dp_size=dp_size
             )
         else:
             placement_group = initialize_placement_group(

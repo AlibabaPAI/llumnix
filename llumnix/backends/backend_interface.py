@@ -12,7 +12,6 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Iterable, List, Union, Deque, Tuple, Any
 
 import ray.actor
@@ -21,24 +20,7 @@ from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.server_info import ServerInfo
 from llumnix.utils import RequestIDType, MigrationResponse
 from llumnix.constants import RAY_RPC_TIMEOUT
-
-
-class EngineState(str, Enum):
-    INIT = "INIT"
-    CRASHED = "CRASHED"
-    RUNNING = "RUNNING"
-    STOPPED = "STOPPED"
-
-
-class BackendType(str, Enum):
-    VLLM = "vLLM"
-    VLLM_V1 = "vLLM v1"
-    BLADELLM = "BladeLLM"
-    SIM_VLLM = "vLLM simulator"
-
-    @staticmethod
-    def is_sim_backend(status: "BackendType") -> bool:
-        return status in [BackendType.SIM_VLLM]
+from llumnix.instance_info import InstanceInfo
 
 
 class BackendInterface(ABC):
@@ -349,5 +331,12 @@ class BackendInterface(ABC):
     async def _run_workers_async(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs) -> List[Any]:
         """
         Run all workers with the given method asynchronously.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_instance_info(self) -> InstanceInfo:
+        """
+        Get instance info from backend engine.
         """
         raise NotImplementedError

@@ -36,7 +36,6 @@ class InstanceType(str, Enum):
 class InstanceInfo:
     instance_id: str = ""
     instance_type: InstanceType = None
-    migrating: bool = None
 
     step_id: int = None
     timestamp: float = None
@@ -72,6 +71,8 @@ class InstanceInfo:
     migration_load_metric: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_in: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_out: BaseLoad = DummyLoad()
+    has_migration_slot: bool = True
+    is_migrating: bool = False
 
     # lazy init infos
     profiling_data: Tuple[str, int, int, float] = None

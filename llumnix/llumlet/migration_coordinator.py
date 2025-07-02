@@ -19,16 +19,16 @@ import functools
 import inspect
 
 import ray.actor
-import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-from llumnix.backends.backend_interface import BackendInterface, BackendType
+from llumnix.backends.backend_interface import BackendInterface
 from llumnix.utils import (
     asyncio_wait_for_with_timeout,
     RequestIDType,
     MigrationResponse,
     log_instance_exception,
+    BackendType,
 )
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
@@ -52,18 +52,24 @@ class MigrationStatus(enum.Enum):
         ]
 
 
-# This wrapper is used by migrate in related functions. This wrapper watch migrate in request,
-# once one migrate in function (pre_alloc_cache, recv_cache, commit_dst_request) for a migrate in request is executed successfully,
-# it means that this migrate in request is waiting for next migrate in function to be called.
-# And this wrapper records the time for the migrate in request when the migrate in function is executed successfully,
-# and remove the recorded migrate in request when next migrate in function for the migrate in request is called.
-# In the migration coordinator, there is a backgroud loop continuously watching the recorded migrate in request,
-# if the recorded migrate in request is not removed after PENDING_MIGRATE_IN_TIMEOUT seconds,
-# it indicates that the migrate out instance is dead, and next migrate in function will not be called.
-# And therefore, the backgroud loop remove the recorded migrate in request and clear the migration states of the migrate in request.
-def watch_migrate_in_request_wrapper(func: Callable):
-    def inspect_is_start(func: Callable, self, *args, **kwargs):
-        if func.__name__ != "pre_alloc_cache":
+def update_pending_migrate_in_request_decorator(func: Callable):
+    # pylint: disable=trailing-whitespace
+    """
+    This decorator is used by migrate in related functions. This decorator watch migrate in request, 
+    once one migrate in function (pre_alloc_cache, recv_cache, commit_dst_request) for a migrate in request is executed successfully, 
+    it means that this migrate in request is waiting for next migrate in function to be called. 
+    And this decorator records the time for the migrate in request when the migrate in function is executed successfully, 
+    and remove the recorded migrate in request when next migrate in function for the migrate in request is called. 
+    In the migration coordinator, there is a backgroud loop continuously watching the recorded migrate in request, 
+    if the recorded migrate in request is not removed after PENDING_MIGRATE_IN_TIMEOUT seconds, 
+    it indicates that the migrate out instance is dead, and next migrate in function will not be called. 
+    And therefore, the backgroud loop remove the recorded migrate in request and clear the migration states of the migrate in request.
+    """
+
+    assert func.__name__ in ["_pre_alloc_cache", "recv_cache", "commit_dst_request", "free_pre_alloc_cache"]
+
+    def inspect_is_start(func: Callable, self, *args, **kwargs) -> bool:
+        if func.__name__ != "_pre_alloc_cache":
             return False
         sig = inspect.signature(func)
         bound_args = sig.bind(self, *args, **kwargs)
@@ -71,10 +77,10 @@ def watch_migrate_in_request_wrapper(func: Callable):
         is_first_stage = bound_args.arguments.get("is_first_stage")
         return is_first_stage
 
-    def inspect_is_stop(func: Callable):
-        return func.__name__ == "commit_dst_request"
+    def inspect_is_stop(func: Callable) -> bool:
+        return func.__name__ in ["commit_dst_request", "free_pre_alloc_cache"]
 
-    def inspect_request_id(func: Callable, self, *args, **kwargs):
+    def inspect_request_id(func: Callable, self, *args, **kwargs) -> RequestIDType:
         sig = inspect.signature(func)
         bound_args = sig.bind(self, *args, **kwargs)
         bound_args.apply_defaults()
@@ -110,10 +116,14 @@ def watch_migrate_in_request_wrapper(func: Callable):
             is_start, request_id, self.pending_migrate_in_request_time
         ):
             return MigrationResponse(success=False, return_value=None)
-        response = await func(self, *args, **kwargs)
-        post_process_pending_migrate_in_request_time(
-            response, is_stop, request_id, self.pending_migrate_in_request_time
-        )
+        try:
+            response = await func(self, *args, **kwargs)
+            post_process_pending_migrate_in_request_time(
+                response, is_stop, request_id, self.pending_migrate_in_request_time
+            )
+        except:
+            self.pending_migrate_in_request_time.pop(request_id)
+            raise
         return response
 
     @functools.wraps(func)
@@ -125,11 +135,95 @@ def watch_migrate_in_request_wrapper(func: Callable):
             is_start, request_id, self.pending_migrate_in_request_time
         ):
             return MigrationResponse(success=False, return_value=None)
-        response = func(self, *args, **kwargs)
-        post_process_pending_migrate_in_request_time(
-            response, is_stop, request_id, self.pending_migrate_in_request_time
-        )
+        try:
+            response = func(self, *args, **kwargs)
+            post_process_pending_migrate_in_request_time(
+                response, is_stop, request_id, self.pending_migrate_in_request_time
+            )
+        except:
+            self.pending_migrate_in_request_time.pop(request_id)
+            raise
         return response
+
+    if asyncio.iscoroutinefunction(func):
+        return async_wrapper
+    return sync_wrapper
+
+
+def update_migrating_out_request_id_set_decorator(func: Callable):
+    # pylint: disable=trailing-whitespace
+    """
+    This decorator is used to update the migrating out request id set, 
+    which is used to decide whether to accept new migrate out/in requests.
+    """
+
+    assert func.__name__ == "_migrate_out_one_request"
+
+    def inspect_request_id(func: Callable, self, *args, **kwargs) -> RequestIDType:
+        sig = inspect.signature(func)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+        migrate_out_request = bound_args.arguments.get("migrate_out_request")
+        return migrate_out_request.request_id
+
+    @functools.wraps(func)
+    async def async_wrapper(self, *args, **kwargs):
+        request_id = inspect_request_id(func, self, *args, **kwargs)
+        if request_id not in self.migrating_out_request_id_set:
+            self.migrating_out_request_id_set.add(request_id)
+        try:
+            return await func(self, *args, **kwargs)
+        finally:
+            assert request_id in self.migrating_out_request_id_set, \
+                "request_id is added to migrating_out_request_id_set for each migration"
+            self.migrating_out_request_id_set.remove(request_id)
+
+    return async_wrapper
+
+
+def update_migrating_in_request_id_set_decorator(func):
+    # pylint: disable=trailing-whitespace
+    """
+    This decorator is used to update the migrating in request id set, 
+    which is used to decide whether to accept new migrate out/in requests.
+    """
+
+    assert func.__name__ in ["_pre_alloc_cache", "recv_cache", "commit_dst_request", "free_pre_alloc_cache"]
+
+    def inspect_request_id(func: Callable, self, *args, **kwargs) -> RequestIDType:
+        sig = inspect.signature(func)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+        request_id = bound_args.arguments.get("request_id")
+        return request_id
+
+    def add_migrating_in_request_id_set(self, request_id: RequestIDType):
+        if request_id not in self.migrating_in_request_id_set:
+            self.migrating_in_request_id_set.add(request_id)
+
+    def remove_migrating_in_request_id_set(self, request_id: RequestIDType):
+        if request_id not in self.pending_migrate_in_request_time:
+            assert request_id in self.migrating_in_request_id_set, \
+                "request_id is added to migrating_in_request_id_set for each migration"
+            self.migrating_in_request_id_set.remove(request_id)
+
+    @functools.wraps(func)
+    async def async_wrapper(self, *args, **kwargs):
+        request_id = inspect_request_id(func, self, *args, **kwargs)
+        add_migrating_in_request_id_set(self, request_id)
+        try:
+            return await func(self, *args, **kwargs)
+        finally:
+            remove_migrating_in_request_id_set(self, request_id)
+
+    @functools.wraps(func)
+    def sync_wrapper(self, *args, **kwargs):
+        request_id = inspect_request_id(func, self, *args, **kwargs)
+        add_migrating_in_request_id_set(self, request_id)
+        try:
+            return func(self, *args, **kwargs)
+        finally:
+            remove_migrating_in_request_id_set(self, request_id)
 
     if asyncio.iscoroutinefunction(func):
         return async_wrapper
@@ -141,19 +235,31 @@ class MigrationCoordinator:
                  instance_id: str,
                  backend_engine: BackendInterface,
                  backend_type: BackendType,
+                 max_migration_concurrency: int,
                  request_migration_policy: str,
                  migration_last_stage_max_blocks: int,
                  migration_max_stages: int) -> None:
         self.instance_id = instance_id
         self.backend_engine = backend_engine
         self.backend_type = backend_type
+        self.max_migration_concurrency = max_migration_concurrency
         self.migration_scheduler = LocalMigrationScheduler(request_migration_policy, self.backend_engine)
         self.migration_last_stage_max_blocks = migration_last_stage_max_blocks
         self.migration_max_stages = migration_max_stages
         self.pending_migrate_in_request_time: Dict[str, float] = {}
+        self.migrating_out_request_id_set = set()
+        self.migrating_in_request_id_set = set()
         asyncio.create_task(self._watch_pending_migrate_in_requests_loop())
 
     async def migrate_out(self, dst_instance_actor: ray.actor.ActorHandle, dst_instance_id: str) -> List[RequestIDType]:
+        if not self.has_migration_slot():
+            logger.debug(
+                "Max migration concurrency ({}) reached, reject new migrate out request attempt.".format(
+                    self.max_migration_concurrency
+                )
+            )
+            return []
+
         migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
 
         if len(migrate_out_requests) == 0:
@@ -175,6 +281,7 @@ class MigrationCoordinator:
 
         return migrated_request_list
 
+    @update_migrating_out_request_id_set_decorator
     async def _migrate_out_one_request(self,
                                        dst_instance_actor: ray.actor.ActorHandle,
                                        dst_instance_id: str,
@@ -353,15 +460,35 @@ class MigrationCoordinator:
 
         return migration_status
 
-    # pylint: disable=unused-argument
-    @watch_migrate_in_request_wrapper
+    # Add this function to implement migration lock outside the update_migrating_in_request_id_set_decorator.
     def pre_alloc_cache(self,
                         request_id: RequestIDType,
                         request_status: RequestStatus,
                         request_arrival_time: float,
                         block_num: int,
                         token_ids: List[int],
-                        is_first_stage: bool) -> List[int]:
+                        is_first_stage: bool) -> MigrationResponse:
+        if is_first_stage and not self.has_migration_slot():
+            logger.debug(
+                "Max migration concurrency ({}) reached, reject new migrate in attempt.".format(
+                    self.max_migration_concurrency
+                )
+            )
+            return MigrationResponse(success=False, return_value=None)
+        return self._pre_alloc_cache(
+            request_id, request_status, request_arrival_time, block_num, token_ids, is_first_stage
+        )
+
+    # pylint: disable=unused-argument
+    @update_migrating_in_request_id_set_decorator
+    @update_pending_migrate_in_request_decorator
+    def _pre_alloc_cache(self,
+                         request_id: RequestIDType,
+                         request_status: RequestStatus,
+                         request_arrival_time: float,
+                         block_num: int,
+                         token_ids: List[int],
+                         is_first_stage: bool) -> MigrationResponse:
         response = self.backend_engine.pre_alloc_cache(request_id,
                                                        request_status,
                                                        request_arrival_time,
@@ -401,6 +528,8 @@ class MigrationCoordinator:
             # which will stop and clear the migration.
             return MigrationResponse(success=False, return_value=None)
 
+    @update_migrating_in_request_id_set_decorator
+    @update_pending_migrate_in_request_decorator
     def free_pre_alloc_cache(self, request_id: RequestIDType) -> None:
         return self.backend_engine.free_pre_alloc_cache(request_id)
 
@@ -434,12 +563,14 @@ class MigrationCoordinator:
             log_instance_exception(e, dst_instance_id, "_send_cache", request_id)
             return MigrationResponse(success=False, return_value=None)
 
-    @watch_migrate_in_request_wrapper
+    @update_migrating_in_request_id_set_decorator
+    @update_pending_migrate_in_request_decorator
     async def recv_cache(self, request_id: RequestIDType, *args, **kwargs) -> MigrationResponse:
         # pylint: disable=protected-access
         return await self.backend_engine.recv_cache(request_id, *args, **kwargs)
 
-    @watch_migrate_in_request_wrapper
+    @update_migrating_in_request_id_set_decorator
+    @update_pending_migrate_in_request_decorator
     async def commit_dst_request(self, request_id: RequestIDType, backend_request: LlumnixRequest) -> MigrationResponse:
         return await self.backend_engine.commit_dst_request(request_id, backend_request)
 
@@ -470,3 +601,9 @@ class MigrationCoordinator:
                 else:
                     new_pending_migrate_in_requests[request_id] = last_migrate_in_stop_time
             self.pending_migrate_in_request_time = new_pending_migrate_in_requests
+
+    def has_migration_slot(self) -> bool:
+        return len(self.migrating_in_request_id_set) + len(self.migrating_out_request_id_set) < self.max_migration_concurrency
+
+    def is_migrating(self) -> bool:
+        return len(self.migrating_in_request_id_set) + len(self.migrating_out_request_id_set) > 0

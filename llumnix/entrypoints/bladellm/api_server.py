@@ -21,11 +21,11 @@ from blade_llm.service.server import Entrypoint
 
 
 from llumnix.config import get_llumnix_config
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType, LaunchMode
 from llumnix.arg_utils import LlumnixArgumentParser, LaunchArgs
 from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
-from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
+from llumnix.entrypoints.utils import is_gpu_available
 from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs, add_cli_args, get_args
 from llumnix.logging.logger import init_logger
 from llumnix.metrics.timestamps import set_timestamp

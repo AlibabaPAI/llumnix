@@ -34,15 +34,15 @@ from vllm import envs as vllm_envs
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.backends.backend_interface import BackendInterface, EngineState, BackendType
+from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.utils import RequestOutputForwardingMode, OutputMediator
-from llumnix.utils import make_async
+from llumnix.backends.utils import EngineState, RequestOutputForwardingMode, OutputMediator
+from llumnix.utils import make_async, BackendType
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
@@ -553,3 +553,6 @@ class BackendVLLM(BackendInterface):
                 self._run_workers_async(
                     "pop_migrating_out_seq_group_metadata", backend_request.request_id))
         return self.engine.scheduler[0].free_src_request(backend_request)
+
+    def get_instance_info(self):
+        return self.engine.instance_info

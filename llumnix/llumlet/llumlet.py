@@ -22,8 +22,8 @@ from ray.util.placement_group import PlacementGroup
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
-from llumnix.backends.backend_interface import BackendInterface, BackendType, EngineState
-from llumnix.backends.utils import init_backend_engine
+from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.server_info import ServerInfo
 from llumnix.queue.queue_type import QueueType
@@ -32,7 +32,7 @@ from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import RequestIDType
+from llumnix.utils import RequestIDType, BackendType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -65,6 +65,7 @@ class Llumlet:
                 self.instance_id,
                 self.backend_engine,
                 llumnix_engine_args.backend_type,
+                instance_args.max_migration_concurrency,
                 instance_args.request_migration_policy,
                 instance_args.migration_last_stage_max_blocks,
                 instance_args.migration_max_stages,
@@ -130,10 +131,13 @@ class Llumlet:
 
     # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager
     def get_instance_info(self) -> InstanceInfo:
-        instance_info: InstanceInfo = self.backend_engine.engine.instance_info
+        instance_info: InstanceInfo = self.backend_engine.get_instance_info()
         instance_info.instance_type = self.instance_args.instance_type
         instance_info.enable_defrag = self.instance_args.enable_defrag
         self.instance_load_calculator.compute_instance_load(instance_info)
+        if self.enable_migration:
+            instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
+            instance_info.is_migrating = self.migration_coordinator.is_migrating()
         return instance_info
 
     async def is_ready(self):

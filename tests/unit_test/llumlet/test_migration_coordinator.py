@@ -15,21 +15,29 @@ import time
 import math
 import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock
+from concurrent.futures import ThreadPoolExecutor
 
 import ray
 import pytest
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
-from llumnix.backends.backend_interface import BackendInterface, BackendType
+from llumnix.backends.backend_interface import BackendInterface
 from llumnix.llumlet.migration_coordinator import MigrationStatus
 from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
-from llumnix.utils import random_uuid, MigrationResponse
+from llumnix.utils import random_uuid, MigrationResponse, BackendType
 from llumnix.llumlet.request import RequestStatus
+from llumnix.llumlet.migration_coordinator import (
+    update_migrating_out_request_id_set_decorator,
+    update_migrating_in_request_id_set_decorator,
+)
+from llumnix.logging.logger import init_logger
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 
 from .test_local_migration_scheduler import MockRequest
+
+logger = init_logger(__name__)
 
 @ray.remote
 def ray_remote_call(ret):
@@ -46,11 +54,82 @@ def init_migration_coordinator(backend_engine,
         "0",
         backend_engine,
         BackendType.VLLM,
+        max_migration_concurrency=1,
         request_migration_policy="SR",
         migration_last_stage_max_blocks=migration_last_stage_max_blocks,
         migration_max_stages=migration_max_stages,
     )
     return migration_coordinator
+
+
+class MockMigrationCoordinator(MigrationCoordinator):
+    async def migrate_out(self, dst_instance_actor, dst_instance_id):
+        if not self.has_migration_slot():
+            logger.debug(
+                "Max migration concurrency ({}) reached, reject new migrate out request attempt.".format(
+                    self.max_migration_concurrency
+                )
+            )
+            return []
+
+        migrate_out_request = MockRequest("0", 1, math.inf)
+        await self._migrate_out_one_request(dst_instance_actor, dst_instance_id, migrate_out_request)
+        return [migrate_out_request]
+
+    @update_migrating_out_request_id_set_decorator
+    async def _migrate_out_one_request(self,
+                                       dst_instance_actor,
+                                       dst_instance_id,
+                                       migrate_out_request):
+        await asyncio.sleep(5.0)
+        return migrate_out_request
+
+    def pre_alloc_cache(self,
+                        request_id,
+                        request_status,
+                        request_arrival_time,
+                        block_num,
+                        token_ids,
+                        is_first_stage):
+        if is_first_stage and not self.has_migration_slot():
+            logger.debug(
+                "Max migration concurrency ({}) reached, reject new migrate in attempt.".format(
+                    self.max_migration_concurrency
+                )
+            )
+            return MigrationResponse(success=False, return_value=None)
+
+        return self._pre_alloc_cache(
+            request_id, request_status, request_arrival_time, block_num, token_ids, is_first_stage
+        )
+
+    @update_migrating_in_request_id_set_decorator
+    def _pre_alloc_cache(self,
+                         request_id,
+                         request_status,
+                         request_arrival_time,
+                         block_num,
+                         token_ids,
+                         is_first_stage):
+        time.sleep(5.0)
+        return MigrationResponse(success=False, return_value=None)
+
+
+def init_mock_migration_coordinator(backend_engine,
+                                    migration_last_stage_max_blocks=1,
+                                    migration_max_stages=3,
+                                    max_migration_concurrency=1):
+    migration_coordinator = MockMigrationCoordinator(
+        "0",
+        backend_engine,
+        BackendType.VLLM,
+        max_migration_concurrency=max_migration_concurrency,
+        request_migration_policy="SR",
+        migration_last_stage_max_blocks=migration_last_stage_max_blocks,
+        migration_max_stages=migration_max_stages,
+    )
+    return migration_coordinator
+
 
 @pytest.mark.asyncio
 async def test_migrate_out_onestage(ray_env):
@@ -273,3 +352,32 @@ async def test_pending_migrate_in_timeout():
     response = await migration_coordinator.commit_dst_request(request_id, migrate_out_request)
     assert response.success is True
     assert request_id not in migration_coordinator.pending_migrate_in_request_time
+
+async def test_migration_lock():
+    backend_engine = MagicMock(spec=BackendInterface)
+    migration_coordinator = init_mock_migration_coordinator(backend_engine)
+
+    # test migrate out lock
+    assert len(migration_coordinator.migrating_out_request_id_set) == 0
+    asyncio.create_task(migration_coordinator.migrate_out(None, None))
+    await asyncio.sleep(0.5)
+    assert len(migration_coordinator.migrating_out_request_id_set) == 1
+    migrated_request_list = await migration_coordinator.migrate_out(None, None)
+    assert len(migrated_request_list) == 0
+    migration_response = migration_coordinator.pre_alloc_cache("1", None, None, None, None, True)
+    assert migration_response.success is False
+    await asyncio.sleep(5.0)
+    assert len(migration_coordinator.migrating_out_request_id_set) == 0
+
+    # test migrate in lock
+    assert len(migration_coordinator.migrating_in_request_id_set) == 0
+    executor = ThreadPoolExecutor()
+    executor.submit(migration_coordinator.pre_alloc_cache, "2", None, None, None, None, True)
+    await asyncio.sleep(0.5)
+    assert len(migration_coordinator.migrating_in_request_id_set) == 1
+    migration_response = migration_coordinator.pre_alloc_cache("3", None, None, None, None, True)
+    assert migration_response.success is False
+    migrated_request_list = await migration_coordinator.migrate_out(None, None)
+    assert len(migrated_request_list) == 0
+    await asyncio.sleep(5.0)
+    assert len(migration_coordinator.migrating_in_request_id_set) == 0

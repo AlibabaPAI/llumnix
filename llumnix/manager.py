@@ -15,12 +15,11 @@ import asyncio
 import time
 import csv
 import os
-from typing import Dict, List, Tuple, Union, Iterable
+from typing import Dict, List, Union, Iterable
 from functools import partial
 
 import ray
 import ray.actor
-from ray.util.placement_group import PlacementGroup
 
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
@@ -37,7 +36,6 @@ from llumnix.arg_utils import (
 )
 from llumnix.metrics.manager_metrics import ManagerMetrics
 from llumnix.server_info import ServerInfo
-from llumnix.backends.backend_interface import BackendType
 from llumnix.utils import (
     random_uuid,
     run_coroutine_in_new_thread,
@@ -45,6 +43,8 @@ from llumnix.utils import (
     asyncio_wait_for_with_timeout,
     RequestIDType,
     log_instance_exception,
+    BackendType,
+    LaunchMode,
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -52,7 +52,6 @@ from llumnix.ray_utils import (
     log_actor_ray_info,
     get_scaler_name,
 )
-from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import (
     NO_INSTANCE_RETRY_GENERATE_INTERVAL,
     WAIT_ALL_MIGRATIONS_DONE_INTERVAL,
@@ -119,8 +118,6 @@ class Manager:
         # instance states
         self.num_instances = 0
         self.instances: Dict[str, Llumlet] = {}
-        self.pgs: Dict[str, PlacementGroup] = {}
-        self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
 
         # migration states
@@ -264,48 +261,19 @@ class Manager:
             asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS))
 
     async def _migrate(self, pair_migration_type: PairMigrationConstraints) -> None:
-        # TODO(s5u13b): Remove the migration done callback through decentralized migration refactoring.
-        async def migrate_done_callback(ret, migrate_instance_pair: Tuple[str, str]) -> None:
-            if migrate_instance_pair[0] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[0]] = False
-            if migrate_instance_pair[1] in self.instance_migrating:
-                self.instance_migrating[migrate_instance_pair[1]] = False
-            if not isinstance(ret, Exception):
-                migrate_out_request_ids = ret
-                if not self.enable_pd_disagg:
-                    logger.info("Instance {}->{} migrate done, migrate request {}".format(
-                        migrate_instance_pair[0], migrate_instance_pair[1], migrate_out_request_ids))
-
-        def migrate_done_callback_wrapper(migrate_instance_pair: Tuple[str, str], fut) -> None:
-            ret = fut.result()[0]
-            loop = asyncio.get_event_loop()
-            loop.create_task(migrate_done_callback(ret, migrate_instance_pair))
-
+        # If encounter error during migration, to make manager keep running, we do not raise exception.
         try:
             migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
-            migration_tasks = []
             for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
                 src_instance_id, dst_instance_id = migrate_instance_pair
-                if self.instance_migrating[src_instance_id] or self.instance_migrating[dst_instance_id]:
-                    continue
-                self.instance_migrating[src_instance_id] = True
-                self.instance_migrating[dst_instance_id] = True
                 dst_instance_actor = self.instances[dst_instance_id]
-                task = asyncio.gather(
+                asyncio.create_task(
                     asyncio_wait_for_with_timeout(
                         self.instances[src_instance_id].migrate_out.remote(
                             dst_instance_actor, dst_instance_id
                         )
-                    ),
-                    return_exceptions=True
+                    )
                 )
-                task.add_done_callback(partial(migrate_done_callback_wrapper, migrate_instance_pair))
-                migration_tasks.append(task)
-            if len(migration_tasks) > 0 and not self.enable_pd_disagg:
-                logger.info("{} migration tasks starts.".format(len(migration_tasks)))
-            await asyncio.gather(*migration_tasks, return_exceptions=True)
-            if len(migration_tasks) > 0 and not self.enable_pd_disagg:
-                logger.info("{} migration tasks ends.".format(len(migration_tasks)))
         # pylint: disable=W0703
         except Exception:
             logger.critical(
@@ -335,7 +303,6 @@ class Manager:
                 if ins_id not in manager.instances:
                     instance_actor = instance_actor_handles[idx]
                     manager.instances[ins_id] = instance_actor
-                    manager.instance_migrating[ins_id] = False
                     if manager.log_instance_info:
                         manager.instance_last_logged_empty[ins_id] = False
                     manager.pending_rebuild_migration_instances += 1
@@ -372,11 +339,6 @@ class Manager:
                 self.instances.pop(ins_id)
             else:
                 logger.warning("instance {} is not in instances".format(ins_id))
-
-            if ins_id in self.instance_migrating:
-                del self.instance_migrating[ins_id]
-            else:
-                logger.warning("instance {} is not in instance_migrating".format(ins_id))
 
             if self.log_instance_info:
                 if ins_id in self.instance_last_logged_empty:
@@ -426,7 +388,7 @@ class Manager:
         self.enable_migration = False
 
         # Wait for all instances to finish migration
-        while any(self.instance_migrating.values()):
+        while not self.global_scheduler.all_instances_not_migrating():
             await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
 
         async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):

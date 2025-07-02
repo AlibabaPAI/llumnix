@@ -24,6 +24,7 @@ from functools import partial
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from enum import Enum
 
 import psutil
 from typing_extensions import ParamSpec
@@ -43,6 +44,24 @@ P = ParamSpec('P')
 T = TypeVar("T")
 
 RequestIDType = Union[str, int]
+
+
+class BackendType(str, Enum):
+    VLLM = "vLLM"
+    VLLM_V1 = "vLLM v1"
+    BLADELLM = "BladeLLM"
+    SIM_VLLM = "vLLM simulator"
+
+    @staticmethod
+    def is_sim_backend(status: "BackendType") -> bool:
+        return status in [BackendType.SIM_VLLM]
+
+
+# Put it in utils.py to avoid circular import.
+class LaunchMode(str, Enum):
+    LOCAL = "LOCAL"
+    GLOBAL = "GLOBAL"
+
 
 @dataclass
 class MigrationResponse:

@@ -23,8 +23,7 @@ from llumnix.entrypoints.setup import (
 from llumnix.arg_utils import ManagerArgs, InstanceArgs, LaunchArgs, EntrypointsArgs
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.backend_interface import BackendType
-from llumnix.entrypoints.utils import LaunchMode
+from llumnix.utils import BackendType, LaunchMode
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM

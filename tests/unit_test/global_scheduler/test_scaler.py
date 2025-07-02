@@ -15,7 +15,6 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.ray_utils import get_scaler_name
 from llumnix.scaler import Scaler
-from llumnix.entrypoints.utils import LaunchMode
 from llumnix.ray_utils import (
     get_server_name,
     remove_placement_group,
@@ -27,8 +26,7 @@ from llumnix.ray_utils import (
     get_manager_name,
 )
 from llumnix.arg_utils import save_engine_args
-from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, BackendType, LaunchMode
 from llumnix.instance_info import InstanceType
 from llumnix.manager import Manager
 

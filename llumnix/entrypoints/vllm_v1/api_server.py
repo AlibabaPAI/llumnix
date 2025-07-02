@@ -28,10 +28,9 @@ from llumnix.entrypoints.setup import setup_ray_cluster, setup_llumnix
 from llumnix.entrypoints.vllm_v1.arg_utils import add_cli_args, get_args, VLLMV1EngineArgs
 from llumnix.entrypoints.vllm_v1.client import LlumnixClientVLLM
 from llumnix.logging.logger import init_logger
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, BackendType, LaunchMode
 from llumnix.config import get_llumnix_config
-from llumnix.backends.backend_interface import BackendType
-from llumnix.entrypoints.utils import LaunchMode, is_gpu_available
+from llumnix.entrypoints.utils import is_gpu_available
 from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE
 from llumnix.metrics.timestamps import set_timestamp
 

@@ -48,11 +48,12 @@ from blade_llm.utils.hardware_util import get_cpu_number
 
 from llumnix.arg_utils import InstanceArgs
 from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_free_port,
-                           wait_port_free, run_coroutine_in_new_thread)
-from llumnix.backends.backend_interface import BackendInterface, EngineState
+                           wait_port_free, run_coroutine_in_new_thread, MigrationResponse)
+from llumnix.backends.backend_interface import BackendInterface
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
 from llumnix.backends.utils import (
+    EngineState,
     OutputMediator,
     RequestOutputForwardingMode,
 )
@@ -65,11 +66,11 @@ from llumnix.backends.bladellm.proto.migration_worker_pb2 import RecvCacheReques
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_RPC_TIMEOUT
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
-from llumnix.utils import RequestIDType, MigrationResponse
+from llumnix.utils import RequestIDType
 
 logger = init_logger(__name__)
 
@@ -869,3 +870,6 @@ class BackendBladeLLM(BackendInterface):
 
     async def stop_profiler(self):
         return await self.engine.stop_profiler()
+
+    def get_instance_info(self):
+        return self.engine.instance_info

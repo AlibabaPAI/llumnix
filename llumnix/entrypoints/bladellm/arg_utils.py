@@ -19,8 +19,7 @@ import copy
 from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, LlumnixArgumentParser, InstanceArgs,
                                LlumnixEngineArgs, init_llumnix_args, LlumnixEngineArgsFactory,
                                load_registered_engine_args, post_init_llumnix_args)
-from llumnix.backends.backend_interface import BackendType
-from llumnix.entrypoints.utils import LaunchMode
+from llumnix.utils import BackendType, LaunchMode
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceType
 from llumnix.config import LlumnixConfig

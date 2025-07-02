@@ -23,7 +23,7 @@ import cloudpickle
 import pandas as pd
 import numpy as np
 
-from llumnix.backends.backend_interface import BackendType
+from llumnix.utils import BackendType
 from llumnix.llumlet.request import RequestInferenceType
 
 # 2D parallel configuration

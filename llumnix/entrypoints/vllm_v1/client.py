@@ -203,7 +203,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     ) -> List[EngineCoreOutput]:
         current_completion_tokens = None
         if hasattr(engine_core_output, 'num_output_tokens'):
-            engine_core_output.num_output_tokens
+            current_completion_tokens = engine_core_output.num_output_tokens
 
         if not current_completion_tokens:
             # No num_output_tokens info, return the engine_core_output directly.

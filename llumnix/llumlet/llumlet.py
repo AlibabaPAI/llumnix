@@ -136,7 +136,8 @@ class Llumlet:
         instance_info.enable_defrag = self.instance_args.enable_defrag
         self.instance_load_calculator.compute_instance_load(instance_info)
         if self.enable_migration:
-            instance_info.can_migrate = self.migration_coordinator.can_migrate()
+            instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
+            instance_info.is_migrating = self.migration_coordinator.is_migrating()
         return instance_info
 
     async def is_ready(self):

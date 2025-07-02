@@ -64,7 +64,7 @@ def init_migration_coordinator(backend_engine,
 
 class MockMigrationCoordinator(MigrationCoordinator):
     async def migrate_out(self, dst_instance_actor, dst_instance_id):
-        if not self.can_migrate():
+        if not self.has_migration_slot():
             logger.debug(
                 "Max migration concurrency ({}) reached, reject new migrate out request attempt.".format(
                     self.max_migration_concurrency
@@ -91,9 +91,9 @@ class MockMigrationCoordinator(MigrationCoordinator):
                         block_num,
                         token_ids,
                         is_first_stage):
-        if is_first_stage and not self.can_migrate():
+        if is_first_stage and not self.has_migration_slot():
             logger.debug(
-                "Max migration concurrency ({}) reached, reject new migrate in request attempt.".format(
+                "Max migration concurrency ({}) reached, reject new migrate in attempt.".format(
                     self.max_migration_concurrency
                 )
             )

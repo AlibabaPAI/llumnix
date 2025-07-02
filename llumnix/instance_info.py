@@ -71,7 +71,8 @@ class InstanceInfo:
     migration_load_metric: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_in: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_out: BaseLoad = DummyLoad()
-    can_migrate: bool = True
+    has_migration_slot: bool = True
+    is_migrating: bool = False
 
     # lazy init infos
     profiling_data: Tuple[str, int, int, float] = None

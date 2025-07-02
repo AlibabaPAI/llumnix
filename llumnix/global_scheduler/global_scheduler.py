@@ -290,5 +290,5 @@ class GlobalScheduler:
     def _get_empty_instance_info(self) -> InstanceInfo:
         return self.scaling_scheduler.get_empty_instance_info()
 
-    def all_instances_can_migrate(self) -> bool:
-        return all(instance_info.can_migrate for instance_info in self.instance_info.values())
+    def all_instances_not_migrating(self) -> bool:
+        return all(not instance_info.is_migrating for instance_info in self.instance_info.values())

@@ -388,7 +388,7 @@ class Manager:
         self.enable_migration = False
 
         # Wait for all instances to finish migration
-        while not self.global_scheduler.all_instances_can_migrate():
+        while not self.global_scheduler.all_instances_not_migrating():
             await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
 
         async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):

@@ -30,7 +30,7 @@ class MigrationScheduler:
         self.migration_filter = MigrationInstanceFilter(filter_config)
         self._register_migration_backend_init_filter(is_group_kind_migration_backend)
         self._register_new_instance_filter()
-        self._register_can_migrate_filter()
+        self._register_has_migration_slot_filter()
 
         self.pair_migration_policy = PairMigrationPolicyFactory.get_policy(
             pair_migration_policy, migrate_out_load_threshold=migrate_out_load_threshold)
@@ -54,13 +54,13 @@ class MigrationScheduler:
         )
         self.migration_filter.register_filter("new_instance_filter", new_instance_filter)
 
-    def _register_can_migrate_filter(self) -> None:
-        can_migrate_filter = CustomFilter()
-        can_migrate_filter.set_filter_condtition(
-            src_filter=lambda instance_info: instance_info.can_migrate,
-            dst_filter=lambda instance_info: instance_info.can_migrate
+    def _register_has_migration_slot_filter(self) -> None:
+        has_migration_slot_filter = CustomFilter()
+        has_migration_slot_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.has_migration_slot,
+            dst_filter=lambda instance_info: instance_info.has_migration_slot
         )
-        self.migration_filter.register_filter("can_migrate_filter", can_migrate_filter)
+        self.migration_filter.register_filter("has_migration_slot_filter", has_migration_slot_filter)
 
     # migration_filter must ensure that the specific instance_info does not appear in both src and dst simultaneously
     def pair_migration(self, instance_info: Dict[str, InstanceInfo], pair_migration_type: PairMigrationConstraints) -> List[Tuple[str, str]]:

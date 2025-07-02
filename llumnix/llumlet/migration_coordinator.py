@@ -252,7 +252,7 @@ class MigrationCoordinator:
         asyncio.create_task(self._watch_pending_migrate_in_requests_loop())
 
     async def migrate_out(self, dst_instance_actor: ray.actor.ActorHandle, dst_instance_id: str) -> List[RequestIDType]:
-        if not self.can_migrate():
+        if not self.has_migration_slot():
             logger.debug(
                 "Max migration concurrency ({}) reached, reject new migrate out request attempt.".format(
                     self.max_migration_concurrency
@@ -468,9 +468,9 @@ class MigrationCoordinator:
                         block_num: int,
                         token_ids: List[int],
                         is_first_stage: bool) -> MigrationResponse:
-        if is_first_stage and not self.can_migrate():
+        if is_first_stage and not self.has_migration_slot():
             logger.debug(
-                "Max migration concurrency ({}) reached, reject new migrate in request attempt.".format(
+                "Max migration concurrency ({}) reached, reject new migrate in attempt.".format(
                     self.max_migration_concurrency
                 )
             )
@@ -602,5 +602,8 @@ class MigrationCoordinator:
                     new_pending_migrate_in_requests[request_id] = last_migrate_in_stop_time
             self.pending_migrate_in_request_time = new_pending_migrate_in_requests
 
-    def can_migrate(self):
+    def has_migration_slot(self) -> bool:
         return len(self.migrating_in_request_id_set) + len(self.migrating_out_request_id_set) < self.max_migration_concurrency
+
+    def is_migrating(self) -> bool:
+        return len(self.migrating_in_request_id_set) + len(self.migrating_out_request_id_set) > 0

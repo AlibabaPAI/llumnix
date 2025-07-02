@@ -20,7 +20,6 @@ from functools import partial
 
 import ray
 import ray.actor
-from ray.util.placement_group import PlacementGroup
 
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger

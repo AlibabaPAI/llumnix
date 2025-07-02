@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 import copy
 import math
 import time
@@ -39,6 +39,12 @@ from llumnix.entrypoints.client import LlumnixClient
 
 logger = init_logger(__name__)
 
+def get_completion_tokens(engine_core_output: EngineCoreOutput) -> Optional[int]:
+    current_completion_tokens = None
+    if isinstance(engine_core_output.kv_transfer_params, dict):
+        current_completion_tokens = engine_core_output.kv_transfer_params.get("num_output_tokens", None)
+    return current_completion_tokens
+
 class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     def __init__(
         self,
@@ -54,7 +60,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
 
         LlumnixClient.__init__(self, entrypoints_context, loop)
         AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
-        self.engine_core_output_stash: Dict[int, Tuple[List[EngineCoreOutput], int, int]] = {}
+        self.engine_core_output_stash: Dict[str, Tuple[List[EngineCoreOutput], int, int]] = {}
 
     async def generate(self,
                        prompt: str,
@@ -179,7 +185,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                     continue
                 outputs.extend(processed_output)
                 last_output = processed_output[-1]
-                self.request_stream_last_completion_tokens[request_id] = last_output.num_output_tokens
+                self.request_stream_last_completion_tokens[request_id] = get_completion_tokens(last_output)
                 if last_output.finished:
                     logger.info("Client finished request {}.".format(request_id))
                     self._clear_client_request_states(request_id)
@@ -201,9 +207,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         engine_core_output: EngineCoreOutput,
         # current_completion_tokens_dict: Dict[str, int],
     ) -> List[EngineCoreOutput]:
-        current_completion_tokens = None
-        if hasattr(engine_core_output, 'num_output_tokens'):
-            current_completion_tokens = engine_core_output.num_output_tokens
+        current_completion_tokens = get_completion_tokens(engine_core_output)
 
         if not current_completion_tokens:
             # No num_output_tokens info, return the engine_core_output directly.

@@ -28,7 +28,6 @@ from vllm import envs as vllm_envs
 from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreOutputs
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
-from vllm.v1.utils import get_engine_client_zmq_addr
 
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
@@ -409,54 +408,35 @@ class BackendVLLMV1(BackendInterface):
         return ret
 
     def _remove_running_request(self, request_id: str) -> bool:
-        return self.engine.scheduler[0].remove_running_request(request_id)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def remove_waiting_request(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler[0].remove_waiting_request(*args, **kwargs)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
-        return self.engine.scheduler[0].add_migrating_out_request_last_stage(*args, **kwargs)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def pop_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
-        return self.engine.scheduler[0].pop_migrating_out_request_last_stage(backend_request.request_id)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def pre_alloc_cache(self, *args, **kwargs) -> MigrationResponse:
-        return self.engine.scheduler[0].pre_alloc_cache(*args, **kwargs)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def should_abort_migration(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler[0].should_abort_migration(*args, **kwargs)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def add_running_request(self, backend_request: LlumnixRequest) -> None:
-        # Although add_running_request is always be called in last stage migration,
-        # there exists migrating_out_seq_group_metadata in worker only when last stage do_send is executed,
-        # so the request id does not always exists.
-        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
-            # pylint: disable=protected-access
-            asyncio.create_task(
-                self._run_workers_async(
-                    "restore_migrating_out_seq_group_metadata", backend_request.request_id))
-        return self.engine.scheduler[0].add_running_request(backend_request)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def add_waiting_request(self, *args, **kwargs) -> None:
-        return self.engine.scheduler[0].add_waiting_request(*args, **kwargs)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def is_request_running(self, *args, **kwargs) -> bool:
-        return self.engine.scheduler[0].is_request_running(*args, **kwargs)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def free_pre_alloc_cache(self, request_id: str) -> None:
-        # TODO(s5u13b): Only needed when migrating running request.
-        if self.use_ray_spmd_worker:
-            # pylint: disable=protected-access
-            asyncio.create_task(self._run_workers_async("free_migrating_in_seq_group_metadata"))
-        return self.engine.scheduler[0].free_pre_alloc_cache(request_id)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def free_src_request(self, backend_request) -> None:
-        # When free_src_request is called, it means that all migration operations is successful.
-        # However, there exists migrating_out_seq_group_metadata in worker only when migrating running request,
-        # so the request id does not always exists.
-        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
-            # pylint: disable=protected-access
-            asyncio.create_task(
-                self._run_workers_async(
-                    "pop_migrating_out_seq_group_metadata", backend_request.request_id))
-        return self.engine.scheduler[0].free_src_request(backend_request)
+        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
+

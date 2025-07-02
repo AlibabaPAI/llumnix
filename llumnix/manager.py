@@ -179,7 +179,6 @@ class Manager:
                   ) -> "Manager":
         manager_class = ray.remote(
             num_cpus=1,
-            num_gpus=0.1, # TODO(shejiarui)
             max_restarts=-1,
             name=get_manager_name(),
             namespace="llumnix",

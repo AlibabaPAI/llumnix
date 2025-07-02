@@ -137,7 +137,8 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     ) -> "AsyncEngineCoreProcLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
         # FIXME(zhaozhiyu): don't known where speculative_config is set, just overload it
-        engine_args.speculative_config = None
+        if hasattr(engine_args, "speculative_config"):
+            engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
         # Hack to pass placement_group for init workers.

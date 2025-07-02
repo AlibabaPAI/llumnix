@@ -87,7 +87,6 @@ def setup_entrypoints_context(request_output_queue_type: QueueType, instance_id)
         None,
         server_info,
         None,
-        None,
     )
 
     return entrypoints_context

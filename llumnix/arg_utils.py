@@ -274,6 +274,7 @@ class VLLMV1EntrypointsArgs:
     response_role: str = None
     chat_template_content_format: str = None
     enable_server_load_tracking: bool = None
+    enable_force_include_usage: bool = None
     
     # The APIServer index mapped to ServerInfo in EngineCore.
     # It will be set in Scaler, no need to set through CLI.

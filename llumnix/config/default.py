@@ -108,6 +108,8 @@ _C.SERVER.RESPONSE_ROLE = "assistant"
 _C.SERVER.CHAT_TEMPLATE_CONTENT_FORMAT = "auto"
 # If set to True, enable tracking server_load_metrics in the app state.
 _C.SERVER.ENABLE_SERVER_LOAD_TRACKING = False
+# If set to True, including usage on every request.
+_C.SERVER.ENABLE_FORCE_INCLUDE_USAGE = False
 # APIServer index, mapped to ServerInfo in EngineCore. The name is following vLLM.
 _C.SERVER.CLIENT_INDEX = 0
 

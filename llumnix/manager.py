@@ -119,8 +119,6 @@ class Manager:
         # instance states
         self.num_instances = 0
         self.instances: Dict[str, Llumlet] = {}
-        self.pgs: Dict[str, PlacementGroup] = {}
-        self.instance_migrating: Dict[str, bool] = {}
         self.pending_rebuild_migration_instances = 0
 
         # migration states
@@ -306,7 +304,6 @@ class Manager:
                 if ins_id not in manager.instances:
                     instance_actor = instance_actor_handles[idx]
                     manager.instances[ins_id] = instance_actor
-                    manager.instance_migrating[ins_id] = False
                     if manager.log_instance_info:
                         manager.instance_last_logged_empty[ins_id] = False
                     manager.pending_rebuild_migration_instances += 1
@@ -343,11 +340,6 @@ class Manager:
                 self.instances.pop(ins_id)
             else:
                 logger.warning("instance {} is not in instances".format(ins_id))
-
-            if ins_id in self.instance_migrating:
-                del self.instance_migrating[ins_id]
-            else:
-                logger.warning("instance {} is not in instance_migrating".format(ins_id))
 
             if self.log_instance_info:
                 if ins_id in self.instance_last_logged_empty:
@@ -397,7 +389,7 @@ class Manager:
         self.enable_migration = False
 
         # Wait for all instances to finish migration
-        while any(self.instance_migrating.values()):
+        while not self.global_scheduler.all_instances_can_migrate():
             await asyncio.sleep(WAIT_ALL_MIGRATIONS_DONE_INTERVAL)
 
         async def run_task(alive_instances: List[str], task_name: str, *args, **kwargs):

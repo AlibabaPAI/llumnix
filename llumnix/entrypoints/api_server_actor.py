@@ -23,6 +23,7 @@ import ray.actor
 
 from llumnix.arg_utils import EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
+from llumnix.instance_info import InstanceType
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.logging.logger import init_logger
 from llumnix.ray_utils import log_actor_ray_info, get_server_name
@@ -42,6 +43,7 @@ class APIServerActor(ABC):
                  instance: ray.actor.ActorHandle):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
+        self.instance_type: InstanceType = ray.get(instance.get_instance_type.remote())
         self.entrypoints_args = entrypoints_args
         self.engine_args = engine_args
         self.scaler = scaler

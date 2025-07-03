@@ -131,6 +131,12 @@ class Manager:
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
+    async def get_enable_engine_pd_disagg(self):
+        return self.manager_args.enable_engine_pd_disagg
+
+    async def get_enable_engine_semi_pd_disagg(self):
+        return self.manager_args.enable_engine_semi_pd_disagg
+
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str):
             if not self.manager_args.enable_engine_semi_pd_disagg:

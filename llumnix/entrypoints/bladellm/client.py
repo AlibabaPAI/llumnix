@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import time
 import asyncio
 import copy
@@ -26,6 +27,7 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
+from llumnix.instance_info import InstanceType
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
@@ -43,7 +45,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
     def __init__(self,
                  args: ServingArgs,
                  entrypoints_context: EntrypointsContext,
-                 loop: asyncio.AbstractEventLoop):
+                 loop: asyncio.AbstractEventLoop,
+                 instance_type: InstanceType):
         MultiProcessingLLMClient.__init__(self, args, -1, -1)
 
         self.entrypoint_req_id_to_llumnix_req_id = {} # int32 -> int32
@@ -55,6 +58,11 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.timestamps_stream: Dict[int, asyncio.Queue] = {}
 
         LlumnixClient.__init__(self, entrypoints_context, loop)
+
+        # pdd
+        self.instance_type: InstanceType = instance_type
+        self.enable_engine_semi_pd_disagg: bool = ray.get(self.manager.get_enable_engine_semi_pd_disagg.remote())
+        self.enable_engine_pd_disagg: bool = ray.get(self.manager.get_enable_engine_pd_disagg.remote())
 
     def get_request_timestamps_generator(self, entrypoint_req_id: int) -> Optional[asyncio.Queue]:
         return self.timestamps_stream.get(entrypoint_req_id, None)
@@ -94,12 +102,20 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         except Exception as e:
             self._handle_generate_by_manager_error(request_id, e)
             # Do not re-generate the request to avoid duplicate requests.
-            if self.manager_available:
+            if self.manager_available or not self.can_genenrate_by_instance():
                 self.manager_available = False
-                return LLMResponse(request_id, resp_queue=results_queue)
+                self.request_stream.pop(request_id, None)
+                return error_resp(request_id, err_code=500, err_msg="Manager is unavailable and can't genenrate by present instance.")
             await self._generate_by_instance(request_id, server_info_copy, request)
 
         return LLMResponse(request_id, resp_queue=results_queue)
+
+    def can_genenrate_by_instance(self,):
+        if self.enable_engine_pd_disagg:
+            return self.instance_type == InstanceType.PREFILL
+        if self.enable_engine_semi_pd_disagg:
+            return self.instance_type == InstanceType.DECODE
+        return True
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self, request_id: int, server_info: ServerInfo, request: bytes):
@@ -118,8 +134,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
+                request_expected_steps = math.inf if not self.enable_engine_pd_disagg else 1
                 await asyncio_wait_for_with_timeout(
-                    self.instances[instance_id].generate.remote(request_id, server_info, -1, server_request=request)
+                    self.instances[instance_id].generate.remote(request_id, server_info, request_expected_steps, server_request=request)
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))

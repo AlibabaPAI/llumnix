@@ -138,7 +138,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         # Rewrite from AsyncMPClient
         print(f"[zzy] APIServer dispatch {self.client_index} {self.server_info.server_id} {request.request_id}")
         request.client_index = self.client_index
-        await self.generate("", request.sampling_params, request.request_id, engine_core_request=request)
+        await self.generate(None, request.sampling_params, request.request_id, engine_core_request=request)
 
     async def abort_requests_async(self, request_ids: list[str]) -> None:
         # Rewrite from AsyncMPClient

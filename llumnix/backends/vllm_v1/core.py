@@ -136,7 +136,8 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         latency_mem: Optional[LatencyMemData] = None,
     ) -> "AsyncEngineCoreProcLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
-        # FIXME(zhaozhiyu): don't known where speculative_config is set, just overload it
+        # FIXME(zhaozhiyu): This is a bug of pai-vllm, engine_args.speculative_config
+        # must be set to None before calling engine_args.create_engine_config()
         if hasattr(engine_args, "speculative_config"):
             engine_args.speculative_config = None
         # Create the engine configs.
@@ -279,11 +280,11 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         expected_steps: int,
         *args, **kwargs,
     ):
+        # TODO(zhaozhiyu): remove mapping, create a new request type to carry server_info
         request_type = EngineCoreRequestType.ADD
         request: EngineCoreRequest = kwargs["engine_core_request"]
         self.server_info_table.add_server_info(request.client_index, server_info)
         await self.input_queue.put((request_type, request))
-        # self.scheduler.running[-1] = LlumnixRequest(Request, =...)
 
 
 class BackendVLLMV1(BackendInterface):
@@ -389,24 +390,12 @@ class BackendVLLMV1(BackendInterface):
         return self.engine.scheduler.waiting
 
     async def get_request_incremental_blocks(self,
-                                             backend_request: LlumnixRequest,
+                                             backend_request: LlumnixRequestVLLMV1,
                                              pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
-        incremental_blocks, incremental_token_ids = \
-            self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
-        is_last_stage = (len(incremental_blocks) <= self.migration_config.migration_last_stage_max_blocks) or \
-            backend_request.blocking_migration
-        return incremental_blocks, incremental_token_ids, is_last_stage
+        raise NotImplementedError("Migration not supported in VLLM V1 yet")
 
     async def remove_running_request(self, request_id: str) -> bool:
-        step_done_event = asyncio.Event()
-        self._step_done_event_queue.put((request_id, step_done_event))
-        await step_done_event.wait()
-        ret = self._remove_running_request_ret.pop(request_id)
-        if not self.disable_async_output_proc:
-            output_proc_done_event = asyncio.Event()
-            self._output_proc_done_event_queue.put(output_proc_done_event)
-            await output_proc_done_event.wait()
-        return ret
+        raise NotImplementedError("Migration not supported in VLLM V1 yet")
 
     def _remove_running_request(self, request_id: str) -> bool:
         raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")

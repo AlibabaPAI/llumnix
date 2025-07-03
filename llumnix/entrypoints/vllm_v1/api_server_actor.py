@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import signal
+import socket
 from dataclasses import fields
 
 import uvloop
@@ -40,8 +40,6 @@ class APIServerActorVLLMV1(APIServerActor):
                  scaler: "ray.actor.ActorHandle",
                  manager: "ray.actor.ActorHandle",
                  instance: "ray.actor.ActorHandle"):
-        # Set up listen address and socket
-        self.listen_address, self.sock = setup_server(entrypoints_args)
         self.client_index = entrypoints_args.client_index
         super().__init__(instance_id, entrypoints_args, engine_args,
                          scaler, manager, instance)
@@ -50,6 +48,18 @@ class APIServerActorVLLMV1(APIServerActor):
         if entrypoints_args.host not in ("127.0.0.1", "0.0.0.0"):
             entrypoints_args.host = get_ip_address()
         self.host = entrypoints_args.host
+        
+        # Set up listen address and socket
+        self.sock = socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM)
+        self.sock.bind((self.host, entrypoints_args.port))
+
+        # pylint: disable=import-outside-toplevel
+        from vllm.utils import set_ulimit
+        set_ulimit()
+
+        is_ssl = entrypoints_args.ssl_keyfile and entrypoints_args.ssl_certfile
+        self.listen_address = f"http{'s' if is_ssl else ''}://" + \
+                              f"{self.host}:{entrypoints_args.port}"
 
     def _set_health_api(self):
         self.health_api = "health"
@@ -84,45 +94,3 @@ class APIServerActorVLLMV1(APIServerActor):
 
         if self.loop.is_running():
             self.loop.call_soon_threadsafe(stop_server)
-
-
-def setup_server(entrypoints_args: VLLMV1EntrypointsArgs):
-    """
-    Validate API server args, set up signal handler, create socket ready to serve.
-
-    Main logic copied from vLLM's `setup_server`, removed some unnecessary logic.
-    """
-    # pylint: disable=import-outside-toplevel
-    from vllm.version import __version__ as VLLM_VERSION
-    from vllm.entrypoints.openai.tool_parsers import ToolParserManager
-    from vllm.entrypoints.openai.api_server import create_server_socket
-    from vllm.utils import (is_valid_ipv6_address, set_ulimit)
-
-    logger.info("vLLM API server version %s", VLLM_VERSION)
-
-    if entrypoints_args.tool_parser_plugin and len(entrypoints_args.tool_parser_plugin) > 3:
-        ToolParserManager.import_tool_parser(entrypoints_args.tool_parser_plugin)
-
-    # workaround to make sure that we bind the port before the engine is set up.
-    # This avoids race conditions with ray.
-    # see https://github.com/vllm-project/vllm/issues/8204
-    sock_addr = (entrypoints_args.host or "", entrypoints_args.port)
-    sock = create_server_socket(sock_addr)
-
-    # workaround to avoid footguns where uvicorn drops requests with too
-    # many concurrent requests active
-    set_ulimit()
-
-    def signal_handler(*_) -> None:
-        # Interrupt server on sigterm while initializing
-        raise KeyboardInterrupt("terminated")
-
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    addr, port = sock_addr
-    is_ssl = entrypoints_args.ssl_keyfile and entrypoints_args.ssl_certfile
-    host_part = f"[{addr}]" if is_valid_ipv6_address(
-        addr) else addr or "0.0.0.0"
-    listen_address = f"http{'s' if is_ssl else ''}://{host_part}:{port}"
-
-    return listen_address, sock

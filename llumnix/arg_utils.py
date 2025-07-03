@@ -276,8 +276,6 @@ class VLLMV1EntrypointsArgs:
     enable_server_load_tracking: bool = None
     enable_force_include_usage: bool = None
     
-    # The APIServer index mapped to ServerInfo in EngineCore.
-    # It will be set in Scaler, no need to set through CLI.
     client_index: int = None
 
     def __post_init__(self):

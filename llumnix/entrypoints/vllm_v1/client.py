@@ -130,9 +130,10 @@ class LlumnixClientVLLM(LlumnixClient):
     async def _abort_request(self, instance_id: str, instance: ray.actor.ActorHandle, request_id: str):
         try:
             await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort.remote, request_id)
+            self._clear_client_request_states(request_id)
         # pylint: disable=broad-except
         except Exception as e:
-            log_instance_exception(e, instance_id, "_abort", request_id)
+            log_instance_exception(e, instance_id, "_abort_request", request_id)
 
     async def get_request_outputs_loop(self):
         while True:

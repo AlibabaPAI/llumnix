@@ -131,6 +131,7 @@ class SchedulerLlumnix(Scheduler):
             for new_req in scheduler_output.scheduled_new_reqs:
                 instance_info.running_seq_lens.append(new_req.num_computed_tokens)
                 instance_info.num_seqs = len(instance_info.running_seq_lens)
+            # TODO(zhaozhiyu): inference_type is used in simulator, not essential for now
             if scheduler_output.num_scheduled_tokens == {}:
                 instance_info.inference_type = RequestInferenceType.UNKNOWN
             elif all(v > 1 for v in scheduler_output.num_scheduled_tokens.values()):

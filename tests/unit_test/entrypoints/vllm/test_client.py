@@ -14,7 +14,6 @@
 import random
 from typing import Dict
 import asyncio
-import time
 from unittest.mock import MagicMock
 
 import pytest

@@ -24,7 +24,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.utils import (
-    asyncio_wait_for_with_timeout,
+    asyncio_wait_for_ray_remote_call_with_timeout,
     RequestIDType,
     MigrationResponse,
     log_instance_exception,
@@ -510,16 +510,15 @@ class MigrationCoordinator:
                                    token_ids: List[int],
                                    is_first_stage: bool) -> MigrationResponse:
         try:
-            return await asyncio_wait_for_with_timeout(
-                dst_instance_actor.execute_migration_method.remote(
-                    "pre_alloc_cache",
-                    request_id,
-                    request_status,
-                    request_arrival_time,
-                    block_num,
-                    token_ids,
-                    is_first_stage,
-                )
+            return await asyncio_wait_for_ray_remote_call_with_timeout(
+                dst_instance_actor.execute_migration_method.remote,
+                "pre_alloc_cache",
+                request_id,
+                request_status,
+                request_arrival_time,
+                block_num,
+                token_ids,
+                is_first_stage
             )
         # pylint: disable=W0703
         except Exception as e:
@@ -538,8 +537,8 @@ class MigrationCoordinator:
                                         dst_instance_id: str,
                                         request_id: RequestIDType) -> bool:
         try:
-            await asyncio_wait_for_with_timeout(
-                dst_instance_actor.execute_migration_method.remote("free_pre_alloc_cache", request_id)
+            await asyncio_wait_for_ray_remote_call_with_timeout(
+                dst_instance_actor.execute_migration_method.remote, "free_pre_alloc_cache", request_id
             )
             return True
         # pylint: disable=W0703
@@ -579,10 +578,9 @@ class MigrationCoordinator:
                                       dst_instance_id: str,
                                       migrate_out_request: LlumnixRequest) -> MigrationResponse:
         try:
-            return await asyncio_wait_for_with_timeout(
-                dst_instance_actor.execute_migration_method_async.remote(
-                    "commit_dst_request", migrate_out_request.request_id, migrate_out_request
-                )
+            return await asyncio_wait_for_ray_remote_call_with_timeout(
+                dst_instance_actor.execute_migration_method_async.remote,
+                "commit_dst_request", migrate_out_request.request_id, migrate_out_request
             )
         # pylint: disable=W0703
         except Exception as e:

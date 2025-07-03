@@ -268,14 +268,17 @@ def update_environment_variables(envs: Dict[str, str]):
             logger.warning("Overwriting environment variable {} from '{}' to '{}'".format(k, os.environ[k], v))
         os.environ[k] = v
 
-def ray_get_with_timeout(object_refs, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
-    return ray.get(object_refs, *args, timeout=timeout, **kwargs)
+def ray_get_with_timeout(object_refs, timeout=RAY_RPC_TIMEOUT):
+    return ray.get(object_refs, timeout=timeout)
 
-def asyncio_wait_for_with_timeout(fut, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
-    return asyncio.wait_for(fut, *args, timeout=timeout, **kwargs)
+def asyncio_wait_for_with_timeout(fut, timeout=RAY_RPC_TIMEOUT):
+    return asyncio.wait_for(fut, timeout=timeout)
 
 async def async_wrapper_for_ray_remote_call(ray_remote_call, *args, **kwargs):
     return await ray_remote_call(*args, **kwargs)
+
+async def asyncio_wait_for_ray_remote_call_with_timeout(ray_remote_call, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
+    return await asyncio_wait_for_with_timeout(async_wrapper_for_ray_remote_call(ray_remote_call, *args, **kwargs), timeout=timeout)
 
 def execute_method_with_timeout(method, timeout, *args, **kwargs):
     with ThreadPoolExecutor(max_workers=1) as executor:

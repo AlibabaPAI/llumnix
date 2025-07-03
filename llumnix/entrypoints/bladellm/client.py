@@ -32,7 +32,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.server_info import ServerInfo
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.entrypoints.client import LlumnixClient
 
@@ -108,8 +108,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
         # await to catch exception
-        await asyncio_wait_for_with_timeout(
-            self.manager.generate.remote(str(request_id), server_info, server_request=request)
+        await asyncio_wait_for_ray_remote_call_with_timeout(
+            self.manager.generate.remote, str(request_id), server_info, server_request=request
         )
 
     # pylint: disable=arguments-differ
@@ -118,8 +118,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
-                await asyncio_wait_for_with_timeout(
-                    self.instances[instance_id].generate.remote(request_id, server_info, -1, server_request=request)
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    self.instances[instance_id].generate.remote, request_id, server_info, -1, server_request=request
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))

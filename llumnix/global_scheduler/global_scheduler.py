@@ -25,7 +25,11 @@ from llumnix.global_scheduler.migration_policy import PairMigrationConstraints
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 from llumnix.metrics.global_scheduler_metrics import GlobalSchedulerMetrics
 from llumnix.llumlet.llumlet import Llumlet
-from llumnix.utils import RequestIDType, asyncio_wait_for_with_timeout, log_instance_exception
+from llumnix.utils import (
+    RequestIDType,
+    asyncio_wait_for_ray_remote_call_with_timeout,
+    log_instance_exception,
+)
 
 logger = init_logger(__name__)
 
@@ -178,7 +182,7 @@ class GlobalScheduler:
         if self.global_scheduler_config.enable_engine_pd_disagg or self.global_scheduler_config.enable_engine_semi_pd_disagg:
             try:
                 self.instance_id_2_engine_inner_inst_id[ins_id] = \
-                    await asyncio_wait_for_with_timeout(instance_actor.get_engine_disagg_inst_id.remote())
+                    await asyncio_wait_for_ray_remote_call_with_timeout(instance_actor.get_engine_disagg_inst_id.remote)
                 logger.info("Bind instance id {} with engine instance id {}.".format(
                     ins_id, self.instance_id_2_engine_inner_inst_id[ins_id]))
             # pylint: disable=broad-except

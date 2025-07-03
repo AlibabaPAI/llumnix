@@ -38,7 +38,7 @@ from llumnix.utils import (
     get_service_resouces,
     random_uuid,
     get_service_instance_type,
-    asyncio_wait_for_with_timeout,
+    asyncio_wait_for_ray_remote_call_with_timeout,
     BackendType,
     LaunchMode,
 )
@@ -289,7 +289,9 @@ class Scaler:
             if not server_exists and instance_exists:
                 instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
                 try:
-                    await asyncio_wait_for_with_timeout(instance.is_ready.remote(), timeout=llumnix_envs.INSTANCE_READY_TIMEOUT)
+                    await asyncio_wait_for_ray_remote_call_with_timeout(
+                        instance.is_ready.remote, timeout=llumnix_envs.INSTANCE_READY_TIMEOUT
+                    )
                 # Instance exception could be handled by manager/scaler, so check states loop omits exception case here.
                 # pylint: disable=bare-except
                 except:
@@ -301,7 +303,7 @@ class Scaler:
             if pg_created and (not server_exists or not instance_exists):
                 logger.warning("Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
                                .format(instance_id, pg_created, server_exists, instance_exists))
-                await asyncio_wait_for_with_timeout(self.manager.scale_down.remote(instance_id))
+                await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.scale_down.remote, instance_id)
 
         while True:
             try:
@@ -355,8 +357,8 @@ class Scaler:
                 )
 
     async def _check_pd_deployment_states(self) -> str:
-        prefill_instance_id_set, decode_instance_id_set = await asyncio_wait_for_with_timeout(
-            self.manager.get_prefill_decode_instance_id_set.remote()
+        prefill_instance_id_set, decode_instance_id_set = await asyncio_wait_for_ray_remote_call_with_timeout(
+            self.manager.get_prefill_decode_instance_id_set.remote
         )
         cur_num_prefill_instances = len(prefill_instance_id_set)
         cur_num_decode_instances = len(decode_instance_id_set)
@@ -374,7 +376,7 @@ class Scaler:
                         self.pdd_config.pd_ratio, cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
 
         if scale_down_instance_id:
-            await asyncio_wait_for_with_timeout(self.manager.scale_down.remote(scale_down_instance_id))
+            await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.scale_down.remote, scale_down_instance_id)
 
         return scale_down_instance_id
 
@@ -455,7 +457,9 @@ class Scaler:
                                 next_engine_args: LlumnixEngineArgs):
             try:
                 instance_ready = False
-                await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    instance.is_ready.remote, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                )
                 instance_ready = True
                 # Initialize server after instance is ready.
                 server = self._init_server(
@@ -468,9 +472,11 @@ class Scaler:
                     self.manager,
                     instance,
                 )
-                await asyncio.wait_for(server.is_ready.remote(), timeout=float(llumnix_envs.SERVER_READY_TIMEOUT))
-                await asyncio_wait_for_with_timeout(
-                    self.manager.scale_up.remote(instance_id, instance, instance_type)
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    server.is_ready.remote, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
+                )
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    self.manager.scale_up.remote, instance_id, instance, instance_type
                 )
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
@@ -584,9 +590,11 @@ class Scaler:
                              ) -> Tuple[List[str], List[Llumlet]]:
         async def instance_ready_scale_up(instance_id: str, instance: Llumlet, instance_type: InstanceType):
             try:
-                await asyncio.wait_for(instance.is_ready.remote(), timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
-                await asyncio_wait_for_with_timeout(
-                    self.manager.scale_up.remote(instance_id, instance, instance_type)
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    instance.is_ready.remote, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                )
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    self.manager.scale_up.remote, instance_id, instance, instance_type
                 )
             except asyncio.TimeoutError:
                 logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
@@ -681,8 +689,8 @@ class Scaler:
 
         if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg:
             # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
-            cur_num_prefill_instances, cur_num_decode_instances = await asyncio_wait_for_with_timeout(
-                self.manager.get_num_prefill_decode_instances.remote()
+            cur_num_prefill_instances, cur_num_decode_instances = await asyncio_wait_for_ray_remote_call_with_timeout(
+                self.manager.get_num_prefill_decode_instances.remote
             )
             next_instance_args.instance_type = self._get_next_instance_type(
                 cur_num_prefill_instances, cur_num_decode_instances, self.pdd_config.pd_ratio, instance_type,)

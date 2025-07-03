@@ -35,7 +35,14 @@ from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc, migration
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
 from llumnix.constants import GRPC_MAX_MESSAGE_LENGTH
-from llumnix.utils import get_ip_address, convert_bytes, get_free_port, get_llumnix_env_vars, log_worker_exception
+from llumnix.utils import (
+    get_ip_address,
+    convert_bytes,
+    get_free_port,
+    get_llumnix_env_vars,
+    log_worker_exception,
+    ray_get_with_timeout,
+)
 
 logger = init_logger(__name__)
 
@@ -151,7 +158,7 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
         ray.init(address='auto', ignore_reinit_error=True, namespace="llumnix", log_to_driver=False,
                  runtime_env={"env_vars": get_llumnix_env_vars()})
         worker_actor = ray.get_actor(self.worker_ray_name, namespace="llumnix")
-        ray.get(worker_actor.set_worker_port.remote(port))
+        ray_get_with_timeout(worker_actor.set_worker_port.remote(port))
 
     # used for wait_worker_ready
     async def info(self, req: empty_pb2.Empty) -> str:

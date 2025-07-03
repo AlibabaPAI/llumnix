@@ -32,7 +32,11 @@ from llumnix.server_info import ServerInfo
 from llumnix.logging.logger import init_logger
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import asyncio_wait_for_with_timeout, RequestIDType, BackendType
+from llumnix.utils import (
+    asyncio_wait_for_ray_remote_call_with_timeout,
+    RequestIDType,
+    BackendType,
+)
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.utils import ray_get_with_timeout, exception_wrapper_async
@@ -126,7 +130,7 @@ class ActorOutputMediator(BaseOutputMediator):
             self.request_output_queue_type, self.request_output_queue_client, server_request_outputs, server_info_dict
         )
         if aborted_request_ids:
-            await asyncio_wait_for_with_timeout(self.engine_actor_handle.abort.remote(aborted_request_ids))
+            await asyncio_wait_for_ray_remote_call_with_timeout(self.engine_actor_handle.abort.remote, aborted_request_ids)
 
     def stop(self):
         if self.request_output_queue_type == QueueType.ZMQ:
@@ -236,10 +240,8 @@ class OutputMediator:
         server_info_dict: List[ServerInfo]
     ) -> None:
         if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
-            await asyncio_wait_for_with_timeout(
-                self.actor_mediator.put_nowait_to_servers.remote(
-                    server_request_outputs, server_info_dict
-                )
+            await asyncio_wait_for_ray_remote_call_with_timeout(
+                self.actor_mediator.put_nowait_to_servers.remote, server_request_outputs, server_info_dict
             )
         else:
             await self.thread_mediator.put_nowait_to_servers(server_request_outputs, server_info_dict)

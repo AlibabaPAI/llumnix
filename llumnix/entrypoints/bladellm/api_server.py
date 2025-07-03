@@ -123,6 +123,6 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
         bladellm_engine_args = BladeLLMEngineArgs(engine_args)
         global llumnix_client
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
-        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
+        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop, instance_args.instance_type)
 
     return llumnix_client

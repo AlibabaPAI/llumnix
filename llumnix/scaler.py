@@ -14,7 +14,8 @@
 import asyncio
 import copy
 import random
-from typing import List, Tuple, Union, Iterable
+from typing import List, Tuple, Union, Iterable, Dict
+from functools import partial
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -39,6 +40,8 @@ from llumnix.utils import (
     random_uuid,
     get_service_instance_type,
     asyncio_wait_for_ray_remote_call_with_timeout,
+    run_coroutine_in_new_thread,
+    log_instance_exception,
     BackendType,
     LaunchMode,
 )
@@ -69,6 +72,7 @@ from llumnix.constants import (
     CHECK_DEPLOYMENT_STATES_INTERVAL,
     WATCH_DEPLOYMENT_INTERVAL,
     MAX_ACTOR_METHOD_RETRIES,
+    HEARTBEAT_LOOP_INTERVAL,
 )
 from llumnix import envs as llumnix_envs
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
@@ -137,8 +141,16 @@ class Scaler:
                 value = get_data_from_ray_internal_kv("scaler.port_offset")
                 self.port_offset = int(value)
 
+        self.instances: Dict[str, ray.actor.ActorHandle] = {}
+        self.instance_types: Dict[str, InstanceType] = {}
+        self.prefill_instance_id_set = set()
+        self.decode_instance_id_set = set()
+
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
+
+        # When manager starts, it automatically connects to all existing instances.
+        run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
 
         if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
@@ -166,6 +178,7 @@ class Scaler:
                         interval=AUTO_SCALE_UP_INTERVAL,
                     )
                 )
+            asyncio.create_task(self._heartbeat_loop(HEARTBEAT_LOOP_INTERVAL))
             asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
             if self.pdd_config.enable_pd_disagg:
                 asyncio.create_task(self._check_pd_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
@@ -235,7 +248,7 @@ class Scaler:
                 instance_id = pending_pg_info["name"].split("_")[-1]
                 if new_pg is not None and instance_id == new_instance_id:
                     continue
-                await self.clear_instance_ray_resources(instance_id)
+                await self._clear_instance_ray_resources(instance_id)
             alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
             alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
             alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
@@ -279,6 +292,29 @@ class Scaler:
             logger.info(
                 "Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id)
             )
+
+    async def _heartbeat_loop(self, interval: float) -> None:
+        def check_instance_health_done_callback(instance_id: str, fut):
+            ret = fut.result()[0]
+            if isinstance(ret, Exception):
+                log_instance_exception(ret, instance_id, "check_instance_health")
+                dead_instance_ids.append(instance_id)
+
+        while True:
+            await asyncio.sleep(interval)
+            tasks = []
+            dead_instance_ids = []
+            for instance_id, instance in self.instances.items():
+                task = asyncio.gather(
+                    asyncio_wait_for_with_timeout(instance.is_ready.remote()),
+                    return_exceptions=True
+                )
+                task.add_done_callback(
+                    partial(check_instance_health_done_callback, instance_id)
+                )
+                tasks.append(task)
+            await asyncio.gather(*tasks)
+            self.scale_down(dead_instance_ids)
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_instance_deployment_states(instance_id: str, server_exists: bool, instance_exists: bool):
@@ -364,13 +400,13 @@ class Scaler:
         cur_num_decode_instances = len(decode_instance_id_set)
         scale_down_instance_id = None
         if cur_num_prefill_instances == 0 and cur_num_decode_instances > 0:
-            scale_down_instance_id = random.choice(list(decode_instance_id_set))
+            scale_down_instance_id = random.choice(list(self.decode_instance_id_set))
             logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill_instances: {}, cur_num_decode_instances: {}, "
                         "all decode instances is decode instance, scale down decode instance {}".format(
                         self.pdd_config.pd_ratio, cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
 
         if cur_num_decode_instances == 0 and cur_num_prefill_instances > 0:
-            scale_down_instance_id = random.choice(list(prefill_instance_id_set))
+            scale_down_instance_id = random.choice(list(self.prefill_instance_id_set))
             logger.info("Check pd deployment, pd_ratio: {}, cur_num_prefill_instances: {}, cur_num_decode_instances: {}, "
                         "all instances is prefill instance, scale down prefill instance {}".format(
                         self.pdd_config.pd_ratio, cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
@@ -452,9 +488,8 @@ class Scaler:
                                         engine_args: LlumnixEngineArgs,
                                         placement_group: PlacementGroup,
                                         instance_type: InstanceType = None):
-        async def done_scale_up(instance_id: str, instance: Llumlet,
-                                instance_type: InstanceType, next_entrypoints_args: EntrypointsArgs,
-                                next_engine_args: LlumnixEngineArgs):
+        async def ready_scale_up(instance_id: str, instance: Llumlet, instance_type: InstanceType,
+                                 next_entrypoints_args: EntrypointsArgs, next_engine_args: LlumnixEngineArgs):
             try:
                 instance_ready = False
                 await asyncio_wait_for_ray_remote_call_with_timeout(
@@ -484,12 +519,20 @@ class Scaler:
                     logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
                 elif isinstance(e, asyncio.TimeoutError):
                     if not instance_ready:
-                        logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
+                        logger.error(
+                            "Failed to scale up instance {}, instance is not ready in {} seconds.".format(
+                                instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                            )
+                        )
                     else:
-                        logger.error("Server {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.SERVER_READY_TIMEOUT)))
+                        logger.error(
+                            "Failed to scale up instance {}, server is not ready in {} seconds.".format(
+                                instance_id, float(llumnix_envs.SERVER_READY_TIMEOUT)
+                            )
+                        )
                 else:
-                    logger.exception("Error in scaler done_scale_up (instance_id: {})".format(instance_id))
-                await self.clear_instance_ray_resources(instance_id)
+                    logger.exception("Error in scaler ready_scale_up (instance_id: {})".format(instance_id))
+                await self._clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
                 self.inflight_num_decode_instances -= 1 if instance_type == InstanceType.DECODE else 0
@@ -520,7 +563,7 @@ class Scaler:
         self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
         self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
         asyncio.create_task(
-            done_scale_up(
+            ready_scale_up(
                 instance_id,
                 instance,
                 next_instance_args.instance_type,
@@ -588,30 +631,25 @@ class Scaler:
                              engine_args: LlumnixEngineArgs,
                              node_id: str
                              ) -> Tuple[List[str], List[Llumlet]]:
-        async def instance_ready_scale_up(instance_id: str, instance: Llumlet, instance_type: InstanceType):
+        async def ready_scale_up(instance_id: str, instance: Llumlet, instance_type: InstanceType):
             try:
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     instance.is_ready.remote, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
                 )
-                await asyncio_wait_for_ray_remote_call_with_timeout(
-                    self.manager.scale_up.remote, instance_id, instance, instance_type
-                )
-            except asyncio.TimeoutError:
-                logger.error("Instance {} is not ready in {} seconds.".format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
-                await self.clear_instance_ray_resources(instance_id)
+                await self._scale_up(instance_id, instance, instance_type)
+                logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
                     logger.warning("Failed to scale up instance {}, instance is dead.".format(instance_id))
                 elif isinstance(e, asyncio.TimeoutError):
                     logger.error(
-                        "Failed to scale up instance {}, "
-                        "instance is not ready in {} seconds.".format(
+                        "Failed to scale up instance {}, instance is not ready in {} seconds.".format(
                             instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)
                         )
                     )
                 else:
-                    logger.exception("Error in scaler instance_ready_scale_up (instance_id: {})".format(instance_id))
-                await self.clear_instance_ray_resources(instance_id)
+                    logger.exception("Error in scaler ready_scale_up (instance_id: {})".format(instance_id))
+                await self._clear_instance_ray_resources(instance_id)
 
         instance_ids: List[str] = []
         instances: List[Llumlet] = []
@@ -648,7 +686,7 @@ class Scaler:
             instance_ids.append(instance_id)
             instances.append(instance)
             asyncio.create_task(
-                instance_ready_scale_up(
+                ready_scale_up(
                     instance_id,
                     instance,
                     instance_args.instance_type,
@@ -660,11 +698,56 @@ class Scaler:
     def init_request_output_queue_server(self, ip: str, queue_type: QueueType) -> QueueServerBase:
         return init_request_output_queue_server(ip, queue_type)
 
+    # scale up: from scaler to manager
+    async def _scale_up(self,
+                        instance_id: Union[str, Iterable[str]],
+                        instance_actor_handle: Union[Llumlet, List[Llumlet]],
+                        instance_type: Union[InstanceType, List[InstanceType]]) -> None:
+        if isinstance(instance_id, str):
+            instance_id = [instance_id,]
+            instance_actor_handle = [instance_actor_handle,]
+            instance_type = [instance_type,]
+
+        instance_ids: List[str] = list(instance_id)
+        instance_actor_handles: List[Llumlet] = list(instance_actor_handle)
+        instance_types: List[InstanceType] = list(instance_type)
+
+        for ins_id, ins_actor_handle, ins_type in zip(instance_ids, instance_actor_handles, instance_types):
+            self.instances[ins_id] = ins_actor_handle
+            self.instance_types[ins_id] = ins_type
+            if ins_type == InstanceType.PREFILL:
+                self.prefill_instance_id_set.add(ins_id)
+            elif ins_type == InstanceType.DECODE:
+                self.decode_instance_id_set.add(ins_id)
+        self.num_instances = len(self.instances)
+        logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instances.keys()))
+
+        await asyncio_wait_for_with_timeout(
+            self.manager.scale_up.remote(instance_ids, instance_actor_handles, instance_types)
+        )
+
+        return self.num_instances
+
+    # scale down: from manager to scaler
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
+    async def scale_down(self, instance_id: Union[str, Iterable[str]]) -> None:
+        if isinstance(instance_id, str):
+            instance_id = [instance_id,]
+        instance_ids = list(instance_id)
+        for ins_id in instance_ids:
+            self.instances.pop(ins_id, None)
+            self.instance_types.pop(ins_id, None)
+            self.prefill_instance_id_set.discard(ins_id)
+            self.decode_instance_id_set.discard(ins_id)
+        self.num_instances = len(self.instances)
+        logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instances.keys()))
+
+        await self._clear_instance_ray_resources(instance_ids)
+
     def is_ready(self) -> bool:
         return True
 
-    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
-    async def clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]]):
+    async def _clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]]):
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
         instance_ids = list(instance_id)
@@ -675,6 +758,69 @@ class Scaler:
                 await kill_server(ins_id)
             await kill_instance(ins_id)
             remove_placement_group(ins_id)
+
+    async def _connect_to_instances(self):
+        def connect_to_instance_done_callback(instance_id: str, instance_actor_handle: ray.actor.ActorHandle, fut):
+            ret = fut.result()[0]
+            if not isinstance(ret, Exception):
+                try:
+                    instance_ids.append(instance_id)
+                    instance_actor_handles.append(instance_actor_handle)
+                    instance_types.append(ret)
+                    logger.info("Connect to instance {}".format(instance_id))
+                except Exception as e: # pylint: disable=broad-except
+                    if isinstance(e, ValueError):
+                        logger.warning("Failed to connect to instance {}, placement group not found.".format(instance_id))
+                    else:
+                        logger.exception("Error in scaler _connect_to_instances get_placement_group (instance_id: {})".format(instance_id))
+            else:
+                log_instance_exception(ret, instance_id, "_connect_to_instances")
+
+        instance_actor_names = get_actor_names_by_name_prefix(INSTANCE_NAME_PREFIX)
+        available_instance_actor_names = []
+        available_instance_actor_handles: List[ray.actor.ActorHandle] = []
+        for actor_name in instance_actor_names:
+            try:
+                instance_actor_handle = ray.get_actor(actor_name, namespace='llumnix')
+                available_instance_actor_names.append(actor_name)
+                available_instance_actor_handles.append(instance_actor_handle)
+            except Exception as e: # pylint: disable=broad-except
+                instance_id = actor_name[len(INSTANCE_NAME_PREFIX):]
+                if isinstance(e, ValueError):
+                    logger.warning("Failed to connect to instance {}, actor not found.".format(instance_id))
+                else:
+                    logger.exception("Error in scaler _connect_to_instances get_actor (instance_id: {})".format(instance_id))
+
+        instance_ids = []
+        instance_actor_handles = []
+        instance_types = []
+        tasks = []
+        for instance_actor_name, instance_actor_handle in \
+            zip(available_instance_actor_names, available_instance_actor_handles):
+            instance_id = instance_actor_name[len(INSTANCE_NAME_PREFIX):]
+            task = asyncio.gather(
+                asyncio_wait_for_with_timeout(instance_actor_handle.get_instance_type.remote()),
+                return_exceptions=True
+            )
+            task.add_done_callback(
+                partial(connect_to_instance_done_callback, instance_id, instance_actor_handle)
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks)
+
+        await self._scale_up(instance_ids, instance_actor_handles, instance_types)
+
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
+    def get_instances(self):
+        instance_ids = []
+        instance_actor_handles = []
+        instance_types = []
+        for instance_id, instance_actor_handle in self.instances.items():
+            instance_ids.append(instance_id)
+            instance_actor_handles.append(instance_actor_handle)
+            instance_types.append(self.instance_types[instance_id])
+
+        return instance_ids, instance_actor_handles, instance_types
 
     async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
         if (

@@ -25,10 +25,6 @@ from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.utils import get_ip_address
 
-# from llumnix.entrypoints.vllm_v1.utils import (setup_server, run_server_proc)
-
-TIMEOUT_KEEP_ALIVE = 5  # seconds
-
 logger = init_logger(__name__)
 
 

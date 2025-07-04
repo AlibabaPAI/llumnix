@@ -230,6 +230,7 @@ class AsyncDPEngineCoreProc(AsyncEngineCoreProc, DPEngineCoreProc):
                     # up-to-date state is returned in the engine outputs.
                     await self._process_engine_step_async()
 
+                # pylint: disable=access-member-before-definition
                 if not self.engines_running:
                     # All engines are idle.
                     continue

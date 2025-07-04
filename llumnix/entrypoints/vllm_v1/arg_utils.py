@@ -68,8 +68,6 @@ def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
     parser = ManagerArgs.add_cli_args(parser)
     parser = InstanceArgs.add_cli_args(parser)
     parser.set_namespace("vllm")
-    # NOTE(shejiarui): Args of AsyncEngineArgs will be added in VLLMV1EntrypointsArgs
-    # parser = AsyncEngineArgs.add_cli_args(parser)
     parser = VLLMV1EntrypointsArgs.add_cli_args(parser)
 
     return parser

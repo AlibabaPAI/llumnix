@@ -55,6 +55,7 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
         """
         t0 = time.time()
         # Build the compiled DAG for the first time.
+        # pylint: disable=access-member-before-definition
         if self.forward_dag is None:  # type: ignore
             self.forward_dag = self._compiled_ray_dag(enable_asyncio=True)
 

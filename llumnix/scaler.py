@@ -155,13 +155,13 @@ class Scaler:
             # TODO(shejiarui): Do not use ray interval kv.
             current_client_index = -1
             try:
-                value = int(get_data_from_ray_internal_kv("scaler.client_index"))
+                value = int(get_data_from_ray_internal_kv("scaler.client_index")) + 1
                 current_client_index = value
-                put_data_to_ray_internal_kv("scaler.client_index", value + 1)
+                put_data_to_ray_internal_kv("scaler.client_index", value)
             except AssertionError:
                 logger.debug("First time set scaler.client_index to 0.")
                 current_client_index = 0
-                put_data_to_ray_internal_kv("scaler.client_index", 1)
+                put_data_to_ray_internal_kv("scaler.client_index", 0)
             except Exception as e:
                 logger.exception(e)
             finally:

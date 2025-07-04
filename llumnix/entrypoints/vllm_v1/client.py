@@ -151,7 +151,6 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
                 request_id, instance_id, instance))
 
-    # get outputs loop is inside AsyncMPClient
     async def _abort_request(self, instance_id: str, instance: ray.actor.ActorHandle, request_id: str):
         try:
             await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort, request_id)

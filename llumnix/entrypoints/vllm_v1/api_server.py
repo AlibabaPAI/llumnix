@@ -211,6 +211,7 @@ if __name__ == "__main__":
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, vllm_engine_args, launch_args)
         # Start the api server after all the components of llumnix are ready.
         loop = asyncio.new_event_loop()
+        # pylint: disable=no-value-for-parameter
         llumnix_client = LlumnixClientVLLMV1(entrypoints_context, loop)
         asyncio.set_event_loop(loop)
         config = uvicorn.Config(app,

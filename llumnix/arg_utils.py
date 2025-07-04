@@ -179,7 +179,6 @@ class EntrypointsArgs:
     disable_log_to_driver: bool = None
     request_output_queue_type: str = None
     disable_log_requests_server: bool = None
-    log_request_timestamps: bool = None
     config_file: str = None
     disable_keep_serve_process_alive: bool = None
 
@@ -221,9 +220,6 @@ class EntrypointsArgs:
         parser.add_argument('--disable-log-requests-server',
                             action='store_true',
                             help='disable logging requests in server')
-        parser.add_argument("--log-request-timestamps",
-                            action='store_true',
-                            help='if log request timestamps')
         parser.add_argument("--config-file",
                             type=str,
                             help="path to config file of arguments")

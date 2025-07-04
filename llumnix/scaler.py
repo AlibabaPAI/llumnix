@@ -306,7 +306,7 @@ class Scaler:
             dead_instance_ids = []
             for instance_id, instance in self.instances.items():
                 task = asyncio.gather(
-                    asyncio_wait_for_with_timeout(instance.is_ready.remote()),
+                    asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready.remote),
                     return_exceptions=True
                 )
                 task.add_done_callback(
@@ -722,8 +722,8 @@ class Scaler:
         self.num_instances = len(self.instances)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instances.keys()))
 
-        await asyncio_wait_for_with_timeout(
-            self.manager.scale_up.remote(instance_ids, instance_actor_handles, instance_types)
+        await asyncio_wait_for_ray_remote_call_with_timeout(
+            self.manager.scale_up.remote, instance_ids, instance_actor_handles, instance_types
         )
 
         return self.num_instances
@@ -799,7 +799,7 @@ class Scaler:
             zip(available_instance_actor_names, available_instance_actor_handles):
             instance_id = instance_actor_name[len(INSTANCE_NAME_PREFIX):]
             task = asyncio.gather(
-                asyncio_wait_for_with_timeout(instance_actor_handle.get_instance_type.remote()),
+                asyncio_wait_for_ray_remote_call_with_timeout(instance_actor_handle.get_instance_type.remote),
                 return_exceptions=True
             )
             task.add_done_callback(

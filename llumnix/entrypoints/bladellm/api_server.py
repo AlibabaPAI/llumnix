@@ -70,7 +70,7 @@ class LlumnixEntrypoint(Entrypoint):
         model_name = oai_req.model or ''
 
         if request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1'):
-            # collect and return request lantencys
+            # collect and return request latencys
             server_req = LlumnixServerRequest.from_server_request(server_req, True)
 
         result = await self._client.add_request(server_req)
@@ -214,7 +214,7 @@ class LlumnixEntrypoint(Entrypoint):
 
         # process llumnix header
         if request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1'):
-            # collect and return request lantencys
+            # collect and return request latencys
             server_req: LlumnixServerRequest = LlumnixServerRequest.from_server_request(server_req, True)
 
         result = await self._client.add_request(server_req)
@@ -327,7 +327,7 @@ class LlumnixEntrypoint(Entrypoint):
         assert isinstance(self._client, LlumnixClientBladeLLM)
         oai_req, server_req = await self._web_request_to_oai_chat_request(request)
         if request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1'):
-            # collect and return request lantencys
+            # collect and return request latencys
             server_req = LlumnixServerRequest.from_server_request(server_req, True)
         start = time.perf_counter()
         results_generator = await self._client.add_request(server_req)

@@ -278,7 +278,8 @@ async def async_wrapper_for_ray_remote_call(ray_remote_call, *args, **kwargs):
     return await ray_remote_call(*args, **kwargs)
 
 async def asyncio_wait_for_ray_remote_call_with_timeout(ray_remote_call, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
-    return await asyncio_wait_for_with_timeout(async_wrapper_for_ray_remote_call(ray_remote_call, *args, **kwargs), timeout=timeout)
+    fut = ray_remote_call(*args, **kwargs)
+    return await asyncio_wait_for_with_timeout(fut, timeout=timeout)
 
 def execute_method_with_timeout(method, timeout, *args, **kwargs):
     with ThreadPoolExecutor(max_workers=1) as executor:

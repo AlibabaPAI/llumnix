@@ -51,7 +51,7 @@ def test_load_migration_filter():
 
     migration_filter_pipeline = MigrationFilterPipeline(MigrationFilterConfig(MIGRATE_OUT_LOAD_THRESHOLD))
     load_filter = MigrationFilterFactory.get_filter('load')
-    migration_filter_pipeline.register_filter('load_filter', load_filter)
+    migration_filter_pipeline.add_filter('load_filter', load_filter)
 
     for _ in range(num_tests):
         instance_infos = []
@@ -77,7 +77,7 @@ def test_custom_migration_filter():
     custom_src_filter = lambda instance_info: instance_info.instance_id != '0'
     custom_dst_filter = lambda instance_info: instance_info.instance_id != '1'
     custom_filter.set_filter_condtition(src_filter=custom_src_filter, dst_filter=custom_dst_filter)
-    migration_filter_pipeline.register_filter('custom_filter', custom_filter)
+    migration_filter_pipeline.add_filter('custom_filter', custom_filter)
 
     instance_infos = []
     for instance_id in range(0, INSTANCE_NUM):
@@ -211,23 +211,29 @@ class MockMigrationScheduler(MigrationScheduler):
 
     def _pair_migration(self,
                         instance_info: Dict[str, InstanceInfo],
-                        migration_filter: Optional[MigrationFilterPipeline],
+                        migration_filter_pipeline: Optional[MigrationFilterPipeline],
                         migration_policy: MigrationPolicy) -> List[Tuple[str, str]]:
         target_store = None
-        if hasattr(self, 'p2d_transfer_filter') and migration_filter == self.p2d_transfer_filter:
+        if hasattr(self, 'p2d_transfer_filter_pipeline') \
+            and migration_filter_pipeline == self.p2d_transfer_filter_pipeline:
             target_store = self.pd_migration_pairs
-        elif hasattr(self, 'load_balance_filter') and migration_filter == self.load_balance_filter:
+        elif hasattr(self, 'load_balance_filter_pipeline') \
+            and migration_filter_pipeline == self.load_balance_filter_pipeline:
             target_store = self.no_constraints_pairs
-        elif hasattr(self, 'd2d_load_filter') and migration_filter == self.d2d_load_filter:
+        elif hasattr(self, 'd2d_load_filter_pipeline') \
+            and migration_filter_pipeline == self.d2d_load_filter_pipeline:
             target_store = self.dd_migration_pairs
-        elif hasattr(self, 'minimize_dynamic_p_filter') and migration_filter == self.minimize_dynamic_p_filter:
+        elif hasattr(self, 'dynamic_p_to_d_filter_pipeline') \
+            and migration_filter_pipeline == self.dynamic_p_to_d_filter_pipeline:
             target_store = self.dynamicp_d_migration_pairs
-        elif hasattr(self, 'aggrate_dynamic_p_filter') and migration_filter == self.aggrate_dynamic_p_filter:
+        elif hasattr(self, 'aggrate_dynamic_p_filter_pipeline') \
+            and migration_filter_pipeline == self.aggrate_dynamic_p_filter_pipeline:
             target_store = self.dynamicp_dynamicp_migration_pairs
-        elif hasattr(self, 'ease_d_with_p_bubble_filter') and migration_filter == self.ease_d_with_p_bubble_filter:
+        elif hasattr(self, 'ease_d_with_p_bubble_filter_pipeline') \
+            and migration_filter_pipeline == self.ease_d_with_p_bubble_filter_pipeline:
             target_store = self.dp_migration_pairs
 
-        migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter, migration_policy)
+        migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter_pipeline, migration_policy)
         target_store.extend(migrate_instance_pairs)
 
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg",

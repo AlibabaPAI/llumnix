@@ -43,7 +43,7 @@ class MigrationFilterPipeline:
     def __repr__(self):
         return "MigrationFilterPipeline(filters={})".format(self.registered_filters.keys())
 
-    def register_filter(self, filter_name: str, migration_filter: MigrationFilter) -> bool:
+    def add_filter(self, filter_name: str, migration_filter: MigrationFilter) -> bool:
         if filter_name in self.registered_filters:
             logger.warning("Migration filter {} has been registered.".format(filter_name))
             return False
@@ -51,7 +51,7 @@ class MigrationFilterPipeline:
         self.registered_filters[filter_name] = migration_filter
         return True
 
-    def unregister_filter(self, filter_name: str) -> None:
+    def remove_filter(self, filter_name: str) -> None:
         self.registered_filters.pop(filter_name, None)
 
     def get_filter(self, filter_name: str) -> Optional[MigrationFilter]:

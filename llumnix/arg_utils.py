@@ -317,14 +317,9 @@ class ManagerArgs:
             assert args.enable_pd_disagg or args.enable_engine_semi_pd_disagg, \
                 "Adaptive prefill-decode disaggregation is only supported when roleless prefill-decode disaggregation."
 
-        assert not (args.enable_engine_pd_disagg and args.enable_pd_disagg), "Engine-based prefill-decode disaggregation and " \
+        assert sum([args.enable_engine_pd_disagg, args.enable_pd_disagg, args.enable_engine_semi_pd_disagg]), \
+            "Engine-based prefill-decode disaggregation, Semi-Engine-based prefill-decode disaggregation and, " \
             "Llumnix-based prefill-decode disaggregation are mutually exclusive."
-
-        assert not (args.enable_engine_pd_disagg and args.enable_engine_semi_pd_disagg), "Engine-based prefill-decode disaggregation " \
-            "and Semi-Engine-based-based prefill-decode disaggregation are mutually exclusive."
-
-        assert not (args.enable_pd_disagg and args.enable_engine_semi_pd_disagg), "Semi-Engine-based prefill-decode disaggregation " \
-            "and Llumnix-based-based prefill-decode disaggregation are mutually exclusive."
 
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']

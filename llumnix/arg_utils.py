@@ -257,8 +257,8 @@ class ManagerArgs:
     enable_port_increment: bool = None
     enable_port_offset_store: bool = None
 
-    enable_adaptive_pd: bool = None
     enable_pd_disagg: bool = None
+    enable_adaptive_pd: bool = None
     pd_ratio: Union[str, List[int]] = None
     load_registered_service: bool = None
     load_registered_service_path: str = None
@@ -310,18 +310,16 @@ class ManagerArgs:
         if args.enable_pd_disagg:
             assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
 
-        if args.enable_adaptive_pd:
-            assert args.enable_pd_disagg or args.enable_engine_semi_pd_disagg, \
-                "Adaptive prefill-decode disaggregation is only supported when prefill-decode disaggregation, " \
-                "set --enable-pd-disagg or --enable-engine-pd-disagg to enable prefill-decode disaggregation."
-
-        assert not (args.enable_engine_pd_disagg and args.enable_adaptive_pd), "Adaptive prefill-decode disaggregation \
+        assert not (args.enable_engine_pd_disagg and args.enable_adaptive_pd), "Dynamic prefill-decode disaggregation \
             is not supported when engine-based prefill-decode disaggregation is enabled."
 
-        assert not (args.enable_engine_pd_disagg and args.enable_pd_disagg), "Engine-based prefill-decode disaggregation and \
-            Llumnix-based prefill-decode disaggregation are mutually exclusive."
+        if args.enable_adaptive_pd:
+            assert args.enable_pd_disagg or args.enable_engine_semi_pd_disagg, \
+                "Adaptive prefill-decode disaggregation is only supported when roleless prefill-decode disaggregation."
 
-        assert not (args.enable_engine_pd_disagg and args.enable_engine_semi_pd_disagg), "Prefill-decode engine and semi engine are exclusive."
+        assert sum([args.enable_engine_pd_disagg, args.enable_pd_disagg, args.enable_engine_semi_pd_disagg]) > 1, \
+            "Engine-based prefill-decode disaggregation, Semi-Engine-based prefill-decode disaggregation and, " \
+            "Llumnix-based prefill-decode disaggregation are mutually exclusive."
 
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
         self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']

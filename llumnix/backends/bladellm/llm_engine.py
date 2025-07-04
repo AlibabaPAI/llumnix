@@ -192,7 +192,6 @@ class AsyncBackQueueWrapper:
         self.current_step_metrics: RequestTimestamps = None
         while True:
             request_outputs, server_info_outputs = [], []
-
             resp, server_info = await get_single_response()
             request_outputs.append(resp)
             server_info_outputs.append(server_info)

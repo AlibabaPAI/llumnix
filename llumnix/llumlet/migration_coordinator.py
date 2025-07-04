@@ -13,7 +13,7 @@
 
 import time
 import enum
-from typing import List, Dict, Callable
+from typing import List, Dict, Callable, Optional
 import asyncio
 import functools
 import inspect
@@ -29,6 +29,7 @@ from llumnix.utils import (
     MigrationResponse,
     log_instance_exception,
     BackendType,
+    MigrationType
 )
 from llumnix.llumlet.local_migration_scheduler import LocalMigrationScheduler
 from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
@@ -251,7 +252,10 @@ class MigrationCoordinator:
         self.migrating_in_request_id_set = set()
         asyncio.create_task(self._watch_pending_migrate_in_requests_loop())
 
-    async def migrate_out(self, dst_instance_actor: ray.actor.ActorHandle, dst_instance_id: str) -> List[RequestIDType]:
+    async def migrate_out(self,
+                          dst_instance_actor: ray.actor.ActorHandle,
+                          dst_instance_id: str,
+                          migration_type: Optional[MigrationType] = None) -> List[RequestIDType]:
         if not self.has_migration_slot():
             logger.debug(
                 "Max migration concurrency ({}) reached, reject new migrate out request attempt.".format(
@@ -271,7 +275,8 @@ class MigrationCoordinator:
         migrated_request_list = []
         for migrate_out_request in migrate_out_requests:
             try:
-                migrated_request = await self._migrate_out_one_request(dst_instance_actor, dst_instance_id, migrate_out_request)
+                migrated_request = await self._migrate_out_one_request(
+                    dst_instance_actor, dst_instance_id, migrate_out_request, migration_type)
             # pylint: disable=W0703
             except Exception as e:
                 log_instance_exception(e, dst_instance_id, "migrate_out", migrate_out_request.request_id)
@@ -285,7 +290,8 @@ class MigrationCoordinator:
     async def _migrate_out_one_request(self,
                                        dst_instance_actor: ray.actor.ActorHandle,
                                        dst_instance_id: str,
-                                       migrate_out_request: LlumnixRequest) -> List[LlumnixRequest]:
+                                       migrate_out_request: LlumnixRequest,
+                                       migration_type: Optional[MigrationType] = None) -> List[LlumnixRequest]:
         t0 = time.time()
         logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
         migrated_request = []
@@ -318,9 +324,9 @@ class MigrationCoordinator:
 
         t1 = time.time()
         logger.info(
-            "Instance {}->{} migrate done, migrate request {}, "
+            "Instance {}->{} migrate done, migration type: {}, migrate request {}, "
             "migration status: {}, len: {} blocks, cost: {} ms".format(
-                self.instance_id, dst_instance_id, migrated_request, status,
+                self.instance_id, dst_instance_id, migration_type, migrated_request, status,
                 sum(migrate_out_request.stage_num_blocks_list), (t1 - t0)*1000
             )
         )

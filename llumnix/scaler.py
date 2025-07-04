@@ -100,7 +100,6 @@ class Scaler:
         self.load_registered_service = manager_args.load_registered_service
         self.load_registered_service_path = manager_args.load_registered_service_path
         self.pdd_config: PDDConfig = manager_args.create_pdd_config()
-
         self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
         try:
             self.manager = Manager.from_args(

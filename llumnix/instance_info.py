@@ -87,6 +87,8 @@ class InstanceInfo:
     def __hash__(self):
         return hash(self.instance_id)
 
+    def __repr__(self):
+        return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type})"
 
 def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
                         key_attr: str,

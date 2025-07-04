@@ -835,9 +835,8 @@ class Scaler:
 
         if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg:
             # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
-            cur_num_prefill_instances, cur_num_decode_instances = await asyncio_wait_for_ray_remote_call_with_timeout(
-                self.manager.get_num_prefill_decode_instances.remote
-            )
+            cur_num_prefill_instances = len(self.prefill_instance_id_set)
+            cur_num_decode_instances = len(self.decode_instance_id_set)
             next_instance_args.instance_type = self._get_next_instance_type(
                 cur_num_prefill_instances, cur_num_decode_instances, self.pdd_config.pd_ratio, instance_type,)
 

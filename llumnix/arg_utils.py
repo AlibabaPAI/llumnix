@@ -275,6 +275,7 @@ class VLLMV1EntrypointsArgs:
     chat_template_content_format: str = None
     enable_server_load_tracking: bool = None
     enable_force_include_usage: bool = None
+    expand_tools_even_if_tool_choice_none: bool = None
     
     client_index: int = None
 

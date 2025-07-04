@@ -54,35 +54,6 @@ from llumnix.request_output import LlumnixRequestOutputs
 
 logger = init_logger(__name__)
 
-class ServerInfoTable:
-    """
-    Manages a lookup table that maps a client_index (integer) to ServerInfo.
-    Supports efficient add, delete, and lookup operations.
-    """
-
-    def __init__(self):
-        self._servers: Dict[int, ServerInfo] = {}
-
-    def add_server_info(self, client_index: int, server_info: ServerInfo):
-        self._servers[client_index] = server_info
-
-    def delete_server_info(self, client_index: int):
-        if client_index in self._servers:
-            del self._servers[client_index]
-
-    def get_server_info(self, client_index: int) -> Optional[ServerInfo]:
-        return self._servers.get(client_index)
-
-    def list_all_servers(self) -> Dict[int, ServerInfo]:
-        return self._servers.copy()
-
-    def __len__(self) -> int:
-        return len(self._servers)
-
-    def __contains__(self, client_index: int) -> bool:
-        return client_index in self._servers
-
-
 class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     def __init__(self,
                  instance_id: str,
@@ -116,7 +87,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
 
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         self.disable_async_output_proc = disable_async_output_proc
-        self.server_info_table = ServerInfoTable()
+        self.server_info_table = {}
 
         assert isinstance(self.scheduler, SchedulerLlumnix), \
             "EngineCore.scheduler failed to set to SchedulerLlumnix"
@@ -153,7 +124,6 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             executor_class = LlumnixRayDistributedExecutor
             executor_class.migration_config = migration_config
             executor_class.instance_id = instance_id
-            logger.debug("executor_class set to LlumnixRayDistributedExecutor")
         else:
             raise ValueError('Unsupported executor backend')
 
@@ -203,7 +173,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         server_request_outputs = {}
         server_info_dict = {}
         for client_index, engine_core_outputs in engine_core_outputs_dict.items():
-            server_info = self.server_info_table.get_server_info(client_index)
+            server_info = self.server_info_table[client_index]
             server_id = server_info.server_id
 
             server_request_outputs[server_id] = LlumnixRequestOutputs(
@@ -283,7 +253,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         # TODO(zhaozhiyu): remove mapping, create a new request type to carry server_info
         request_type = EngineCoreRequestType.ADD
         request: EngineCoreRequest = kwargs["engine_core_request"]
-        self.server_info_table.add_server_info(request.client_index, server_info)
+        self.server_info_table[request.client_index] = server_info
         await self.input_queue.put((request_type, request))
 
 
@@ -326,8 +296,6 @@ class BackendVLLMV1(BackendInterface):
 
         self.state = EngineState.INIT
         logger.info("engine {} current state: {}".format(self.instance_id, self.state))
-
-        # self.disable_async_output_proc = engine_args.disable_async_output_proc
 
         self._step_done_event_queue = queue.Queue()
         self._remove_running_request_ret: Dict[str] = {}

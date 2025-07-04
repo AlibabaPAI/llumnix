@@ -53,11 +53,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         vllm_config: VllmConfig,
         executor_class: type[Executor],
         log_stats: bool,
-        client_addresses: dict[str, str] | None = None,
+        client_addresses: Dict[str, str] | None = None,
         client_index: int = 0,
     ):
-        # self.request_stream: Dict[str, AsyncStream] = {}
-
         LlumnixClient.__init__(self, entrypoints_context, loop)
         AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
         self.engine_core_output_stash: Dict[str, Tuple[List[EngineCoreOutput], int, int]] = {}
@@ -133,16 +131,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
 
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)
-        
-    async def get_output_async(self) -> EngineCoreOutputs:
-        outputs = await super().get_output_async()
-        for output in outputs.outputs:
-            print(f"[zzy] APIServer return {self.client_index} {self.server_info.server_id} {output.request_id}")
-        return outputs
 
     async def add_request_async(self, request: EngineCoreRequest) -> None:
         # Rewrite from AsyncMPClient
-        print(f"[zzy] APIServer dispatch {self.client_index} {self.server_info.server_id} {request.request_id}")
         request.client_index = self.client_index
         await self.generate(None, request.sampling_params, request.request_id, engine_core_request=request)
 

@@ -1,5 +1,18 @@
+# Copyright (c) 2024, Alibaba Group;
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from logging import DEBUG
-from typing import Optional, Any, Union
+from typing import Dict, Optional, Any, Tuple, Union
 import signal
 import asyncio
 import queue
@@ -23,7 +36,6 @@ class AsyncEngineCore(EngineCore):
     """Extension of EngineCore to add async methods."""
 
     async def execute_model_async(self, scheduler_output: SchedulerOutput):
-        logger.debug("[execute_model_async]")
         try:
             return await self.model_executor.execute_model_async(scheduler_output)
         except BaseException as err:
@@ -33,10 +45,9 @@ class AsyncEngineCore(EngineCore):
             # Re-raise exception
             raise err
 
-    async def step_async(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
+    async def step_async(self) -> Tuple[Dict[int, EngineCoreOutputs], bool]:
         """Schedule, execute, and make output."""
 
-        logger.debug("[step_async]")
         kvconn = self.scheduler.get_kv_connector()
         if kvconn:
             kvconn.step(self.scheduler)
@@ -78,7 +89,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
             (EngineCoreRequestType.EXECUTOR_FAILED, b''))
 
         self.engine_index = engine_index
-        # TODO(shejiarui): engines_running is a func
+        # TODO(shejiarui): engines_runni    ng is a func
         # self.engines_running = False
 
         self.has_coordinator = False
@@ -98,8 +109,6 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
                         local_dp_rank: int = 0,
                         **kwargs):
         """Launch EngineCore busy loop in background process."""
-
-        logger.debug("[AsyncEngineCoreProc] run_engine_core")
 
         # Signal handler used for graceful termination.
         # SystemExit exception is only raised once to allow this and worker
@@ -134,7 +143,6 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
             asyncio.create_task(engine_core.run_busy_loop_async())
 
         except SystemExit:
-            logger.debug("EngineCore exiting.")
             raise
         except Exception as e:
             if engine_core is None:
@@ -152,13 +160,10 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
 
         # Loop until process is sent a SIGINT or SIGTERM
         while True:
-            logger.debug("[run_busy_loop_async] before _process_input_queue_async")
             # 1) Poll the input queue until there is work to do.
             await self._process_input_queue_async()
-            logger.debug("[run_busy_loop_async] before _process_engine_step_async")
             # 2) Step the engine core and return the outputs.
             await self._process_engine_step_async()
-            logger.debug("[run_busy_loop_async] after _process_engine_step_async")
 
     async def _process_input_queue_async(self):
         """
@@ -166,16 +171,12 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         Exits when an engine step needs to be performed.
         """
         waited = False
-        # Loop and wait for work if the engine has no pending requests.
-        # while not self.engines_running and not self.scheduler.has_requests():
+        # Remove condition: not self.engines_running
         while not self.scheduler.has_requests():
             if logger.isEnabledFor(DEBUG) and self.input_queue.empty():
                 logger.debug("EngineCore waiting for work.")
                 waited = True
-
-            # Asynchronously get an item from the queue.
-            # This will pause the task if the queue is empty, allowing the
-            # event loop to run other tasks, without blocking the thread.
+            # Change input_queue to asyncio.Queue, use await q.get()
             req = await self.input_queue.get()
             self._handle_client_request(*req)
 
@@ -185,12 +186,8 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         # Handle any remaining requests that arrived while processing.
         # get_nowait() is non-blocking and works similarly for asyncio.Queue.
         while not self.input_queue.empty():
-            try:
-                req = self.input_queue.get_nowait()
-                self._handle_client_request(*req)
-            except asyncio.QueueEmpty:
-                # This can happen in concurrent scenarios; it's safe to just break.
-                break
+            req = self.input_queue.get_nowait()
+            self._handle_client_request(*req)
 
     async def _process_engine_step_async(self):
         """Called only when there are unfinished local requests."""

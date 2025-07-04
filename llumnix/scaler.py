@@ -75,7 +75,6 @@ from llumnix.constants import (
     HEARTBEAT_LOOP_INTERVAL,
 )
 from llumnix import envs as llumnix_envs
-from llumnix.entrypoints.utils import LaunchMode
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR
 from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server

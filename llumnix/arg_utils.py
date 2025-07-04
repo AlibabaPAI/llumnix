@@ -317,7 +317,7 @@ class ManagerArgs:
             assert args.enable_pd_disagg or args.enable_engine_semi_pd_disagg, \
                 "Adaptive prefill-decode disaggregation is only supported when roleless prefill-decode disaggregation."
 
-        assert sum([args.enable_engine_pd_disagg, args.enable_pd_disagg, args.enable_engine_semi_pd_disagg]), \
+        assert sum([args.enable_engine_pd_disagg, args.enable_pd_disagg, args.enable_engine_semi_pd_disagg]) > 1, \
             "Engine-based prefill-decode disaggregation, Semi-Engine-based prefill-decode disaggregation and, " \
             "Llumnix-based prefill-decode disaggregation are mutually exclusive."
 

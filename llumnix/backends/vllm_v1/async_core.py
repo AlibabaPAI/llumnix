@@ -89,8 +89,6 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
             (EngineCoreRequestType.EXECUTOR_FAILED, b''))
 
         self.engine_index = engine_index
-        # TODO(shejiarui): engines_runni    ng is a func
-        # self.engines_running = False
 
         self.has_coordinator = False
         self._init_data_parallel(vllm_config)

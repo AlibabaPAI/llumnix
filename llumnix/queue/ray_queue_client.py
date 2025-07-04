@@ -24,7 +24,6 @@ from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, is_trac
 class RayQueueClient(QueueClientBase):
     async def put_nowait(self, item: Any, server_info: ServerInfo):
         output_queue = server_info.request_output_queue
-        # TODO: conbine metrics and debug mode logic
         need_record_trace_timestamp = False
         if isinstance(item, list):
             for obj in item:

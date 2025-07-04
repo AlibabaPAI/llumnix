@@ -83,9 +83,6 @@ async def test_request_trace(
     is_stream,
 ):
     engine = engine.split("_")[1]
-    enable_pd_disagg = False
-    enable_simulator = False
-    enable_migration = False
     global test_times
 
     ip = get_ip_address()
@@ -115,10 +112,10 @@ async def test_request_trace(
             port=base_port,
             model=model,
             enforce_eager=True,
-            enable_pd_disagg=enable_pd_disagg,
-            enable_simulator=enable_simulator,
+            enable_pd_disagg=False,
+            enable_simulator=False,
             tensor_parallel_size=tensor_parallel_size,
-            enable_migration=enable_migration,
+            enable_migration=False,
             max_instances=instance_count,
         )
     )

@@ -92,7 +92,7 @@ async def generate(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
-    # collect and return request lantencys
+    # collect and return request latencys
     request_trace_param = {
         LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1')
     }
@@ -174,7 +174,7 @@ async def generate_benchmark(request: Request) -> Response:
 
     start = time.perf_counter()
 
-    # collect and return request lantencys
+    # collect and return request latencys
     request_trace_param = {
         LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1')
     }

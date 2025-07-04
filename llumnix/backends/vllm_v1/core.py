@@ -33,7 +33,7 @@ from vllm.v1.request import Request, RequestStatus
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, RequestInferenceType
-from llumnix.backends.backend_interface import BackendInterface, EngineState
+from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm_v1.async_core import AsyncEngineCoreProc
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
@@ -41,14 +41,14 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
-from llumnix.backends.utils import RequestOutputForwardingMode, OutputMediator
+from llumnix.backends.utils import (RequestOutputForwardingMode, 
+                                    OutputMediator, EngineState)
 from llumnix.utils import make_async, ray_get_with_timeout
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
-from llumnix.backends.backend_interface import BackendType
-from llumnix.utils import RequestIDType, MigrationResponse
+from llumnix.utils import RequestIDType, MigrationResponse, BackendType
 from llumnix.request_output import LlumnixRequestOutputs
 
 
@@ -430,3 +430,5 @@ class BackendVLLMV1(BackendInterface):
     def free_src_request(self, backend_request) -> None:
         raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
+    def get_instance_info(self):
+        return self.engine.instance_info

@@ -16,6 +16,7 @@ import math
 import time
 import asyncio
 from typing import Dict, List
+import ray.actor
 
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.outputs import RequestOutput
@@ -26,7 +27,7 @@ from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.server_info import ServerInfo
 from llumnix.constants import WAIT_MANAGER_INTERVAL
-from llumnix.utils import asyncio_wait_for_with_timeout
+from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.entrypoints.client import LlumnixClient
 
@@ -79,8 +80,8 @@ class LlumnixClientVLLM(LlumnixClient):
             # Hack request timestamps in server_info for latency breakdown.
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
-        await asyncio_wait_for_with_timeout(
-            self.manager.generate.remote(request_id, server_info, prompt, sampling_params, *args, **kwargs)
+        await asyncio_wait_for_ray_remote_call_with_timeout(
+            self.manager.generate.remote, request_id, server_info, prompt, sampling_params, *args, **kwargs
         )
 
     # pylint: disable=arguments-differ
@@ -96,10 +97,9 @@ class LlumnixClientVLLM(LlumnixClient):
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
-                await asyncio_wait_for_with_timeout(
-                    self.instances[instance_id].generate.remote(
-                        request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
-                    )
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    self.instances[instance_id].generate.remote,
+                    request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
@@ -121,11 +121,18 @@ class LlumnixClientVLLM(LlumnixClient):
         instance_id, instance = self._get_instance_for_abort(request_id)
         if instance:
             logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
-            # TODO(s5u13b): Optimize the serialization cost.
-            instance.abort.remote(request_id)
+            asyncio.create_task(self._abort_request(instance_id, instance, request_id))
         else:
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
                 request_id, instance_id, instance))
+
+    async def _abort_request(self, instance_id: str, instance: ray.actor.ActorHandle, request_id: str):
+        try:
+            await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort.remote, request_id)
+            self._clear_client_request_states(request_id)
+        # pylint: disable=broad-except
+        except Exception as e:
+            log_instance_exception(e, instance_id, "_abort_request", request_id)
 
     async def get_request_outputs_loop(self):
         while True:

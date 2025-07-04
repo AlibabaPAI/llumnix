@@ -143,6 +143,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
             is_last_comm = (tot_blocks - start_idx <= self.num_migration_buffer_blocks)
             send_blocks = src_blocks[start_idx:start_idx+offset]
             send_worker_metadata = self.use_ray_spmd_worker and is_last_stage and is_last_comm
+            # TODO(s5u13b): Remote call has serialization cost, optimize it.
             ray_obj = self.proxy_actor.exec_method.remote(
                 src_worker_handle,
                 "do_send",

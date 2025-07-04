@@ -47,9 +47,14 @@ from blade_llm.service.communications.protocol_msgspec import Stats
 from blade_llm.utils.hardware_util import get_cpu_number
 
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import (get_ip_address, asyncio_wait_for_with_timeout, get_free_port,
-                           wait_port_free, run_coroutine_in_new_thread, MigrationResponse)
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.utils import (
+    get_ip_address,
+    asyncio_wait_for_ray_remote_call_with_timeout,
+    get_free_port,
+    wait_port_free,
+    run_coroutine_in_new_thread,
+    MigrationResponse
+)
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
 from llumnix.backends.utils import (
@@ -71,6 +76,7 @@ from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
 from llumnix.utils import RequestIDType
+from llumnix.backends.backend_interface import BackendInterface
 
 logger = init_logger(__name__)
 
@@ -810,15 +816,14 @@ class BackendBladeLLM(BackendInterface):
                          dst_blocks: List[int],
                          request_id: int,
                          is_last_stage: bool) -> MigrationResponse:
-        return await asyncio_wait_for_with_timeout(
-            dst_instance_actor.execute_migration_method_async.remote(
-                "recv_cache",
-                request_id=request_id,
-                src_worker_handle_list=self.worker_infos,
-                dst_blocks=dst_blocks,
-                src_blocks=src_blocks,
-                is_last_stage=is_last_stage
-            )
+        return await asyncio_wait_for_ray_remote_call_with_timeout(
+            dst_instance_actor.execute_migration_method_async.remote,
+            "recv_cache",
+            request_id=request_id,
+            src_worker_handle_list=self.worker_infos,
+            dst_blocks=dst_blocks,
+            src_blocks=src_blocks,
+            is_last_stage=is_last_stage
         )
 
     async def recv_cache(self,

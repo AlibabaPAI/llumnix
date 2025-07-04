@@ -47,7 +47,7 @@ from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
-from llumnix.utils import RequestIDType, MigrationResponse, asyncio_wait_for_with_timeout
+from llumnix.utils import RequestIDType, MigrationResponse, asyncio_wait_for_ray_remote_call_with_timeout
 from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)
@@ -437,15 +437,14 @@ class BackendVLLM(BackendInterface):
                          dst_blocks: List[int],
                          request_id: str,
                          is_last_stage: bool) -> MigrationResponse:
-        return await asyncio_wait_for_with_timeout(
-            dst_instance_actor.execute_migration_method_async.remote(
-                "recv_cache",
-                request_id=request_id,
-                src_worker_handle_list=self.worker_handle_list,
-                src_blocks=src_blocks,
-                dst_blocks=dst_blocks,
-                is_last_stage=is_last_stage
-            )
+        return await asyncio_wait_for_ray_remote_call_with_timeout(
+            dst_instance_actor.execute_migration_method_async.remote,
+            "recv_cache",
+            request_id=request_id,
+            src_worker_handle_list=self.worker_handle_list,
+            src_blocks=src_blocks,
+            dst_blocks=dst_blocks,
+            is_last_stage=is_last_stage
         )
 
     async def recv_cache(self,

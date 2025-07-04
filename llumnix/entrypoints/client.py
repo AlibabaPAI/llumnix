@@ -33,7 +33,7 @@ from llumnix.ray_utils import (
 from llumnix.logging.logger import init_logger
 from llumnix.utils import (
     RequestIDType,
-    asyncio_wait_for_with_timeout,
+    asyncio_wait_for_ray_remote_call_with_timeout,
     log_instance_exception,
     log_manager_exception,
 )
@@ -89,7 +89,7 @@ class LlumnixClient(ABC):
         raise NotImplementedError
 
     async def is_ready(self) -> bool:
-        return await asyncio_wait_for_with_timeout(self.manager.is_ready.remote())
+        return await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.is_ready.remote)
 
     def cleanup(self):
         self.request_output_queue.cleanup()
@@ -114,7 +114,7 @@ class LlumnixClient(ABC):
             self.global_instances[instance_id] = instance
             logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
             try:
-                await asyncio_wait_for_with_timeout(instance.abort.remote(request_id))
+                await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort.remote, request_id)
                 self._clear_client_request_states(request_id)
             except Exception as e: # pylint: disable=broad-except
                 log_instance_exception(e, instance_id, "_abort", request_id)

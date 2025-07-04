@@ -39,8 +39,7 @@ from llumnix.server_info import ServerInfo
 from llumnix.utils import (
     random_uuid,
     run_coroutine_in_new_thread,
-    async_wrapper_for_ray_remote_call,
-    asyncio_wait_for_with_timeout,
+    asyncio_wait_for_ray_remote_call_with_timeout,
     RequestIDType,
     log_instance_exception,
     BackendType,
@@ -165,11 +164,9 @@ class Manager:
                                                 target_instance_id: str,
                                                 *args, **kwargs):
         try:
-            await asyncio_wait_for_with_timeout(
-                async_wrapper_for_ray_remote_call(
-                    self.instances[target_instance_id].generate.remote,
-                    request_id, server_info, request_expected_steps, *args, **kwargs
-                )
+            await asyncio_wait_for_ray_remote_call_with_timeout(
+                self.instances[target_instance_id].generate.remote,
+                request_id, server_info, request_expected_steps, *args, **kwargs
             )
         # pylint: disable=broad-except
         except Exception as e:
@@ -205,7 +202,7 @@ class Manager:
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""
         tasks = [
-            asyncio_wait_for_with_timeout(instance.is_ready.remote())
+            asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready.remote)
             for instance in self.instances.values()
         ]
         # Note that llumnix run server and scale up instance in manager after instance is ready,
@@ -235,7 +232,7 @@ class Manager:
             for instance_id, instance in self.instances.items():
                 # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
                 task = asyncio.gather(
-                    asyncio_wait_for_with_timeout(instance.get_instance_info.remote()),
+                    asyncio_wait_for_ray_remote_call_with_timeout(instance.get_instance_info.remote),
                     return_exceptions=True
                 )
                 task.add_done_callback(partial(get_instance_info_done_callback_wrapper, instance_id))
@@ -268,10 +265,8 @@ class Manager:
                 src_instance_id, dst_instance_id = migrate_instance_pair
                 dst_instance_actor = self.instances[dst_instance_id]
                 asyncio.create_task(
-                    asyncio_wait_for_with_timeout(
-                        self.instances[src_instance_id].migrate_out.remote(
-                            dst_instance_actor, dst_instance_id
-                        )
+                    asyncio_wait_for_ray_remote_call_with_timeout(
+                        self.instances[src_instance_id].migrate_out.remote, dst_instance_actor, dst_instance_id
                     )
                 )
         # pylint: disable=W0703
@@ -351,8 +346,8 @@ class Manager:
             self.num_instances = len(self.instances)
 
         asyncio.create_task(
-            asyncio_wait_for_with_timeout(
-                async_wrapper_for_ray_remote_call(self.scaler.clear_instance_ray_resources.remote, instance_ids)
+            asyncio_wait_for_ray_remote_call_with_timeout(
+                self.scaler.clear_instance_ray_resources.remote, instance_ids
             )
         )
 
@@ -360,8 +355,8 @@ class Manager:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
                 asyncio.create_task(
-                    asyncio_wait_for_with_timeout(
-                        self.scaler.clear_gloo_backend_ray_resources.remote()
+                    asyncio_wait_for_ray_remote_call_with_timeout(
+                        self.scaler.clear_gloo_backend_ray_resources.remote
                     )
                 )
             elif indeed_update and no_pending_instance and rebuild_migration_backend and not self.instance_args.simulator_mode:
@@ -399,8 +394,8 @@ class Manager:
                 llumlet_handle = self.instances.get(instance_id, None)
                 if llumlet_handle is not None:
                     tasks.append(
-                        asyncio_wait_for_with_timeout(
-                            llumlet_handle.execute_engine_method_async.remote("_run_workers_async", task_name, *args, **kwargs),
+                        asyncio_wait_for_ray_remote_call_with_timeout(
+                            llumlet_handle.execute_engine_method_async.remote, "_run_workers_async", task_name, *args, **kwargs
                         )
                     )
                 else:
@@ -416,10 +411,10 @@ class Manager:
 
             if len(dead_instances) > 0:
                 self.scale_down(dead_instances, rebuild_migration_backend=False)
-                await asyncio_wait_for_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote())
+                await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote)
             return dead_instances
 
-        await asyncio_wait_for_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote())
+        await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote)
         alive_instances = sorted(self.instances.keys())
         pending_task = self.pending_rebuild_migration_instances
         group_name = None
@@ -498,7 +493,7 @@ class Manager:
             instance_id = instance_actor_name[len(INSTANCE_NAME_PREFIX):]
             if instance_id not in self.instances:
                 task = asyncio.gather(
-                    asyncio_wait_for_with_timeout(instance_actor_handle.get_instance_type.remote()),
+                    asyncio_wait_for_ray_remote_call_with_timeout(instance_actor_handle.get_instance_type.remote),
                     return_exceptions=True
                 )
                 task.add_done_callback(

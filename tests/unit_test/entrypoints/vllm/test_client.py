@@ -14,7 +14,6 @@
 import random
 from typing import Dict
 import asyncio
-import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -224,7 +223,7 @@ async def test_abort_and_abort_request(ray_env):
     request_id1 = random_uuid()
     client.request_instance[request_id1] = instance_id
     client.abort_request(request_id1)
-    time.sleep(3.0)
+    await asyncio.sleep(3.0)
     num_aborts = ray.get(instance.get_num_aborts.remote())
     assert num_aborts == 2
 

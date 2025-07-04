@@ -56,7 +56,6 @@ from llumnix.utils import (
     MigrationResponse,
     is_traced_request
 )
-from llumnix.backends.backend_interface import BackendInterface
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
 from llumnix.backends.utils import EngineState

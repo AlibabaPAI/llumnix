@@ -27,7 +27,12 @@ from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.server_info import ServerInfo
 from llumnix.constants import REQUEST_TIMESTAMPS_ATTR_STR, WAIT_MANAGER_INTERVAL, LLUMNIX_TRACE_REQUEST
-from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception, is_traced_request, enable_request_trace, log_instance_exception
+from llumnix.utils import (
+    asyncio_wait_for_ray_remote_call_with_timeout,
+    is_traced_request,
+    enable_request_trace,
+    log_instance_exception,
+)
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.entrypoints.client import LlumnixClient
 

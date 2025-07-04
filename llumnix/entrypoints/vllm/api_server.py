@@ -31,11 +31,9 @@ from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 from llumnix.logging.logger import init_logger
 from llumnix.utils import is_traced_request, random_uuid, BackendType, LaunchMode
 from llumnix.config import get_llumnix_config
-from llumnix.backends.backend_interface import BackendType
-from llumnix.entrypoints.utils import LaunchMode, is_gpu_available, LlumnixTraceInfo
+from llumnix.entrypoints.utils import is_gpu_available, LlumnixTraceInfo
 from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE, LLUMNIX_TRACE_HEADER, LLUMNIX_TRACE_REQUEST
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.entrypoints.utils import is_gpu_available
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
 logger = init_logger("llumnix.entrypoints.vllm.api_server")

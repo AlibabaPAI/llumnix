@@ -27,11 +27,15 @@ from llumnix.utils import get_ip_address, wait_port_free
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env, cleanup_ray_env_func
-from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command, generate_special_test_config,
-                                  wait_for_llumnix_service_ready, generate_bladellm_launch_command,
-                                  shutdown_llumnix_service, shutdown_llumnix_service_func, generate_bladellm_request,
-                                  generate_vllm_request, process_bladellm_api_server_output, process_vllm_api_server_output,
-                                  check_log_exception, generate_bladellm_serve_command, get_llumnix_response)
+from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
+                                  generate_vllm_request, process_vllm_api_server_output,
+                                  generate_vllm_v1_launch_command, generate_vllm_v1_serve_command, generate_raw_vllm_v1_serve_command,
+                                  generate_vllm_v1_request, process_vllm_v1_api_server_output,
+                                  generate_bladellm_launch_command, generate_bladellm_serve_command,
+                                  generate_bladellm_request, process_bladellm_api_server_output,
+                                  wait_for_llumnix_service_ready, wait_for_llumnix_service_ready_vllm_v1,
+                                  shutdown_llumnix_service, shutdown_llumnix_service_func, check_log_exception, get_llumnix_response,
+                                  generate_special_test_config)
 from tests.utils import try_convert_to_local_path
 
 
@@ -65,6 +69,38 @@ def run_vllm(model):
     for _, output in enumerate(outputs):
         vllm_output[output.prompt] = output.prompt + output.outputs[0].text
     return vllm_output
+
+async def run_vllm_v1(model, enable_pd_disagg, enable_migration):
+    ip = get_ip_address()
+    base_port = 35000 + test_times * 100
+    
+    assert enable_pd_disagg is False, "PD disaggregation is not supported in v1"
+    assert enable_migration is False, "Migration is not supported in v1"
+
+    raw_serve_command = generate_raw_vllm_v1_serve_command(
+        model=model,
+        ip=ip,
+        port=base_port,
+        max_model_len=1024,
+    )
+    subprocess.run(raw_serve_command, shell=True, check=True)
+
+    await asyncio.sleep(60)
+
+    vllm_v1_outputs = {}
+    for prompt in prompts:
+        req_out = await get_llumnix_response(
+            prompt,
+            f"http://{ip}:{base_port}/v1/chat/completions",
+            generate_vllm_v1_request,
+            process_vllm_v1_api_server_output,
+        )
+        vllm_v1_outputs[prompt] = req_out
+
+    shutdown_llumnix_service_func()
+    await asyncio.sleep(3)
+
+    return vllm_v1_outputs
 
 async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
     global test_times
@@ -167,7 +203,14 @@ def generate_correctness_test_config():
         # adaptive pd
         generate_special_correctness_test_config([("enable_pd_disagg", True), ("enable_adaptive_pd", True)], vllm_base_config),
     ]
-
+    
+    vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, "global", "thread", False, False]
+    
+    vllm_v1_config = [
+        vllm_v1_base_config,
+        generate_special_correctness_test_config([("tensor_parallel_size", 2)], vllm_v1_base_config),
+    ]
+    
     bladellm_base_config = ["engine_BladeLLM", "grpc", 1, True, False, False, "global", "thread", False, False]
 
     bladellm_config = [
@@ -195,7 +238,7 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("enable_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)], bladellm_base_config),
     ]
 
-    return vllm_config + bladellm_config
+    return vllm_config + vllm_v1_config + bladellm_config
 
 
 @pytest.mark.asyncio
@@ -204,9 +247,9 @@ def generate_correctness_test_config():
 @pytest.mark.parametrize(config_schema, generate_correctness_test_config())
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator,
-                           enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_engine_semi_pd_disagg,
-                           enable_adaptive_pd):
-    engine = engine.split("_")[1]
+                           enable_pd_disagg, launch_mode, request_output_forwarding_mode):
+    print("Enter test_correctness")
+    engine = "_".join(engine.split("_")[1:])
 
     global test_times
 
@@ -237,7 +280,17 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
             engine_pdd_prompt_output = engine_prompt_output
             if len(engine_pdd_prompt_output) == 0:
                 engine_pdd_prompt_output = await run_vllm.remote(model)
-    else:
+    elif engine == "vLLM_v1":
+        assert not enable_pd_disagg, "PD disaggregation is not supported for vLLM_v1"
+        
+        generate_request_func = generate_vllm_v1_request
+        process_api_server_output_func = process_vllm_v1_api_server_output
+        generate_launch_command_func = generate_vllm_v1_launch_command
+        generate_serve_command_func = generate_vllm_v1_serve_command
+        url = f'http://{ip}:{base_port}/v1/chat/completions'
+        
+        engine_prompt_output = await run_vllm_v1(model, enable_pd_disagg, enable_migration)
+    elif engine == "BladeLLM":
         generate_request_func = generate_bladellm_request
         process_api_server_output_func = process_bladellm_api_server_output
         generate_launch_command_func = generate_bladellm_launch_command
@@ -330,7 +383,11 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
     await asyncio.sleep(3)
 
-    wait_for_llumnix_service_ready(ip_ports)
+    if engine =="vLLM_v1":
+        # special wait for ready for vllm v1
+        wait_for_llumnix_service_ready_vllm_v1(ip_ports)
+    else:
+        wait_for_llumnix_service_ready(ip_ports)
 
     await asyncio.sleep(3)
 
@@ -348,8 +405,12 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         raw_output = engine_semi_pd_prompt_output
 
     if not enable_simulator:
-        for prompt in prompts:
+        for i, prompt in enumerate(prompts):
             assert llumnix_output[prompt] == raw_output[prompt]
+            with open(f"{i}_llumnix.out", "a+") as f:
+                f.write(str(llumnix_output[prompt]))
+            with open(f"{i}_raw.out", "a+") as f:
+                f.write(str(raw_output[prompt]))
 
     await asyncio.sleep(3)
 

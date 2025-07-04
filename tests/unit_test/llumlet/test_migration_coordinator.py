@@ -274,7 +274,7 @@ async def test_migrate_out_one_request():
     migration_coordinator._migrate_out_running_request = MagicMock()
     migration_coordinator._dst_commit_dst_request = MagicMock()
     migrate_out_request.request_id = request_id
-    migrate_out_request.status = RequestStatus.RUNNING
+    migrate_out_request.llumnix_status = RequestStatus.RUNNING
     migration_coordinator._dst_free_pre_alloc_cache = MagicMock()
 
     # setting the return value for each _migrate_out_running_request call, because different coroutines are required.

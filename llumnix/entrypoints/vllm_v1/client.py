@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional, Union
 import copy
 import math
 import time
@@ -55,9 +55,10 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         log_stats: bool,
         client_addresses: Dict[str, str] | None = None,
         client_index: int = 0,
+        driver_tensor_queue_union: Union[None, Any] = None
     ):
         LlumnixClient.__init__(self, entrypoints_context, loop)
-        AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index)
+        AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index, driver_tensor_queue_union)
         self.engine_core_output_stash: Dict[str, Tuple[List[EngineCoreOutput], int, int]] = {}
 
     async def generate(self,

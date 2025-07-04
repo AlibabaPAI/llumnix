@@ -112,6 +112,8 @@ _C.SERVER.ENABLE_SERVER_LOAD_TRACKING = False
 _C.SERVER.ENABLE_FORCE_INCLUDE_USAGE = False
 # APIServer index, mapped to ServerInfo in EngineCore. The name is following vLLM.
 _C.SERVER.CLIENT_INDEX = 0
+# Include tool definitions in prompts even when tool_choice='none'.
+_C.SERVER.EXPAND_TOOLS_EVEN_IF_TOOL_CHOICE_NONE = False
 
 # -----------------------------------------------------------------------------
 # MANAGER CONFIGURATION

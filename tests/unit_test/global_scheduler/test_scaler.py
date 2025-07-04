@@ -146,7 +146,7 @@ def init_scaler_with_launch_mode(launch_mode, enable_pd_disagg=False, pd_ratio="
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="at least 1 gpus required")
 async def test_init_server_and_get_instance_deployment_states_and_instance_and_clear_instance_ray_resources(ray_env):
-    scaler, manager, _, _, engine_args, _ = init_scaler_with_launch_mode(LaunchMode.LOCAL)
+    scaler, _, _, _, engine_args, _ = init_scaler_with_launch_mode(LaunchMode.LOCAL)
     instance_id = random_uuid()
     pg = ray.get(
         scaler._init_placement_group.remote(
@@ -164,14 +164,14 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     await asyncio.sleep(5.0)
     server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
     ray.get(server.is_ready.remote())
-    num_instances = ray.get(manager.scale_up.remote(instance_id, instance, InstanceType("no_constraints")))
+    num_instances = ray.get(scaler._scale_up.remote(instance_id, instance, InstanceType("no_constraints")))
     assert num_instances == 1
 
     pg_created, server_alive, instance_alive = ray.get(scaler._get_instance_deployment_states.remote(instance_id))
     assert pg_created and server_alive and instance_alive
 
     # test clear_instance_ray_resources
-    ray.get(scaler.clear_instance_ray_resources.remote(instance_id))
+    ray.get(scaler._clear_instance_ray_resources.remote(instance_id))
     # wait for remove and kill
     await asyncio.sleep(5.0)
 
@@ -188,10 +188,10 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
-    scaler, manager, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
+    scaler, _, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
     await asyncio.sleep(60.0)
 
-    num_instances = ray.get(manager.scale_up.remote([], [], []))
+    num_instances = ray.get(scaler._scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -200,11 +200,11 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
     instance_ids = [actor_info['name'].split("_")[-1] for actor_info in actor_infos
                     if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
     assert len(instance_ids) == 4
-    ray.get(scaler.clear_instance_ray_resources.remote(instance_ids[0]))
-    ray.get(scaler.clear_instance_ray_resources.remote(instance_ids[1]))
+    ray.get(scaler._clear_instance_ray_resources.remote(instance_ids[0]))
+    ray.get(scaler._clear_instance_ray_resources.remote(instance_ids[1]))
     await asyncio.sleep(60.0)
 
-    num_instances = ray.get(manager.scale_up.remote([], [], []))
+    num_instances = ray.get(scaler._scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -212,10 +212,10 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
-    scaler, manager, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
+    scaler, _, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
     await asyncio.sleep(60.0)
 
-    num_instances = ray.get(manager.scale_up.remote([], [], []))
+    num_instances = ray.get(scaler._scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -230,7 +230,7 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     # Wait for check deployment states, scale down instance and auto scale up.
     await asyncio.sleep(90.0)
 
-    num_instances = ray.get(manager.scale_up.remote([], [], []))
+    num_instances = ray.get(scaler._scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -306,10 +306,10 @@ def test_load_registered_service(ray_env, load_registered_service, enable_pd_dis
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env):
-    scaler, manager, _, _, _, _ = init_scaler_with_launch_mode(
+    scaler, _, _, _, _, _ = init_scaler_with_launch_mode(
         LaunchMode.GLOBAL, max_instances=4, enable_pd_disagg=True, pd_ratio="1:1")
     await asyncio.sleep(60.0)
-    num_instances = ray.get(manager.scale_up.remote([], [], []))
+    num_instances = ray.get(scaler._scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -341,7 +341,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
     await asyncio.sleep(90.0)
     alive_decode_instance_id = decode_instance_ids[0]
 
-    num_instances = ray.get(manager.scale_up.remote([], [], []))
+    num_instances = ray.get(scaler._scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -384,25 +384,25 @@ async def test_pd_disagg_deployment_states(ray_env):
     prefill_instance_ids, prefill_instances = init_instances(3)
     decode_instance_ids, decode_instances = init_instances(3)
 
-    ray.get(manager.scale_up.remote(prefill_instance_ids, prefill_instances,
+    ray.get(scaler._scale_up.remote(prefill_instance_ids, prefill_instances,
                      [InstanceType("prefill")]*len(prefill_instance_ids)))
     assert ray.get(scaler._check_pd_deployment_states.remote()) in prefill_instance_ids
     ray.get(manager.scale_down.remote(prefill_instance_ids))
-    ray.get(manager.scale_up.remote(decode_instance_ids, decode_instances,
+    ray.get(scaler._scale_up.remote(decode_instance_ids, decode_instances,
                      [InstanceType("decode")]*len(decode_instance_ids)))
     assert ray.get(scaler._check_pd_deployment_states.remote()) in decode_instance_ids
 
     prefill_instance_ids2, prefill_instances2 = init_instances(3)
-    ray.get(manager.scale_up.remote(prefill_instance_ids2, prefill_instances2,
+    ray.get(scaler._scale_up.remote(prefill_instance_ids2, prefill_instances2,
                      [InstanceType("prefill")]*len(prefill_instance_ids2)))
     assert not ray.get(scaler._check_pd_deployment_states.remote())
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_auto_scale_up_loop_max_instances(ray_env):
-    _, manager, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, "rayqueue", max_instances=2)
+    scaler, _, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, "rayqueue", max_instances=2)
     await asyncio.sleep(60.0)
-    num_instances = ray.get(manager.scale_up.remote([], [], []))
+    num_instances = ray.get(scaler._scale_up.remote([], [], []))
     assert num_instances == 2
 
 # 1. Resources cannot be specified in ray.init() when there is a existing ray cluster.

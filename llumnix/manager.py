@@ -38,7 +38,6 @@ from llumnix.metrics.manager_metrics import ManagerMetrics
 from llumnix.server_info import ServerInfo
 from llumnix.utils import (
     random_uuid,
-    run_coroutine_in_new_thread,
     asyncio_wait_for_ray_remote_call_with_timeout,
     RequestIDType,
     log_instance_exception,
@@ -47,7 +46,6 @@ from llumnix.utils import (
 )
 from llumnix.ray_utils import (
     get_manager_name,
-    INSTANCE_NAME_PREFIX,
     log_actor_ray_info,
     get_scaler_name,
 )
@@ -56,7 +54,6 @@ from llumnix.constants import (
     WAIT_ALL_MIGRATIONS_DONE_INTERVAL,
     MAX_ACTOR_METHOD_RETRIES,
 )
-
 from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
@@ -126,8 +123,6 @@ class Manager:
         # metrics
         self.manager_metrics = ManagerMetrics()
 
-        # When manager starts, it automatically connects to all existing instances.
-        run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
     async def generate(self, request_id: RequestIDType, server_info: ServerInfo, *args, **kwargs) -> None:
@@ -280,15 +275,15 @@ class Manager:
     async def scale_up(self,
                        instance_id: Union[str, Iterable[str]],
                        instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
-                       instance_type: Union[InstanceType, Iterable[InstanceType]]) -> None:
+                       instance_type: Union[InstanceType, Iterable[InstanceType]]) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
             instance_actor_handle = [instance_actor_handle,]
             instance_type = [instance_type,]
 
-        instance_ids = list(instance_id)
+        instance_ids: List[str] = list(instance_id)
         instance_actor_handles: List[Llumlet] = list(instance_actor_handle)
-        instance_types = list(instance_type)
+        instance_types: List[InstanceType] = list(instance_type)
 
         no_pending_instance = (self.pending_rebuild_migration_instances == 0)
         indeed_update = not set(instance_ids).issubset(self.instances.keys())
@@ -322,7 +317,7 @@ class Manager:
     def scale_down(self, instance_id: Union[str, Iterable[str]], rebuild_migration_backend: bool = True) -> None:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
-        instance_ids = list(instance_id)
+        instance_ids: List[str] = list(instance_id)
 
         indeed_update = False
         no_pending_instance = self.pending_rebuild_migration_instances == 0
@@ -347,7 +342,7 @@ class Manager:
 
         asyncio.create_task(
             asyncio_wait_for_ray_remote_call_with_timeout(
-                self.scaler.clear_instance_ray_resources.remote, instance_ids
+                self.scaler.scale_down.remote, instance_ids
             )
         )
 
@@ -363,19 +358,6 @@ class Manager:
                 asyncio.create_task(self._rebuild_migration_backend())
 
         return self.num_instances
-
-    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
-    def get_num_prefill_decode_instances(self):
-        num_prefill_instances = len(self.global_scheduler.prefill_instance_info)
-        num_decode_instances = len(self.global_scheduler.decode_instance_info)
-
-        return num_prefill_instances, num_decode_instances
-
-    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
-    def get_prefill_decode_instance_id_set(self):
-        prefill_instance_id_set = set(self.global_scheduler.prefill_instance_info.keys())
-        decode_instance_id_set = set(self.global_scheduler.decode_instance_info.keys())
-        return prefill_instance_id_set, decode_instance_id_set
 
     async def _rebuild_migration_backend(self) -> None:
         # During rebuilding migration backend, disable migration.
@@ -444,64 +426,18 @@ class Manager:
             dst_filter=lambda instance_info: instance_info.instance_id in alive_instances,
         )
 
-        logger.info("Rebuild migration backend done, group_name: {}, alive instance ({}): {}."
-            .format(group_name, len(alive_instances), alive_instances))
+        logger.info(
+            "Rebuild migration backend done, group_name: {}, alive instance ({}): {}.".format(
+                group_name, len(alive_instances), alive_instances
+            )
+        )
 
         # Restore migrate config
         self.enable_migration = origin_config
 
     async def _connect_to_instances(self):
-        def connect_to_instance_done_callback(instance_id: str, instance_actor_handle: "ray.actor.ActorHandle", fut):
-            ret = fut.result()[0]
-            if not isinstance(ret, Exception):
-                try:
-                    instance_ids.append(instance_id)
-                    instances.append(instance_actor_handle)
-                    instance_types.append(ret)
-                    logger.info("Connect to instance {}".format(instance_id))
-                except Exception as e: # pylint: disable=broad-except
-                    if isinstance(e, ValueError):
-                        logger.warning("Failed to connect to instance {}, placement group not found.".format(instance_id))
-                    else:
-                        logger.exception("Error in manager _connect_to_instances get_placement_group (instance_id: {})".format(instance_id))
-            else:
-                log_instance_exception(ret, instance_id, "_connect_to_instances")
-
-        # Must set True despite set namespance to llumnix.
-        actor_infos = ray.util.list_named_actors(all_namespaces=True)
-        instance_actor_names = [actor_info['name'] for actor_info in actor_infos
-                                if actor_info['name'].startswith(INSTANCE_NAME_PREFIX)]
-        available_instance_actor_names = []
-        available_instance_actor_handles: List[Llumlet] = []
-        for actor_name in instance_actor_names:
-            try:
-                instance_actor_handle = ray.get_actor(actor_name, namespace='llumnix')
-                available_instance_actor_names.append(actor_name)
-                available_instance_actor_handles.append(instance_actor_handle)
-            except Exception as e: # pylint: disable=broad-except
-                instance_id = actor_name[len(INSTANCE_NAME_PREFIX):]
-                if isinstance(e, ValueError):
-                    logger.warning("Failed to connect to instance {}, actor not found.".format(instance_id))
-                else:
-                    logger.exception("Error in manager _connect_to_instances get_actor (instance_id: {})".format(instance_id))
-        instance_ids = []
-        instances = []
-        instance_types = []
-        tasks = []
-        for instance_actor_name, instance_actor_handle in \
-            zip(available_instance_actor_names,available_instance_actor_handles):
-            instance_id = instance_actor_name[len(INSTANCE_NAME_PREFIX):]
-            if instance_id not in self.instances:
-                task = asyncio.gather(
-                    asyncio_wait_for_ray_remote_call_with_timeout(instance_actor_handle.get_instance_type.remote),
-                    return_exceptions=True
-                )
-                task.add_done_callback(
-                    partial(connect_to_instance_done_callback, instance_id, instance_actor_handle)
-                )
-                tasks.append(task)
-        await asyncio.gather(*tasks)
-        # The only function that can add instance actor handles to manager.
+        instance_ids, instances, instance_types = \
+            await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.get_instances.remote)
         await self.scale_up(instance_ids, instances, instance_types)
 
     def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:

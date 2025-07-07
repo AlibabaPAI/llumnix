@@ -154,8 +154,6 @@ class ThreadOutputForwarder(BaseOutputForwarder):
             raise RuntimeError("Engine ThreadOutputForwarder is dead.")
 
     def _start_put_queue_loop(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         async def put_queue_loop():
             while True:
                 item = self.server_request_outputs_queue.get()
@@ -165,6 +163,9 @@ class ThreadOutputForwarder(BaseOutputForwarder):
                 await self._put_nowait_to_servers(
                     server_request_outputs, server_info_dict,
                 )
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(put_queue_loop())
         finally:

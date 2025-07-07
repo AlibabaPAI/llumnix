@@ -393,11 +393,8 @@ class Scaler:
                 )
 
     async def _check_pd_deployment_states(self) -> str:
-        prefill_instance_id_set, decode_instance_id_set = await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.get_prefill_decode_instance_id_set.remote
-        )
-        cur_num_prefill_instances = len(prefill_instance_id_set)
-        cur_num_decode_instances = len(decode_instance_id_set)
+        cur_num_prefill_instances = len(self.prefill_instance_id_set)
+        cur_num_decode_instances = len(self.decode_instance_id_set)
         scale_down_instance_id = None
         if cur_num_prefill_instances == 0 and cur_num_decode_instances > 0:
             scale_down_instance_id = random.choice(list(self.decode_instance_id_set))

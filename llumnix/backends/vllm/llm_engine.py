@@ -41,7 +41,8 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
-from llumnix.backends.utils import EngineState, RequestOutputForwardingMode, OutputMediator
+from llumnix.backends.utils import EngineState
+from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
 from llumnix.utils import make_async, BackendType
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
@@ -81,7 +82,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        self.output_mediator = OutputMediator(
+        self.output_forwarder = OutputForwarder(
             instance_id,
             request_output_queue_type,
             request_output_forwarding_mode,
@@ -245,7 +246,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         if request_outputs:
             server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, server_infos)
             if server_request_outputs:
-                await self.output_mediator.put_request_outputs_to_server(server_request_outputs, server_info_dict)
+                await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
         set_timestamp(request_outputs, 'engine_step_postprocess_timestamp_end', time.time())
 
@@ -278,7 +279,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         return await self._process_request_outputs(outputs)
 
     def stop(self) -> None:
-        self.output_mediator.stop()
+        self.output_forwarder.stop()
         gc.collect()
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:

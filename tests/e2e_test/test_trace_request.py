@@ -69,6 +69,7 @@ test_times = 0
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", [try_convert_to_local_path("Qwen/Qwen2.5-7B")])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
+@pytest.mark.parametrize("enable_pd_disagg", [True, False])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 @pytest.mark.parametrize("enable_request_trace", [True, False])
 @pytest.mark.parametrize("is_stream", [True, False])
@@ -78,6 +79,7 @@ async def test_request_trace(
     check_log_exception,
     model,
     engine,
+    enable_pd_disagg,
     request_output_queue_type,
     enable_request_trace,
     is_stream,
@@ -112,10 +114,10 @@ async def test_request_trace(
             port=base_port,
             model=model,
             enforce_eager=True,
-            enable_pd_disagg=False,
+            enable_pd_disagg=enable_pd_disagg,
             enable_simulator=False,
             tensor_parallel_size=tensor_parallel_size,
-            enable_migration=False,
+            enable_migration=engine == "vLLM" and enable_pd_disagg,
             max_instances=instance_count,
         )
     )

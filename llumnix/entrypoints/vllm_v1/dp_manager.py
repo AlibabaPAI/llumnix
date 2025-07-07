@@ -13,6 +13,7 @@
 
 import asyncio
 from typing import List
+import pickle
 
 import ray
 import ray.actor
@@ -34,7 +35,7 @@ from llumnix.instance_info import InstanceType
 from llumnix.queue.queue_type import QueueType
 from llumnix.entrypoints.vllm_v1.api_server_actor import APIServerActorVLLMV1
 from llumnix.constants import NUM_GPUS_VLLM_V1_GPU_ACTOR, MAX_ACTOR_METHOD_RETRIES
-from llumnix.utils import asyncio_wait_for_with_timeout, random_uuid
+from llumnix.utils import random_uuid, asyncio_wait_for_ray_remote_call_with_timeout
 
 logger = init_logger(__name__)
 
@@ -46,9 +47,12 @@ class DPManager:
                  instance_args: InstanceArgs,
                  engine_args: LlumnixEngineArgs,
                  placement_group: PlacementGroup,):
-        # TODO(shejiarui): check some args as vLLM here.
         self.instance_id = instance_id
-        self.engine_args = engine_args.load_engine_args()
+        self.entrypoints_args = entrypoints_args
+        self.instance_args = instance_args
+        self.placement_group = placement_group
+        self.engine_args = engine_args
+
         dp_args: VLLMV1DPArgs = engine_args.get_dp_args()
         self.dp_size = dp_args.dp_size
         self.dp_size_local = dp_args.dp_size_local
@@ -58,8 +62,11 @@ class DPManager:
         self.scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
         self.manager = ray.get_actor(get_manager_name(), namespace="llumnix")
 
-        self._init_instances_and_servers(
-            entrypoints_args, instance_args, engine_args, placement_group)
+        self.port_offset = 0
+        self.client_index_offset = 0
+
+        # self._init_instances_and_servers(
+        #     entrypoints_args, instance_args, engine_args, placement_group)
 
     @classmethod
     def from_args(cls,
@@ -71,6 +78,7 @@ class DPManager:
                   ) -> "DPManager":
         dp_manager_class = ray.remote(
             num_cpus=1,
+            # num_gpus=0.1,
             name=get_dpmanager_name(instance_id),
             namespace="llumnix",
         )(cls)
@@ -83,53 +91,57 @@ class DPManager:
         )
         return dp_manager
 
-    def _init_instances_and_servers(
-            self,
-            entrypoints_args: EntrypointsArgs,
-            instance_args: InstanceArgs,
-            engine_args: LlumnixEngineArgs,
-            placement_group: PlacementGroup,):
+    async def _init_instances_and_servers(self) -> None:
+        self.pull_up_tasks: List[asyncio.Task] = []
         self.instance_ids: List[str] = []
         self.instances: List[ray.actor.ActorHandle] = []
         self.servers: List[ray.actor.ActorHandle] = []
 
-        request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
-
-        for _ in range(self.dp_size):
+        request_output_queue_type = QueueType(
+            self.entrypoints_args.request_output_queue_type)
+        # NOTE(shejiarui): noqa for kvt
+        dp_rank_local = 0
+        
+        for rank in range(self.dp_size):
             new_instance_id = random_uuid()
             self.instance_ids.append(new_instance_id)
                 
-            # TODO(shejiarui): how to get local_dp_ranks?
-            # Vars below will be used in DPEngineCoreActor, 
-            # need to implement the class.
-            # on_head_node = i < self.dp_size_local
-            # local_index = local_dp_ranks[i]
+            # TODO(shejiarui): how to pass dp_rank_local?
 
-            # Pull up Llumlets
+            # vllm_engine_args = self.engine_args.load_engine_args()
+            # vllm_engine_args.data_parallel_size = rank
+            # self.engine_args.engine_args = pickle.dumps(vllm_engine_args)
+            logger.info(f"[sjr] Creating Llumlet, {rank=}, {dp_rank_local=}")
             instance = Llumlet.from_args(
                 new_instance_id,
-                instance_args,
-                placement_group,
+                self.instance_args,
+                self.placement_group,
                 request_output_queue_type,
-                engine_args,
+                self.engine_args,
+                dp_rank=rank,
+                dp_rank_local=dp_rank_local,
             )
             self.instances.append(instance)
-            # Pull up APIServerActor
+            
+            self.entrypoints_args.port += self.port_offset
+            self.entrypoints_args.client_index += self.client_index_offset
+            self.port_offset += 1
+            self.client_index_offset += 1
             server = APIServerActorVLLMV1.from_args(
                 NUM_GPUS_VLLM_V1_GPU_ACTOR,
                 new_instance_id,
-                placement_group,
-                entrypoints_args,
-                engine_args,
+                self.placement_group,
+                self.entrypoints_args,
+                self.engine_args,
                 self.scaler,
                 self.manager,
                 instance,
             )
             self.servers.append(server)
+            # dp_rank_local += 1
 
-        asyncio.create_task(
-            self._done_scale_up(placement_group)
-        )
+        task = asyncio.create_task(self._done_scale_up(placement_group))
+        self.pull_up_tasks.append(task)
 
     async def _done_scale_up(self,
                              placement_group: PlacementGroup,
@@ -137,34 +149,32 @@ class DPManager:
         for i in range(self.dp_size):
             instance_id = self.instance_ids[i]
             try:
-                instance_ready = False
-                await asyncio.wait_for(self.instances[i].is_ready.remote(), 
-                                       timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
-                instance_ready = True
+                server_ready = False
                 await asyncio.wait_for(self.servers[i].is_ready.remote(), 
                                        timeout=float(llumnix_envs.SERVER_READY_TIMEOUT))
+                server_ready = True
+                await asyncio.wait_for(self.instances[i].is_ready.remote(), 
+                                       timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT))
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
                     logger.warning("Failed to scale up DP instance {}, instance is dead.".format(instance_id))
                 elif isinstance(e, asyncio.TimeoutError):
-                    if not instance_ready:
-                        logger.error("DP Instance {} is not ready in {} seconds.".format(instance_id, 
-                                                                                         float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
+                    if server_ready:
+                        logger.error("DP Instance {} is not ready in {} seconds."
+                                     .format(instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)))
                     else:
-                        logger.error("DP Server {} is not ready in {} seconds.".format(instance_id, 
-                                                                                       float(llumnix_envs.SERVER_READY_TIMEOUT)))
+                        logger.error("DP Server {} is not ready in {} seconds."
+                                     .format(instance_id, float(llumnix_envs.SERVER_READY_TIMEOUT)))
                 else:
                     logger.exception("Error in dpmanager(instance_id: {}) done_scale_up.".format(self.instance_id))
                 await self.clear_dp_ray_resources()
-        await asyncio_wait_for_with_timeout(
-            self.manager.scale_up.remote(
-                self.instance_ids, 
-                self.instances, 
-                instance_type, 
-                placement_group, 
-                self.servers)
+
+        logger.info(f"[sjr] Try to register instances and servers to Manager.")
+        await asyncio_wait_for_ray_remote_call_with_timeout(
+            self.manager.scale_up.remote, self.instance_ids, self.instances, instance_type,
+            placement_group, self.servers
         )
-        logger.info()
+        logger.info(f"[sjr] Manager scaled up for instances and servers.")
 
     @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     async def clear_dp_ray_resources(self):
@@ -175,5 +185,15 @@ class DPManager:
             await kill_instance(ins_id)
         remove_placement_group(self.instance_id)
 
-    def is_ready(self):
-        return False
+    async def is_ready(self):
+        """Called by Scaler, return true when all the DP instances and api servers
+        have been successfully created.
+        """
+        tasks = [
+            asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready.remote)
+            for instance in self.instances.values()
+        ]
+        # Note that llumnix run server and scale up instance in manager after instance is ready,
+        # so the waiting time here will not include the initialization time of instance.
+        is_ready_list = await asyncio.gather(*tasks, return_exceptions=True)
+        return all(is_ready_list)

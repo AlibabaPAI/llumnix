@@ -73,6 +73,7 @@ from llumnix.constants import (
     WATCH_DEPLOYMENT_INTERVAL,
     MAX_ACTOR_METHOD_RETRIES,
     HEARTBEAT_LOOP_INTERVAL,
+    DPMANAGER_INIT_TIMEOUT,
 )
 from llumnix import envs as llumnix_envs
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR
@@ -80,7 +81,7 @@ from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.manager import Manager
-from llumnix.entrypoints.dp_manager import DPManager
+from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
 
 logger = init_logger(__name__)
 
@@ -307,7 +308,7 @@ class Scaler:
                 elif self.engine_args.backend_type == BackendType.VLLM_V1 and \
                      self.engine_args.get_dp_args().dp_size > 1:
                     # Currently data parallelism only support vLLM V1
-                    # TODO(shejiarui): what will happen if DPManager cause Exception?
+                    # TODO(shejiarui): Add exception handler if DPManager fail
                     dp_manager = DPManager.from_args(new_instance_id, self.entrypoints_args, 
                                                      self.instance_args, self.engine_args, new_pg)
                 else:
@@ -398,6 +399,8 @@ class Scaler:
                 # Not check right after scaler initialized, so sleep at the beginning.
                 await asyncio.sleep(interval)
                 curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
+                logger.info(f"[sjr] {len(curr_pgs)=}, {len(curr_servers)=}, {len(curr_instances)=}")
+                # TODO(shejiarui): fix it in DP
                 assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
                 tasks = []
                 for instance_id in curr_pgs:
@@ -504,8 +507,22 @@ class Scaler:
                               service_name: str = None
                               ) -> PlacementGroup:
         backend_type = engine_args.backend_type
-        # num_cpus=2+(0/1), for Llumlet + ActorOutputForwarder + (ApiServerActor)
-        if not BackendType.is_sim_backend(backend_type):
+        if backend_type == BackendType.VLLM_V1 and engine_args.get_dp_args().dp_size > 1:
+            dp_size = engine_args.get_dp_args().dp_size
+            world_size = engine_args.get_world_size()
+            # num_cpus: [lumlet + ActorOutputMediator + (ApiServerActor)] * dp_size
+            # num_gpus: world_size * dp_size
+            placement_group = initialize_placement_group(
+                placement_group_name,
+                num_cpus=(2+int(init_server)) * dp_size,
+                num_gpus=world_size * dp_size,
+                dp_size=dp_size,
+                detached=True,
+                block=block,
+                node_id=node_id,
+            )
+        elif not BackendType.is_sim_backend(backend_type):
+            # num_cpus=2+(0/1), for Llumlet + ActorOutputForwarder + (ApiServerActor)
             # num_gpus=world_size, for world_size Workers
             world_size = engine_args.get_world_size()
             resources = get_service_resouces(service_name, world_size)
@@ -517,21 +534,6 @@ class Scaler:
                 block=block,
                 node_id=node_id,
                 resources=resources,
-            )
-        elif self.engine_args.backend_type == BackendType.VLLM_V1 and \
-             engine_args.get_dp_args().dp_size > 1:
-            dp_size = engine_args.get_dp_args().dp_size
-            world_size = engine_args.get_world_size()
-            # CPU: [lumlet + ActorOutputMediator + (ApiServerActor)] * dp_size
-            # GPU: world_size * dp_size
-            placement_group = initialize_placement_group(
-                placement_group_name,
-                num_cpus=(2+int(init_server)) * dp_size,
-                num_gpus=world_size * dp_size,
-                dp_size=dp_size,
-                detached=True,
-                block=block,
-                node_id=node_id,
             )
         else:
             placement_group = initialize_placement_group(

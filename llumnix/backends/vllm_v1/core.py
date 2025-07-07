@@ -32,7 +32,7 @@ from vllm.v1.request import Request, RequestStatus
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.backends.backend_interface import BackendInterface, EngineState
+from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc, 
                                                  AsyncDPEngineCoreProc)
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
@@ -275,12 +275,12 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
-        AsyncDPEngineCoreProc().__init__(vllm_config, on_head_node, 
-                                         handshake_address, executor_class, log_stats)
+        AsyncDPEngineCoreProc.__init__(self, vllm_config, on_head_node, 
+                                       handshake_address, executor_class, log_stats)
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        self.output_mediator = OutputMediator(
+        self.output_mediator = OutputForwarder(
             instance_id,
             request_output_queue_type,
             request_output_forwarding_mode,
@@ -308,6 +308,8 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         request_output_forwarding_mode: RequestOutputForwardingMode,
         abort_request_callback: Coroutine,
         latency_mem: Optional[LatencyMemData] = None,
+        dp_rank: int = 0,
+        dp_rank_local: Optional[int] = None,
     ) -> "AsyncDPEngineCoreProcLlumnix":
         """Creates an DPEngineCoreProc from the engine arguments."""
         # TODO(shejiarui): set it to None in EngineArgs
@@ -317,6 +319,8 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         logger.info("engine_config: {}".format(engine_config))
         # Hack to pass placement_group for init workers.
         engine_config.parallel_config.placement_group = placement_group
+        engine_config.parallel_config.data_parallel_rank = dp_rank
+        engine_config.parallel_config.data_parallel_rank_local = dp_rank_local
         # Initialize the cluster and specify the executor class.
         # pylint: disable=import-outside-toplevel
         if latency_mem is not None:
@@ -366,7 +370,9 @@ class BackendVLLMV1(BackendInterface):
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         instance_args: InstanceArgs,
-        llumnix_engine_args: LlumnixEngineArgs
+        llumnix_engine_args: LlumnixEngineArgs,
+        dp_rank: int = 0,
+        dp_rank_local: Optional[int] = None
     ) -> None:
         self.engine_disagg_inst_id = instance_id
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args() # type: ignore
@@ -381,6 +387,8 @@ class BackendVLLMV1(BackendInterface):
                 backend_type=BackendType.VLLM_V1,
                 request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
                 abort_request_callback=self.abort_request,
+                dp_rank=dp_rank,
+                dp_rank_local=dp_rank_local
             )
         else:
             # FIXME(zhaozhiyu): check args

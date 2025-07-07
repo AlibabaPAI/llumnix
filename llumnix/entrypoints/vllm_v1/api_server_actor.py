@@ -35,6 +35,7 @@ class APIServerActorVLLMV1(APIServerActor):
                  manager: "ray.actor.ActorHandle",
                  instance: "ray.actor.ActorHandle"):
         self.client_index = entrypoints_args.client_index
+        logger.info(f"[sjr] {self.client_index=}")
         super().__init__(instance_id, entrypoints_args, engine_args,
                          scaler, manager, instance)
 
@@ -42,6 +43,7 @@ class APIServerActorVLLMV1(APIServerActor):
         if entrypoints_args.host not in ("127.0.0.1", "0.0.0.0"):
             entrypoints_args.host = get_ip_address()
         self.host = entrypoints_args.host
+        logger.info(f"[sjr] socket bind {self.host}:{entrypoints_args.port}")
 
         # Set up listen address and socket
         self.sock = socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM)

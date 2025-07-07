@@ -169,8 +169,8 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         Exits when an engine step needs to be performed.
         """
         waited = False
-        # Remove condition: not self.engines_running
-        while not self.scheduler.has_requests():
+        # pylint: disable=access-member-before-definition
+        while not self.engines_running and not self.scheduler.has_requests():
             if logger.isEnabledFor(DEBUG) and self.input_queue.empty():
                 logger.debug("EngineCore waiting for work.")
                 waited = True

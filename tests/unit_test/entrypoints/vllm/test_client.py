@@ -95,6 +95,16 @@ def gen_request_output(
         outputs=[gen_completion_output(i, tokens_len + i) for i in range(output_len)],
     )
 
+def gen_llumnix_request_output(
+    request_id: str, tokens_len: int = 1, output_len: int = 1, finished: bool = False
+) -> LlumnixRequestOuputVLLM:
+    return LlumnixRequestOuputVLLM(
+        request_id=request_id,
+        instance_id="mock_instance_id",
+        engine_output=gen_request_output(request_id, tokens_len, output_len, finished),
+        request_timestamps=None,
+    )
+
 
 def get_correct_order_output(
     request_id: str, length: int = 1000, max_outputs_len: int = 1
@@ -102,9 +112,9 @@ def get_correct_order_output(
     i = 0
     while i < length - 1:
         output_len = random.randint(1, min(length - 1 - i, max_outputs_len))
-        yield gen_request_output(request_id, i + 1, output_len)
+        yield gen_llumnix_request_output(request_id, i + 1, output_len)
         i += output_len
-    yield gen_request_output(request_id, i + 1, 1, finished=True)
+    yield gen_llumnix_request_output(request_id, i + 1, 1, finished=True)
 
 
 def get_out_of_order_output(
@@ -117,10 +127,10 @@ def get_out_of_order_output(
     reqeust_outputs = []
     while i < length - 1:
         output_len = random.randint(1, min(length - 1 - i, max_outputs_len))
-        reqeust_outputs.append(gen_request_output(request_id, i + 1, output_len))
+        reqeust_outputs.append(gen_llumnix_request_output(request_id, i + 1, output_len))
         i += output_len
     random.shuffle(reqeust_outputs)
-    last_output: RequestOutput = gen_request_output(request_id, i + 1, 1, finished=True)
+    last_output: LlumnixRequestOuputVLLM = gen_llumnix_request_output(request_id, i + 1, 1, finished=True)
     if is_finished_flag_at_last_output:
         reqeust_outputs.append(last_output)
     else:
@@ -130,7 +140,8 @@ def get_out_of_order_output(
         yield output
 
 
-def check_processed_output(processed_output: list[RequestOutput], output_length):
+def check_processed_output(processed_output: list[LlumnixRequestOuputVLLM], output_length):
+    processed_output=[llumnix_request_output.get_engine_output() for llumnix_request_output in processed_output]
     last_completion_token = 0
     assert len(processed_output[-1].outputs[-1].token_ids) == output_length
     if output_length == 0:
@@ -176,7 +187,7 @@ def test_out_of_order_output(max_outputs_len, is_finished_flag_at_last_output):
             max_outputs_len=max_outputs_len,
             is_finished_flag_at_last_output=True,
         ):
-            processed_output: RequestOutput = client._process_output_order(request_id, request_output)
+            processed_output: LlumnixRequestOuputVLLM = client._process_output_order(request_id, request_output)
             if processed_output:
                 res.append(processed_output)
         check_processed_output(res, output_length)

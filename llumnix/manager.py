@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import asyncio
-import time
 import csv
 import os
 from typing import Dict, List, Union, Iterable

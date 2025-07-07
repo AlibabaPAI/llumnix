@@ -28,7 +28,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.constants import (RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RETRY_BIND_ADDRESS_INTERVAL,
                                MAX_BIND_ADDRESS_RETRY_TIMES, ZMQ_IO_THREADS, ZMQ_RPC_TIMEOUT)
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.utils import get_ip_address, get_free_port, is_traced_request
+from llumnix.utils import get_ip_address, get_free_port
 
 logger = init_logger(__name__)
 

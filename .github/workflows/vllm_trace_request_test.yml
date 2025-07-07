@@ -36,7 +36,7 @@ jobs:
         script: |
           try {
             const fs = require('fs');
-            const filePath = 'performance.txt';
+            const filePath = 'trace_info.txt';
             const commentBody = fs.readFileSync(filePath, 'utf8');
             await github.rest.issues.createComment({
               issue_number: context.issue.number,

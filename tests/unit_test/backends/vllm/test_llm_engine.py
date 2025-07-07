@@ -33,7 +33,7 @@ from llumnix.backends.vllm.sim_executor import SimGPUExecutor
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.backends.vllm.sequence import LlumnixRequest
 from llumnix.queue.queue_type import QueueType
-from llumnix.server_info import ServerInfo
+from llumnix.server_info import RequestServerInfo
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 from llumnix.utils import random_uuid, BackendType
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
@@ -135,7 +135,7 @@ def test_from_engine_args_sim(ray_env):
 async def test_add_requset(ray_env):
     llm_engine = init_llm_engine("0")
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
-    server_info = ServerInfo(None, None, None, None, None)
+    server_info = RequestServerInfo(None, None, None, None, None)
     await llm_engine.add_request("0", server_info, math.inf, "prompt", sampling_params)
     assert len(llm_engine.scheduler[0].waiting) == 1
     assert llm_engine.scheduler[0].waiting[-1].request_id == "0"
@@ -158,8 +158,8 @@ async def test_put_request_outputs_to_server(ray_env, request_output_forwarding_
     completion_output = CompletionOutput(0, "", [], 0.0, None)
     request_outputs = [RequestOutput(request_id, "", [], None, [completion_output], finished=True)]
     server_id = random_uuid()
-    server_infos = [ServerInfo(server_id, None, None, None, None)]
-    server_request_outputs, server_info_dict = llm_engine._gen_server_request_outputs(request_outputs, server_infos)
+    request_server_infos = [RequestServerInfo(server_id, None, None, None, None)]
+    server_request_outputs, server_info_dict = llm_engine._gen_server_request_outputs(request_outputs, request_server_infos)
     await llm_engine.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
     if request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
         server_request_outputs, server_info_dict = ray.get(actor_forwarder.get.remote())
@@ -167,9 +167,9 @@ async def test_put_request_outputs_to_server(ray_env, request_output_forwarding_
         llumnix_response: LlumnixRequestOuputVLLM = request_outputs_engine[0]
         assert llumnix_response.request_id == request_id
         assert llumnix_response.instance_id == instance_id
-        assert list(server_info_dict.keys())[0] == server_infos[0].server_id
+        assert list(server_info_dict.keys())[0] == request_server_infos[0].server_id
     else:
         time.sleep(1.0)
         req_outputs, server_info = request_output_queue_client.get()
         assert req_outputs[0].request_id == request_outputs[0].request_id
-        assert server_info.server_id == server_infos[0].server_id
+        assert server_info.server_id == request_server_infos[0].server_id

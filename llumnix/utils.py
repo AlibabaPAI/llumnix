@@ -426,11 +426,3 @@ def is_traced_request(
     return (
         hasattr(item, REQUEST_TIMESTAMPS_ATTR_STR) and getattr(item, REQUEST_TIMESTAMPS_ATTR_STR)
     ) or (hasattr(item, LLUMNIX_TRACE_REQUEST) and getattr(item, LLUMNIX_TRACE_REQUEST))
-
-
-def disable_request_trace(item: Union["ServerInfo", "LlumnixServerRequest"]):
-    setattr(item, LLUMNIX_TRACE_REQUEST, False)
-
-
-def enable_request_trace(item: Union["ServerInfo", "LlumnixServerRequest", "SamplingParams"]):
-    setattr(item, LLUMNIX_TRACE_REQUEST, True)

@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import copy
+from typing import Optional
 
 from ray.util.queue import Queue
 from llumnix.metrics.timestamps import RequestTimestamps
@@ -31,10 +32,10 @@ class ServerInfo:
                  request_output_queue_port: int) -> None:
         self.server_id = server_id
         self.request_output_queue_type = request_output_queue_type
+        self.request_output_queue = None
         if request_output_queue_type == QueueType.RAYQUEUE:
             assert request_output_queue is not None
-        self.request_output_queue: Queue | None = None
-        if request_output_queue_type == QueueType.RAYQUEUE:
+            # type of request_output_queue is ray.Queue when create this class at RequestServerInfo.from_server_info
             self.request_output_queue = (
                 request_output_queue.queue
                 if isinstance(request_output_queue, RayQueueServer)
@@ -53,7 +54,7 @@ class RequestServerInfo(ServerInfo):
         self,
         server_id: str,
         request_output_queue_type: QueueType,
-        request_output_queue: RayQueueServer | Queue,
+        request_output_queue: RayQueueServer,
         request_output_queue_ip: str,
         request_output_queue_port: int,
         enable_trace: bool = False,
@@ -66,7 +67,7 @@ class RequestServerInfo(ServerInfo):
             request_output_queue_port,
         )
         self.enable_trace: bool = enable_trace
-        self.request_timestamps: RequestTimestamps | None = RequestTimestamps() if enable_trace else None
+        self.request_timestamps: Optional[RequestTimestamps] = RequestTimestamps() if enable_trace else None
 
     @classmethod
     def deepcopy_from_server_info(

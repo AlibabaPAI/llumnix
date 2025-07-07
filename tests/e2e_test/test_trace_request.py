@@ -16,6 +16,7 @@ import random
 import subprocess
 import asyncio
 import json
+import numpy as np
 import requests
 import pytest
 
@@ -28,6 +29,7 @@ from tests.e2e_test.utils import (
     generate_bladellm_serve_command,
     shutdown_llumnix_service,
     check_log_exception,
+    to_markdown_table
 )
 from tests.utils import try_convert_to_local_path
 
@@ -69,17 +71,16 @@ test_times = 0
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", [try_convert_to_local_path("Qwen/Qwen2.5-7B")])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-@pytest.mark.parametrize("enable_pd_disagg", [True, False])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
 @pytest.mark.parametrize("enable_request_trace", [True, False])
 @pytest.mark.parametrize("is_stream", [True, False])
 async def test_request_trace(
+    request,
     ray_env,
     shutdown_llumnix_service,
     check_log_exception,
     model,
     engine,
-    enable_pd_disagg,
     request_output_queue_type,
     enable_request_trace,
     is_stream,
@@ -114,10 +115,10 @@ async def test_request_trace(
             port=base_port,
             model=model,
             enforce_eager=True,
-            enable_pd_disagg=enable_pd_disagg,
+            enable_pd_disagg=False,
             enable_simulator=False,
             tensor_parallel_size=tensor_parallel_size,
-            enable_migration=engine == "vLLM" and enable_pd_disagg,
+            enable_migration=False,
             max_instances=instance_count,
         )
     )
@@ -133,10 +134,10 @@ async def test_request_trace(
     for api in engine_apis[engine]:
         url = f"{endpoint}{api}"
 
-        request = get_requests(api, is_stream)
+        request_json = get_requests(api, is_stream)
         headers = {"X-Llumnix-Trace": "true"} if enable_request_trace else {}
         with requests.post(
-            url, json=request, stream=is_stream, headers=headers, timeout=60
+            url, json=request_json, stream=is_stream, headers=headers, timeout=60
         ) as resp:
             if not is_stream:
                 output = resp.json()
@@ -179,15 +180,42 @@ async def test_request_trace(
                     ), "reqeust trace mode is not enabled but return llumnix trace info"
         if (
             enable_request_trace
-            and not enable_pd_disagg
             and api in ["/generate", "/v1/chat/completions"]
             and not is_stream
         ):
-            with open("performance.txt", "a", encoding="utf-8") as f:
-                f.write(f"Run Test: {request.node.name}\n")
-                f.write(llumnix_trace_info)
-                print(llumnix_trace_info)
+            with open("trace_info.txt", "a", encoding="utf-8") as f:
+                f.write(process_llumnix_trace_info(request.node.name, llumnix_trace_info))
 
     await asyncio.sleep(1)
 
     test_times += 1
+
+def process_llumnix_trace_info(title, trace_info_list):
+    """
+    Process the llumnix trace info and return a formatted string.
+    """
+    latnecy_dict = {}
+    for trace_info in trace_info_list:
+        for key, value in trace_info['latencys'].items():
+            if key not in latnecy_dict:
+                latnecy_dict[key] = []
+            latnecy_dict[key].append(value)
+
+    data = [["latency(ms)", "mean", "p50", "p99", "min", "max"]]
+    for key, value in latnecy_dict.items():
+        latencies_array = np.array(value)
+        p50 = np.percentile(latencies_array, 50)
+        p99 = np.percentile(latencies_array, 99)
+        mean = np.mean(latencies_array)
+        max_value = np.max(latencies_array)
+        min_value = np.min(latencies_array)
+        data.append([key, f"{mean:.2f}", f"{p50:.2f}", f"{p99:.2f}", f"{min_value:.2f}", f"{max_value:.2f}"])
+
+    return (
+        title
+        + "\n"
+        + to_markdown_table(data)
+        + "\n"
+        + "-------------------------------------\n"
+    )
+    

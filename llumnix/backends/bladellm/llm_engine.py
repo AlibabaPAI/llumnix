@@ -70,7 +70,7 @@ from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.utils import BackendType
 from llumnix.request_output import LlumnixRequestOuput
-from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
+from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
 from llumnix.utils import RequestIDType, exception_wrapper_async
 from llumnix.backends.backend_interface import BackendInterface

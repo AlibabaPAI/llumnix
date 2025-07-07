@@ -200,7 +200,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         if reqs:
             tot_blocks = defaultdict(list)
             for req in reqs:
-                if req.status != RequestStatus.RUNNING:
+                if req.llumnix_status != RequestStatus.RUNNING:
                     continue
                 # block_ids (List[List[int]]): A two-level list where
                 # the outer list corresponds to KV cache groups

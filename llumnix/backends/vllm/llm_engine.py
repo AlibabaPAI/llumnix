@@ -547,7 +547,7 @@ class BackendVLLM(BackendInterface):
         # When free_src_request is called, it means that all migration operations is successful.
         # However, there exists migrating_out_seq_group_metadata in worker only when migrating running request,
         # so the request id does not always exists.
-        if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
             # pylint: disable=protected-access
             asyncio.create_task(
                 self._run_workers_async(

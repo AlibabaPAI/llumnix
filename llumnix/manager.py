@@ -147,7 +147,8 @@ class Manager:
                 NO_INSTANCE_RETRY_GENERATE_INTERVAL, request_id))
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
-        prefill_instance_id, decode_instance_id, request_expected_steps = self.global_scheduler.dispatch(request_id)
+        prefill_instance_id, decode_instance_id, request_expected_steps = \
+            self.global_scheduler.dispatch(request_id, dispatch_context=kwargs)
         target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id, kwargs)
         request_processing_context.add_trace_timeline('manager_generate_timestamp')
         asyncio.create_task(
@@ -511,7 +512,6 @@ class Manager:
             'step_id',
             'gpu_cache_usage',
             'num_available_gpu_blocks',
-            'dispatch_load_metric',
             'migration_load_metric',
             'num_running_requests',
             'num_waiting_requests',
@@ -525,6 +525,10 @@ class Manager:
             'num_blocks_first_waiting_request',
             'num_blocks_all_waiting_requests',
             'waiting_time_first_waiting_request',
+            'kv_blocks_ratio',
+            'remaining_steps',
+            'adaptive_decode',
+            'miss_waiting_tokens',
         ])
 
     def _log_instance_infos_to_csv(self, instance_infos: List[InstanceInfo]) -> None:
@@ -542,7 +546,6 @@ class Manager:
                     instance_info.step_id,
                     instance_info.gpu_cache_usage,
                     instance_info.num_available_gpu_blocks,
-                    instance_info.dispatch_load_metric,
                     instance_info.migration_load_metric,
                     instance_info.num_running_requests,
                     instance_info.num_waiting_requests,
@@ -555,6 +558,10 @@ class Manager:
                     instance_info.num_seqs,
                     instance_info.num_blocks_first_waiting_request,
                     instance_info.num_blocks_all_waiting_requests,
-                    instance_info.waiting_time_first_waiting_request
+                    instance_info.waiting_time_first_waiting_request,
+                    instance_info.kv_blocks_ratio,
+                    instance_info.remaining_steps,
+                    instance_info.adaptive_decode,
+                    instance_info.miss_waiting_tokens,
                 ])
         self.instance_info_file.flush()

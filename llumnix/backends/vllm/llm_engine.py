@@ -303,7 +303,9 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler[0].waiting[-1]
         request_processing_context.add_trace_timeline('engine_add_request_timestamp')
-        self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(request_id, request_processing_context, expected_steps, [seq_group.get_seqs()[0]],
+        hit_length = kwargs.get("hit_length", 0)
+        transfer_penalty = kwargs.get("transfer_penalty", 1)
+        self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(request_id, request_processing_context, expected_steps, hit_length, transfer_penalty, [seq_group.get_seqs()[0]],
                                                              seq_group.metrics.arrival_time, seq_group.sampling_params, seq_group.lora_request,
                                                              seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
                                                              seq_group.priority)

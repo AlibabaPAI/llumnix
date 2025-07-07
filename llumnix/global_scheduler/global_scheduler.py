@@ -50,7 +50,9 @@ class GlobalScheduler:
                                                     global_scheduler_config.enable_engine_pd_disagg,
                                                     global_scheduler_config.enable_engine_semi_pd_disagg,
                                                     global_scheduler_config.enable_adaptive_pd,
-                                                    self.global_scheduler_metrics.dispatch_latency)
+                                                    global_scheduler_config.dispatch_load_metric_config,
+                                                    self.global_scheduler_metrics.dispatch_latency,
+                                                    global_scheduler_config.cache_aware_query_client_config_path)
 
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
@@ -66,10 +68,11 @@ class GlobalScheduler:
                                                   global_scheduler_config.scaling_load_metric,
                                                   global_scheduler_config.enable_pd_disagg)
 
+    # TODO(baizhuoyan): Since dispatch_load_metric is no longer available, it is temporarily replaced with remaining_steps.
     def update_instance_infos(self, instance_infos: List[InstanceInfo]) -> None:
         for instance_info in instance_infos:
             self.global_scheduler_metrics.dispatch_load.observe(
-                value=instance_info.dispatch_load_metric,
+                value=instance_info.remaining_steps,
                 labels={"instance_id": instance_info.instance_id},
             )
             if instance_info.instance_id in self.instance_id_set:
@@ -101,12 +104,13 @@ class GlobalScheduler:
                     request_id, self.instance_info[prefill_instance_id].instance_type, prefill_instance_id,
                     self.instance_info[decode_instance_id].instance_type, decode_instance_id))
 
-    def dispatch(self, request_id: RequestIDType) -> Tuple[str, str, int]:
+    def dispatch(self, request_id: RequestIDType, dispatch_context: Dict) -> Tuple[str, str, int]:
         # instance_num_requests will be updated inplace in dispatch_scheduler.dispatch
         if not self._enable_pd():
             no_constrains_instance_id = self.dispatch_scheduler.dispatch_no_constrains(
                 self.instance_info,
-                self.instance_num_requests
+                self.instance_num_requests,
+                dispatch_context,
             )
             prefill_instance_id = no_constrains_instance_id
             decode_instance_id = no_constrains_instance_id
@@ -122,7 +126,8 @@ class GlobalScheduler:
                 self.prefill_instance_info,
                 self.prefill_instance_num_requests,
                 self.decode_instance_info,
-                self.decode_instance_num_requests
+                self.decode_instance_num_requests,
+                dispatch_context,
             )
 
             self.global_scheduler_metrics.dispatch_counter.increase(

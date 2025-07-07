@@ -151,6 +151,18 @@ _C.MANAGER.ENABLE_PDD_NODE_AFFINITY_SCHEDULING = False
 _C.MANAGER.DISPATCH_POLICY = 'load'
 # Number of candidate instances for dispatch policy
 _C.MANAGER.TOPK_RANDOM_DISPATCH = 1
+# Instance dispatch load metric
+_C.MANAGER.DISPATCH_LOAD_METRIC = 'remaining_steps'
+# Prefill instance dispatch load metric
+_C.MANAGER.DISPATCH_PREFILL_LOAD_METRIC = 'kv_blocks_ratio'
+# Prefill instance dispatch load metric when used for decoding
+_C.MANAGER.DISPATCH_PREFILL_AS_DECODE_LOAD_METRIC = 'adaptive_decode'
+# Decode instance dispatch load metric
+_C.MANAGER.DISPATCH_DECODE_LOAD_METRIC = 'remaining_steps'
+# Decode instance dispatch load metric when used for prefilling
+_C.MANAGER.DISPATCH_DECODE_AS_PREFILL_LOAD_METRIC = 'kv_blocks_ratio'
+# The config file path for initializing QueryClient under the cache-aware policy
+_C.MANAGER.CACHE_AWARE_QUERY_CLIENT_CONFIG_PATH = "llumnix/config/query_client_config.json"
 
 # -------------------------- MIGRATION CONFIGURATION --------------------------
 # Enable migrate requests between instances
@@ -196,16 +208,6 @@ _C.INSTANCE.ENGINE_DISAGG_INST_ID_ENV_VAR = None
 _C.INSTANCE.REQUEST_OUTPUT_FORWARDING_MODE = "thread"
 
 # ------------------------- LOAD METRICS CONFIGURATION ------------------------
-# Instance dispatch load metric
-_C.INSTANCE.DISPATCH_LOAD_METRIC = 'remaining_steps'
-# Prefill instance dispatch load metric
-_C.INSTANCE.DISPATCH_PREFILL_LOAD_METRIC = 'kv_blocks_ratio'
-# Prefill instance dispatch load metric when used for decoding
-_C.INSTANCE.DISPATCH_PREFILL_AS_DECODE_LOAD_METRIC = 'adaptive_decode'
-# Decode instance dispatch load metric
-_C.INSTANCE.DISPATCH_DECODE_LOAD_METRIC = 'remaining_steps'
-# Decode instance dispatch load metric when used for prefilling
-_C.INSTANCE.DISPATCH_DECODE_AS_PREFILL_LOAD_METRIC = 'kv_blocks_ratio'
 # Instance migration load metric
 _C.INSTANCE.MIGRATION_LOAD_METRIC = 'remaining_steps'
 

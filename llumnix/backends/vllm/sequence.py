@@ -17,9 +17,10 @@ from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, Reques
 
 
 class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
-    def __init__(self, request_id, request_processing_context, expected_steps: int, *args, **kwargs) -> None:
+    def __init__(self, request_id, request_processing_context, expected_steps: int, num_hit_tokens: int = 0, transfer_penalty: int = 1, *args, **kwargs) -> None:
         SequenceGroup.__init__(self, request_id, *args, **kwargs)
-        LlumnixRequest.__init__(self, request_id, request_processing_context, expected_steps)
+        LlumnixRequest.__init__(self, request_id, request_processing_context, expected_steps, num_hit_tokens, transfer_penalty)
+    
 
     @property
     def block_size(self) -> int:

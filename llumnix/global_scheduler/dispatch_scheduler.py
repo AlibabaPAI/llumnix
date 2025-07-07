@@ -12,33 +12,16 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple, Optional
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceType, InstanceInfo
 from llumnix.constants import DISPATCH_LOG_FREQUENCY
-from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory, DispatchPolicy
+from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory, DispatchPolicy, DispatchLoadMetricConfig
 from llumnix.global_scheduler.dispatch_filter import DispatchFilter, LoadBusyFilter
 from llumnix.metrics.metrics_types import Summary
 
 logger = init_logger(__name__)
-
-
-@dataclass
-class DispatchRule:
-    instance_type: InstanceType = None # used to determine which load metric is used
-    instance_filter: DispatchFilter = None
-
-    def filter(self,
-               instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int],
-               ) -> Tuple[List[InstanceInfo], Dict[str, int]]:
-        available_instance_infos, available_instance_num_requests = instance_infos, instance_num_requests
-        if self.instance_filter is not None:
-            available_instance_infos, available_instance_num_requests = \
-                self.instance_filter.filter(available_instance_infos, available_instance_num_requests)
-        return available_instance_infos, available_instance_num_requests
-
 
 class DispatchScheduler:
     def __init__(self,
@@ -48,7 +31,9 @@ class DispatchScheduler:
                  enable_engine_pd_disagg: bool,
                  enable_engine_semi_pd_disagg: bool,
                  enable_adaptive_pd: bool,
-                 dispatch_latency_metric: Summary = Summary("dummy")) -> None:
+                 dispatch_load_metric_config: DispatchLoadMetricConfig,
+                 dispatch_latency_metric: Summary = Summary("dummy"),
+                 cache_aware_query_client_config_path: str = None) -> None:
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
         self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
@@ -56,7 +41,10 @@ class DispatchScheduler:
 
         self.dispatch_policy: DispatchPolicy = DispatchPolicyFactory.get_policy(
             dispatch_policy,
-            topk_random_dispatch=topk_random_dispatch)
+            cache_aware_query_client_config_path=cache_aware_query_client_config_path,
+            topk_random_dispatch=topk_random_dispatch,
+            dispatch_load_metric_config=dispatch_load_metric_config
+        )
 
         self.dispatch_latency_metric = dispatch_latency_metric
 
@@ -67,26 +55,8 @@ class DispatchScheduler:
             InstanceType.PREFILL: 0
         }
 
-        self._build_phase_rules()
-
-    def _build_phase_rules(self):
-        if not self.enable_engine_pd_disagg and not self.enable_pd_disagg and not self.enable_engine_semi_pd_disagg:
-            self.no_constrains_rules = []
-            self.no_constrains_rules.append(DispatchRule(InstanceType.NO_CONSTRAINTS, None))
-        else:
-            self.busy_filter = LoadBusyFilter()
-            self.prefill_dispatch_rules = []
-            if self.enable_adaptive_pd:
-                self.prefill_dispatch_rules.append(DispatchRule(InstanceType.PREFILL, self.busy_filter))
-                self.prefill_dispatch_rules.append(DispatchRule(InstanceType.DECODE_AS_PREFILL, self.busy_filter))
-            self.prefill_dispatch_rules.append(DispatchRule(InstanceType.PREFILL, None))
-
-            self.decode_dispatch_rules = []
-            if not self.enable_pd_disagg:
-                if self.enable_adaptive_pd:
-                    self.decode_dispatch_rules.append(DispatchRule(InstanceType.DECODE, self.busy_filter))
-                    self.decode_dispatch_rules.append(DispatchRule(InstanceType.PREFILL_AS_DECODE, self.busy_filter))
-                self.decode_dispatch_rules.append(DispatchRule(InstanceType.DECODE, None))
+        # enable_early_reject is only a tag — nothing is actually implemented for it.
+        self.enable_early_reject = False
 
     def _log_instance_dispatch_info(self, instance_type: InstanceType, instance_num_requests: Dict[str, int]):
         self.instance_type_num_requests[instance_type] += 1
@@ -98,36 +68,55 @@ class DispatchScheduler:
                     instance_type, instance_id, num_requests))
 
     def _dispatch(self,
-                  phase_rules: List[DispatchRule],
-                  phase_elements: List[Tuple[Dict[str, InstanceInfo], Dict[str, int]]]) -> str:
-        target_instance_id = None
-        for rule, element in zip(phase_rules, phase_elements):
-            instance_infos, instance_num_requests = element
-            available_instance_infos, available_instance_num_requests = rule.filter(instance_infos, instance_num_requests)
-            if len(available_instance_infos) > 0:
-                target_instance_id = self.dispatch_policy.dispatch(
-                    instance_type=rule.instance_type,
-                    instance_num_requests=available_instance_num_requests,
-                    available_instance_infos=available_instance_infos,
-                )
-                instance_num_requests[target_instance_id] += 1
-                break
+                  instance_type: InstanceType,
+                  primary_instance_infos: Dict[str, InstanceInfo],
+                  primary_instance_num_requests: Dict[str, int],
+                  secondary_instance_infos: Optional[Dict[str, InstanceInfo]],
+                  secondary_instance_num_requests: Optional[Dict[str, int]],
+                  dispatch_context: Dict,
+                  ) -> str:
+        # Filter primary instances based on dispatch policy
+        candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
+            instance_type, primary_instance_infos, primary_instance_num_requests)
+        
+        # Adaptive PD fallback: try secondary instance type if primary unavailable
+        if not candidate_instance_infos and self.enable_adaptive_pd:
+            fallback_type = InstanceType.DECODE if instance_type == InstanceType.PREFILL else InstanceType.PREFILL
+            candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
+                fallback_type, secondary_instance_infos, secondary_instance_num_requests)
+            
+            if candidate_instance_infos:
+                instance_type = (InstanceType.DECODE_AS_PREFILL if instance_type == InstanceType.PREFILL 
+                               else InstanceType.PREFILL_AS_DECODE)
+        
+        # Early reject or fallback to primary instances if no candidates found
+        if not candidate_instance_infos:
+            if self.enable_early_reject:
+                return None
+            candidate_instance_infos, candidate_instance_num_requests = primary_instance_infos, primary_instance_num_requests
+        
+        # Select target instance and update request count
+        target_instance_id = self.dispatch_policy.select(
+            instance_type, candidate_instance_num_requests, candidate_instance_infos, dispatch_context)
+        candidate_instance_num_requests[target_instance_id] += 1
+        
         assert target_instance_id is not None, "No available instance for dispatch."
         return target_instance_id
 
     def dispatch_no_constrains(self,
                                instance_infos: Dict[str, InstanceInfo],
-                               instance_num_requests: Dict[str, int]):
+                               instance_num_requests: Dict[str, int],
+                               dispatch_context: Dict,
+                               ):
         instance_type = InstanceType.NO_CONSTRAINTS
-        phase_elements = [(instance_infos, instance_num_requests)]
 
         with self.dispatch_latency_metric.observe_time(
             labels={"instance_type": InstanceType.NO_CONSTRAINTS.value}
         ):
-            targer_instance_id = self._dispatch(self.no_constrains_rules, phase_elements)
+            target_instance_id = self._dispatch(instance_type, instance_infos, instance_num_requests, None, None, dispatch_context)
 
         self._log_instance_dispatch_info(instance_type, instance_num_requests)
-        return targer_instance_id
+        return target_instance_id
 
     # For llumnix-based pd (enable_pd_disagg), the decode instance is not selected in the dispatch scheduler,
     # but rather based on the pair-migration-policy. For engine-based pd (enable_engine_pd_disagg), the decode
@@ -139,24 +128,20 @@ class DispatchScheduler:
                     prefill_instance_infos: Dict[str, InstanceInfo],
                     prefill_instance_num_requests: Dict[str, int],
                     decode_instance_infos: Dict[str, InstanceInfo],
-                    decode_instance_num_requests: Dict[str, int]) -> Tuple[str, str]:
-        prefill_dispatch_elements, decode_dispatch_elements = [], []
-        if self.enable_adaptive_pd:
-            prefill_dispatch_elements.extend([
-                (prefill_instance_infos, prefill_instance_num_requests),
-                (decode_instance_infos, decode_instance_num_requests)
-            ])
-            decode_dispatch_elements.extend([
-                (decode_instance_infos, decode_instance_num_requests),
-                (prefill_instance_infos, prefill_instance_num_requests)
-            ])
-        prefill_dispatch_elements.append((prefill_instance_infos, prefill_instance_num_requests))
-        decode_dispatch_elements.append((decode_instance_infos, decode_instance_num_requests))
-
+                    decode_instance_num_requests: Dict[str, int],
+                    dispatch_context: Dict,
+                    ) -> Tuple[str, str]:
         with self.dispatch_latency_metric.observe_time(
             labels={"instance_type": InstanceType.PREFILL.value}
         ):
-            prefill_instance_id = self._dispatch(self.prefill_dispatch_rules, prefill_dispatch_elements)
+            prefill_instance_id = self._dispatch(
+                InstanceType.PREFILL,
+                prefill_instance_infos,
+                prefill_instance_num_requests,
+                decode_instance_infos,
+                decode_instance_num_requests,
+                dispatch_context
+            )
         instance_num_requests[prefill_instance_id] += 1
 
         self._log_instance_dispatch_info(InstanceType.PREFILL, prefill_instance_num_requests)
@@ -170,7 +155,14 @@ class DispatchScheduler:
                     decode_instance_id = prefill_instance_id
                     decode_instance_num_requests[decode_instance_id] += 1
                 else:
-                    decode_instance_id = self._dispatch(self.decode_dispatch_rules, decode_dispatch_elements)
+                    decode_instance_id = self._dispatch(
+                        InstanceType.DECODE,
+                        decode_instance_infos,
+                        decode_instance_num_requests,
+                        prefill_instance_infos,
+                        prefill_instance_num_requests,
+                        dispatch_context
+                    )
             instance_num_requests[decode_instance_id] += 1
             self._log_instance_dispatch_info(InstanceType.DECODE, decode_instance_num_requests)
 

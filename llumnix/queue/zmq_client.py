@@ -34,7 +34,6 @@ from llumnix.queue.zmq_utils import (
     get_zmq_socket_name,
 )
 from llumnix.constants import ZMQ_RPC_TIMEOUT, ZMQ_IO_THREADS
-from llumnix.utils import is_traced_request
 
 logger = init_logger(__name__)
 
@@ -132,17 +131,7 @@ class ZmqClient(QueueClientBase):
                         error_message="Unable to start RPC Server")
 
     async def put_nowait(self, item: Any, server_info: ServerInfo):
-        queue_request = RPCPutNoWaitQueueRequest(item=item)
-        need_record_trace_timestamp = False
-        if isinstance(item, list):
-            for obj in item:
-                if is_traced_request(obj):
-                    need_record_trace_timestamp = True
-                    break
-        else:
-            need_record_trace_timestamp = is_traced_request(item)
-        if need_record_trace_timestamp or self.need_record_latency_metric():
-            queue_request.send_time = time.perf_counter()
+        queue_request = RPCPutNoWaitQueueRequest(item=item, send_time=time.perf_counter())
         await self._send_one_way_rpc_request(
                         request=queue_request,
                         ip=server_info.request_output_queue_ip,
@@ -150,9 +139,7 @@ class ZmqClient(QueueClientBase):
                         error_message="Unable to put items into queue.")
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
-        batch_queue_request = RPCPutNoWaitBatchQueueRequest(items=items)
-        if is_traced_request(server_info) or is_traced_request(items) or self.need_record_latency_metric():
-            batch_queue_request.send_time = time.perf_counter()
+        batch_queue_request = RPCPutNoWaitBatchQueueRequest(items=items, send_time=time.perf_counter())
         await self._send_one_way_rpc_request(
                         request=batch_queue_request,
                         ip=server_info.request_output_queue_ip,

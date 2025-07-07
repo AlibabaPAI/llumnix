@@ -54,10 +54,9 @@ from llumnix.utils import (
     wait_port_free,
     run_coroutine_in_new_thread,
     MigrationResponse,
-    is_traced_request
 )
 from llumnix.internal_config import MigrationConfig
-from llumnix.server_info import ServerInfo
+from llumnix.server_info import RequestServerInfo
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import OutputForwarder, RequestOutputForwardingMode
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
@@ -152,20 +151,20 @@ class AsyncBackQueueWrapper:
             pass
 
     async def _put_request_outputs_loop(self):
-        async def get_single_response() -> Tuple[GenerateStreamResponse, ServerInfo]:
+        async def get_single_response() -> Tuple[GenerateStreamResponse, RequestServerInfo]:
             resp: Union[GenerateStreamResponse, int] = await self.resp_queue.get()
             while isinstance(resp, int):
                 self.get_current_step_counter_queue.put_nowait(resp)
                 self._set_step_metrics()
                 resp: Union[GenerateStreamResponse, int] = await self.resp_queue.get()
-            server_info: ServerInfo = self.request_server_map[resp.req_id]
+            reqeust_server_info: RequestServerInfo = self.request_server_map[resp.req_id]
             if resp.is_finished:
                 logger.info("Engine finished request {}.".format(resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
-            return resp, server_info
+            return resp, reqeust_server_info
 
-        def get_nowait_responses(output_size: int) -> Tuple[GenerateStreamResponse, ServerInfo]:
-            resps, server_infos = [], []
+        def get_nowait_responses(output_size: int) -> Tuple[GenerateStreamResponse, RequestServerInfo]:
+            resps, reqeust_server_infos = [], []
 
             while output_size > 0:
                 resp: Union[GenerateStreamResponse, int] = self.resp_queue.get_nowait()
@@ -180,64 +179,63 @@ class AsyncBackQueueWrapper:
                 if isinstance(resp, int):
                     continue
 
-                server_info: ServerInfo = self.request_server_map[resp.req_id]
+                reqeust_server_info: RequestServerInfo = self.request_server_map[resp.req_id]
                 if resp.is_finished:
                     logger.info("Engine finished request {}.".format(resp.req_id))
                     self.request_server_map.pop(resp.req_id, None)
 
                 resps.append(resp)
-                server_infos.append(server_info)
+                reqeust_server_infos.append(reqeust_server_info)
 
-            return resps, server_infos
+            return resps, reqeust_server_infos
 
         self.current_step_metrics: RequestTimestamps = None
         while True:
-            request_outputs, server_info_outputs = [], []
-            resp, server_info = await get_single_response()
+            request_outputs, request_server_info_outputs = [], []
+            resp, reqeust_server_info = await get_single_response()
             request_outputs.append(resp)
-            server_info_outputs.append(server_info)
+            request_server_info_outputs.append(reqeust_server_info)
 
             output_size = self.resp_queue.qsize()
             if output_size > 0:
-                resps, server_infos = get_nowait_responses(output_size)
+                resps, request_server_infos = get_nowait_responses(output_size)
                 request_outputs.extend(resps)
-                server_info_outputs.extend(server_infos)
+                request_server_info_outputs.extend(request_server_infos)
 
-            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, server_info_outputs)
+            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, request_server_info_outputs)
             if server_request_outputs:
                 await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
     def _gen_server_request_outputs(self,
                                     request_outputs: List[GenerateStreamResponse],
-                                    server_infos: List[ServerInfo]) -> None:
+                                    request_server_infos: List[RequestServerInfo]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in order to put request output to queue in batch at one time.
-        for request_output, server_info in zip(request_outputs, server_infos):
+        for request_output, request_server_info in zip(request_outputs, request_server_infos):
             request_timestamps = None
             req_id = request_output.req_id
             if req_id in self.request_metrics_queue_dict:
-                request_timestamps = server_info.request_timestamps
-                set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_end', time.perf_counter())
+                request_timestamps = request_server_info.request_timestamps
+                request_timestamps.set_timestamp("engine_process_model_outputs_timestamp_end")
                 engine_put_queue_timestamp = time.perf_counter()
-                set_timestamp(request_timestamps, 'engine_put_queue_timestamp', engine_put_queue_timestamp)
-                set_timestamp(request_timestamps, 'engine_thread_put_queue_timestamp', engine_put_queue_timestamp)
-
+                request_timestamps.set_timestamp("engine_put_queue_timestamp",engine_put_queue_timestamp)
+                request_timestamps.set_timestamp("engine_thread_put_queue_timestamp",engine_put_queue_timestamp)
                 current_step_metrics = self.request_metrics_queue_dict[req_id].get_nowait()
-                set_timestamp(request_timestamps, 'engine_step_timestamp_end',
-                            current_step_metrics.engine_step_timestamp_end)
-                set_timestamp(request_timestamps, 'engine_step_postprocess_timestamp_end',
-                            current_step_metrics.engine_step_postprocess_timestamp_end)
-                set_timestamp(request_timestamps, 'engine_process_model_outputs_timestamp_begin',
-                            current_step_metrics.engine_process_model_outputs_timestamp_begin)
+                request_timestamps.set_timestamp("engine_step_timestamp_end",current_step_metrics.engine_step_timestamp_end)
+                request_timestamps.set_timestamp("engine_step_postprocess_timestamp_end",current_step_metrics.engine_step_postprocess_timestamp_end)
+                request_timestamps.set_timestamp(
+                    "engine_process_model_outputs_timestamp_begin",
+                    current_step_metrics.engine_process_model_outputs_timestamp_begin,
+                )
 
             llumnix_request_output = LlumnixRequestOuput(
                 req_id, self.instance_id, self.msg_encoder.encode(request_output), request_timestamps
             )
-            server_id = server_info.server_id
+            server_id = request_server_info.server_id
             server_request_outputs[server_id].append(llumnix_request_output)
             if server_id not in server_info_dict:
-                server_info_dict[server_id] = server_info
+                server_info_dict[server_id] = request_server_info
 
         return server_request_outputs, server_info_dict
 
@@ -249,10 +247,10 @@ class AsyncBackQueueWrapper:
         logger.debug("Trans_wrapper {} is going to remove request {} at step {}.".format(
             self.instance_id, request_id, expired_step))
 
-    def add_request(self, request_id: int, server_info: ServerInfo) -> None:
-        self.request_server_map[request_id] = server_info
+    def add_request(self, request_id: int, request_server_info: RequestServerInfo) -> None:
+        self.request_server_map[request_id] = request_server_info
         logger.debug("Trans_wrapper {} add_request {} from server {}.".format(
-            self.instance_id, request_id, server_info.server_id))
+            self.instance_id, request_id, request_server_info.server_id))
 
     def clear(self):
         self.request_server_map = {}
@@ -396,9 +394,9 @@ class AsyncLLMEngineLlumnixMixin:
                         + worker_metrics.model_forward_ms
                         + worker_metrics.post_step_ms
                     )
-                    set_timestamp(step_timestamps, 'engine_step_timestamp_end', worker_forward_time / 1000)
-                    set_timestamp(step_timestamps, 'engine_step_postprocess_timestamp_end', worker_forward_time / 1000)
-                    set_timestamp(step_timestamps, 'engine_process_model_outputs_timestamp_begin', time.perf_counter())
+                    step_timestamps.set_timestamp('engine_step_timestamp_end', worker_forward_time / 1000)
+                    step_timestamps.set_timestamp('engine_step_postprocess_timestamp_end', worker_forward_time / 1000)
+                    step_timestamps.set_timestamp('engine_process_model_outputs_timestamp_begin', time.perf_counter())
                     self.request_metrics_queue_dict[request_group_id].put_nowait(step_timestamps)
 
         self.resp_queue.put_nowait(self.step_counter)
@@ -460,12 +458,12 @@ class AsyncLLMEngineLlumnixMixin:
         await super()._handle_reset()
         self.trans_wrapper.clear()
 
-    async def add_request_wrapper(self, server_info: ServerInfo, server_request: ServerRequest):
+    async def add_request_wrapper(self, request_server_info: RequestServerInfo, server_request: ServerRequest):
         logger.debug("Engine {} add request {}:{}.".format(self.instance_id, server_request.id, server_request.external_id))
-        if is_traced_request(server_info):
-            set_timestamp(server_info, 'engine_add_request_timestamp', time.perf_counter())
+        if request_server_info.enable_trace:
+            request_server_info.set_timestamp('engine_add_request_timestamp')
             self.request_metrics_queue_dict[server_request.id] = asyncio.Queue()
-        self.trans_wrapper.add_request(server_request.id, server_info)
+        self.trans_wrapper.add_request(server_request.id, request_server_info)
         # pylint: disable=protected-access
         await self._client._add_request(server_request, self.resp_queue)
 
@@ -552,7 +550,6 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             backend_type,
             request_output_forwarding_mode,
         )
-
 
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
@@ -714,7 +711,7 @@ class BackendBladeLLM(BackendInterface):
 
     # -------------- dispatch related method --------------
 
-    async def add_request(self, request_id: int, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def add_request(self, request_id: int, request_server_info: RequestServerInfo, expected_steps: int, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
         server_request = msgspec.convert(self.msg_decoder.decode(kwargs["server_request"]), type=ServerRequest)
         # The instance ID of the decode instance. If provided, engine will skip dispatch decode instance after prefilling.
@@ -738,9 +735,9 @@ class BackendBladeLLM(BackendInterface):
         if self.engine_args.enable_semi_pd_mode:
             # TODO(KuilongCui): add exception handle
             add_request_exception_wrapper = exception_wrapper_async(self.engine.add_request_wrapper)
-            asyncio.create_task(add_request_exception_wrapper(server_info, server_request))
+            asyncio.create_task(add_request_exception_wrapper(request_server_info, server_request))
         else:
-            await self.engine.add_request_wrapper(server_info, server_request)
+            await self.engine.add_request_wrapper(request_server_info, server_request)
 
     async def abort_request(self, request_id: Union[int, Iterable[int]]) -> None:
         if isinstance(request_id, int):

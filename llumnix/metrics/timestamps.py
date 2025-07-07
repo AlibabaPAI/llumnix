@@ -11,9 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 from dataclasses import dataclass
 from typing import Dict, Any, Iterable
 from llumnix.constants import REQUEST_TIMESTAMPS_ATTR_STR
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
@@ -84,3 +88,10 @@ class RequestTimestamps:
                 (self.api_server_generate_timestamp_end - self.api_server_get_queue_timestamp) * 1000,
         }
         return latency_dict
+
+    def set_timestamp(self, timestamp_attr: str, timestamp: float = None):
+        if not hasattr(self, timestamp_attr):
+            logger.warning("Timestamp attribute {} not found in RequestTimestamps.".format(timestamp_attr))
+        if timestamp is None:
+            timestamp = time.perf_counter()
+        setattr(self, timestamp_attr, timestamp)

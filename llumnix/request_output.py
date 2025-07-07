@@ -23,10 +23,15 @@ class LlumnixRequestOuput:
         self.request_id = request_id
         self.instance_id = instance_id
         self.engine_output = engine_output
-        self.request_timestamps = request_timestamps
+        self.request_timestamps: RequestTimestamps = request_timestamps
 
     def get_engine_output(self):
         return self.engine_output
+
+    def set_timestamp(self, timestamp_attr: str, timestamp: float = None):
+        if not self.request_timestamps:
+            return
+        self.request_timestamps.set_timestamp(timestamp_attr=timestamp_attr, timestamp=timestamp)
 
 class LlumnixRequestOutputs:
     """Wrapper of vLLM v1 EngineCoreOutputs"""

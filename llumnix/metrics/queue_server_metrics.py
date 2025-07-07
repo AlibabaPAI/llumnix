@@ -24,8 +24,10 @@ class QueueServerMetrics(BaseMetrics):
     def __init__(self):
         super().__init__()
         self.register = Registery()
-        # queue client will decide if record metrics, queue server just store the metrics it received
-        self.metrics_sampling_interval = 1
+
+        self.metrics_sampling_interval = int(
+            llumnix_envs.QUEUE_SERVER_METRICS_SAMPLE_EVERY_N_RECORDS
+        )
 
         self.queue_trans_latency = Summary(
             name = "queue_trans_latency",

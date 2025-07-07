@@ -88,7 +88,7 @@ async def test_request_trace(
     global test_times
 
     ip = get_ip_address()
-    base_port = 30000 + random.randint(0, 46) + test_times * 100
+    base_port = 15000 + random.randint(0, 46) + test_times * 100
     if "BladeLLM" in engine:
         base_port += 2500
     tensor_parallel_size = 1
@@ -129,7 +129,7 @@ async def test_request_trace(
     wait_for_llumnix_service_ready(ip_ports)
 
     await asyncio.sleep(3)
-
+    llumnix_trace_info = None
     for api in engine_apis[engine]:
         url = f"{endpoint}{api}"
 
@@ -144,6 +144,7 @@ async def test_request_trace(
                     assert (
                         "llumnix_trace_info" in output and output["llumnix_trace_info"]
                     ), "llumnix debug info is missing"
+                    llumnix_trace_info = output["llumnix_trace_info"]
                 if not enable_request_trace:
                     assert (
                         "llumnix_trace_info" not in output
@@ -176,6 +177,17 @@ async def test_request_trace(
                     assert (
                         not has_trace_info
                     ), "reqeust trace mode is not enabled but return llumnix trace info"
+        if (
+            enable_request_trace
+            and not enable_pd_disagg
+            and api in ["/generate", "/v1/chat/completions"]
+            and not is_stream
+        ):
+            with open("performance.txt", "a", encoding="utf-8") as f:
+                f.write(f"Run Test: {request.node.name}\n")
+                f.write(llumnix_trace_info)
+                print(llumnix_trace_info)
+
     await asyncio.sleep(1)
 
     test_times += 1

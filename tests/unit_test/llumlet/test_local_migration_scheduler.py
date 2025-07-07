@@ -18,7 +18,7 @@ from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, Reques
 
 class MockRequest(LlumnixRequest):
     def __init__(self, request_id, length, expected_steps, status=RequestStatus.RUNNING) -> None:
-        super().__init__(request_id=request_id, server_info=None, expected_steps=expected_steps)
+        super().__init__(request_id=request_id, request_server_info=None, expected_steps=expected_steps)
         self.length = length
         self._llumnix_status = status
         self._inference_type = RequestInferenceType.DECODE

@@ -147,10 +147,14 @@ class ZmqServer(QueueServerBase):
             )
             and request.send_time
         ):
+            now_time = time.perf_counter()
             self.queue_server_metrics.queue_trans_latency.observe(
-                (time.perf_counter() - request.send_time) * 1000
+                (now_time - request.send_time) * 1000
             )
             self.queue_server_metrics.queue_trans_size_bytes.observe(len(message))
+            item = request.item if isinstance(request, RPCPutNoWaitQueueRequest) else request.items
+            set_timestamp(item, 'queue_client_send_timestamp', request.send_time)
+            set_timestamp(item, 'queue_server_receive_timestamp', now_time)
         if request == RPCUtilityRequest.IS_SERVER_READY:
             return self._is_server_ready(identity)
         if isinstance(request, RPCPutNoWaitQueueRequest):
@@ -178,8 +182,6 @@ class ZmqServer(QueueServerBase):
         # while client raises exception to outside (but ActorOutputForwarder will not die).
         try:
             item = put_nowait_queue_request.item
-            set_timestamp(item, 'queue_client_send_timestamp', put_nowait_queue_request.send_time)
-            set_timestamp(item, 'queue_server_receive_timestamp', time.perf_counter())
             self.put_nowait(item)
             await asyncio.wait_for(
                 self.socket.send_multipart(
@@ -204,10 +206,6 @@ class ZmqServer(QueueServerBase):
     async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
         try:
             items = put_nowait_batch_queue_request.items
-            for item in items:
-                if is_traced_request(item):
-                    set_timestamp(item, 'queue_client_send_timestamp', put_nowait_batch_queue_request.send_time)
-                    set_timestamp(item, 'queue_server_receive_timestamp', time.perf_counter())
             self.put_nowait_batch(items)
             await asyncio.wait_for(
                 self.socket.send_multipart(

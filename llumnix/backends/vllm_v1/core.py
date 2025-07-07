@@ -29,7 +29,6 @@ from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreO
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
 
-
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
@@ -52,8 +51,8 @@ from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.utils import RequestIDType, MigrationResponse, BackendType
 from llumnix.request_output import LlumnixRequestOutputs
 
-
 logger = init_logger(__name__)
+
 
 class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     def __init__(self,
@@ -292,7 +291,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         self.disable_async_output_proc = disable_async_output_proc
-        self.server_info_table = ServerInfoTable()
+        self.server_info_table = {}
 
         assert isinstance(self.scheduler, SchedulerLlumnix), \
             "EngineCore.scheduler failed to set to SchedulerLlumnix"
@@ -349,24 +348,16 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
 
     async def _process_engine_step_async(self) -> bool:
         """Overloading super()._process_engine_step_async() to update instance info"""
-
-        # Step the engine core.
-        self.step_begin_time = time.time()
-        outputs, model_executed = await self.step_fn_async()
-        self.step_end_time = time.time()
-        # Update instance info after step
-        self._update_instance_info()
-        # Put EngineCoreOutputs into output_mediator
-        await self._put_engine_core_outputs(outputs)
-        
+        forward_executed = await AsyncEngineCoreProcLlumnix._process_engine_step_async(self)        
         self._maybe_publish_request_counts()
-        if model_executed:
+        if forward_executed:
             return 
 
         if self.engines_running:
             self._dppart.new_step()
             self.execute_dummy_batch()
         return
+
 
 class BackendVLLMV1(BackendInterface):
     def __init__(

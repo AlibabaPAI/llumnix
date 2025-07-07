@@ -19,7 +19,7 @@ import asyncio
 
 import ray.actor
 
-from vllm.v1.engine import EngineCoreOutput, EngineCoreOutputs
+from vllm.v1.engine import EngineCoreOutput
 from vllm.v1.engine.core_client import AsyncMPClient, DPAsyncMPClient
 from vllm.v1.executor.abstract import Executor
 
@@ -39,11 +39,13 @@ from llumnix.entrypoints.client import LlumnixClient
 
 logger = init_logger(__name__)
 
+
 def get_completion_tokens(engine_core_output: EngineCoreOutput) -> Optional[int]:
     current_completion_tokens = None
     if isinstance(engine_core_output.kv_transfer_params, dict):
         current_completion_tokens = engine_core_output.kv_transfer_params.get("num_output_tokens", None)
     return current_completion_tokens
+
 
 class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     def __init__(
@@ -231,4 +233,15 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
 
 
 class LlumnixDPClientVLLMV1(LlumnixClientVLLMV1, DPAsyncMPClient):
-    pass
+    def __init__(self, *args, **kwargs):
+        self.current_wave = 0
+
+        LlumnixClientVLLMV1.__init__(self, *args, **kwargs)
+
+    async def add_request_async(self, request: EngineCoreRequest) -> None:
+        self._ensure_output_queue_task()
+
+        request.current_wave = self.current_wave
+        request.client_index = self.client_index
+
+        await self.generate(None, request.sampling_params, request.request_id, engine_core_request=request)

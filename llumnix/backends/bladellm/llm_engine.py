@@ -57,11 +57,8 @@ from llumnix.utils import (
 )
 from llumnix.internal_config import MigrationConfig
 from llumnix.server_info import ServerInfo
-from llumnix.backends.utils import (
-    EngineState,
-    OutputMediator,
-    RequestOutputForwardingMode,
-)
+from llumnix.backends.utils import EngineState
+from llumnix.backends.output_forwarder import OutputForwarder, RequestOutputForwardingMode
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
 from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
@@ -105,7 +102,7 @@ class AsyncBackQueueWrapper:
                  drop_request_callback: Coroutine) -> None:
         self.instance_id = instance_id
         self.msg_encoder = msgspec.msgpack.Encoder()
-        self.output_mediator = OutputMediator(
+        self.output_forwarder = OutputForwarder(
             instance_id,
             request_output_queue_type,
             request_output_forwarding_mode,
@@ -205,7 +202,7 @@ class AsyncBackQueueWrapper:
 
             server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, server_info_outputs)
             if server_request_outputs:
-                await self.output_mediator.put_request_outputs_to_server(server_request_outputs, server_info_dict)
+                await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
     def _gen_server_request_outputs(self,
                                     request_outputs: List[GenerateStreamResponse],
@@ -239,7 +236,7 @@ class AsyncBackQueueWrapper:
         return server_request_outputs, server_info_dict
 
     def stop(self):
-        self.output_mediator.stop()
+        self.output_forwarder.stop()
 
     def remove_request_server_info(self, request_id: int, expired_step: int) -> None:
         self.dangling_request_server_info[request_id] = expired_step

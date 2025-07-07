@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Coroutine, Union, Mapping
+from typing import Dict, List, Coroutine, Union
 import asyncio
 import time
 import os
@@ -59,7 +59,7 @@ class StopPutQueueSignal:
 class BaseOutputMediator(ABC):
     @abstractmethod
     async def put_nowait_to_servers(self,
-                                    server_request_outputs: Mapping[str, OutputsType],
+                                    server_request_outputs: Dict[str, OutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         raise NotImplementedError
 
@@ -71,7 +71,7 @@ class BaseOutputMediator(ABC):
         self,
         request_output_queue_type: QueueType,
         request_output_queue_client: QueueClientBase,
-        server_request_outputs: Mapping[str, OutputsType],
+        server_request_outputs: Dict[str, OutputsType],
         server_info_dict: Dict[str, ServerInfo],
     ) -> List[RequestIDType]:
         tasks = []
@@ -112,7 +112,7 @@ class ActorOutputMediator(BaseOutputMediator):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     async def put_nowait_to_servers(self,
-                                    server_request_outputs: Mapping[str, OutputsType],
+                                    server_request_outputs: Dict[str, OutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         # fake metric, for alignment
         for req_outputs in server_request_outputs.values():
@@ -148,7 +148,7 @@ class ThreadOutputMediator(BaseOutputMediator):
         self.put_queue_loop_thread.start()
 
     async def put_nowait_to_servers(self,
-                                    server_request_outputs: Mapping[str, OutputsType],
+                                    server_request_outputs: Dict[str, OutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         for req_outputs in server_request_outputs.values():
             set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.time())
@@ -177,7 +177,7 @@ class ThreadOutputMediator(BaseOutputMediator):
 
     async def _put_nowait_to_servers(
         self,
-        server_request_outputs: Mapping[str, OutputsType],
+        server_request_outputs: Dict[str, OutputsType],
         server_info_dict: Dict[str, ServerInfo],
     ) -> None:
         aborted_request_ids = await self.put_nowait_to_servers_func(
@@ -231,7 +231,7 @@ class OutputMediator:
 
     async def put_request_outputs_to_server(
         self,
-        server_request_outputs: Mapping[str, OutputsType],
+        server_request_outputs: Dict[str, OutputsType],
         server_info_dict: Dict[str, ServerInfo]
     ) -> None:
         if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:

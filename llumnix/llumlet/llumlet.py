@@ -196,10 +196,9 @@ class Llumlet:
         try:
             executor = getattr(target_engine, method)
         except AttributeError as e:
-            logger.error(f"Utility method '{method}' not found on backend engine {target_engine}.")
+            logger.error("Utility method '{}' not found on backend engine {}.".format(method, target_engine))
             raise e
 
         if asyncio.iscoroutinefunction(executor):
             return await executor(*args)
-        else:
-            return executor(*args)
+        return executor(*args)

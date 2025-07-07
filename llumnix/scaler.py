@@ -162,12 +162,12 @@ class Scaler:
                 logger.debug("First time set scaler.client_index to 0.")
                 current_client_index = 0
                 put_data_to_ray_internal_kv("scaler.client_index", 0)
-            except Exception as e:
+            except Exception as e: # pylint: disable=broad-except
                 logger.exception(e)
             finally:
                 self.client_index = current_client_index
                 if self.client_index == -1:
-                    logger.error(f"Failed to get client_index from ray internal kv: {self.client_index}")
+                    logger.error("Failed to get client_index from ray internal kv: {}".format(self.client_index))
 
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
@@ -634,6 +634,7 @@ class Scaler:
                 instance,
             )
         elif backend_type == BackendType.VLLM_V1:
+            # pylint: disable=import-outside-toplevel
             from llumnix.entrypoints.vllm_v1.api_server_actor import APIServerActorVLLMV1
             # To avoid triton runtime error, assign GPU to api server.
             api_server = APIServerActorVLLMV1.from_args(
@@ -906,7 +907,7 @@ class Scaler:
             next_entrypoints_args.client_index = self.client_index
             self.client_index += 1
             put_data_to_ray_internal_kv("scaler.client_index", self.client_index)
-        
+
         return next_entrypoints_args
 
     def _get_next_instance_type(self,

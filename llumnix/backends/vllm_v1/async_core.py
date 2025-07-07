@@ -16,8 +16,6 @@ from typing import Dict, Optional, Any, Tuple, Union
 import signal
 import asyncio
 import queue
-import threading
-
 
 from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc
 from vllm.v1.core.sched.output import SchedulerOutput
@@ -76,8 +74,8 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
     def __init__(
         self,
         vllm_config: VllmConfig,
-        on_head_node: bool,
-        handshake_address: str,
+        on_head_node: bool,             # pylint: disable=unused-argument
+        handshake_address: str,         # pylint: disable=unused-argument
         executor_class: type[Executor],
         log_stats: bool,
         engine_index: int = 0,
@@ -116,6 +114,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         # Ensure we can serialize transformer config after spawning
         maybe_register_config_serialize_by_value()
 
+        # pylint: disable=unused-argument
         def signal_handler(signum, frame):
             nonlocal shutdown_requested
             if not shutdown_requested:
@@ -140,6 +139,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
 
             asyncio.create_task(engine_core.run_busy_loop_async())
 
+        # pylint: disable=try-except-raise
         except SystemExit:
             raise
         except Exception as e:
@@ -147,7 +147,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
                 logger.exception("EngineCore failed to start.")
             else:
                 logger.exception("EngineCore encountered a fatal error.")
-                engine_core._send_engine_dead()
+                engine_core._send_engine_dead() # pylint: disable=protected-access
             raise e
         finally:
             if engine_core is not None:

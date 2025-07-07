@@ -32,7 +32,7 @@ from vllm.v1.request import Request, RequestStatus
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, RequestInferenceType
+from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm_v1.async_core import AsyncEngineCoreProc
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
@@ -41,13 +41,13 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
-from llumnix.backends.utils import (RequestOutputForwardingMode, 
+from llumnix.backends.utils import (RequestOutputForwardingMode,
                                     OutputMediator, EngineState)
-from llumnix.utils import make_async, ray_get_with_timeout
+from llumnix.utils import make_async
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
-from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
+from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.utils import RequestIDType, MigrationResponse, BackendType
 from llumnix.request_output import LlumnixRequestOutputs
 
@@ -119,7 +119,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         # pylint: disable=import-outside-toplevel
         if latency_mem is not None:
             raise NotImplementedError('vLLM v1 sim_executor not implemented yet')
-        elif engine_config.parallel_config.use_ray:
+        if engine_config.parallel_config.use_ray:
             from llumnix.backends.vllm_v1.executor import LlumnixRayDistributedExecutor
             executor_class = LlumnixRayDistributedExecutor
             executor_class.migration_config = migration_config
@@ -242,7 +242,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
         self.instance_info = instance_info
 
-    # pylint: disable=invalid-overridden-method
+    # pylint: disable=invalid-overridden-method,unused-argument
     async def add_request_async(
         self,
         request_id: str,
@@ -383,7 +383,7 @@ class BackendVLLMV1(BackendInterface):
     def should_abort_migration(self, *args, **kwargs) -> bool:
         raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
-    def add_running_request(self, backend_request: LlumnixRequest) -> None:
+    async def add_running_request(self, backend_request: LlumnixRequest) -> None:
         raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def add_waiting_request(self, *args, **kwargs) -> None:

@@ -152,4 +152,3 @@ class SchedulerLlumnix(Scheduler):
         scheduler_output = super().schedule()
         self.update_instance_info_callback(self._get_instance_info(scheduler_output))
         return scheduler_output
-

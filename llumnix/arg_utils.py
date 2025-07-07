@@ -276,7 +276,7 @@ class VLLMV1EntrypointsArgs:
     enable_server_load_tracking: bool = None
     enable_force_include_usage: bool = None
     expand_tools_even_if_tool_choice_none: bool = None
-    
+
     client_index: int = None
 
     def __post_init__(self):
@@ -297,6 +297,7 @@ class VLLMV1EntrypointsArgs:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        # pylint: disable=import-outside-toplevel
         from vllm.entrypoints.openai.cli_args import make_arg_parser
         parser = make_arg_parser(parser)
 

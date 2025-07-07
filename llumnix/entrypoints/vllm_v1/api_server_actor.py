@@ -16,8 +16,6 @@ from dataclasses import fields
 
 import uvloop
 
-import ray
-
 from llumnix.arg_utils import VLLMV1EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.entrypoints.api_server_actor import APIServerActor
@@ -44,7 +42,7 @@ class APIServerActorVLLMV1(APIServerActor):
         if entrypoints_args.host not in ("127.0.0.1", "0.0.0.0"):
             entrypoints_args.host = get_ip_address()
         self.host = entrypoints_args.host
-        
+
         # Set up listen address and socket
         self.sock = socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM)
         self.sock.bind((self.host, entrypoints_args.port))
@@ -77,8 +75,8 @@ class APIServerActorVLLMV1(APIServerActor):
             serve_args.speculative_config = None
 
         # Set global variable in vLLM
-        import vllm.v1.engine.core_client
-        from vllm.entrypoints.openai.api_server import run_server_worker
+        import vllm.v1.engine.core_client # pylint: disable=import-outside-toplevel
+        from vllm.entrypoints.openai.api_server import run_server_worker # pylint: disable=import-outside-toplevel
         vllm.v1.engine.core_client.entrypoints_context = self.entrypoints_context
         uvloop.run(
             run_server_worker(self.listen_address, self.sock,

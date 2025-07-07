@@ -19,7 +19,7 @@ import asyncio
 
 import ray.actor
 
-from vllm.v1.engine import EngineCoreOutput, EngineCoreOutputs
+from vllm.v1.engine import EngineCoreOutput
 from vllm.v1.engine.core_client import AsyncMPClient
 from vllm.v1.executor.abstract import Executor
 
@@ -192,6 +192,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         super()._clear_client_request_states(request_id)
         self.engine_core_output_stash.pop(request_id, None)
 
+    # pylint: disable=arguments-renamed
     def _process_output_order(
         self,
         request_id: str,

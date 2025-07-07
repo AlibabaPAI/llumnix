@@ -14,13 +14,21 @@
 from vllm.v1.request import Request
 from vllm.v1.request import RequestStatus as RequestStatusVLLMV1
 
-from llumnix.llumlet.request import LlumnixRequest, RequestStatus
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
 
 
 class LlumnixRequestVLLMV1(Request, LlumnixRequest):
     def __init__(self, request_id, server_info, expected_steps: int, *args, **kwargs) -> None:
         Request.__init__(self, request_id, *args, **kwargs)
         LlumnixRequest.__init__(self, request_id, server_info, expected_steps)
+
+    @property
+    def request_len(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def inference_type(self) -> RequestInferenceType:
+        return RequestInferenceType.UNKNOWN
 
     @property
     def prompt_len(self) -> int:
@@ -35,6 +43,10 @@ class LlumnixRequestVLLMV1(Request, LlumnixRequest):
         return self.is_finished()
 
     @property
+    def request_arrival_time(self) -> float:
+        raise NotImplementedError
+
+    @property
     def llumnix_status(self) -> RequestStatus:
         if self._llumnix_status:
             return self._llumnix_status
@@ -46,3 +58,7 @@ class LlumnixRequestVLLMV1(Request, LlumnixRequest):
         else:
             request_status = RequestStatus.FINISHED
         return request_status
+
+    @property
+    def prefill_num_blocks(self) -> int:
+        raise NotImplementedError

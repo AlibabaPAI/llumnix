@@ -507,9 +507,7 @@ class Scaler:
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     server.is_ready.remote, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
                 )
-                await asyncio_wait_for_ray_remote_call_with_timeout(
-                    self.manager.scale_up.remote, instance_id, instance, instance_type
-                )
+                await self._scale_up(instance_id, instance, instance_type)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
@@ -717,7 +715,7 @@ class Scaler:
             elif ins_type == InstanceType.DECODE:
                 self.decode_instance_id_set.add(ins_id)
         self.num_instances = len(self.instances)
-        logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instances.keys()))
+        logger.info("num_instances: {}, instances: {}".format(self.num_instances, list(self.instances.keys())))
 
         await asyncio_wait_for_ray_remote_call_with_timeout(
             self.manager.scale_up.remote, instance_ids, instance_actor_handles, instance_types

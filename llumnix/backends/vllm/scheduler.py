@@ -107,7 +107,7 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in reversed(self.running):
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
-                seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
+                seq_group.set_llumnix_status(RequestStatus.RUNNING_MIGRATING)
                 return True
         return False
 
@@ -116,7 +116,7 @@ class SchedulerLlumnix(Scheduler):
             if seq_group.request_id == request_id and \
                seq_group.get_seqs()[0].n_blocks * self.cache_config.block_size <= self._get_prompt_limit(seq_group):
                 self.waiting.remove(seq_group)
-                seq_group.set_status(RequestStatus.WAITING_MIGRATING)
+                seq_group.set_llumnix_status(RequestStatus.WAITING_MIGRATING)
                 return True
         return False
 

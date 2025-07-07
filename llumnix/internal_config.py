@@ -13,6 +13,7 @@
 
 from typing import Union, List
 
+from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
 
 class GlobalSchedulerConfig:
     def __init__(
@@ -30,7 +31,10 @@ class GlobalSchedulerConfig:
             enable_engine_pd_disagg: bool,
             enable_engine_semi_pd_disagg: bool,
             enable_adaptive_pd: bool,
-            is_group_kind_migration_backend: bool) -> None:
+            is_group_kind_migration_backend: bool,
+            dispatch_load_metric_config: DispatchLoadMetricConfig,
+            cache_aware_query_client_config_path: str,
+            ) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy
         self.topk_random_dispatch = topk_random_dispatch
@@ -48,6 +52,9 @@ class GlobalSchedulerConfig:
         self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
         self.is_group_kind_migration_backend = is_group_kind_migration_backend
+
+        self.dispatch_load_metric_config = dispatch_load_metric_config
+        self.cache_aware_query_client_config_path = cache_aware_query_client_config_path
 
 
 class MigrationConfig:

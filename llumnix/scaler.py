@@ -228,70 +228,77 @@ class Scaler:
     async def _auto_scale_up_loop(self, service_name: str, max_instances: int, interval: float) -> None:
         logger.info("Auto scale up loop starts, service name: {}".format(service_name))
         while True:
-            new_pg = None
-            if self.last_timeout_instance_id is not None:
-                last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
-                last_timeout_pg_infos = get_placement_group_infos_by_name(name=last_timeout_pg_name)
-                if len(last_timeout_pg_infos) > 0 and last_timeout_pg_infos[0]["state"] != "REMOVED":
-                    new_instance_id = self.last_timeout_instance_id
-                    # pending, created(without server and instance) or rescheduling
-                    try:
-                        new_pg = ray.util.get_placement_group(last_timeout_pg_name)
-                    except ValueError:
-                        logger.warning("Placement group {} not found.".format(
-                            last_timeout_pg_name[:len(PLACEMENT_GROUP_NAME_PREFIX)]))
-                # reset
-                self.last_timeout_instance_id = None
-            pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
-            pending_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
-            for pending_pg_info in pending_pg_infos:
-                instance_id = pending_pg_info["name"].split("_")[-1]
-                if new_pg is not None and instance_id == new_instance_id:
-                    continue
-                await self._clear_instance_ray_resources(instance_id)
-            alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
-            alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
-            alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
-            if max_instances != -1 and len(alive_pg_infos) >= max_instances:
-                logger.debug("The number of alive placement groups has reached the max_instances.")
-                await asyncio.sleep(interval)
-                continue
-            if new_pg is None:
-                new_instance_id = random_uuid()
-                new_pg = self._init_placement_group(
-                    get_placement_group_name(new_instance_id),
-                    self.engine_args,
-                    init_server=True,
-                    block=False,
-                    service_name=service_name,
-                )
             try:
-                await asyncio.wait_for(new_pg.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
-            except asyncio.TimeoutError:
-                logger.debug("Waiting for new placement group {} ready timeout.".format(new_instance_id))
-                # After timeout, the new placement group might be pending,
-                # created(without server and instance), rescheduling.
-                self.last_timeout_instance_id = new_instance_id
-                await asyncio.sleep(interval)
-                continue
-            if service_name in ["prefill", "decode"]:
-                await self._init_server_and_instance(
-                    new_instance_id,
-                    self.entrypoints_args,
-                    self.instance_args,
-                    self.engine_args,
-                    new_pg,
-                    instance_type=get_service_instance_type(service_name),
+                new_pg = None
+                if self.last_timeout_instance_id is not None:
+                    last_timeout_pg_name = get_placement_group_name(self.last_timeout_instance_id)
+                    last_timeout_pg_infos = get_placement_group_infos_by_name(name=last_timeout_pg_name)
+                    if len(last_timeout_pg_infos) > 0 and last_timeout_pg_infos[0]["state"] != "REMOVED":
+                        new_instance_id = self.last_timeout_instance_id
+                        # pending, created(without server and instance) or rescheduling
+                        try:
+                            new_pg = ray.util.get_placement_group(last_timeout_pg_name)
+                        except ValueError:
+                            logger.warning("Placement group {} not found.".format(
+                                last_timeout_pg_name[:len(PLACEMENT_GROUP_NAME_PREFIX)]))
+                    # reset
+                    self.last_timeout_instance_id = None
+                pending_pg_infos = get_placement_group_infos_by_state(state="PENDING")
+                pending_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
+                for pending_pg_info in pending_pg_infos:
+                    instance_id = pending_pg_info["name"].split("_")[-1]
+                    if new_pg is not None and instance_id == new_instance_id:
+                        continue
+                    await self._clear_instance_ray_resources(instance_id)
+                alive_pg_infos = get_placement_group_infos_by_state(state="CREATED")
+                alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
+                alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
+                if max_instances != -1 and len(alive_pg_infos) >= max_instances:
+                    logger.debug("The number of alive placement groups has reached the max_instances.")
+                    await asyncio.sleep(interval)
+                    continue
+                if new_pg is None:
+                    new_instance_id = random_uuid()
+                    new_pg = self._init_placement_group(
+                        get_placement_group_name(new_instance_id),
+                        self.engine_args,
+                        init_server=True,
+                        block=False,
+                        service_name=service_name,
+                    )
+                try:
+                    await asyncio.wait_for(new_pg.ready(), timeout=WAIT_PLACEMENT_GROUP_TIMEOUT)
+                except asyncio.TimeoutError:
+                    logger.debug("Waiting for new placement group {} ready timeout.".format(new_instance_id))
+                    # After timeout, the new placement group might be pending,
+                    # created(without server and instance), rescheduling.
+                    self.last_timeout_instance_id = new_instance_id
+                    await asyncio.sleep(interval)
+                    continue
+                if service_name in ["prefill", "decode"]:
+                    await self._init_server_and_instance(
+                        new_instance_id,
+                        self.entrypoints_args,
+                        self.instance_args,
+                        self.engine_args,
+                        new_pg,
+                        instance_type=get_service_instance_type(service_name),
+                    )
+                else:
+                    # If not prefill/decode service, we do not specify the instance type,
+                    # and the instance type is decided by _get_next_instance_type.
+                    await self._init_server_and_instance(
+                        new_instance_id, self.entrypoints_args, self.instance_args, self.engine_args, new_pg
+                    )
+                logger.info(
+                    "Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id)
                 )
-            else:
-                # If not prefill/decode service, we do not specify the instance type,
-                # and the instance type is decided by _get_next_instance_type.
-                await self._init_server_and_instance(
-                    new_instance_id, self.entrypoints_args, self.instance_args, self.engine_args, new_pg
+            # pylint: disable=broad-except
+            except Exception:
+                logger.critical(
+                    "Scaler get error in _auto_scale_up_loop, scaler keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
                 )
-            logger.info(
-                "Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id)
-            )
 
     async def _heartbeat_loop(self, interval: float) -> None:
         def check_instance_health_done_callback(instance_id: str, fut):
@@ -301,20 +308,27 @@ class Scaler:
                 dead_instance_ids.append(instance_id)
 
         while True:
-            await asyncio.sleep(interval)
-            tasks = []
-            dead_instance_ids = []
-            for instance_id, instance in self.instances.items():
-                task = asyncio.gather(
-                    asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready.remote),
-                    return_exceptions=True
+            try:
+                await asyncio.sleep(interval)
+                tasks = []
+                dead_instance_ids = []
+                for instance_id, instance in self.instances.items():
+                    task = asyncio.gather(
+                        asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready),
+                        return_exceptions=True
+                    )
+                    task.add_done_callback(
+                        partial(check_instance_health_done_callback, instance_id)
+                    )
+                    tasks.append(task)
+                await asyncio.gather(*tasks)
+                self.scale_down(dead_instance_ids)
+            # pylint: disable=broad-except
+            except Exception:
+                logger.critical(
+                    "Scaler get error in _heartbeat_loop, scaler keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
                 )
-                task.add_done_callback(
-                    partial(check_instance_health_done_callback, instance_id)
-                )
-                tasks.append(task)
-            await asyncio.gather(*tasks)
-            self.scale_down(dead_instance_ids)
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         async def watch_instance_deployment_states(instance_id: str, server_exists: bool, instance_exists: bool):
@@ -323,23 +337,34 @@ class Scaler:
                 await asyncio.sleep(1.0)
             # Server is initialized after instance is ready, so waiting for instance ready first.
             if not server_exists and instance_exists:
-                instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
                 try:
-                    await asyncio_wait_for_ray_remote_call_with_timeout(
-                        instance.is_ready.remote, timeout=llumnix_envs.INSTANCE_READY_TIMEOUT
-                    )
-                # Instance exception could be handled by manager/scaler, so check states loop omits exception case here.
-                # pylint: disable=bare-except
-                except:
-                    pass
-            logger.info("watch instance {} deployment states, server_exists: {}, instance_exists: {}".format(
-                instance_id, server_exists, instance_exists))
+                    instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+                except ValueError:
+                    logger.warning("Instance {} not found.".format(instance_id))
+                    instance_exists = False
+                if instance_exists:
+                    try:
+                        await asyncio_wait_for_ray_remote_call_with_timeout(
+                            instance.is_ready, timeout=llumnix_envs.INSTANCE_READY_TIMEOUT
+                        )
+                    # Instance exception could be handled by manager/scaler, so check states loop omits exception case here.
+                    # pylint: disable=bare-except
+                    except:
+                        pass
+            logger.info(
+                "Watch instance {} deployment states, server_exists: {}, instance_exists: {}".format(
+                    instance_id, server_exists, instance_exists
+                )
+            )
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
             pg_created, server_exists, instance_exists = self._get_instance_deployment_states(instance_id)
             if pg_created and (not server_exists or not instance_exists):
-                logger.warning("Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})"
-                               .format(instance_id, pg_created, server_exists, instance_exists))
-                await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.scale_down.remote, instance_id)
+                logger.warning(
+                    "Instance {} deployment states incorrect, states: (pg {}, server {}, instance {})".format(
+                        instance_id, pg_created, server_exists, instance_exists
+                    )
+                )
+                await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.scale_down, instance_id)
 
         while True:
             try:
@@ -409,7 +434,7 @@ class Scaler:
                         self.pdd_config.pd_ratio, cur_num_prefill_instances, cur_num_decode_instances, scale_down_instance_id))
 
         if scale_down_instance_id:
-            await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.scale_down.remote, scale_down_instance_id)
+            await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.scale_down, scale_down_instance_id)
 
         return scale_down_instance_id
 
@@ -490,7 +515,7 @@ class Scaler:
             try:
                 instance_ready = False
                 await asyncio_wait_for_ray_remote_call_with_timeout(
-                    instance.is_ready.remote, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                    instance.is_ready, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
                 )
                 instance_ready = True
                 # Initialize server after instance is ready.
@@ -505,7 +530,7 @@ class Scaler:
                     instance,
                 )
                 await asyncio_wait_for_ray_remote_call_with_timeout(
-                    server.is_ready.remote, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
+                    server.is_ready, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
                 )
                 await self._scale_up(instance_id, instance, instance_type)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
@@ -629,7 +654,7 @@ class Scaler:
         async def ready_scale_up(instance_id: str, instance: Llumlet, instance_type: InstanceType):
             try:
                 await asyncio_wait_for_ray_remote_call_with_timeout(
-                    instance.is_ready.remote, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                    instance.is_ready, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
                 )
                 await self._scale_up(instance_id, instance, instance_type)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
@@ -718,7 +743,7 @@ class Scaler:
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, list(self.instances.keys())))
 
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.scale_up.remote, instance_ids, instance_actor_handles, instance_types
+            self.manager.scale_up, instance_ids, instance_actor_handles, instance_types
         )
 
         return self.num_instances
@@ -794,7 +819,7 @@ class Scaler:
             zip(available_instance_actor_names, available_instance_actor_handles):
             instance_id = instance_actor_name[len(INSTANCE_NAME_PREFIX):]
             task = asyncio.gather(
-                asyncio_wait_for_ray_remote_call_with_timeout(instance_actor_handle.get_instance_type.remote),
+                asyncio_wait_for_ray_remote_call_with_timeout(instance_actor_handle.get_instance_type),
                 return_exceptions=True
             )
             task.add_done_callback(

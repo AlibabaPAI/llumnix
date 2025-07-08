@@ -28,7 +28,7 @@ class RayQueueClient(QueueClientBase):
         send_time = time.perf_counter() if self.need_record_latency() else None
         set_timestamp(item, 'queue_client_send_timestamp', time.time())
         return await asyncio_wait_for_ray_remote_call_with_timeout(
-            output_queue.actor.put_nowait.remote, (item, send_time),
+            output_queue.actor.put_nowait, (item, send_time),
             timeout=RAY_QUEUE_RPC_TIMEOUT
         )
 
@@ -38,6 +38,6 @@ class RayQueueClient(QueueClientBase):
         send_time = time.perf_counter() if self.need_record_latency() else None
         items_with_send_time = [(item, send_time) for item in items]
         return await asyncio_wait_for_ray_remote_call_with_timeout(
-            output_queue.actor.put_nowait_batch.remote, items_with_send_time,
+            output_queue.actor.put_nowait_batch, items_with_send_time,
             timeout=RAY_QUEUE_RPC_TIMEOUT
         )

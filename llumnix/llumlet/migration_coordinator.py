@@ -511,7 +511,7 @@ class MigrationCoordinator:
                                    is_first_stage: bool) -> MigrationResponse:
         try:
             return await asyncio_wait_for_ray_remote_call_with_timeout(
-                dst_instance_actor.execute_migration_method.remote,
+                dst_instance_actor.execute_migration_method,
                 "pre_alloc_cache",
                 request_id,
                 request_status,
@@ -538,7 +538,7 @@ class MigrationCoordinator:
                                         request_id: RequestIDType) -> bool:
         try:
             await asyncio_wait_for_ray_remote_call_with_timeout(
-                dst_instance_actor.execute_migration_method.remote, "free_pre_alloc_cache", request_id
+                dst_instance_actor.execute_migration_method, "free_pre_alloc_cache", request_id
             )
             return True
         # pylint: disable=W0703
@@ -579,7 +579,7 @@ class MigrationCoordinator:
                                       migrate_out_request: LlumnixRequest) -> MigrationResponse:
         try:
             return await asyncio_wait_for_ray_remote_call_with_timeout(
-                dst_instance_actor.execute_migration_method_async.remote,
+                dst_instance_actor.execute_migration_method_async,
                 "commit_dst_request", migrate_out_request.request_id, migrate_out_request
             )
         # pylint: disable=W0703

@@ -13,7 +13,6 @@
 
 from typing import Dict, List, Coroutine, Union
 import asyncio
-import time
 import queue
 import threading
 from abc import ABC, abstractmethod
@@ -26,7 +25,6 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.server_info import ServerInfo
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
-from llumnix.metrics.timestamps import set_timestamp
 from llumnix.request_output import LlumnixRequestOuput, LlumnixRequestOutputs
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.utils import ray_get_with_timeout, exception_wrapper_async
@@ -73,7 +71,9 @@ class BaseOutputForwarder(ABC):
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
-            set_timestamp(req_outputs, 'engine_actor_put_queue_timestamp', time.time())
+            for req_output in req_outputs:
+                # Set the timestamp for each request output.
+                req_output.set_timestamp('engine_actor_put_queue_timestamp')
             tasks.append(asyncio.create_task(request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         aborted_request_ids = []
@@ -112,7 +112,8 @@ class ActorOutputForwarder(BaseOutputForwarder):
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         # fake metric, for alignment
         for req_outputs in server_request_outputs.values():
-            set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.time())
+            for req_output in req_outputs:
+                req_output.set_timestamp('engine_thread_put_queue_timestamp')
         if self.engine_actor_handle is None:
             # The lifetime of ActorOutputForwarder is the same as the lifetime of the instance actor,
             # so we do not handling exception here.
@@ -147,7 +148,8 @@ class ThreadOutputForwarder(BaseOutputForwarder):
                                     server_request_outputs: Dict[str, LlumnixRequestOutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         for req_outputs in server_request_outputs.values():
-            set_timestamp(req_outputs, 'engine_thread_put_queue_timestamp', time.time())
+            for req_output in req_outputs:
+                req_output.set_timestamp('engine_thread_put_queue_timestamp')
         if self.put_queue_loop_thread.is_alive():
             self.server_request_outputs_queue.put_nowait((server_request_outputs, server_info_dict))
         # Ensure engine will die if put queue loop thread is dead.

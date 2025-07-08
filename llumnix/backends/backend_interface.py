@@ -223,7 +223,7 @@ class BackendInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_pre_alloc_cache(self, request_id: RequestIDType) -> None:
+    def free_pre_alloc_cache(self, request_id: RequestIDType) -> MigrationResponse:
         """
         Free pre-allocated blocks for a migrating request on the destination instance.
 
@@ -233,6 +233,10 @@ class BackendInterface(ABC):
 
         Args:
             request_id: The ID of the request for which resources are to be freed on the destination instance.
+
+        Returns:
+            A MigrationResponse type object which stores boolean value indicating if function success and
+            the value returned by function.
         """
         raise NotImplementedError
 

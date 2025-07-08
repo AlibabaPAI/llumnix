@@ -541,7 +541,8 @@ class BackendVLLM(BackendInterface):
         if self.use_ray_spmd_worker:
             # pylint: disable=protected-access
             asyncio.create_task(self._run_workers_async("free_migrating_in_seq_group_metadata"))
-        return self.engine.scheduler[0].free_pre_alloc_cache(request_id)
+        self.engine.scheduler[0].free_pre_alloc_cache(request_id)
+        return MigrationResponse(success=True, return_value=None)
 
     def free_src_request(self, backend_request: SequenceGroup) -> None:
         # When free_src_request is called, it means that all migration operations is successful.

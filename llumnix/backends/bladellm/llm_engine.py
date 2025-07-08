@@ -800,7 +800,8 @@ class BackendBladeLLM(BackendInterface):
         return self.engine.scheduler.add_running_request(backend_request)
 
     def free_pre_alloc_cache(self, *args, **kwargs) -> None:
-        return self.engine.scheduler.free_pre_alloc_cache(*args, **kwargs)
+        self.engine.scheduler.free_pre_alloc_cache(*args, **kwargs)
+        return MigrationResponse(success=True, return_value=None)
 
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         expired_step = self.engine.step_counter + 1

@@ -116,14 +116,10 @@ def update_pending_migrate_in_request_decorator(func: Callable):
             is_start, request_id, self.pending_migrate_in_request_time
         ):
             return MigrationResponse(success=False, return_value=None)
-        try:
-            response = await func(self, *args, **kwargs)
-            post_process_pending_migrate_in_request_time(
-                response, is_stop, request_id, self.pending_migrate_in_request_time
-            )
-        except:
-            self.pending_migrate_in_request_time.pop(request_id)
-            raise
+        response = await func(self, *args, **kwargs)
+        post_process_pending_migrate_in_request_time(
+            response, is_stop, request_id, self.pending_migrate_in_request_time
+        )
         return response
 
     @functools.wraps(func)
@@ -135,14 +131,10 @@ def update_pending_migrate_in_request_decorator(func: Callable):
             is_start, request_id, self.pending_migrate_in_request_time
         ):
             return MigrationResponse(success=False, return_value=None)
-        try:
-            response = func(self, *args, **kwargs)
-            post_process_pending_migrate_in_request_time(
-                response, is_stop, request_id, self.pending_migrate_in_request_time
-            )
-        except:
-            self.pending_migrate_in_request_time.pop(request_id)
-            raise
+        response = func(self, *args, **kwargs)
+        post_process_pending_migrate_in_request_time(
+            response, is_stop, request_id, self.pending_migrate_in_request_time
+        )
         return response
 
     if asyncio.iscoroutinefunction(func):
@@ -169,8 +161,7 @@ def update_migrating_out_request_id_set_decorator(func: Callable):
     @functools.wraps(func)
     async def async_wrapper(self, *args, **kwargs):
         request_id = inspect_request_id(func, self, *args, **kwargs)
-        if request_id not in self.migrating_out_request_id_set:
-            self.migrating_out_request_id_set.add(request_id)
+        self.migrating_out_request_id_set.add(request_id)
         try:
             return await func(self, *args, **kwargs)
         finally:
@@ -197,10 +188,6 @@ def update_migrating_in_request_id_set_decorator(func):
         request_id = bound_args.arguments.get("request_id")
         return request_id
 
-    def add_migrating_in_request_id_set(self, request_id: RequestIDType):
-        if request_id not in self.migrating_in_request_id_set:
-            self.migrating_in_request_id_set.add(request_id)
-
     def remove_migrating_in_request_id_set(self, request_id: RequestIDType):
         if request_id not in self.pending_migrate_in_request_time:
             assert request_id in self.migrating_in_request_id_set, \
@@ -210,7 +197,7 @@ def update_migrating_in_request_id_set_decorator(func):
     @functools.wraps(func)
     async def async_wrapper(self, *args, **kwargs):
         request_id = inspect_request_id(func, self, *args, **kwargs)
-        add_migrating_in_request_id_set(self, request_id)
+        self.migrating_in_request_id_set.add(request_id)
         try:
             return await func(self, *args, **kwargs)
         finally:
@@ -219,7 +206,7 @@ def update_migrating_in_request_id_set_decorator(func):
     @functools.wraps(func)
     def sync_wrapper(self, *args, **kwargs):
         request_id = inspect_request_id(func, self, *args, **kwargs)
-        add_migrating_in_request_id_set(self, request_id)
+        self.migrating_in_request_id_set.add(request_id)
         try:
             return func(self, *args, **kwargs)
         finally:
@@ -535,16 +522,15 @@ class MigrationCoordinator:
     async def _dst_free_pre_alloc_cache(self,
                                         dst_instance_actor: ray.actor.ActorHandle,
                                         dst_instance_id: str,
-                                        request_id: RequestIDType) -> bool:
+                                        request_id: RequestIDType) -> MigrationResponse:
         try:
-            await asyncio_wait_for_ray_remote_call_with_timeout(
+            return await asyncio_wait_for_ray_remote_call_with_timeout(
                 dst_instance_actor.execute_migration_method, "free_pre_alloc_cache", request_id
             )
-            return True
         # pylint: disable=W0703
         except Exception as e:
             log_instance_exception(e, dst_instance_id, "_dst_free_pre_alloc_cache", request_id)
-            return False
+            return MigrationResponse(success=False, return_value=None)
 
     async def _send_cache(self,
                           dst_instance_actor: ray.actor.ActorHandle,

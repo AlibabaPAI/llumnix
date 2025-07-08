@@ -13,7 +13,6 @@
 
 import asyncio
 from typing import List
-import pickle
 
 import ray
 import ray.actor
@@ -65,8 +64,19 @@ class DPManager:
         self.port_offset = 0
         self.client_index_offset = 0
 
-        # self._init_instances_and_servers(
-        #     entrypoints_args, instance_args, engine_args, placement_group)
+        self.instance_ids: List[str] = []
+        self.instances: List[ray.actor.ActorHandle] = []
+        self.servers: List[ray.actor.ActorHandle] = []
+        self._init_instances_and_servers()
+        
+        try:
+            # TODO(shejiarui): exception need to be handled
+            ray.get([server.is_ready.remote() for server in self.servers])
+            ray.get([instance.is_ready.remote() for instance in self.instances])
+            self.manager.scale_up.remote(self.instance_ids, self.instances, 
+                                         [None] * self.dp_size)
+        except Exception as e:
+            logger.exception(e)
 
     @classmethod
     def from_args(cls,
@@ -78,7 +88,6 @@ class DPManager:
                   ) -> "DPManager":
         dp_manager_class = ray.remote(
             num_cpus=1,
-            # num_gpus=0.1,
             name=get_dpmanager_name(instance_id),
             namespace="llumnix",
         )(cls)
@@ -91,12 +100,7 @@ class DPManager:
         )
         return dp_manager
 
-    async def _init_instances_and_servers(self) -> None:
-        self.pull_up_tasks: List[asyncio.Task] = []
-        self.instance_ids: List[str] = []
-        self.instances: List[ray.actor.ActorHandle] = []
-        self.servers: List[ray.actor.ActorHandle] = []
-
+    def _init_instances_and_servers(self) -> None:
         request_output_queue_type = QueueType(
             self.entrypoints_args.request_output_queue_type)
         # NOTE(shejiarui): noqa for kvt
@@ -106,12 +110,6 @@ class DPManager:
             new_instance_id = random_uuid()
             self.instance_ids.append(new_instance_id)
                 
-            # TODO(shejiarui): how to pass dp_rank_local?
-
-            # vllm_engine_args = self.engine_args.load_engine_args()
-            # vllm_engine_args.data_parallel_size = rank
-            # self.engine_args.engine_args = pickle.dumps(vllm_engine_args)
-            logger.info(f"[sjr] Creating Llumlet, {rank=}, {dp_rank_local=}")
             instance = Llumlet.from_args(
                 new_instance_id,
                 self.instance_args,
@@ -122,7 +120,7 @@ class DPManager:
                 dp_rank_local=dp_rank_local,
             )
             self.instances.append(instance)
-            
+
             self.entrypoints_args.port += self.port_offset
             self.entrypoints_args.client_index += self.client_index_offset
             self.port_offset += 1
@@ -136,16 +134,13 @@ class DPManager:
                 self.scaler,
                 self.manager,
                 instance,
+                bundle_index=rank
             )
             self.servers.append(server)
-            # dp_rank_local += 1
-
-        task = asyncio.create_task(self._done_scale_up(placement_group))
-        self.pull_up_tasks.append(task)
 
     async def _done_scale_up(self,
                              placement_group: PlacementGroup,
-                             instance_type: InstanceType = None,):
+                             instance_type: InstanceType = None) -> None:
         for i in range(self.dp_size):
             instance_id = self.instance_ids[i]
             try:

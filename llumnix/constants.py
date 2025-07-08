@@ -97,7 +97,7 @@ RAYRPC_MIGRATION_TIMEOUT = 100.0
 # llumnix/entrypoints/api_server_actor.py
 SERVER_GRACEFUL_SHUTDOWN_TIMEOUT: float = 10.0
 # NOTE(shejiarui): vLLM V1 need more time to start server.
-SERVER_START_TIMEOUT: float = 30.0
+SERVER_START_TIMEOUT: float = 60.0
 SERVER_STOP_TIMEOUT: float = 10.0
 
 # llumnix/llumlet/migration_coordinator.py

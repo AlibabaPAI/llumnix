@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
+from typing import Any, Optional
 import os
 from enum import Enum
 
@@ -22,7 +22,7 @@ from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
-from llumnix.utils import BackendType
+from llumnix.utils import (BackendType, ray_get_with_timeout)
 
 logger = init_logger(__name__)
 

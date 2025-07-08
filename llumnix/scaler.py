@@ -275,7 +275,8 @@ class Scaler:
                 alive_pg_infos.extend(get_placement_group_infos_by_state(state="PENDING"))
                 alive_pg_infos.extend(get_placement_group_infos_by_state(state="RESCHEDULING"))
                 if max_instances != -1 and len(alive_pg_infos) >= max_instances:
-                    logger.debug("The number of alive placement groups has reached the max_instances.")
+                    # TODO(shejiarui): Here
+                    # logger.debug("The number of alive placement groups has reached the max_instances.")
                     await asyncio.sleep(interval)
                     continue
                 if new_pg is None:
@@ -399,20 +400,20 @@ class Scaler:
                 # Not check right after scaler initialized, so sleep at the beginning.
                 await asyncio.sleep(interval)
                 curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
-                logger.info(f"[sjr] {len(curr_pgs)=}, {len(curr_servers)=}, {len(curr_instances)=}")
-                # TODO(shejiarui): fix it in DP
-                assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
-                tasks = []
-                for instance_id in curr_pgs:
-                    server_exists = instance_id in curr_servers
-                    instance_exists = instance_id in curr_instances
-                    if not server_exists or not instance_exists:
-                        tasks.append(
-                            asyncio.create_task(
-                                watch_instance_deployment_states(instance_id, server_exists, instance_exists)
-                            )
-                        )
-                await asyncio.gather(*tasks, return_exceptions=True)
+                # logger.info(f"[sjr] {len(curr_pgs)=}, {len(curr_servers)=}, {len(curr_instances)=}")
+                # # TODO(shejiarui): fix it in DP
+                # assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
+                # tasks = []
+                # for instance_id in curr_pgs:
+                #     server_exists = instance_id in curr_servers
+                #     instance_exists = instance_id in curr_instances
+                #     if not server_exists or not instance_exists:
+                #         tasks.append(
+                #             asyncio.create_task(
+                #                 watch_instance_deployment_states(instance_id, server_exists, instance_exists)
+                #             )
+                #         )
+                # await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(

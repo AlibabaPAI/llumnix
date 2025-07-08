@@ -24,7 +24,7 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, Instance
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
-from llumnix.server_info import RequestServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
@@ -152,13 +152,20 @@ class Llumlet:
         await self.backend_engine.is_ready()
         return self.backend_engine.engine_disagg_inst_id
 
-    async def generate(self, request_id: RequestIDType, request_server_info: RequestServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        request_server_info.set_timestamp('llumlet_generate_timestamp')
+    async def generate(
+        self,
+        request_id: RequestIDType,
+        request_processing_context: RequestProcessingContext,
+        expected_steps: int,
+        *args,
+        **kwargs,
+    ) -> None:
+        request_processing_context.add_trace_timeline("llumlet_generate_timestamp")
         self.llumlet_metrics.llumlet_request_qps.increase(
             labels={"instance_id": self.instance_id}
         )
         await self.backend_engine.add_request(
-            request_id, request_server_info, expected_steps, *args, **kwargs
+            request_id, request_processing_context, expected_steps, *args, **kwargs
         )
 
     async def abort(self, request_id: Union[RequestIDType, Iterable[RequestIDType]]) -> None:

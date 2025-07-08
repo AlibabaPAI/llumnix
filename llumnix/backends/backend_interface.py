@@ -17,7 +17,7 @@ from typing import Iterable, List, Union, Deque, Tuple, Any
 import ray.actor
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-from llumnix.server_info import RequestServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import RequestIDType, MigrationResponse
 from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.instance_info import InstanceInfo
@@ -36,7 +36,7 @@ class BackendInterface(ABC):
 
     # Methods for inference
     @abstractmethod
-    async def add_request(self, request_id: RequestIDType, request_server_info: RequestServerInfo, expected_steps: int,
+    async def add_request(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, expected_steps: int,
                           *args, **kwargs) -> None:
         """
         Add a new inference request to the backend.
@@ -46,7 +46,7 @@ class BackendInterface(ABC):
 
         Args:
             request_id: Request ID.
-            request_server_info: The information of the api server where the request comes.
+            request_processing_context: The information of the api server where the request comes.
             expected_steps: The expected number of steps for the request to run. The number of steps
                             represents the times 'engine.step()' has been called by the backend
                             instance for the request. Currently, `expected_steps` is used to

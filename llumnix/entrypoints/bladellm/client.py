@@ -30,7 +30,7 @@ from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
-from llumnix.server_info import RequestServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputBladeLLM
 from llumnix.entrypoints.client import LlumnixClient
@@ -79,8 +79,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         logger.info("Client receive request {}.".format(request_id))
         results_queue = asyncio.Queue()
         self.request_stream[request_id] = results_queue
-        reuqest_server_info: RequestServerInfo = (
-            RequestServerInfo.deepcopy_from_server_info(
+        reuqest_server_info: RequestProcessingContext = (
+            RequestProcessingContext.deepcopy_from_server_info(
                 self.server_info,
                 enable_trace=isinstance(request, LlumnixServerRequest)
                 and request.llumnix_trace_request,
@@ -106,21 +106,22 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         return LLMResponse(request_id, resp_queue=results_queue)
 
     # pylint: disable=arguments-differ
-    async def _generate_by_manager(self, request_id: int, request_server_info: RequestServerInfo, request: bytes):
-        request_server_info.set_timestamp("api_server_generate_timestamp")
+    async def _generate_by_manager(self, request_id: int, request_processing_context: RequestProcessingContext, request: bytes):
+        request_processing_context.add_trace_timeline("api_server_generate_timestamp")
         # await to catch exception
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.generate, str(request_id), request_server_info, server_request=request
+            self.manager.generate, str(request_id), request_processing_context, server_request=request
         )
 
     # pylint: disable=arguments-differ
-    async def _generate_by_instance(self, request_id: int, request_server_info: RequestServerInfo, request: bytes):
+    async def _generate_by_instance(self, request_id: int, request_processing_context: RequestProcessingContext, request: bytes):
         try:
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
+                request_processing_context.add_trace_timeline("api_server_generate_timestamp")
                 self.instance_num_requests[instance_id] += 1
                 await asyncio_wait_for_ray_remote_call_with_timeout(
-                    self.instances[instance_id].generate, request_id, request_server_info, -1, server_request=request
+                    self.instances[instance_id].generate, request_id, request_processing_context, -1, server_request=request
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
@@ -157,8 +158,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                         continue
                     self.request_instance[request_id] = request_response.instance_id
 
-                    request_timestamps: RequestTimestamps = request_response.request_timestamps
-                    if request_timestamps:
+                    if request_response.enable_trace():
+                        request_timestamps: RequestTimestamps = request_response.request_timestamps
                         request_timestamps.set_timestamp('api_server_get_queue_timestamp')
                         # Do not consider the out of order for request timestamp currently.
                         entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)

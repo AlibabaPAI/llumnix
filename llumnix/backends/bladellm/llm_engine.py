@@ -56,7 +56,7 @@ from llumnix.utils import (
     MigrationResponse,
 )
 from llumnix.internal_config import MigrationConfig
-from llumnix.server_info import RequestServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import OutputForwarder, RequestOutputForwardingMode
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
@@ -151,20 +151,20 @@ class AsyncBackQueueWrapper:
             pass
 
     async def _put_request_outputs_loop(self):
-        async def get_single_response() -> Tuple[GenerateStreamResponse, RequestServerInfo]:
+        async def get_single_response() -> Tuple[GenerateStreamResponse, RequestProcessingContext]:
             resp: Union[GenerateStreamResponse, int] = await self.resp_queue.get()
             while isinstance(resp, int):
                 self.get_current_step_counter_queue.put_nowait(resp)
                 self._set_step_metrics()
                 resp: Union[GenerateStreamResponse, int] = await self.resp_queue.get()
-            reqeust_server_info: RequestServerInfo = self.request_server_map[resp.req_id]
+            request_processing_context: RequestProcessingContext = self.request_server_map[resp.req_id]
             if resp.is_finished:
                 logger.info("Engine finished request {}.".format(resp.req_id))
                 self.request_server_map.pop(resp.req_id, None)
-            return resp, reqeust_server_info
+            return resp, request_processing_context
 
-        def get_nowait_responses(output_size: int) -> Tuple[GenerateStreamResponse, RequestServerInfo]:
-            resps, reqeust_server_infos = [], []
+        def get_nowait_responses(output_size: int) -> Tuple[GenerateStreamResponse, RequestProcessingContext]:
+            resps, request_processing_contexts = [], []
 
             while output_size > 0:
                 resp: Union[GenerateStreamResponse, int] = self.resp_queue.get_nowait()
@@ -179,44 +179,44 @@ class AsyncBackQueueWrapper:
                 if isinstance(resp, int):
                     continue
 
-                reqeust_server_info: RequestServerInfo = self.request_server_map[resp.req_id]
+                request_processing_context: RequestProcessingContext = self.request_server_map[resp.req_id]
                 if resp.is_finished:
                     logger.info("Engine finished request {}.".format(resp.req_id))
                     self.request_server_map.pop(resp.req_id, None)
 
                 resps.append(resp)
-                reqeust_server_infos.append(reqeust_server_info)
+                request_processing_contexts.append(request_processing_context)
 
-            return resps, reqeust_server_infos
+            return resps, request_processing_contexts
 
         self.current_step_metrics: RequestTimestamps = None
         while True:
-            request_outputs, request_server_info_outputs = [], []
-            resp, reqeust_server_info = await get_single_response()
+            request_outputs, request_processing_context_outputs = [], []
+            resp, request_processing_context = await get_single_response()
             request_outputs.append(resp)
-            request_server_info_outputs.append(reqeust_server_info)
+            request_processing_context_outputs.append(request_processing_context)
 
             output_size = self.resp_queue.qsize()
             if output_size > 0:
-                resps, request_server_infos = get_nowait_responses(output_size)
+                resps, request_processing_contexts = get_nowait_responses(output_size)
                 request_outputs.extend(resps)
-                request_server_info_outputs.extend(request_server_infos)
+                request_processing_context_outputs.extend(request_processing_contexts)
 
-            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, request_server_info_outputs)
+            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, request_processing_context_outputs)
             if server_request_outputs:
                 await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
     def _gen_server_request_outputs(self,
                                     request_outputs: List[GenerateStreamResponse],
-                                    request_server_infos: List[RequestServerInfo]) -> None:
+                                    request_processing_contexts: List[RequestProcessingContext]) -> None:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in order to put request output to queue in batch at one time.
-        for request_output, request_server_info in zip(request_outputs, request_server_infos):
+        for request_output, request_processing_context in zip(request_outputs, request_processing_contexts):
             request_timestamps = None
             req_id = request_output.req_id
             if req_id in self.request_metrics_queue_dict:
-                request_timestamps = request_server_info.request_timestamps
+                request_timestamps = request_processing_context.trace_timeline
                 request_timestamps.set_timestamp("engine_process_model_outputs_timestamp_end")
                 engine_put_queue_timestamp = time.perf_counter()
                 request_timestamps.set_timestamp("engine_put_queue_timestamp",engine_put_queue_timestamp)
@@ -232,10 +232,10 @@ class AsyncBackQueueWrapper:
             llumnix_request_output = LlumnixRequestOuput(
                 req_id, self.instance_id, self.msg_encoder.encode(request_output), request_timestamps
             )
-            server_id = request_server_info.server_id
+            server_id = request_processing_context.server_id
             server_request_outputs[server_id].append(llumnix_request_output)
             if server_id not in server_info_dict:
-                server_info_dict[server_id] = request_server_info
+                server_info_dict[server_id] = request_processing_context
 
         return server_request_outputs, server_info_dict
 
@@ -247,10 +247,10 @@ class AsyncBackQueueWrapper:
         logger.debug("Trans_wrapper {} is going to remove request {} at step {}.".format(
             self.instance_id, request_id, expired_step))
 
-    def add_request(self, request_id: int, request_server_info: RequestServerInfo) -> None:
-        self.request_server_map[request_id] = request_server_info
+    def add_request(self, request_id: int, request_processing_context: RequestProcessingContext) -> None:
+        self.request_server_map[request_id] = request_processing_context
         logger.debug("Trans_wrapper {} add_request {} from server {}.".format(
-            self.instance_id, request_id, request_server_info.server_id))
+            self.instance_id, request_id, request_processing_context.server_id))
 
     def clear(self):
         self.request_server_map = {}
@@ -458,12 +458,12 @@ class AsyncLLMEngineLlumnixMixin:
         await super()._handle_reset()
         self.trans_wrapper.clear()
 
-    async def add_request_wrapper(self, request_server_info: RequestServerInfo, server_request: ServerRequest):
+    async def add_request_wrapper(self, request_processing_context: RequestProcessingContext, server_request: ServerRequest):
         logger.debug("Engine {} add request {}:{}.".format(self.instance_id, server_request.id, server_request.external_id))
-        if request_server_info.enable_trace:
-            request_server_info.set_timestamp('engine_add_request_timestamp')
+        if request_processing_context.enable_trace:
+            request_processing_context.add_trace_timeline('engine_add_request_timestamp')
             self.request_metrics_queue_dict[server_request.id] = asyncio.Queue()
-        self.trans_wrapper.add_request(server_request.id, request_server_info)
+        self.trans_wrapper.add_request(server_request.id, request_processing_context)
         # pylint: disable=protected-access
         await self._client._add_request(server_request, self.resp_queue)
 
@@ -711,7 +711,7 @@ class BackendBladeLLM(BackendInterface):
 
     # -------------- dispatch related method --------------
 
-    async def add_request(self, request_id: int, request_server_info: RequestServerInfo, expected_steps: int, *args, **kwargs) -> None:
+    async def add_request(self, request_id: int, request_processing_context: RequestProcessingContext, expected_steps: int, *args, **kwargs) -> None:
         assert "server_request" in kwargs and kwargs["server_request"]
         server_request = msgspec.convert(self.msg_decoder.decode(kwargs["server_request"]), type=ServerRequest)
         # The instance ID of the decode instance. If provided, engine will skip dispatch decode instance after prefilling.
@@ -735,9 +735,9 @@ class BackendBladeLLM(BackendInterface):
         if self.engine_args.enable_semi_pd_mode:
             # TODO(KuilongCui): add exception handle
             add_request_exception_wrapper = exception_wrapper_async(self.engine.add_request_wrapper)
-            asyncio.create_task(add_request_exception_wrapper(request_server_info, server_request))
+            asyncio.create_task(add_request_exception_wrapper(request_processing_context, server_request))
         else:
-            await self.engine.add_request_wrapper(request_server_info, server_request)
+            await self.engine.add_request_wrapper(request_processing_context, server_request)
 
     async def abort_request(self, request_id: Union[int, Iterable[int]]) -> None:
         if isinstance(request_id, int):

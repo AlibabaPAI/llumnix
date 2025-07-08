@@ -33,7 +33,7 @@ from llumnix.arg_utils import (
     LlumnixEngineArgs,
 )
 from llumnix.metrics.manager_metrics import ManagerMetrics
-from llumnix.server_info import RequestServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import (
     random_uuid,
     asyncio_wait_for_ray_remote_call_with_timeout,
@@ -123,7 +123,7 @@ class Manager:
 
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
-    async def generate(self, request_id: RequestIDType, request_server_info: RequestServerInfo, *args, **kwargs) -> None:
+    async def generate(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, *args, **kwargs) -> None:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
             if self.manager_args.enable_engine_pd_disagg:
                 dispatch_kwargs["decode_instance_id"] = self.instance_id_2_engine_inner_inst_id[decode_instance_id]
@@ -138,7 +138,7 @@ class Manager:
             return target_instance_id
 
         self.manager_metrics.manager_request_qps.increase(
-            labels={"server_id": request_server_info.server_id}
+            labels={"server_id": request_processing_context.server_id}
         )
         while self.num_instances == 0:
             logger.warning("No instance available now, sleep {}s, and regenerate request {}.".format(
@@ -147,29 +147,29 @@ class Manager:
 
         prefill_instance_id, decode_instance_id, request_expected_steps = self.global_scheduler.dispatch(request_id)
         target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id, kwargs)
-        request_server_info.set_timestamp('manager_generate_timestamp')
+        request_processing_context.add_trace_timeline('manager_generate_timestamp')
         asyncio.create_task(
             self._generate_with_exception_handling(
-                request_id, request_server_info, request_expected_steps, target_instance_id, *args, **kwargs
+                request_id, request_processing_context, request_expected_steps, target_instance_id, *args, **kwargs
             )
         )
 
     async def _generate_with_exception_handling(self,
                                                 request_id: RequestIDType,
-                                                request_server_info: RequestServerInfo,
+                                                request_processing_context: RequestProcessingContext,
                                                 request_expected_steps: int,
                                                 target_instance_id: str,
                                                 *args, **kwargs):
         try:
             await asyncio_wait_for_ray_remote_call_with_timeout(
                 self.instances[target_instance_id].generate,
-                request_id, request_server_info, request_expected_steps, *args, **kwargs
+                request_id, request_processing_context, request_expected_steps, *args, **kwargs
             )
         # pylint: disable=broad-except
         except Exception as e:
             log_instance_exception(e, target_instance_id, "generate", request_id)
             self.scale_down(target_instance_id)
-            await asyncio.create_task(self.generate(request_id, request_server_info, *args, **kwargs))
+            await asyncio.create_task(self.generate(request_id, request_processing_context, *args, **kwargs))
 
     @classmethod
     def from_args(cls,

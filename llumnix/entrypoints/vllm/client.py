@@ -22,7 +22,7 @@ from vllm import SamplingParams
 
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
-from llumnix.server_info import RequestServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.constants import WAIT_MANAGER_INTERVAL, LLUMNIX_TRACE_REQUEST
 from llumnix.utils import (
     asyncio_wait_for_ray_remote_call_with_timeout,
@@ -51,7 +51,7 @@ class LlumnixClientVLLM(LlumnixClient):
         # pylint: disable=unexpected-keyword-arg
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
         self.request_stream[request_id] = results_generator
-        request_server_info: RequestServerInfo = RequestServerInfo.deepcopy_from_server_info(
+        request_processing_context: RequestProcessingContext = RequestProcessingContext.deepcopy_from_server_info(
             server_info=self.server_info,
             enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
         )
@@ -59,7 +59,7 @@ class LlumnixClientVLLM(LlumnixClient):
 
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
-            await self._generate_by_manager(request_id, request_server_info, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_manager(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
@@ -68,40 +68,40 @@ class LlumnixClientVLLM(LlumnixClient):
             if self.manager_available:
                 self.manager_available = False
                 return results_generator
-            await self._generate_by_instance(request_id, request_server_info, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_instance(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
 
         return results_generator
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,
                                    request_id: str,
-                                   request_server_info: RequestServerInfo,
+                                   request_processing_context: RequestProcessingContext,
                                    prompt: str,
                                    sampling_params: SamplingParams,
                                    *args,
                                    **kwargs) -> AsyncStream:
-        request_server_info.set_timestamp("api_server_generate_timestamp")
+        request_processing_context.add_trace_timeline("api_server_generate_timestamp")
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.generate, request_id, request_server_info, prompt, sampling_params, *args, **kwargs
+            self.manager.generate, request_id, request_processing_context, prompt, sampling_params, *args, **kwargs
         )
 
     # pylint: disable=arguments-differ
     async def _generate_by_instance(self,
                                     request_id: str,
-                                    request_server_info: RequestServerInfo,
+                                    request_processing_context: RequestProcessingContext,
                                     prompt: str,
                                     sampling_params: SamplingParams,
                                     *args,
                                     **kwargs) -> AsyncStream:
         try:
             if self.instance_num_requests:
-                request_server_info.set_timestamp("api_server_generate_timestamp")
+                request_processing_context.add_trace_timeline("api_server_generate_timestamp")
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     self.instances[instance_id].generate,
-                    request_id, request_server_info, expected_steps, prompt, sampling_params, *args, **kwargs
+                    request_id, request_processing_context, expected_steps, prompt, sampling_params, *args, **kwargs
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))

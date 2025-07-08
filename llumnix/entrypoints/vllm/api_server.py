@@ -110,7 +110,7 @@ async def generate(request: Request) -> Response:
                 prompt + output.text for output in request_output.outputs
             ]
             ret = {"text": text_outputs}
-            if llumnix_request_output.request_timestamps is not None:
+            if llumnix_request_output.enable_trace():
                 llumnix_request_output.set_timestamp("api_server_generate_timestamp_end")
                 llumnix_trace_info = LlumnixTraceInfo(
                     latencys=llumnix_request_output.request_timestamps.to_latency_breakdown_dict(),
@@ -133,7 +133,7 @@ async def generate(request: Request) -> Response:
             return Response(status_code=499)
         request_output = llumnix_request_output.get_engine_output()
         final_output = request_output
-        if llumnix_request_output.request_timestamps is not None:
+        if llumnix_request_output.enable_trace():
             llumnix_request_output.set_timestamp("api_server_generate_timestamp_end")
             llumnix_trace_info = LlumnixTraceInfo(
                 latencys=llumnix_request_output.request_timestamps.to_latency_breakdown_dict(),
@@ -190,7 +190,7 @@ async def generate_benchmark(request: Request) -> Response:
         per_token_latency.append([now, (now - start)*1000])
         start = now
         final_output = request_output
-        if llumnix_request_output.request_timestamps is not None:
+        if llumnix_request_output.enable_trace():
             llumnix_request_output.set_timestamp('api_server_generate_timestamp_end', now)
             per_token_latency_breakdown_list.append(llumnix_request_output.request_timestamps.to_latency_breakdown_dict())
     assert final_output is not None

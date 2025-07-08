@@ -33,6 +33,9 @@ class LlumnixRequestOuput:
             return
         self.request_timestamps.set_timestamp(timestamp_attr=timestamp_attr, timestamp=timestamp)
 
+    def enable_trace(self) -> bool:
+        return self.request_timestamps is not None
+
 class LlumnixRequestOutputs:
     """Wrapper of vLLM v1 EngineCoreOutputs"""
     def __init__(self, instance_id: str, engine_outputs: Any,

@@ -26,8 +26,8 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.ray_utils import initialize_placement_group, get_placement_group_name
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import random_uuid
-from llumnix.server_info import ServerInfo
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -123,9 +123,9 @@ def test_generate_and_abort(ray_env):
     waiting_requests = ray.get(llumlet.execute_engine_method.remote("get_waiting_queue"))
     assert len(waiting_requests) == 0
     request_id = random_uuid()
-    server_info = ServerInfo(None, None, None, None, None)
+    request_processing_context = RequestProcessingContext(None, None, None, None, None)
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
-    ray.get(llumlet.generate.remote(request_id, server_info, math.inf, "prompt", sampling_params))
+    ray.get(llumlet.generate.remote(request_id, request_processing_context, math.inf, "prompt", sampling_params))
     waiting_requests = ray.get(llumlet.execute_engine_method.remote("get_waiting_queue"))
     assert len(waiting_requests) == 1
     ray.get(llumlet.abort.remote(request_id))

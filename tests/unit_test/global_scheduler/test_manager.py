@@ -22,7 +22,7 @@ import numpy as np
 from llumnix.arg_utils import ManagerArgs, InstanceArgs
 from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo, InstanceType
-from llumnix.server_info import ServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import random_uuid
 from llumnix.ray_utils import (
     get_placement_group_name,
@@ -213,8 +213,8 @@ def test_generate(ray_env, manager: Manager, llumlet):
     request_id = random_uuid()
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 0
-    server_info = ServerInfo(None, None, None, None, None)
-    ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None))
+    request_processing_context = RequestProcessingContext(None, None, None, None, None)
+    ray.get(manager.generate.remote(request_id, request_processing_context, math.inf, None, None))
     time.sleep(1.0)
     num_requests = ray.get(llumlet.get_num_requests.remote())
     assert num_requests == 1
@@ -231,8 +231,8 @@ def test_generate_pdd(ray_env):
     request_id = random_uuid()
     num_requests = ray.get(prefill_llumlet.get_num_requests.remote())
     assert num_requests == 0
-    server_info = ServerInfo(None, None, None, None, None)
-    ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None,
+    request_processing_context = RequestProcessingContext(None, None, None, None, None)
+    ray.get(manager.generate.remote(request_id, request_processing_context, math.inf, None, None,
                                     prefill_instance_id=prefill_instance_id))
     time.sleep(1.0)
     num_requests = ray.get(prefill_llumlet.get_num_requests.remote())
@@ -250,8 +250,8 @@ def test_generate_semi_pdd(ray_env):
     request_id = random_uuid()
     num_requests = ray.get(decode_llumlet.get_num_requests.remote())
     assert num_requests == 0
-    server_info = ServerInfo(None, None, None, None, None)
-    ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None))
+    request_processing_context = RequestProcessingContext(None, None, None, None, None)
+    ray.get(manager.generate.remote(request_id, request_processing_context, math.inf, None, None))
     time.sleep(1.0)
     num_requests = ray.get(decode_llumlet.get_num_requests.remote())
     assert num_requests == 1

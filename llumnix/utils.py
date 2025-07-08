@@ -277,9 +277,30 @@ def asyncio_wait_for_with_timeout(fut, timeout=RAY_RPC_TIMEOUT):
 async def async_wrapper_for_ray_remote_call(ray_remote_call, *args, **kwargs):
     return await ray_remote_call(*args, **kwargs)
 
-async def asyncio_wait_for_ray_remote_call_with_timeout(ray_remote_call, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
-    fut = ray_remote_call(*args, **kwargs)
-    return await asyncio_wait_for_with_timeout(fut, timeout=timeout)
+async def asyncio_wait_for_ray_remote_call_with_timeout(
+    ray_method, *args, timeout=RAY_RPC_TIMEOUT, exc_handling=False, **kwargs
+):
+    try:
+        fut = ray_method.remote(*args, **kwargs)
+        return await asyncio_wait_for_with_timeout(fut, timeout=timeout)
+    # pylint: disable=broad-except
+    except Exception as e:
+        if exc_handling:
+            if isinstance(e, asyncio.TimeoutError):
+                logger.error(
+                    "Ray remote call {} timeout after {} seconds, "
+                    "exception type: {}, exception message: {}, args: {}, kwargs: {}".format(
+                        ray_method.__getstate__()['method_name'], timeout, type(e).__name__, e, args, kwargs
+                    )
+                )
+            else:
+                logger.exception(
+                    "Error in ray remote call {}, args: {}, kwargs: {}".format(
+                        ray_method.__getstate__()['method_name'], args, kwargs
+                    )
+                )
+        else:
+            raise
 
 def execute_method_with_timeout(method, timeout, *args, **kwargs):
     with ThreadPoolExecutor(max_workers=1) as executor:

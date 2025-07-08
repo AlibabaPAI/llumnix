@@ -120,7 +120,7 @@ class ActorOutputForwarder(BaseOutputForwarder):
             self.request_output_queue_type, self.request_output_queue_client, server_request_outputs, server_info_dict
         )
         if aborted_request_ids:
-            await asyncio_wait_for_ray_remote_call_with_timeout(self.engine_actor_handle.abort.remote, aborted_request_ids)
+            await asyncio_wait_for_ray_remote_call_with_timeout(self.engine_actor_handle.abort, aborted_request_ids)
 
     def stop(self):
         if self.request_output_queue_type == QueueType.ZMQ:
@@ -232,7 +232,7 @@ class OutputForwarder:
     ) -> None:
         if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
             await asyncio_wait_for_ray_remote_call_with_timeout(
-                self.actor_forwarder.put_nowait_to_servers.remote, server_request_outputs, server_info_dict
+                self.actor_forwarder.put_nowait_to_servers, server_request_outputs, server_info_dict
             )
         else:
             await self.thread_forwarder.put_nowait_to_servers(server_request_outputs, server_info_dict)

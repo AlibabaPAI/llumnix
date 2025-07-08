@@ -160,7 +160,7 @@ class Manager:
                                                 *args, **kwargs):
         try:
             await asyncio_wait_for_ray_remote_call_with_timeout(
-                self.instances[target_instance_id].generate.remote,
+                self.instances[target_instance_id].generate,
                 request_id, server_info, request_expected_steps, *args, **kwargs
             )
         # pylint: disable=broad-except
@@ -197,7 +197,7 @@ class Manager:
     async def is_ready(self) -> bool:
         """Called by api server, return true when all the instances have been successfully created."""
         tasks = [
-            asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready.remote)
+            asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready)
             for instance in self.instances.values()
         ]
         # Note that llumnix run server and scale up instance in manager after instance is ready,
@@ -221,29 +221,36 @@ class Manager:
             loop.create_task(get_instance_info_done_callback(ret, instance_id))
 
         while True:
-            await asyncio.sleep(interval)
-            tasks = []
-            instance_infos = []
-            for instance_id, instance in self.instances.items():
-                # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
-                task = asyncio.gather(
-                    asyncio_wait_for_ray_remote_call_with_timeout(instance.get_instance_info.remote),
-                    return_exceptions=True
+            try:
+                await asyncio.sleep(interval)
+                tasks = []
+                instance_infos = []
+                for instance_id, instance in self.instances.items():
+                    # Use asyncio.gather to wrap ray remote call to add done callback, asyncio.create_task will get error.
+                    task = asyncio.gather(
+                        asyncio_wait_for_ray_remote_call_with_timeout(instance.get_instance_info),
+                        return_exceptions=True
+                    )
+                    task.add_done_callback(partial(get_instance_info_done_callback_wrapper, instance_id))
+                    tasks.append(task)
+                if self.num_instance_info_updates % 1000 == 0:
+                    logger.debug("Polling instance infos of {} instances starts.".format(self.num_instances))
+                await asyncio.gather(*tasks, return_exceptions=True)
+                if self.num_instance_info_updates % 1000 == 0:
+                    logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
+                self.num_instance_info_updates += 1
+                # Push migrate when the instance_info have updated a certain number of times.
+                if self.enable_migration and self.num_instance_info_updates != 0 \
+                    and self.num_instance_info_updates % self.pair_migration_frequency == 0:
+                    asyncio.create_task(self._push_migrations())
+                if self.log_instance_info:
+                    self._log_instance_infos_to_csv(instance_infos)
+            # pylint: disable=W0703
+            except Exception:
+                logger.critical(
+                    "Manager get error in _poll_instance_info_loop, manager keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
                 )
-                task.add_done_callback(partial(get_instance_info_done_callback_wrapper, instance_id))
-                tasks.append(task)
-            if self.num_instance_info_updates % 1000 == 0:
-                logger.debug("Polling instance infos of {} instances starts.".format(self.num_instances))
-            await asyncio.gather(*tasks, return_exceptions=True)
-            if self.num_instance_info_updates % 1000 == 0:
-                logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
-            self.num_instance_info_updates += 1
-            # Push migrate when the instance_info have updated a certain number of times.
-            if self.enable_migration and self.num_instance_info_updates != 0 \
-                and self.num_instance_info_updates % self.pair_migration_frequency == 0:
-                asyncio.create_task(self._push_migrations())
-            if self.log_instance_info:
-                self._log_instance_infos_to_csv(instance_infos)
 
     async def _push_migrations(self) -> None:
         if self.enable_pd_disagg:
@@ -253,22 +260,15 @@ class Manager:
             asyncio.create_task(self._migrate(PairMigrationConstraints.NO_CONSTRAINTS))
 
     async def _migrate(self, pair_migration_type: PairMigrationConstraints) -> None:
-        # If encounter error during migration, to make manager keep running, we do not raise exception.
-        try:
-            migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
-            for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
-                src_instance_id, dst_instance_id = migrate_instance_pair
-                dst_instance_actor = self.instances[dst_instance_id]
-                asyncio.create_task(
-                    asyncio_wait_for_ray_remote_call_with_timeout(
-                        self.instances[src_instance_id].migrate_out.remote, dst_instance_actor, dst_instance_id
-                    )
+        migrate_instance_pairs = self.global_scheduler.pair_migration(pair_migration_type)
+        for _, migrate_instance_pair in enumerate(migrate_instance_pairs):
+            src_instance_id, dst_instance_id = migrate_instance_pair
+            dst_instance_actor = self.instances[dst_instance_id]
+            asyncio.create_task(
+                asyncio_wait_for_ray_remote_call_with_timeout(
+                    self.instances[src_instance_id].migrate_out, dst_instance_actor, dst_instance_id,
+                    exc_handling=True,
                 )
-        # pylint: disable=W0703
-        except Exception:
-            logger.critical(
-                "Manager get error in _migrate, manager keeps running, please check the cause!",
-                exc_info=True, stack_info=True
             )
 
     @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
@@ -342,7 +342,8 @@ class Manager:
 
         asyncio.create_task(
             asyncio_wait_for_ray_remote_call_with_timeout(
-                self.scaler.scale_down.remote, instance_ids
+                self.scaler.scale_down, instance_ids,
+                exc_handling=True,
             )
         )
 
@@ -351,7 +352,8 @@ class Manager:
                 self.pending_rebuild_migration_instances = 0
                 asyncio.create_task(
                     asyncio_wait_for_ray_remote_call_with_timeout(
-                        self.scaler.clear_gloo_backend_ray_resources.remote
+                        self.scaler.clear_gloo_backend_ray_resources,
+                        exc_handling=True,
                     )
                 )
             elif indeed_update and no_pending_instance and rebuild_migration_backend and not self.instance_args.simulator_mode:
@@ -377,7 +379,7 @@ class Manager:
                 if llumlet_handle is not None:
                     tasks.append(
                         asyncio_wait_for_ray_remote_call_with_timeout(
-                            llumlet_handle.execute_engine_method_async.remote, "_run_workers_async", task_name, *args, **kwargs
+                            llumlet_handle.execute_engine_method_async, "_run_workers_async", task_name, *args, **kwargs
                         )
                     )
                 else:
@@ -393,10 +395,10 @@ class Manager:
 
             if len(dead_instances) > 0:
                 self.scale_down(dead_instances, rebuild_migration_backend=False)
-                await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote)
+                await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources)
             return dead_instances
 
-        await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources.remote)
+        await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources)
         alive_instances = sorted(self.instances.keys())
         pending_task = self.pending_rebuild_migration_instances
         group_name = None
@@ -437,7 +439,7 @@ class Manager:
 
     async def _connect_to_instances(self):
         instance_ids, instances, instance_types = \
-            await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.get_instances.remote)
+            await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.get_instances)
         await self.scale_up(instance_ids, instances, instance_types)
 
     def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:

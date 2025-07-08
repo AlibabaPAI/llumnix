@@ -89,7 +89,7 @@ class LlumnixClient(ABC):
         raise NotImplementedError
 
     async def is_ready(self) -> bool:
-        return await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.is_ready.remote)
+        return await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.is_ready)
 
     def cleanup(self):
         self.request_output_queue.cleanup()
@@ -114,7 +114,7 @@ class LlumnixClient(ABC):
             self.global_instances[instance_id] = instance
             logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
             try:
-                await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort.remote, request_id)
+                await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort, request_id)
                 self._clear_client_request_states(request_id)
             except Exception as e: # pylint: disable=broad-except
                 log_instance_exception(e, instance_id, "_abort", request_id)
@@ -139,18 +139,25 @@ class LlumnixClient(ABC):
     async def _update_global_instances_loop(self):
         await asyncio.sleep(INIT_GLOBAL_INSTANCES_INTERVAL)
         while True:
-            curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
-            curr_instance_ids = [curr_instance_name.split("_")[-1] for curr_instance_name in curr_instance_names]
-            new_global_instances = {}
-            for instance_id in curr_instance_ids:
-                if instance_id in self.global_instances:
-                    new_global_instances[instance_id] = self.global_instances[instance_id]
-                else:
-                    instance = get_instance(instance_id)
-                    if instance is not None:
-                        new_global_instances[instance_id] = instance
-            self.global_instances = new_global_instances
-            await asyncio.sleep(UPDATE_GLOBAL_INSTANCES_INTERVAL)
+            try:
+                curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
+                curr_instance_ids = [curr_instance_name.split("_")[-1] for curr_instance_name in curr_instance_names]
+                new_global_instances = {}
+                for instance_id in curr_instance_ids:
+                    if instance_id in self.global_instances:
+                        new_global_instances[instance_id] = self.global_instances[instance_id]
+                    else:
+                        instance = get_instance(instance_id)
+                        if instance is not None:
+                            new_global_instances[instance_id] = instance
+                self.global_instances = new_global_instances
+                await asyncio.sleep(UPDATE_GLOBAL_INSTANCES_INTERVAL)
+            # pylint: disable=broad-except
+            except Exception:
+                logger.critical(
+                    "Client get error in _update_global_instances_loop, client keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
+                )
 
     def _handle_generate_by_manager_error(self, request_id: RequestIDType, e: Exception) -> None:
         log_manager_exception(e, "generate_by_manager", request_id)

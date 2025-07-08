@@ -81,7 +81,7 @@ class LlumnixClientVLLM(LlumnixClient):
             server_info.request_timestamps = RequestTimestamps()
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.generate.remote, request_id, server_info, prompt, sampling_params, *args, **kwargs
+            self.manager.generate, request_id, server_info, prompt, sampling_params, *args, **kwargs
         )
 
     # pylint: disable=arguments-differ
@@ -98,7 +98,7 @@ class LlumnixClientVLLM(LlumnixClient):
                 self.instance_num_requests[instance_id] += 1
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
                 await asyncio_wait_for_ray_remote_call_with_timeout(
-                    self.instances[instance_id].generate.remote,
+                    self.instances[instance_id].generate,
                     request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
                 )
                 logger.warning("Manager is unavailable temporarily, "
@@ -107,12 +107,12 @@ class LlumnixClientVLLM(LlumnixClient):
                 logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
                 await asyncio.sleep(WAIT_MANAGER_INTERVAL)
-                return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
+                asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
         # pylint: disable=broad-except
         except Exception as e:
             if instance_id in self.instances:
                 self._handle_generate_by_instance_error(request_id, instance_id, e)
-            return await asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
+            asyncio.create_task(self.generate(prompt, sampling_params, request_id, *args, **kwargs))
 
     async def abort(self, request_id: str) -> None:
         await self._abort(request_id)
@@ -128,7 +128,7 @@ class LlumnixClientVLLM(LlumnixClient):
 
     async def _abort_request(self, instance_id: str, instance: ray.actor.ActorHandle, request_id: str):
         try:
-            await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort.remote, request_id)
+            await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort, request_id)
             self._clear_client_request_states(request_id)
         # pylint: disable=broad-except
         except Exception as e:
@@ -136,24 +136,31 @@ class LlumnixClientVLLM(LlumnixClient):
 
     async def get_request_outputs_loop(self):
         while True:
-            request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
-            for request_response in request_responses:
-                request_output: RequestOutput = request_response.get_engine_output()
-                set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
-                request_id = request_response.request_id
-                # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
-                if request_id not in self.request_stream:
-                    continue
-                # Update when request_id is in self.request_streams.
-                self.request_instance[request_id] = request_response.instance_id
+            try:
+                request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
+                for request_response in request_responses:
+                    request_output: RequestOutput = request_response.get_engine_output()
+                    set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
+                    request_id = request_response.request_id
+                    # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
+                    if request_id not in self.request_stream:
+                        continue
+                    # Update when request_id is in self.request_streams.
+                    self.request_instance[request_id] = request_response.instance_id
 
-                processed_output = self._process_output_order(request_id, request_output)
-                if not processed_output:
-                    continue
-                self.request_stream[request_id].put(processed_output)
-                if request_output.finished:
-                    logger.info("Client finished request {}.".format(request_id))
-                    self._clear_client_request_states(request_id)
+                    processed_output = self._process_output_order(request_id, request_output)
+                    if not processed_output:
+                        continue
+                    self.request_stream[request_id].put(processed_output)
+                    if request_output.finished:
+                        logger.info("Client finished request {}.".format(request_id))
+                        self._clear_client_request_states(request_id)
+            # pylint: disable=broad-except
+            except Exception:
+                logger.critical(
+                    "Client get error in get_request_outputs_loop, client keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
+                )
 
     def _clear_client_request_states(self, request_id: str):
         super()._clear_client_request_states(request_id)

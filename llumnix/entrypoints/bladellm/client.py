@@ -109,7 +109,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             set_timestamp(server_info, "api_server_generate_timestamp", time.time())
         # await to catch exception
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.generate.remote, str(request_id), server_info, server_request=request
+            self.manager.generate, str(request_id), server_info, server_request=request
         )
 
     # pylint: disable=arguments-differ
@@ -119,7 +119,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 await asyncio_wait_for_ray_remote_call_with_timeout(
-                    self.instances[instance_id].generate.remote, request_id, server_info, -1, server_request=request
+                    self.instances[instance_id].generate, request_id, server_info, -1, server_request=request
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
@@ -127,12 +127,12 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available.".format(WAIT_MANAGER_INTERVAL))
                 await asyncio.sleep(WAIT_MANAGER_INTERVAL)
-                return await asyncio.create_task(self._generate(request_id, request))
+                asyncio.create_task(self._generate(request_id, request))
         # pylint: disable=broad-except
         except Exception as e:
             if instance_id in self.instances:
                 self._handle_generate_by_instance_error(request_id, instance_id, e)
-            return await asyncio.create_task(self._generate(request_id, request))
+            asyncio.create_task(self._generate(request_id, request))
 
     async def drop_request(self, req_id: int) -> None:
         llumnix_req_id = self.entrypoint_req_id_to_llumnix_req_id.get(req_id, None)
@@ -141,44 +141,51 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     async def get_request_outputs_loop(self):
         while True:
-            request_responses: List[LlumnixRequestOuputBladeLLM] = await self.request_output_queue.get()
-            if request_responses is None:
-                continue
-
-            for request_response in request_responses:
-                request_output = msgspec.convert(self.msg_decoder.decode(request_response.get_engine_output()),
-                                                 type=GenerateStreamResponse)
-                request_id = request_output.req_id
-                request_timestamp: RequestTimestamps = request_response.request_timestamps
-                set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
-                # Request could be dispatched twice when manager is dead, the first request will free
-                # the request_streams when finished. Or the request is dropped already.
-                if request_id not in self.request_stream:
+            try:
+                request_responses: List[LlumnixRequestOuputBladeLLM] = await self.request_output_queue.get()
+                if request_responses is None:
                     continue
-                self.request_instance[request_id] = request_response.instance_id
 
-                if self.log_request_timestamps:
-                    # Do not consider the out of order for request timestamp currently.
-                    entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
-                    if entrypoint_req_id is not None:
-                        self.timestamps_stream[entrypoint_req_id].put_nowait(request_timestamp)
+                for request_response in request_responses:
+                    request_output = msgspec.convert(self.msg_decoder.decode(request_response.get_engine_output()),
+                                                    type=GenerateStreamResponse)
+                    request_id = request_output.req_id
+                    request_timestamp: RequestTimestamps = request_response.request_timestamps
+                    set_timestamp(request_timestamp, 'api_server_get_queue_timestamp', time.time())
+                    # Request could be dispatched twice when manager is dead, the first request will free
+                    # the request_streams when finished. Or the request is dropped already.
+                    if request_id not in self.request_stream:
+                        continue
+                    self.request_instance[request_id] = request_response.instance_id
 
-                processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
-                if not processed_output:
-                    continue
-                for req in processed_output:
-                    self.llumnix_client_metrics.observe_tpot_and_ttft(
-                        request_id=self.llumnix_req_id_to_entrypoint_req_id.get(
-                            request_id, None
+                    if self.log_request_timestamps:
+                        # Do not consider the out of order for request timestamp currently.
+                        entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
+                        if entrypoint_req_id is not None:
+                            self.timestamps_stream[entrypoint_req_id].put_nowait(request_timestamp)
+
+                    processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
+                    if not processed_output:
+                        continue
+                    for req in processed_output:
+                        self.llumnix_client_metrics.observe_tpot_and_ttft(
+                            request_id=self.llumnix_req_id_to_entrypoint_req_id.get(
+                                request_id, None
+                            )
                         )
-                    )
-                    self.request_stream[request_id].put_nowait(req)
-                last_output = processed_output[-1]
-                self.request_stream_last_completion_tokens[request_id] = last_output.usage.completion_tokens
-                if processed_output[-1].is_finished or not processed_output[-1].is_ok:
-                    logger.debug("Client finished request {}, is_ok: {}, err_info: {}.".format(
-                        request_id, last_output.is_ok, last_output.error_info))
-                    self._clear_client_request_states(request_id)
+                        self.request_stream[request_id].put_nowait(req)
+                    last_output = processed_output[-1]
+                    self.request_stream_last_completion_tokens[request_id] = last_output.usage.completion_tokens
+                    if processed_output[-1].is_finished or not processed_output[-1].is_ok:
+                        logger.debug("Client finished request {}, is_ok: {}, err_info: {}.".format(
+                            request_id, last_output.is_ok, last_output.error_info))
+                        self._clear_client_request_states(request_id)
+            # pylint: disable=broad-except
+            except Exception:
+                logger.critical(
+                    "Client get error in get_request_outputs_loop, client keeps running, please check the cause!",
+                    exc_info=True, stack_info=True
+                )
 
     def _clear_client_request_states(self, request_id: int):
         super()._clear_client_request_states(request_id)

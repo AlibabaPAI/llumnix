@@ -439,7 +439,7 @@ class BackendVLLM(BackendInterface):
                          request_id: str,
                          is_last_stage: bool) -> MigrationResponse:
         return await asyncio_wait_for_ray_remote_call_with_timeout(
-            dst_instance_actor.execute_migration_method_async.remote,
+            dst_instance_actor.execute_migration_method_async,
             "recv_cache",
             request_id=request_id,
             src_worker_handle_list=self.worker_handle_list,

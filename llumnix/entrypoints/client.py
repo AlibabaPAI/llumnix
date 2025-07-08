@@ -67,7 +67,6 @@ class LlumnixClient(ABC):
 
         # metrics
         self.llumnix_client_metrics = LlumnixClientMetrics(server_id = self.server_info.server_id)
-
         loop.create_task(self.get_request_outputs_loop())
         loop.create_task(self.request_output_queue.run_server_loop())
         loop.create_task(self._update_global_instances_loop())

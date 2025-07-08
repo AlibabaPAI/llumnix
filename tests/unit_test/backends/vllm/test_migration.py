@@ -75,11 +75,11 @@ class MockLlumletTestMigration(Llumlet):
         return self.backend_engine.engine.scheduler[0].block_manager.get_num_free_gpu_blocks()
 
     async def commit_seq_group_metadata_worker(self, request_id):
-        # if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        # if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
         return await self.backend_engine._run_workers_async("commit_seq_group_metadata", request_id)
 
     async def pop_migrating_out_seq_group_metadata_worker(self, request_id):
-        # if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        # if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
         return await self.backend_engine._run_workers_async("pop_migrating_out_seq_group_metadata", request_id)
 
 
@@ -165,11 +165,11 @@ class MockLlumletTestMigrationDoNotSchedule(Llumlet):
         return self.backend_engine.engine.scheduler[0].block_manager.get_num_free_gpu_blocks()
 
     async def commit_seq_group_metadata_worker(self, request_id):
-        # if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        # if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
         return await self.backend_engine._run_workers_async("commit_seq_group_metadata", request_id)
 
     async def pop_migrating_out_seq_group_metadata_worker(self, request_id):
-        # if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        # if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
         return await self.backend_engine._run_workers_async("pop_migrating_out_seq_group_metadata", request_id)
 
 @pytest.mark.asyncio

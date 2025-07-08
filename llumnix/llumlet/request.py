@@ -63,7 +63,7 @@ class LlumnixRequest:
         self.stage_timestamps = []
         self.stage_num_blocks_list = []
         self.try_schedule_times = 0
-        self._status = None
+        self._llumnix_status = None
         self.migration_start_time = None
         self.is_migrating = False
 
@@ -88,11 +88,11 @@ class LlumnixRequest:
         self.migration_start_time = None
         self.is_migrating = False
 
-    def reset_status(self):
-        self._status = None
+    def reset_llumnix_status(self):
+        self._llumnix_status = None
 
-    def set_status(self, status: RequestStatus):
-        self._status = status
+    def set_llumnix_status(self, status: RequestStatus):
+        self._llumnix_status = status
 
     @property
     def inference_type(self) -> RequestInferenceType:
@@ -119,7 +119,7 @@ class LlumnixRequest:
         raise NotImplementedError
 
     @property
-    def status(self) -> RequestStatus:
+    def llumnix_status(self) -> RequestStatus:
         raise NotImplementedError
 
     @property

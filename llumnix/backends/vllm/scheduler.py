@@ -51,7 +51,7 @@ class BlockManagerLlumnix(SelfAttnBlockSpaceManager):
         self._last_access_blocks_tracker.add_seq(seq_id)
 
     def can_allocate(self, seq_group: SequenceGroup, *args, **kwargs) -> AllocStatus:
-        if seq_group.status == RequestStatus.WAITING_MIGRATING:
+        if seq_group.llumnix_status == RequestStatus.WAITING_MIGRATING:
             return AllocStatus.OK
         return super().can_allocate(seq_group, *args, **kwargs)
 
@@ -107,7 +107,7 @@ class SchedulerLlumnix(Scheduler):
         for seq_group in reversed(self.running):
             if seq_group.request_id == request_id:
                 self.running.remove(seq_group)
-                seq_group.set_status(RequestStatus.RUNNING_MIGRATING)
+                seq_group.set_llumnix_status(RequestStatus.RUNNING_MIGRATING)
                 return True
         return False
 
@@ -116,7 +116,7 @@ class SchedulerLlumnix(Scheduler):
             if seq_group.request_id == request_id and \
                seq_group.get_seqs()[0].n_blocks * self.cache_config.block_size <= self._get_prompt_limit(seq_group):
                 self.waiting.remove(seq_group)
-                seq_group.set_status(RequestStatus.WAITING_MIGRATING)
+                seq_group.set_llumnix_status(RequestStatus.WAITING_MIGRATING)
                 return True
         return False
 
@@ -174,11 +174,11 @@ class SchedulerLlumnix(Scheduler):
 
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         # Change seq status to running, but request status is still waiting_migrating.
-        if seq_group.status == RequestStatus.WAITING_MIGRATING:
+        if seq_group.llumnix_status == RequestStatus.WAITING_MIGRATING:
             logger.info("Allocate waiting migrating request {}".format(seq_group.request_id))
             # For the waiting request migrated in, blocks have already been allocated when pre alloc.
             self._set_status(seq_group, status_to=SequenceStatus.RUNNING)
-            seq_group.reset_status()
+            seq_group.reset_llumnix_status()
         else:
             super()._allocate_and_set_running(seq_group)
 

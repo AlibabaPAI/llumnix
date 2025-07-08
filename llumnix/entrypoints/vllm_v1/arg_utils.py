@@ -17,9 +17,9 @@ import pickle
 
 from llumnix.logging.logger import init_logger
 from llumnix.utils import BackendType, LaunchMode
-from llumnix.arg_utils import (EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixEngineArgsFactory,
+from llumnix.arg_utils import (VLLMV1EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixEngineArgsFactory,
                                LlumnixArgumentParser, LlumnixEngineArgs, load_registered_engine_args,
-                               init_llumnix_args, post_init_llumnix_args)
+                               init_llumnix_args_v1, post_init_llumnix_args)
 from llumnix.internal_config import MigrationConfig
 from llumnix.config import LlumnixConfig
 
@@ -56,7 +56,7 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
         return pickle.dumps(engine_args)
 
     def load_engine_args(self):
-        engine_args = pickle.load(self.engine_args)
+        engine_args = pickle.loads(self.engine_args)
         return engine_args
 
     def get_world_size(self):
@@ -64,15 +64,11 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
 
 
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
-    # pylint: disable=import-outside-toplevel
-    from vllm.engine.arg_utils import AsyncEngineArgs
-
     parser.set_namespace("llumnix")
-    parser = EntrypointsArgs.add_cli_args(parser)
     parser = ManagerArgs.add_cli_args(parser)
     parser = InstanceArgs.add_cli_args(parser)
     parser.set_namespace("vllm")
-    parser = AsyncEngineArgs.add_cli_args(parser)
+    parser = VLLMV1EntrypointsArgs.add_cli_args(parser)
 
     return parser
 
@@ -123,11 +119,11 @@ def check_instance_args(instance_args: InstanceArgs, engine_args: "AsyncEngineAr
         "Llumnix does not support async output processing when enabling simualtor mode, please disable async output processing."
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
-        -> Tuple[EntrypointsArgs, ManagerArgs, InstanceArgs, "AsyncEngineArgs"]:
+        -> Tuple[VLLMV1EntrypointsArgs, ManagerArgs, InstanceArgs, "AsyncEngineArgs"]:
     # pylint: disable=import-outside-toplevel
     from vllm.engine.arg_utils import AsyncEngineArgs
 
-    entrypoints_args, manager_args, instance_args = init_llumnix_args(llumnix_config)
+    entrypoints_args, manager_args, instance_args = init_llumnix_args_v1(llumnix_config)
     if manager_args.load_registered_service:
         engine_args = load_registered_engine_args(manager_args)
     else:

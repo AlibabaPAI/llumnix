@@ -11,64 +11,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from vllm.sequence import SequenceGroup, SequenceStatus
+from vllm.v1.request import Request
+from vllm.v1.request import RequestStatus as RequestStatusVLLMV1
 
-from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
+from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
 
 
-class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
+class LlumnixRequestVLLMV1(Request, LlumnixRequest):
     def __init__(self, request_id, server_info, expected_steps: int, *args, **kwargs) -> None:
-        SequenceGroup.__init__(self, request_id, *args, **kwargs)
+        Request.__init__(self, request_id, *args, **kwargs)
         LlumnixRequest.__init__(self, request_id, server_info, expected_steps)
 
     @property
-    def block_size(self) -> int:
-        return self.get_seqs()[0].block_size
-
-    @property
-    def prompt_len(self) -> int:
-        return self.get_seqs()[0].get_prompt_len()
-
-    def is_finished(self) -> bool:
-        return self.get_seqs()[0].is_finished()
-
-    @property
     def request_len(self) -> int:
-        return self.get_seqs()[0].get_len()
-
-    @property
-    def output_len(self) -> int:
-        return self.get_seqs()[0].get_output_len()
-
-    @property
-    def n_blocks(self) -> int:
-        return self.get_seqs()[0].n_blocks
-    @property
-    def token_ids(self) -> int:
-        return self.get_seqs()[0].get_token_ids()
+        raise NotImplementedError
 
     @property
     def inference_type(self) -> RequestInferenceType:
-        if self.is_prefill():
-            return RequestInferenceType.PREFILL
-        return RequestInferenceType.DECODE
+        return RequestInferenceType.UNKNOWN
+
+    @property
+    def prompt_len(self) -> int:
+        return self.num_prompt_tokens
+
+    @property
+    def output_len(self) -> int:
+        return self.num_computed_tokens
 
     @property
     def finished(self) -> bool:
-        return self.get_seqs()[0].is_finished()
+        return self.is_finished()
 
     @property
     def request_arrival_time(self) -> float:
-        return self.arrival_time
+        raise NotImplementedError
 
     @property
     def llumnix_status(self) -> RequestStatus:
         if self._llumnix_status:
             return self._llumnix_status
-        status = self.get_seqs()[0].status
-        if status == SequenceStatus.RUNNING:
+        status = self.llumnix_status
+        if status == RequestStatusVLLMV1.RUNNING:
             request_status = RequestStatus.RUNNING
-        elif status == SequenceStatus.WAITING:
+        elif status == RequestStatusVLLMV1.WAITING:
             request_status = RequestStatus.WAITING
         else:
             request_status = RequestStatus.FINISHED
@@ -76,5 +61,4 @@ class SequenceGroupLlumnix(SequenceGroup, LlumnixRequest):
 
     @property
     def prefill_num_blocks(self) -> int:
-        # Get the prefill len of the waiting request.
-        return self.get_seqs()[0].n_blocks
+        raise NotImplementedError

@@ -1,17 +1,27 @@
-from typing import Optional, Any, Union
+# Copyright (c) 2024, Alibaba Group;
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from logging import DEBUG
+from typing import Dict, Optional, Any, Tuple, Union
 import signal
 import asyncio
 import queue
-import threading
-
-import zmq
-import msgspec
 
 from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.logging_utils.dump_input import dump_engine_exception
-from vllm.v1.engine import EngineCoreOutputs, EngineCoreRequestType, disagg
-from vllm.utils import make_async, make_zmq_socket
+from vllm.v1.engine import EngineCoreOutputs, EngineCoreRequestType
+from vllm.utils import make_async
 from vllm.transformers_utils.config import maybe_register_config_serialize_by_value
 from vllm.logger import init_logger
 from vllm.config import ParallelConfig, VllmConfig
@@ -23,11 +33,7 @@ logger = init_logger(__name__)
 class AsyncEngineCore(EngineCore):
     """Extension of EngineCore to add async methods."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     async def execute_model_async(self, scheduler_output: SchedulerOutput):
-        logger.debug("[execute_model_async]")
         try:
             return await self.model_executor.execute_model_async(scheduler_output)
         except BaseException as err:
@@ -37,30 +43,30 @@ class AsyncEngineCore(EngineCore):
             # Re-raise exception
             raise err
 
-    async def step_async(self) -> EngineCoreOutputs:
+    async def step_async(self) -> Tuple[Dict[int, EngineCoreOutputs], bool]:
         """Schedule, execute, and make output."""
 
-        logger.debug("[step_async]")
+        kvconn = self.scheduler.get_kv_connector()
+        if kvconn:
+            kvconn.step(self.scheduler)
+
         # Check for any requests remaining in the scheduler - unfinished,
         # or finished and not yet removed from the batch.
         if not self.scheduler.has_requests():
-            return EngineCoreOutputs(
-                outputs=[],
-                scheduler_stats=self.scheduler.make_stats(),
-            )
-
+            return {}, False
         scheduler_output = self.scheduler.schedule()
         model_output = await self.execute_model_async(scheduler_output)
         engine_core_outputs = self.scheduler.update_from_output(
             scheduler_output, model_output)  # type: ignore
 
-        return engine_core_outputs
+        return (engine_core_outputs,
+                scheduler_output.total_num_scheduled_tokens > 0)
 
     async def execute_dummy_batch_async(self):
         return await make_async(self.execute_dummy_batch)()
 
 
-class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):    
+class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
     """ZMQ-wrapper for running EngineCore in background process."""
 
     ENGINE_CORE_DEAD = b'ENGINE_CORE_DEAD'
@@ -68,76 +74,30 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
     def __init__(
         self,
         vllm_config: VllmConfig,
-        on_head_node: bool,
-        input_address: str,
+        on_head_node: bool,             # pylint: disable=unused-argument
+        handshake_address: str,         # pylint: disable=unused-argument
         executor_class: type[Executor],
         log_stats: bool,
         engine_index: int = 0,
     ):
-        input_queue = queue.Queue[tuple[EngineCoreRequestType, Any]]()
-
-        executor_fail_callback = lambda: input_queue.put_nowait(
+        self.input_queue = asyncio.Queue[tuple[EngineCoreRequestType, Any]]()
+        self.output_queue = queue.Queue[Union[tuple[int, EngineCoreOutputs],
+                                              bytes]]()
+        executor_fail_callback = lambda: self.input_queue.put_nowait(
             (EngineCoreRequestType.EXECUTOR_FAILED, b''))
 
-        # Create input socket.
-        input_ctx = zmq.Context()
-        identity = engine_index.to_bytes(length=2, byteorder="little")
-        input_socket = make_zmq_socket(input_ctx,
-                                        input_address,
-                                       zmq.DEALER,
-                                       identity=identity,
-                                       bind=False)
-        try:
-            # Register engine with front-end.
-            output_address = self.startup_handshake(
-                input_socket, on_head_node, vllm_config.parallel_config)
+        self.engine_index = engine_index
 
-            # Update config which may have changed from the handshake.
-            vllm_config.__post_init__()
+        self.has_coordinator = False
+        self._init_data_parallel(vllm_config)
 
-            # Set up data parallel environment.
-            self._init_data_parallel(vllm_config)
+        AsyncEngineCore.__init__(self, vllm_config, executor_class, log_stats,
+                             executor_fail_callback)
 
-            # Initialize engine core and model.
-            AsyncEngineCore.__init__(self, vllm_config, executor_class,
-                                     log_stats, executor_fail_callback)
-
-            self.step_fn = (self.step if self.batch_queue is None else
-                            self.step_with_batch_queue)
-            self.engines_running = False
-
-            # Send ready message.
-            num_gpu_blocks = vllm_config.cache_config.num_gpu_blocks
-            input_socket.send(
-                msgspec.msgpack.encode({
-                    "status": "READY",
-                    "local": on_head_node,
-                    "num_gpu_blocks": num_gpu_blocks,
-                }))
-
-            # Background Threads and Queues for IO. These enable us to
-            # overlap ZMQ socket IO with GPU since they release the GIL,
-            # and to overlap some serialization/deserialization with the
-            # model forward pass.
-            # Threads handle Socket <-> Queues and core_busy_loop uses Queue.
-            self.input_queue = input_queue
-            self.output_queue = queue.Queue[Union[EngineCoreOutputs, bytes]]()
-            threading.Thread(target=self.process_input_socket,
-                             args=(input_socket, ),
-                             daemon=True).start()
-            input_socket = None
-            self.output_thread = threading.Thread(
-                target=self.process_output_socket,
-                args=(output_address, engine_index),
-                daemon=True)
-            self.output_thread.start()
-        finally:
-            if input_socket is not None:
-                input_socket.close(linger=0)
-
-        disagg.init(vllm_config, self)
-
+        self.step_fn = (self.step if self.batch_queue is None else
+                        self.step_with_batch_queue)
         self.step_fn_async = self.step_async
+
 
     @staticmethod
     def run_engine_core(*args,
@@ -145,8 +105,6 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
                         local_dp_rank: int = 0,
                         **kwargs):
         """Launch EngineCore busy loop in background process."""
-
-        logger.debug("[AsyncEngineCoreProc] run_engine_core")
 
         # Signal handler used for graceful termination.
         # SystemExit exception is only raised once to allow this and worker
@@ -156,6 +114,7 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         # Ensure we can serialize transformer config after spawning
         maybe_register_config_serialize_by_value()
 
+        # pylint: disable=unused-argument
         def signal_handler(signum, frame):
             nonlocal shutdown_requested
             if not shutdown_requested:
@@ -178,17 +137,17 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
             else:
                 engine_core = AsyncEngineCoreProc(*args, **kwargs)
 
-            asyncio.run(engine_core.run_busy_loop_async())
+            asyncio.create_task(engine_core.run_busy_loop_async())
 
+        # pylint: disable=try-except-raise
         except SystemExit:
-            logger.debug("EngineCore exiting.")
             raise
         except Exception as e:
             if engine_core is None:
                 logger.exception("EngineCore failed to start.")
             else:
                 logger.exception("EngineCore encountered a fatal error.")
-                engine_core._send_engine_dead()
+                engine_core._send_engine_dead() # pylint: disable=protected-access
             raise e
         finally:
             if engine_core is not None:
@@ -199,22 +158,44 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
 
         # Loop until process is sent a SIGINT or SIGTERM
         while True:
-            logger.debug("[run_busy_loop_async] before _process_input_queue")
             # 1) Poll the input queue until there is work to do.
-            self._process_input_queue()
-            logger.debug("[run_busy_loop_async] before _process_engine_step_async")
+            await self._process_input_queue_async()
             # 2) Step the engine core and return the outputs.
             await self._process_engine_step_async()
-            logger.debug("[run_busy_loop_async] after _process_engine_step_async")
+
+    async def _process_input_queue_async(self):
+        """
+        Asynchronously processes the input queue.
+        Exits when an engine step needs to be performed.
+        """
+        waited = False
+        # pylint: disable=access-member-before-definition
+        while not self.engines_running and not self.scheduler.has_requests():
+            if logger.isEnabledFor(DEBUG) and self.input_queue.empty():
+                logger.debug("EngineCore waiting for work.")
+                waited = True
+            # Change input_queue to asyncio.Queue, use await q.get()
+            req = await self.input_queue.get()
+            self._handle_client_request(*req)
+
+        if waited:
+            logger.debug("EngineCore loop active.")
+
+        # Handle any remaining requests that arrived while processing.
+        # get_nowait() is non-blocking and works similarly for asyncio.Queue.
+        while not self.input_queue.empty():
+            req = self.input_queue.get_nowait()
+            self._handle_client_request(*req)
 
     async def _process_engine_step_async(self):
         """Called only when there are unfinished local requests."""
-
         # Step the engine core.
-        outputs = await self.step_fn_async()
+        outputs, model_executed = await self.step_fn_async()
         # Put EngineCoreOutputs into the output queue.
-        if outputs is not None:
-            self.output_queue.put_nowait(outputs)
+        for output in (outputs.items() if outputs else ()):
+            self.output_queue.put_nowait(output)
+
+        return model_executed
 
 
 class AsyncDPEngineCoreProc(AsyncEngineCoreProc, DPEngineCoreProc):
@@ -247,6 +228,7 @@ class AsyncDPEngineCoreProc(AsyncEngineCoreProc, DPEngineCoreProc):
                     # up-to-date state is returned in the engine outputs.
                     await self._process_engine_step_async()
 
+                # pylint: disable=access-member-before-definition
                 if not self.engines_running:
                     # All engines are idle.
                     continue

@@ -440,7 +440,7 @@ class AsyncLLMEngineLlumnixMixin:
         await super()._handle_abort(abort)
         if abort is not None and len(abort) > 0:
             for req_id, _, _ in abort:
-                self._scheduler.id2group[req_id]._status = RequestStatus.FINISHED
+                self._scheduler.id2group[req_id].set_llumnix_status(RequestStatus.FINISHED)
                 self.trans_wrapper.remove_request_server_info(
                     req_id, self.step_counter + 1
                 )

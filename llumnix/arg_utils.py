@@ -231,6 +231,106 @@ class EntrypointsArgs:
 
 
 @dataclass
+class VLLMV1EntrypointsArgs:
+    host: str = None
+    port: int = None
+    ssl_keyfile: str = None
+    ssl_certfile: str = None
+    server_log_level: str = None
+    launch_ray_cluster: bool = None
+    ray_cluster_port: int = None
+    disable_log_to_driver: bool = None
+    request_output_queue_type: str = None
+    disable_log_requests_server: bool = None
+    log_request_timestamps: bool = None
+    config_file: str = None
+    disable_keep_serve_process_alive: bool = None
+    # vLLM V1 required args
+    ssl_ca_certs: str = None
+    ssl_cert_reqs: int = None
+    allowed_origins: List[str] = None
+    allow_credentials: bool = None
+    allowed_methods: List[str] = None
+    allowed_headers: List[str] = None
+    tool_call_parser: str = None
+    tool_parser_plugin: str = None
+    log_config_file: str = None
+    root_path: str = None
+    disable_fastapi_docs: bool = None
+    api_key: str = None
+    enable_request_id_headers: bool = None
+    middleware: List[str] = None
+    enable_ssl_refresh: bool = None
+    uvicorn_log_level: str = None
+    disable_uvicorn_access_log: bool = None
+    disable_frontend_multiprocessing: bool = None
+    max_log_len: int = None
+    chat_template: str = None
+    lora_modules: str = None
+    prompt_adapters: str = None
+    enable_auto_tool_choice: bool = None
+    enable_prompt_tokens_details: bool = None
+    return_tokens_as_token_ids: bool = None
+    response_role: str = None
+    chat_template_content_format: str = None
+    enable_server_load_tracking: bool = None
+    enable_force_include_usage: bool = None
+    expand_tools_even_if_tool_choice_none: bool = None
+
+    client_index: int = None
+
+    def __post_init__(self):
+        ensure_args_default_none(self)
+        init_from_default_args_config(self, _C.SERVER)
+
+    @classmethod
+    def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'VLLMV1EntrypointsArgs':
+        v1_entrypoint_args = from_llumnix_args_config(cls, cfg.SERVER)
+        return v1_entrypoint_args
+
+    @classmethod
+    def check_args(cls, args: 'VLLMV1EntrypointsArgs', parser: argparse.ArgumentParser) -> None:
+        check_args_choices(args, parser)
+
+    def init_from_engine_args(self, engine_args, backend_type: BackendType):
+        pass
+
+    @staticmethod
+    def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        # pylint: disable=import-outside-toplevel
+        from vllm.entrypoints.openai.cli_args import make_arg_parser
+        parser = make_arg_parser(parser)
+
+        parser.add_argument('--launch-ray-cluster',
+                            action='store_true',
+                            help='if launch ray cluster')
+        parser.add_argument("--ray-cluster-port",
+                            type=int,
+                            help='ray cluster port')
+        parser.add_argument('--disable-log-to-driver',
+                            action='store_true',
+                            help='disable redirecting all worker logs to driver')
+        parser.add_argument("--request-output-queue-type",
+                            type=str,
+                            choices=['rayqueue', 'zmq'],
+                            help='queue type for request output queue')
+        parser.add_argument("--request-output-queue-port",
+                            type=int,
+                            help='port number for the zmq request output queue')
+        parser.add_argument('--disable-log-requests-server',
+                            action='store_true',
+                            help='disable logging requests in server')
+        parser.add_argument("--log-request-timestamps",
+                            action='store_true',
+                            help='if log request timestamps')
+        parser.add_argument("--config-file",
+                            type=str,
+                            help="path to config file of arguments")
+
+        return parser
+
+
+@dataclass
 class ManagerArgs:
     initial_instances: int = None
 
@@ -705,6 +805,13 @@ def init_llumnix_args(llumnix_config: LlumnixConfig):
     entrypoints_args = EntrypointsArgs.from_llumnix_config(llumnix_config)
 
     return entrypoints_args, manager_args, instance_args
+
+def init_llumnix_args_v1(llumnix_config: LlumnixConfig):
+    instance_args = InstanceArgs.from_llumnix_config(llumnix_config)
+    manager_args = ManagerArgs.from_llumnix_config(llumnix_config)
+    entrypoints_args_v1 = VLLMV1EntrypointsArgs.from_llumnix_config(llumnix_config)
+
+    return entrypoints_args_v1, manager_args, instance_args
 
 def post_init_llumnix_args(
     engine_args,

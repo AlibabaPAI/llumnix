@@ -75,7 +75,7 @@ from llumnix.constants import (
     HEARTBEAT_LOOP_INTERVAL,
 )
 from llumnix import envs as llumnix_envs
-from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR
 from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.queue.queue_server_base import QueueServerBase
@@ -148,6 +148,26 @@ class Scaler:
 
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
+
+        if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
+            # Mantain a monotonically increasing `client_index` for vLLM V1 APIServer.
+            # It will be passed to APIServerActor through EntrypointsArgs.
+            # TODO(shejiarui): Do not use ray interval kv.
+            current_client_index = -1
+            try:
+                value = int(get_data_from_ray_internal_kv("scaler.client_index")) + 1
+                current_client_index = value
+                put_data_to_ray_internal_kv("scaler.client_index", value)
+            except AssertionError:
+                logger.debug("First time set scaler.client_index to 0.")
+                current_client_index = 0
+                put_data_to_ray_internal_kv("scaler.client_index", 0)
+            except Exception as e: # pylint: disable=broad-except
+                logger.exception(e)
+            finally:
+                self.client_index = current_client_index
+                if self.client_index == -1:
+                    logger.error("Failed to get client_index from ray internal kv: {}".format(self.client_index))
 
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
@@ -613,6 +633,20 @@ class Scaler:
                 manager,
                 instance,
             )
+        elif backend_type == BackendType.VLLM_V1:
+            # pylint: disable=import-outside-toplevel
+            from llumnix.entrypoints.vllm_v1.api_server_actor import APIServerActorVLLMV1
+            # To avoid triton runtime error, assign GPU to api server.
+            api_server = APIServerActorVLLMV1.from_args(
+                NUM_GPUS_VLLM_V1_GPU_ACTOR,
+                instance_id,
+                placement_group,
+                entrypoints_args,
+                engine_args,
+                scaler,
+                manager,
+                instance,
+            )
         else: # BackendType.VLLM, BackendType.SIM_VLLM
             from llumnix.entrypoints.vllm.api_server_actor import APIServerActorVLLM # pylint: disable=import-outside-toplevel
             api_server = APIServerActorVLLM.from_args(
@@ -868,6 +902,11 @@ class Scaler:
 
         next_entrypoints_args = copy.deepcopy(entrypoints_args)
         next_entrypoints_args.port += self.port_offset
+
+        if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
+            next_entrypoints_args.client_index = self.client_index
+            self.client_index += 1
+            put_data_to_ray_internal_kv("scaler.client_index", self.client_index)
 
         return next_entrypoints_args
 

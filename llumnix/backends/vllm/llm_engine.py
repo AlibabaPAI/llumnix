@@ -411,7 +411,7 @@ class BackendVLLM(BackendInterface):
     async def commit_dst_request(self,
                                  request_id: RequestIDType,
                                  backend_request: SequenceGroupLlumnix) -> MigrationResponse:
-        if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
             await self._run_workers_async("commit_seq_group_metadata", request_id)
 
         seq = backend_request.get_seqs()[0]
@@ -421,11 +421,11 @@ class BackendVLLM(BackendInterface):
         logger.info("add seq {} to block table".format(seq.seq_id))
         self.engine.scheduler[0].block_manager.add_block_table(pre_alloc_blocks, seq.seq_id)
         backend_request.reset_migration_states_dst()
-        assert RequestStatus.is_migrating(backend_request.status), \
+        assert RequestStatus.is_migrating(backend_request.llumnix_status), \
             "The status of request migrated to dst instance should be  \
              RequestStatus.WAITING_MIGRATING or RequestStatus.RUNNING_MIGRATING"
-        if backend_request.status == RequestStatus.RUNNING_MIGRATING:
-            backend_request.reset_status()
+        if backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
+            backend_request.reset_llumnix_status()
             await self.add_running_request(backend_request)
         else: # WAITING_MIGRATING:
             self.add_waiting_request(backend_request)
@@ -523,7 +523,7 @@ class BackendVLLM(BackendInterface):
         # Although add_running_request is always be called in last stage migration,
         # there exists migrating_out_seq_group_metadata in worker only when last stage do_send is executed,
         # so the request id does not always exists.
-        if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
             # pylint: disable=protected-access
             await self._run_workers_async(
                 "restore_migrating_out_seq_group_metadata", backend_request.request_id
@@ -547,7 +547,7 @@ class BackendVLLM(BackendInterface):
         # When free_src_request is called, it means that all migration operations is successful.
         # However, there exists migrating_out_seq_group_metadata in worker only when migrating running request,
         # so the request id does not always exists.
-        if self.use_ray_spmd_worker and backend_request.status == RequestStatus.RUNNING_MIGRATING:
+        if self.use_ray_spmd_worker and backend_request.llumnix_status == RequestStatus.RUNNING_MIGRATING:
             # pylint: disable=protected-access
             asyncio.create_task(
                 self._run_workers_async(

@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import random_uuid
 from llumnix.server_info import ServerInfo
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
@@ -20,4 +21,5 @@ def request_output_queue_server(request_output_queue_type: QueueType):
     output_queue = init_request_output_queue_server(ip, request_output_queue_type)
     server_id = random_uuid()
     server_info = ServerInfo(server_id, request_output_queue_type, output_queue, ip, output_queue.port)
-    return output_queue, server_info
+    request_processing_context = RequestProcessingContext.from_server_info(server_info)
+    return output_queue, request_processing_context

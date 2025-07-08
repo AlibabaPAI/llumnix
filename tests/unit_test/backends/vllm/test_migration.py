@@ -221,7 +221,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
     instance_args.migration_backend = migration_backend
 
     request_output_queue_type = QueueType.RAYQUEUE
-    que, server_info = request_output_queue_server(request_output_queue_type)
+    que, request_processing_context = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
     llumlet_0: MockLlumletTestMigration = init_llumlet(request_output_queue_type, "0", instance_args, engine_args, num_gpus=tensor_parallel_size)
@@ -247,7 +247,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
     # running without migration
     async def gen_origin_outputs(prompt):
         request_id0 = random_uuid()
-        llumlet_0.generate.remote(request_id0, server_info, math.inf, prompt, sampling_params)
+        llumlet_0.generate.remote(request_id0, request_processing_context, math.inf, prompt, sampling_params)
         request_output_queue = que
         origin_output = None
         finished = False
@@ -263,7 +263,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
     async def test_correctness(prompt, origin_output):
         if migration_request_status == 'running':
             request_id1 = random_uuid()
-            ray.get(llumlet_0.generate.remote(request_id1, server_info, math.inf, prompt, sampling_params))
+            ray.get(llumlet_0.generate.remote(request_id1, request_processing_context, math.inf, prompt, sampling_params))
             # wait prefill done
             while True:
                 running_queue = ray.get(llumlet_0.execute_engine_method.remote("get_running_queue"))
@@ -274,7 +274,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
             assert len(res) == 1
         else: # migration_request_status == 'waiting'
             request_id1 = random_uuid()
-            ray.get(llumlet_2.generate.remote(request_id1, server_info, math.inf, prompt, sampling_params))
+            ray.get(llumlet_2.generate.remote(request_id1, request_processing_context, math.inf, prompt, sampling_params))
             # wait try schedule done
             while True:
                 waiting_queue = ray.get(llumlet_2.execute_engine_method.remote("get_waiting_queue"))
@@ -390,7 +390,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
     instance_args.migration_backend = migration_backend
 
     request_output_queue_type = QueueType.RAYQUEUE
-    que, server_info = request_output_queue_server(request_output_queue_type)
+    que, request_processing_context = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
 
     llumlet_0 = init_llumlet(request_output_queue_type, "0", instance_args, engine_args)
@@ -411,7 +411,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
         request_id0 = random_uuid()
         request_expected_steps_id0 = math.inf
-        llumlet_0.generate.remote(request_id0, server_info, request_expected_steps_id0, prompt, sampling_params)
+        llumlet_0.generate.remote(request_id0, request_processing_context, request_expected_steps_id0, prompt, sampling_params)
         request_output_queue = que
         origin_output = None
         finished = False
@@ -425,7 +425,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
 
         request_id1 = random_uuid()
         request_expected_steps_id1 = 1
-        ray.get(llumlet_0.generate.remote(request_id1, server_info, request_expected_steps_id1, prompt, sampling_params))
+        ray.get(llumlet_0.generate.remote(request_id1, request_processing_context, request_expected_steps_id1, prompt, sampling_params))
         # migrate request for decode
         while True:
             res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, "1"))

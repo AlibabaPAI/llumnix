@@ -100,7 +100,7 @@ async def test_backend(ray_env):
                                  migration_buffer_blocks=16, migration_num_layers=1, migration_last_stage_max_blocks=4,
                                  migration_max_stages=5, migration_backend_init_timeout=20)
     request_output_queue_type = QueueType.RAYQUEUE
-    que, server_info = request_output_queue_server(request_output_queue_type)
+    que, request_processing_context = request_output_queue_server(request_output_queue_type)
     asyncio.create_task(que.run_server_loop())
     class DummyActor:
         def __init__(self):
@@ -116,7 +116,7 @@ async def test_backend(ray_env):
 
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     request_id0 = random_uuid()
-    await sim_backend.add_request(request_id0, server_info, math.inf, "hello world", sampling_params)
+    await sim_backend.add_request(request_id0, request_processing_context, math.inf, "hello world", sampling_params)
 
     async def check_output_len():
         request_output_queue = que

@@ -83,7 +83,7 @@ while num_instance == 0:
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = str(uuid.uuid4().hex)
 request_output_queue = RayQueueServer()
-request_processing_context = RequestProcessingContext(server_id, QueueType("rayqueue"), request_output_queue, None, None)
+request_processing_context = RequestProcessingContext(server_id, QueueType("rayqueue"), request_output_queue.queue, None, None)
 
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.

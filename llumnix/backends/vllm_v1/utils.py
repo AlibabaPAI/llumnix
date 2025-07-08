@@ -177,11 +177,3 @@ def _sample_with_torch(
         maybe_deferred_args,
         sampled_token_ids_tensor,
     )
-
-
-def scheduler_lock(func):
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        with self.scheduler_lock:
-            return func(self, *args, **kwargs)
-    return wrapper

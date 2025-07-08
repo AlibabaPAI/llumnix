@@ -25,17 +25,10 @@ from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType, INSTANCE_TYPE_TO_METRIC_FIELD, sort_instance_infos
 from llumnix.global_scheduler.query_client import build_meta_client_from_config, QueryClient
 from llumnix.global_scheduler.dispatch_filter import MetricBasedFilter
+from llumnix.internal_config import DispatchLoadMetricConfig
 
 
 logger = init_logger(__name__)
-
-@dataclass
-class DispatchLoadMetricConfig:
-    dispatch_load_metric: str
-    dispatch_prefill_load_metric: str
-    dispatch_decode_load_metric: str
-    dispatch_prefill_as_decode_load_metric: bool
-    dispatch_decode_as_prefill_load_metric: bool
 
 
 class DispatchPolicy(ABC):
@@ -119,13 +112,13 @@ class Load(DispatchPolicy):
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
         self.filters = {
               InstanceType.PREFILL: MetricBasedFilter(
-                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL]) 
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL]) 
               ),
               InstanceType.DECODE: MetricBasedFilter(
-                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
               ),
               InstanceType.NO_CONSTRAINTS: MetricBasedFilter(
-                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
               ),
         }
     
@@ -143,11 +136,11 @@ class Load(DispatchPolicy):
                  available_instance_infos: Dict[str, InstanceInfo],
                  dispatch_context: Dict,
                  ) -> str:
-        sorted_instance_infos = sort_instance_infos(available_instance_infos.values(),
-                                                    getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type]))
+        dispatch_load_metric=getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type])
+        sorted_instance_infos = sort_instance_infos(available_instance_infos.values(), dispatch_load_metric)
         instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
         instance_id = instance_info_chosen.instance_id
-        logger.info("dispatch request to {}, load: {}".format(instance_id, instance_info_chosen.dispatch_load_metric))
+        logger.info("dispatch request to {}, load: {}".format(instance_id, getattr(instance_info_chosen, dispatch_load_metric)))
         return instance_id
 
 
@@ -216,13 +209,13 @@ class CacheAware(DispatchPolicy):
         self.transfer_penalty_factor = 0.7
         self.filters = {
               InstanceType.PREFILL: MetricBasedFilter(
-                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL]) 
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL]) 
               ),
               InstanceType.DECODE: MetricBasedFilter(
-                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
               ),
               InstanceType.NO_CONSTRAINTS: MetricBasedFilter(
-                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
               ),
         }
     
@@ -375,11 +368,11 @@ class CacheAware(DispatchPolicy):
             return target_instance_id
         
         else:
-            sorted_instance_infos = sort_instance_infos(available_instance_infos.values(),
-                                                    getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type]))
+            dispatch_load_metric=getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type])
+            sorted_instance_infos = sort_instance_infos(available_instance_infos.values(), dispatch_load_metric)
             instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
             instance_id = instance_info_chosen.instance_id
-            logger.info("dispatch request to {}, load: {}".format(instance_id, instance_info_chosen.dispatch_load_metric))
+            logger.info("dispatch request to {}, load: {}".format(instance_id, getattr(instance_info_chosen, dispatch_load_metric)))
             return instance_id
                     
 

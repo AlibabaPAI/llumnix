@@ -20,6 +20,7 @@ from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.utils import random_uuid
 from llumnix.load_computation import KvBlocksRatioLoad, RemainingStepsLoad
+from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
 
 
 def init_global_scheduler(
@@ -27,6 +28,13 @@ def init_global_scheduler(
         enable_engine_pd_disagg: bool = False,
         enable_adaptive_pd: bool = False,
         enable_engine_semi_pd_disagg = False):
+    dispatch_load_metric_config = DispatchLoadMetricConfig(
+        dispatch_load_metric="remaining_steps",
+        dispatch_prefill_load_metric="kv_blocks_ratio",
+        dispatch_decode_load_metric="remaining_steps",
+        dispatch_prefill_as_decode_load_metric="adaptive_decode",
+        dispatch_decode_as_prefill_load_metric="kv_blocks_ratio",
+    )
     global_scheduler_config = GlobalSchedulerConfig(
         initial_instances=0,
         dispatch_policy="load",
@@ -41,7 +49,8 @@ def init_global_scheduler(
         enable_engine_pd_disagg=enable_engine_pd_disagg,
         enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
         enable_adaptive_pd=enable_adaptive_pd,
-        is_group_kind_migration_backend=False)
+        is_group_kind_migration_backend=False,
+        dispatch_load_metric_config=dispatch_load_metric_config)
     global_scheduler = GlobalScheduler(global_scheduler_config)
     return global_scheduler
 
@@ -232,14 +241,14 @@ async def test_dispatch_adaptive_pd_disagg_and_expected_steps():
     prefill_instance_id = random_uuid()
     prefill_instance_info = InstanceInfo(instance_id=prefill_instance_id, instance_type=InstanceType.PREFILL)
     KvBlocksRatioLoad.BUSY_THRESHOLD = 100
-    prefill_instance_info.dispatch_load_metric = KvBlocksRatioLoad(10)
+    prefill_instance_info.kv_blocks_ratio = KvBlocksRatioLoad(10)
     global_scheduler.scale_up(prefill_instance_id, InstanceType.PREFILL)
     global_scheduler.update_instance_infos([prefill_instance_info])
 
     decode_instance_id = random_uuid()
     decode_instance_info = InstanceInfo(instance_id=decode_instance_id, instance_type=InstanceType.DECODE)
     RemainingStepsLoad.BUSY_THRESHOLD = 0
-    decode_instance_info.dispatch_load_metric = RemainingStepsLoad(10)
+    decode_instance_info.remaining_steps = RemainingStepsLoad(10)
     global_scheduler.scale_up(decode_instance_id, InstanceType.DECODE)
     global_scheduler.update_instance_infos([decode_instance_info])
 

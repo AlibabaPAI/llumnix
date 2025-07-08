@@ -13,7 +13,15 @@
 
 from typing import Union, List
 
-from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
+from dataclasses import dataclass
+
+@dataclass
+class DispatchLoadMetricConfig:
+    dispatch_load_metric: str
+    dispatch_prefill_load_metric: str
+    dispatch_decode_load_metric: str
+    dispatch_prefill_as_decode_load_metric: bool
+    dispatch_decode_as_prefill_load_metric: bool
 
 class GlobalSchedulerConfig:
     def __init__(
@@ -33,7 +41,7 @@ class GlobalSchedulerConfig:
             enable_adaptive_pd: bool,
             is_group_kind_migration_backend: bool,
             dispatch_load_metric_config: DispatchLoadMetricConfig,
-            cache_aware_query_client_config_path: str,
+            cache_aware_query_client_config_path: str=None,
             ) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy

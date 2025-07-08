@@ -18,7 +18,6 @@ from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceType, InstanceInfo
 from llumnix.constants import DISPATCH_LOG_FREQUENCY
 from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory, DispatchPolicy, DispatchLoadMetricConfig
-from llumnix.global_scheduler.dispatch_filter import DispatchFilter, LoadBusyFilter
 from llumnix.metrics.metrics_types import Summary
 
 logger = init_logger(__name__)
@@ -78,6 +77,10 @@ class DispatchScheduler:
         # Filter primary instances based on dispatch policy
         candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
             instance_type, primary_instance_infos, primary_instance_num_requests)
+        if(instance_type == InstanceType.DECODE):
+            print(f"candidate_instance_infos: {candidate_instance_infos}\n")
+            
+        is_fallback_to_secondary = False
         
         # Adaptive PD fallback: try secondary instance type if primary unavailable
         if not candidate_instance_infos and self.enable_adaptive_pd:
@@ -88,6 +91,7 @@ class DispatchScheduler:
             if candidate_instance_infos:
                 instance_type = (InstanceType.DECODE_AS_PREFILL if instance_type == InstanceType.PREFILL 
                                else InstanceType.PREFILL_AS_DECODE)
+                is_fallback_to_secondary = True
         
         # Early reject or fallback to primary instances if no candidates found
         if not candidate_instance_infos:
@@ -98,7 +102,11 @@ class DispatchScheduler:
         # Select target instance and update request count
         target_instance_id = self.dispatch_policy.select(
             instance_type, candidate_instance_num_requests, candidate_instance_infos, dispatch_context)
-        candidate_instance_num_requests[target_instance_id] += 1
+        
+        if not is_fallback_to_secondary:
+            primary_instance_num_requests[target_instance_id] += 1
+        else:
+            secondary_instance_num_requests[target_instance_id] += 1
         
         assert target_instance_id is not None, "No available instance for dispatch."
         return target_instance_id

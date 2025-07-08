@@ -26,7 +26,6 @@ from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.utils import BackendType, LaunchMode
 from llumnix.logging.logger import init_logger
-from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
 
 logger = init_logger(__name__)
 
@@ -431,6 +430,10 @@ class ManagerArgs:
     def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
         # Create the GlobalScheduler Configuration.
     
+        # Local import to avoid circular dependency with instance_info -> arg_utils -> dispatch_policy
+        # pylint: disable=import-outside-toplevel
+        from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
+
         dispatch_load_metric_config = DispatchLoadMetricConfig(
             self.dispatch_load_metric,
             self.dispatch_prefill_load_metric,

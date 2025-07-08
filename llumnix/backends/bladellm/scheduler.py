@@ -96,20 +96,20 @@ class PagedSchedulerLlumnix(PagedScheduler):
         gen_group_llumnix = GenerationGroupStateLlumnix(
             gen_group, gen_group.request_group_id, server_info
         )
-        gen_group_llumnix._status = RequestStatus.WAITING
+        gen_group_llumnix.set_llumnix_status(RequestStatus.WAITING)
         self.id2group[gen_group.request_group_id] = gen_group_llumnix
         super().add_gen_group(gen_group_llumnix, *args, **kwargs)
 
     def drop_request(self, req_id: int):
         if req_id in self.id2group:
-            self.id2group[req_id]._status = RequestStatus.FINISHED
+            self.id2group[req_id].set_llumnix_status(RequestStatus.FINISHED)
         self.trans_wrapper.remove_request_server_info(req_id, self.step_counter + 1)
         super().drop_request(req_id)
 
     # happends when moving request from waiting to running
     def _add_prefill_to_queue(self, group_to_add: GenerationGroupStateLlumnix):
         super()._add_prefill_to_queue(group_to_add)
-        group_to_add._status = RequestStatus.RUNNING
+        group_to_add.set_llumnix_status(RequestStatus.RUNNING)
 
     def _preempt(self, gen_group: GenerationGroupStateLlumnix, insert=True) -> PreemptionMode:
         gen_group.last_preemption_time = time.time()
@@ -119,7 +119,7 @@ class PagedSchedulerLlumnix(PagedScheduler):
         super().safe_remove_requests(request_ids)
         for request_id in request_ids:
             if request_id in self.id2group:
-                self.id2group[request_id]._status = RequestStatus.FINISHED
+                self.id2group[request_id].set_llumnix_status(RequestStatus.FINISHED)
                 self.id2group.pop(request_id, None)
 
     def get_request_incremental_blocks(self, backend_request: GenerationGroupStateLlumnix, pre_stage_num_blocks: int) -> List[int]:

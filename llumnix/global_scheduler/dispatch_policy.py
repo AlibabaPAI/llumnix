@@ -22,20 +22,12 @@ import torch
 import json
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceType, sort_instance_infos
+from llumnix.instance_info import InstanceInfo, InstanceType, INSTANCE_TYPE_TO_METRIC_FIELD, sort_instance_infos
 from llumnix.global_scheduler.query_client import build_meta_client_from_config, QueryClient
 from llumnix.global_scheduler.dispatch_filter import MetricBasedFilter
 
 
 logger = init_logger(__name__)
-
-INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
-    InstanceType.NO_CONSTRAINTS: 'dispatch_load_metric',
-    InstanceType.PREFILL: 'dispatch_prefill_load_metric',
-    InstanceType.DECODE: 'dispatch_decode_load_metric',
-    InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
-    InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
-}
 
 @dataclass
 class DispatchLoadMetricConfig:

@@ -178,7 +178,7 @@ class SchedulerLlumnix(Scheduler):
             logger.info("Allocate waiting migrating request {}".format(seq_group.request_id))
             # For the waiting request migrated in, blocks have already been allocated when pre alloc.
             self._set_status(seq_group, status_to=SequenceStatus.RUNNING)
-            seq_group.reset_status()
+            seq_group.reset_llumnix_status()
         else:
             super()._allocate_and_set_running(seq_group)
 

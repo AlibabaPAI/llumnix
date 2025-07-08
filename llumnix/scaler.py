@@ -149,7 +149,7 @@ class Scaler:
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
 
-        if self.backend_type == BackendType.VLLM_V1:
+        if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
             # Mantain a monotonically increasing `client_index` for vLLM V1 APIServer.
             # It will be passed to APIServerActor through EntrypointsArgs.
             # TODO(shejiarui): Do not use ray interval kv.
@@ -903,7 +903,7 @@ class Scaler:
         next_entrypoints_args = copy.deepcopy(entrypoints_args)
         next_entrypoints_args.port += self.port_offset
 
-        if self.backend_type == BackendType.VLLM_V1:
+        if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
             next_entrypoints_args.client_index = self.client_index
             self.client_index += 1
             put_data_to_ray_internal_kv("scaler.client_index", self.client_index)

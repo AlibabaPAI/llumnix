@@ -14,33 +14,32 @@
 
 import copy
 from typing import Optional
+from ray.util.queue import Queue as RayQueue
 
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.queue.queue_type import QueueType
-from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.server_info import ServerInfo
 
 
 
 
-class RequestProcessingContext(ServerInfo):
+
+class RequestProcessingContext():
 
     def __init__(
         self,
         server_id: str,
         request_output_queue_type: QueueType,
-        request_output_queue: RayQueueServer,
+        request_output_queue: RayQueue,
         request_output_queue_ip: str,
         request_output_queue_port: int,
         enable_trace: bool = False,
     ) -> None:
-        super().__init__(
-            server_id,
-            request_output_queue_type,
-            request_output_queue,
-            request_output_queue_ip,
-            request_output_queue_port,
-        )
+        self.server_id: str = server_id
+        self.request_output_queue_type: QueueType = request_output_queue_type
+        self.request_output_queue: RayQueue = request_output_queue
+        self.request_output_queue_ip: str = request_output_queue_ip
+        self.request_output_queue_port: int = request_output_queue_port
         self.enable_trace: bool = enable_trace
         self.trace_timeline: Optional[RequestTimestamps] = RequestTimestamps() if enable_trace else None
 

@@ -209,7 +209,7 @@ def process_llumnix_trace_info(title, trace_info_list):
         mean = np.mean(latencies_array)
         max_value = np.max(latencies_array)
         min_value = np.min(latencies_array)
-        data.append([key, f"{mean:.2f}", f"{p50:.2f}", f"{p99:.2f}", f"{min_value:.2f}", f"{max_value:.2f}"])
+        data.append([key, f"{mean:.4f}", f"{p50:.4f}", f"{p99:.4f}", f"{min_value:.4f}", f"{max_value:.4f}"])
 
     return (
         title

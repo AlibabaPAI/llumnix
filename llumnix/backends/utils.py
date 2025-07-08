@@ -14,6 +14,7 @@
 import os
 from enum import Enum
 
+import ray
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
@@ -29,6 +30,29 @@ class EngineState(str, Enum):
     CRASHED = "CRASHED"
     RUNNING = "RUNNING"
     STOPPED = "STOPPED"
+
+
+# Once worker died, proxy actor will not restart.
+@ray.remote(num_cpus=0, max_concurrency=2, max_restarts=-1)
+class ProxyActor:
+    def __init__(self, is_driver_worker: bool, use_ray_spmd_worker: bool):
+        self.is_driver_worker = is_driver_worker
+        self.use_ray_spmd_worker = use_ray_spmd_worker
+
+    def exec_method(self, handle: ray.actor.ActorHandle, *args, **kwargs) -> Any:
+        if self.is_driver_worker and not self.use_ray_spmd_worker:
+            ret = ray_get_with_timeout(
+                handle.execute_engine_method_async.remote(
+                    "execute_driver_worker_method_async", *args, **kwargs
+                )
+            )
+        else:
+            ret = ray_get_with_timeout(
+                handle.execute_method.remote(*args, **kwargs)
+            )
+
+        return ret
+    
 
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,

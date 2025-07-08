@@ -164,7 +164,11 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                         # Do not consider the out of order for request timestamp currently.
                         entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
                         if entrypoint_req_id is not None:
-                            request_output: LlumnixGenerateStreamResponse = LlumnixGenerateStreamResponse.from_generate_stream_response(request_output)
+                            request_output: LlumnixGenerateStreamResponse = (
+                                LlumnixGenerateStreamResponse.from_generate_stream_response(
+                                    request_output
+                                )
+                            )
                             request_output.set_request_timestamp(request_timestamps)
 
                     processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)

@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any
 import os
 from enum import Enum
 
@@ -52,7 +53,7 @@ class ProxyActor:
             )
 
         return ret
-    
+
 
 def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,

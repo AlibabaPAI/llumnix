@@ -78,6 +78,8 @@ class KvBlocksRatioLoad(BaseLoad):
     @classmethod
     def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "KvBlocksRatioLoad":
         all_wanted_blocks = instance_info.num_used_gpu_blocks + instance_info.num_blocks_all_waiting_requests
+        if instance_info.num_total_gpu_blocks == 0:
+            return KvBlocksRatioLoad(np.inf)
         demand_factor = all_wanted_blocks / instance_info.num_total_gpu_blocks
         return KvBlocksRatioLoad(demand_factor)
 

@@ -83,10 +83,10 @@ class InstanceInfo:
     num_trans_wrapper_cached_request: int = 0
 
     # load metrics
-    kv_blocks_ratio: KvBlocksRatioLoad
-    remaining_steps: RemainingStepsLoad
-    adaptive_decode: AdaptiveDecodeBatchLoad
-    miss_waiting_tokens: MissWaitingTokensLoad
+    kv_blocks_ratio: KvBlocksRatioLoad = KvBlocksRatioLoad()
+    remaining_steps: RemainingStepsLoad = RemainingStepsLoad()
+    adaptive_decode: AdaptiveDecodeBatchLoad = AdaptiveDecodeBatchLoad()
+    miss_waiting_tokens: MissWaitingTokensLoad = MissWaitingTokensLoad()
 
     # on-demand init infos
     migration_load_metric: BaseLoad = DummyLoad()

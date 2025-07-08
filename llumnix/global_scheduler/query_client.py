@@ -1,4 +1,4 @@
-from third_party.MetaService.src.python.metaservice_client import MetaServiceClient
+# from third_party.MetaService.src.python.metaservice_client import MetaServiceClient
 import json
 
 
@@ -7,15 +7,15 @@ class QueryClient:
         raise NotImplementedError
     
 
-class MetaServiceQueryClient(QueryClient):
-    def __init__(self, config):
-        self.config = config
-        self.client = MetaServiceClient()
-        self.client.initialize(config)
+# class MetaServiceQueryClient(QueryClient):
+#     def __init__(self, config):
+#         self.config = config
+#         self.client = MetaServiceClient()
+#         self.client.initialize(config)
 
-    def query_cache_locality(self, hash_key: str) -> list[str]:
-        results = self.client.zreadrange(hash_key, 0)
-        return [item[0] for item in results]
+#     def query_cache_locality(self, hash_key: str) -> list[str]:
+#         results = self.client.zreadrange(hash_key, 0)
+#         return [item[0] for item in results]
     
 
 class MockQueryClient(QueryClient):

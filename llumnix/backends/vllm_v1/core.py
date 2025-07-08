@@ -41,8 +41,8 @@ from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
-from llumnix.backends.utils import (RequestOutputForwardingMode,
-                                    OutputMediator, EngineState)
+from llumnix.backends.utils import EngineState
+from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
 from llumnix.utils import make_async
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
@@ -76,7 +76,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        self.output_mediator = OutputMediator(
+        self.output_forwarder = OutputForwarder(
             instance_id,
             request_output_queue_type,
             request_output_forwarding_mode,
@@ -162,7 +162,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         if outputs:
             server_request_outputs, server_info_dict = self._gen_server_request_outputs(outputs)
             if server_request_outputs:
-                await self.output_mediator.put_request_outputs_to_server(server_request_outputs, server_info_dict)
+                await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
         set_timestamp(engine_core_output_all, 'engine_step_postprocess_timestamp_end', time.time())
 
@@ -200,7 +200,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         if reqs:
             tot_blocks = defaultdict(list)
             for req in reqs:
-                if req.llumnix_status != RequestStatus.RUNNING:
+                if req.status != RequestStatus.RUNNING:
                     continue
                 # block_ids (List[List[int]]): A two-level list where
                 # the outer list corresponds to KV cache groups

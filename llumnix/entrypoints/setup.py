@@ -187,7 +187,7 @@ def setup_entrypoints_context(entrypoints_args, scaler, manager, instance_ids, i
     server_info = ServerInfo(
         server_id,
         QueueType(entrypoints_args.request_output_queue_type),
-        request_output_queue,
+        request_output_queue.queue,
         ip,
         port,
     )

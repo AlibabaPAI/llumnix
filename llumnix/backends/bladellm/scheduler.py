@@ -30,7 +30,7 @@ from llumnix.backends.bladellm.metrics import BladeLLMMetrics
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.llumlet.request import RequestStatus
 from llumnix.backends.bladellm.llm_engine import AsyncBackQueueWrapper
-from llumnix.server_info import ServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import MigrationResponse
 
 
@@ -90,11 +90,11 @@ class PagedSchedulerLlumnix(PagedScheduler):
 
     # happends when add_request
     def add_gen_group(self, gen_group: GenerationGroupState, *args, **kwargs):
-        server_info: ServerInfo = None # just set to None for warm-up requests
-        if gen_group.request_group_id in self.trans_wrapper.request_server_map:
-            server_info = self.trans_wrapper.request_server_map[gen_group.request_group_id]
+        request_porcessing_context: RequestProcessingContext = None # just set to None for warm-up requests
+        if gen_group.request_group_id in self.trans_wrapper.request_processing_context_map:
+            request_porcessing_context = self.trans_wrapper.request_processing_context_map[gen_group.request_group_id]
         gen_group_llumnix = GenerationGroupStateLlumnix(
-            gen_group, gen_group.request_group_id, server_info
+            gen_group, gen_group.request_group_id, request_porcessing_context
         )
         gen_group_llumnix.set_llumnix_status(RequestStatus.WAITING)
         self.id2group[gen_group.request_group_id] = gen_group_llumnix

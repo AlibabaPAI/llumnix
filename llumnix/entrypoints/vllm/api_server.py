@@ -110,11 +110,12 @@ async def generate(request: Request) -> Response:
                 prompt + output.text for output in request_output.outputs
             ]
             ret = {"text": text_outputs}
-            if llumnix_request_output.enable_trace():
-                llumnix_request_output.set_timestamp("api_server_generate_timestamp_end")
+            request_processing_context = llumnix_request_output.request_processing_context
+            if request_processing_context.enable_trace:
+                request_processing_context.add_trace_timeline("api_server_generate_timestamp_end")
                 llumnix_trace_info = LlumnixTraceInfo(
-                    latencys=llumnix_request_output.request_timestamps.to_latency_breakdown_dict(),
-                    token_timestamps=llumnix_request_output.request_timestamps,
+                    latencys=request_processing_context.trace_timeline.to_latency_breakdown_dict(),
+                    token_timestamps=request_processing_context.trace_timeline,
                 )
                 ret["llumnix_trace_info"] = asdict(llumnix_trace_info)
             yield (json.dumps(ret) + "\0").encode("utf-8")
@@ -133,11 +134,12 @@ async def generate(request: Request) -> Response:
             return Response(status_code=499)
         request_output = llumnix_request_output.get_engine_output()
         final_output = request_output
-        if llumnix_request_output.enable_trace():
-            llumnix_request_output.set_timestamp("api_server_generate_timestamp_end")
+        request_processing_context = llumnix_request_output.request_processing_context
+        if request_processing_context.enable_trace:
+            request_processing_context.add_trace_timeline("api_server_generate_timestamp_end")
             llumnix_trace_info = LlumnixTraceInfo(
-                latencys=llumnix_request_output.request_timestamps.to_latency_breakdown_dict(),
-                token_timestamps=llumnix_request_output.request_timestamps,
+                latencys=request_processing_context.trace_timeline.to_latency_breakdown_dict(),
+                token_timestamps=request_processing_context.trace_timeline,
             )
             llumnix_trace_infos.append(asdict(llumnix_trace_info))
 
@@ -147,7 +149,6 @@ async def generate(request: Request) -> Response:
     ret = {"text": text_outputs}
     if llumnix_trace_infos:
         ret["llumnix_trace_info"] = llumnix_trace_infos
-    print(f"ret in api_server is: {ret}")
     return JSONResponse(ret)
 
 @app.post("/generate_benchmark")
@@ -190,9 +191,10 @@ async def generate_benchmark(request: Request) -> Response:
         per_token_latency.append([now, (now - start)*1000])
         start = now
         final_output = request_output
-        if llumnix_request_output.enable_trace():
-            llumnix_request_output.set_timestamp('api_server_generate_timestamp_end', now)
-            per_token_latency_breakdown_list.append(llumnix_request_output.request_timestamps.to_latency_breakdown_dict())
+        request_processing_context = llumnix_request_output.request_processing_context
+        if request_processing_context.enable_trace:
+            request_processing_context.add_trace_timeline('api_server_generate_timestamp_end', now)
+            per_token_latency_breakdown_list.append(request_processing_context.trace_timeline.to_latency_breakdown_dict())
     assert final_output is not None
 
     if llumnix_client.log_requests:

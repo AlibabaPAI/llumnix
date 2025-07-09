@@ -46,10 +46,10 @@ class LlumnixGenerateStreamResponse(_GenerateStreamResponse):
         llumnix_generate_stream_response.llumnix_trace_info = llumnix_trace_info
         return llumnix_generate_stream_response
 
-    def set_request_timestamp(self, request_timestamp):
+    def set_trace_timeline(self, trace_timeline):
         if self.llumnix_trace_info is None:
             self.llumnix_trace_info = LlumnixTraceInfo()
-        self.llumnix_trace_info.token_timestamps = request_timestamp
+        self.llumnix_trace_info.token_timestamps = trace_timeline
 
 
 class LlumnixOAICompletionsResponse(OAICompletionsResponse, LlumnixBaseResponse):

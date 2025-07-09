@@ -26,7 +26,6 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
-from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
@@ -79,7 +78,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         logger.info("Client receive request {}.".format(request_id))
         results_queue = asyncio.Queue()
         self.request_stream[request_id] = results_queue
-        reuqest_server_info: RequestProcessingContext = (
+        reuqest_processing_context: RequestProcessingContext = (
             RequestProcessingContext.deepcopy_from_server_info(
                 self.server_info,
                 enable_trace=isinstance(request, LlumnixServerRequest)
@@ -92,7 +91,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
-            await self._generate_by_manager(request_id, reuqest_server_info, request)
+            await self._generate_by_manager(request_id, reuqest_processing_context, request)
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
@@ -101,7 +100,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             if self.manager_available:
                 self.manager_available = False
                 return LLMResponse(request_id, resp_queue=results_queue)
-            await self._generate_by_instance(request_id, reuqest_server_info, request)
+            await self._generate_by_instance(request_id, reuqest_processing_context, request)
 
         return LLMResponse(request_id, resp_queue=results_queue)
 
@@ -158,9 +157,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                         continue
                     self.request_instance[request_id] = request_response.instance_id
 
-                    if request_response.enable_trace():
-                        request_timestamps: RequestTimestamps = request_response.request_timestamps
-                        request_timestamps.set_timestamp('api_server_get_queue_timestamp')
+                    if request_response.request_processing_context.enable_trace:
+                        request_response.request_processing_context.add_trace_timeline('api_server_get_queue_timestamp')
                         # Do not consider the out of order for request timestamp currently.
                         entrypoint_req_id = self.llumnix_req_id_to_entrypoint_req_id.get(request_id, None)
                         if entrypoint_req_id is not None:
@@ -169,7 +167,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                                     request_output
                                 )
                             )
-                            request_output.set_request_timestamp(request_timestamps)
+                            request_output.set_trace_timeline(request_response.request_processing_context.trace_timeline)
 
                     processed_output: List[GenerateStreamResponse] = self._process_output_order(request_id, request_output)
                     if not processed_output:

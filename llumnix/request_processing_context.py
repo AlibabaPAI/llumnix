@@ -67,3 +67,12 @@ class RequestProcessingContext():
         if not self.enable_trace:
             return
         self.trace_timeline.set_timestamp(timestamp_attr, timestamp)
+
+    def get_server_info(self) -> ServerInfo:
+        return ServerInfo(
+            server_id=self.server_id,
+            request_output_queue_type=self.request_output_queue_type,
+            request_output_queue=self.request_output_queue,
+            request_output_queue_ip=self.request_output_queue_ip,
+            request_output_queue_port=self.request_output_queue_port
+        )

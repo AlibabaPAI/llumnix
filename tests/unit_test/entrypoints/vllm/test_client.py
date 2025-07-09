@@ -102,7 +102,7 @@ def gen_llumnix_request_output(
         request_id=request_id,
         instance_id="mock_instance_id",
         engine_output=gen_request_output(request_id, tokens_len, output_len, finished),
-        request_timestamps=None,
+        request_processing_context=None,
     )
 
 

@@ -12,7 +12,6 @@
 # limitations under the License.
 
 from ray.util.queue import Queue
-from llumnix.queue.ray_queue_server import RayQueueServer
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
 
@@ -23,7 +22,7 @@ class ServerInfo:
     def __init__(self,
                  server_id: str,
                  request_output_queue_type: QueueType,
-                 request_output_queue: RayQueueServer | Queue,
+                 request_output_queue: Queue,
                  request_output_queue_ip: str,
                  request_output_queue_port: int) -> None:
         self.server_id = server_id
@@ -31,12 +30,7 @@ class ServerInfo:
         self.request_output_queue = None
         if request_output_queue_type == QueueType.RAYQUEUE:
             assert request_output_queue is not None
-            # type of request_output_queue is ray.Queue when create ServerInfo at RequestProcessingContext.from_server_info()
-            self.request_output_queue = (
-                request_output_queue.queue
-                if isinstance(request_output_queue, RayQueueServer)
-                else request_output_queue
-            )
+        self.request_output_queue = request_output_queue if request_output_queue_type == QueueType.RAYQUEUE else None
         self.request_output_queue_ip = request_output_queue_ip
         self.request_output_queue_port = request_output_queue_port
 

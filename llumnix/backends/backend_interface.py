@@ -46,7 +46,8 @@ class BackendInterface(ABC):
 
         Args:
             request_id: Request ID.
-            request_processing_context: The information of the api server where the request comes.
+            request_processing_context: The information of the api server where the request comes and
+                                        the infromation of request tracing.
             expected_steps: The expected number of steps for the request to run. The number of steps
                             represents the times 'engine.step()' has been called by the backend
                             instance for the request. Currently, `expected_steps` is used to

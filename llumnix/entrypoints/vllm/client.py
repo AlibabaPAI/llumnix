@@ -141,8 +141,8 @@ class LlumnixClientVLLM(LlumnixClient):
             try:
                 request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
                 for request_response in request_responses:
+                    request_response.request_processing_context.set_timestamp('api_server_get_queue_timestamp')
                     request_output: RequestOutput = request_response.get_engine_output()
-                    request_response.set_timestamp('api_server_get_queue_timestamp')
                     request_id = request_response.request_id
                     # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                     if request_id not in self.request_stream:
@@ -191,9 +191,13 @@ class LlumnixClientVLLM(LlumnixClient):
                     request_id, last_completion_tokens, current_completion_tokens
                 )
             )
-            if request_output.request_timestamps is not None:
-                logger.info("out-of-order request({}) output timestamps: {}".format(
-                    request_id, request_output.request_timestamps.to_latency_breakdown_dict()))
+            if request_output.request_processing_context.enable_trace:
+                logger.info(
+                    "out-of-order request({}) output timestamps: {}".format(
+                        request_id,
+                        request_output.request_processing_context.trace_timeline.to_latency_breakdown_dict(),
+                    )
+                )
             return None
         self.request_stream_last_completion_tokens[request_id] = current_completion_tokens
 

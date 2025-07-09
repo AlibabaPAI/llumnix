@@ -58,9 +58,9 @@ class LlumnixRequestOutputFactory(RequestOutputFactory):
         # Determine the type based on a condition, for example:
         if hasattr(seq_group,
                    'embeddings') and seq_group.embeddings is not None:
-            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
+            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.request_processing_context
         # pylint: disable=too-many-function-args
-        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
+        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.request_processing_context
 
 
 class LLMEngineLlumnix(_AsyncLLMEngine):
@@ -154,7 +154,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
              is_last_step, is_first_step_output, skip) = ctx.output_queue.popleft()
 
         # Filter out outputs of migrating requests.
-        server_infos: List[RequestProcessingContext] = []
+        request_processing_contexts: List[RequestProcessingContext] = []
         if outputs:
             new_outputs = []
             new_scheduled_seq_groups = []
@@ -165,7 +165,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 new_scheduled_seq_groups.append(scheduled_seq_group)
                 new_seq_group_metadata_list.append(seq_group_meta)
                 new_outputs.append(seq_group_output)
-                server_infos.append(seq_group.server_info)
+                request_processing_contexts.append(seq_group.request_processing_context)
             scheduler_outputs.scheduled_seq_groups = new_scheduled_seq_groups
             outputs[0].outputs = new_outputs
             seq_group_metadata_list = new_seq_group_metadata_list
@@ -178,17 +178,17 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                                          is_last_step, is_first_step_output, skip))
 
         now_time = time.perf_counter()
-        for server_info in server_infos:
-            server_info.add_trace_timeline('engine_process_model_outputs_timestamp_begin',now_time)
+        for request_processing_context in request_processing_contexts:
+            request_processing_context.add_trace_timeline('engine_process_model_outputs_timestamp_begin',now_time)
 
         super()._process_model_outputs(ctx, request_id)
 
         if ctx.request_outputs:
-            _, server_infos = zip(*ctx.request_outputs)
+            _, request_processing_contexts = zip(*ctx.request_outputs)
 
             now_time = time.perf_counter()
-            for server_info in server_infos:
-                server_info.add_trace_timeline('engine_process_model_outputs_timestamp_end', now_time)
+            for request_processing_context in request_processing_contexts:
+                request_processing_context.add_trace_timeline('engine_process_model_outputs_timestamp_end', now_time)
 
         if not self.disable_async_output_proc:
             while self._output_proc_done_event_queue.qsize() > 0:
@@ -262,13 +262,12 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         # Reorganize data in orther to put request output to queue in batch at one time.
         for request_output, request_processing_context in zip(request_outputs, request_processing_contexts):
             server_id = request_processing_context.server_id
-            request_timestamps = request_processing_context.trace_timeline
             llumnix_resquest_output = LlumnixRequestOuput(
-                request_output.request_id, self.instance_id, request_output, request_timestamps
+                request_output.request_id, self.instance_id, request_output, request_processing_context
             )
             server_request_outputs[server_id].append(llumnix_resquest_output)
             if server_id not in server_info_dict:
-                server_info_dict[server_id] = request_processing_context
+                server_info_dict[server_id] = request_processing_context.get_server_info()
 
         return server_request_outputs, server_info_dict
 

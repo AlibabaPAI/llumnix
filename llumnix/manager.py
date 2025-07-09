@@ -257,18 +257,7 @@ class Manager:
                     exc_info=True, stack_info=True
                 )
 
-<<<<<<< HEAD
     async def _migrate(self):
-=======
-    async def _push_migrations(self) -> None:
-        if self.enable_pd_disagg:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.PREFILL_2_DECODE))
-            asyncio.create_task(self._migrate(PairMigrationConstraints.DECODE_2_DECODE))
-        else:
-            asyncio.create_task(self._migrate(PairMigrationConstraints.NEUTRAL))
-
-    async def _migrate(self, pair_migration_type: PairMigrationConstraints) -> None:
->>>>>>> 624c758 (Address review comments)
         # If encounter error during migration, to make manager keep running, we do not raise exception.
         try:
             instance_infos = self.global_scheduler.instance_info

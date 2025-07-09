@@ -69,11 +69,11 @@ bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_t
 
 .PHONY: bladellm_unit_test
 bladellm_unit_test: check_pytest_installed
-	@pytest -v --ignore=third_party --disable-warnings ./tests/unit_test/**/bladellm/
+	@pytest -v --timer-top-n=999 --ignore=third_party --disable-warnings ./tests/unit_test/**/bladellm/
 
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed
-	@pytest -v --ignore=third_party --ignore-glob="tests/**/bladellm" --disable-warnings ./tests/unit_test/
+	@pytest -v --timer-top-n=999 --ignore=third_party --ignore-glob="tests/**/bladellm" --disable-warnings ./tests/unit_test/
 
 .PHONY: vllm_offline_test
 vllm_offline_test:
@@ -165,5 +165,9 @@ check_pytest_installed:
 	@python3 -m pip show pytest-timeout > /dev/null 2>&1 || { \
 		echo "pytest-timeout is not installed. Installing pytest-timeout ..."; \
 		python3 -m pip install -i https://mirrors.aliyun.com/pypi/simple/ pytest-timeout; }
+
+	@python3 -m pip show pytest-timer > /dev/null 2>&1 || { \
+		echo "pytest-timer is not installed. Installing pytest-timer ..."; \
+		python3 -m pip install -i https://mirrors.aliyun.com/pypi/simple/ pytest-timer; }
 
 ###################################### pytest end #######################################

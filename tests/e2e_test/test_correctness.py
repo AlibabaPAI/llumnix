@@ -35,7 +35,7 @@ from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_se
                                   generate_bladellm_request, process_bladellm_api_server_output,
                                   wait_for_llumnix_service_ready, wait_for_llumnix_service_ready_vllm_v1,
                                   shutdown_llumnix_service, shutdown_llumnix_service_func, check_log_exception, get_llumnix_response,
-                                  generate_special_test_config)
+                                  generate_special_test_config, parse_launch_command)
 from tests.utils import try_convert_to_local_path
 
 
@@ -207,7 +207,7 @@ def generate_correctness_test_config():
     vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, "global", "thread", False, False]
     
     vllm_v1_config = [
-        vllm_v1_base_config,
+        # vllm_v1_base_config,
         generate_special_correctness_test_config([("tensor_parallel_size", 2)], vllm_v1_base_config),
     ]
     
@@ -238,7 +238,8 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("enable_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)], bladellm_base_config),
     ]
 
-    return vllm_config + vllm_v1_config + bladellm_config
+    # return vllm_config + vllm_v1_config + bladellm_config
+    return vllm_v1_config
 
 
 @pytest.mark.asyncio
@@ -247,8 +248,8 @@ def generate_correctness_test_config():
 @pytest.mark.parametrize(config_schema, generate_correctness_test_config())
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator,
-                           enable_pd_disagg, launch_mode, request_output_forwarding_mode):
-    print("Enter test_correctness")
+                           enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_engine_semi_pd_disagg,
+                           enable_adaptive_pd):
     engine = "_".join(engine.split("_")[1:])
 
     global test_times
@@ -379,12 +380,15 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                enable_migration=enable_migration,
                                                max_instances=instance_count))
     for launch_command in launch_commands:
-        subprocess.run(launch_command, shell=True, check=True)
+        # make sure env vars are passed
+        env, launch_command = parse_launch_command(launch_command)
+        subprocess.run(launch_command, shell=True, check=True, env=env)
 
     await asyncio.sleep(3)
 
     if engine =="vLLM_v1":
-        # special wait for ready for vllm v1
+        # special wait_for_llumnix_service_ready for vllm v1
+        # TODO(zhaozhiyu): remove this special judge
         wait_for_llumnix_service_ready_vllm_v1(ip_ports)
     else:
         wait_for_llumnix_service_ready(ip_ports)

@@ -217,20 +217,20 @@ class MockMigrationScheduler(MigrationScheduler):
         if hasattr(self, 'p2d_transfer_filter_pipeline') \
             and migration_filter_pipeline == self.p2d_transfer_filter_pipeline:
             target_store = self.pd_migration_pairs
-        elif hasattr(self, 'load_balance_filter_pipeline') \
-            and migration_filter_pipeline == self.load_balance_filter_pipeline:
+        elif hasattr(self, 'no_constraints_load_balance_filter_pipeline') \
+            and migration_filter_pipeline == self.no_constraints_load_balance_filter_pipeline:
             target_store = self.no_constraints_pairs
-        elif hasattr(self, 'd2d_load_filter_pipeline') \
-            and migration_filter_pipeline == self.d2d_load_filter_pipeline:
+        elif hasattr(self, 'decode_load_balance_filter_pipeline') \
+            and migration_filter_pipeline == self.decode_load_balance_filter_pipeline:
             target_store = self.dd_migration_pairs
-        elif hasattr(self, 'dynamic_p_to_d_filter_pipeline') \
-            and migration_filter_pipeline == self.dynamic_p_to_d_filter_pipeline:
+        elif hasattr(self, 'dynamic_p2d_filter_pipeline') \
+            and migration_filter_pipeline == self.dynamic_p2d_filter_pipeline:
             target_store = self.dynamicp_d_migration_pairs
         elif hasattr(self, 'aggrate_dynamic_p_filter_pipeline') \
             and migration_filter_pipeline == self.aggrate_dynamic_p_filter_pipeline:
             target_store = self.dynamicp_dynamicp_migration_pairs
-        elif hasattr(self, 'ease_d_with_p_bubble_filter_pipeline') \
-            and migration_filter_pipeline == self.ease_d_with_p_bubble_filter_pipeline:
+        elif hasattr(self, 'ease_d_with_empty_p_filter_pipeline') \
+            and migration_filter_pipeline == self.ease_d_with_empty_p_filter_pipeline:
             target_store = self.dp_migration_pairs
 
         migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter_pipeline, migration_policy)

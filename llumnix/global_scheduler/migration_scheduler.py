@@ -82,8 +82,9 @@ class MigrationScheduler:
         self.load_filter = MigrationFilterFactory.get_filter("load")
 
         if not self._enable_pd():
-            self.load_balance_filter_pipeline = MigrationFilterPipeline(self.filter_config)
-            self.load_balance_filter_pipeline.add_filter("load_balance_filter", self.load_filter)
+            self.no_constraints_load_balance_filter_pipeline = MigrationFilterPipeline(self.filter_config)
+            self.no_constraints_load_balance_filter_pipeline.add_filter(
+                "no_constraints_load_balance_filter", self.load_filter)
 
         if self.enable_pd_disagg:
             self.p_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
@@ -101,9 +102,9 @@ class MigrationScheduler:
                 src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
                 dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE
             )
-            self.d2d_load_filter_pipeline = MigrationFilterPipeline(self.filter_config)
-            self.d2d_load_filter_pipeline.add_filter("dd_intance_filter", self.d_d_filter)
-            self.d2d_load_filter_pipeline.add_filter("dd_load_balance_filter", self.load_filter)
+            self.decode_load_balance_filter_pipeline = MigrationFilterPipeline(self.filter_config)
+            self.decode_load_balance_filter_pipeline.add_filter("dd_intance_filter", self.d_d_filter)
+            self.decode_load_balance_filter_pipeline.add_filter("decode_load_balance_filter", self.load_filter)
 
         if self.enable_adaptive_pd:
             self.dynamic_p_free_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
@@ -113,8 +114,8 @@ class MigrationScheduler:
                 dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE \
                     and not instance_info.dispatch_load_metric.is_busy()
             )
-            self.dynamic_p_to_d_filter_pipeline = MigrationFilterPipeline(self.filter_config)
-            self.dynamic_p_to_d_filter_pipeline.add_filter("dynamic_p_d_instance_filter", self.dynamic_p_free_d_filter)
+            self.dynamic_p2d_filter_pipeline = MigrationFilterPipeline(self.filter_config)
+            self.dynamic_p2d_filter_pipeline.add_filter("dynamic_p_d_instance_filter", self.dynamic_p_free_d_filter)
 
             self.dynamic_p_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
             self.dynamic_p_filter.set_filter_condtition(
@@ -136,8 +137,8 @@ class MigrationScheduler:
                 dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
                     and instance_info.num_running_requests == 0
             )
-            self.ease_d_with_p_bubble_filter_pipeline = MigrationFilterPipeline(self.filter_config)
-            self.ease_d_with_p_bubble_filter_pipeline.add_filter("busy_d_empty_p_filter", self.d_p_filter)
+            self.ease_d_with_empty_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
+            self.ease_d_with_empty_p_filter_pipeline.add_filter("busy_d_empty_p_filter", self.d_p_filter)
 
     def _set_migration_policy(self):
         self.pair_migration_policy = MigrationPolicyFactory.get_policy(
@@ -164,13 +165,14 @@ class MigrationScheduler:
         if not self._enable_pd():
             migration_tasks.append((
                 MigrationType.NO_CONSTRAINTS_LOAD_BALANCE,
-                self._pair_migration(instance_info, self.load_balance_filter_pipeline, self.pair_migration_policy)
+                self._pair_migration(instance_info, self.no_constraints_load_balance_filter_pipeline,
+                                     self.pair_migration_policy)
             ))
 
         elif not self.enable_engine_pd_disagg:
             migration_tasks.append((
                 MigrationType.DD_LOAD_BALANCE,
-                self._pair_migration(instance_info, self.d2d_load_filter_pipeline, self.pair_migration_policy)
+                self._pair_migration(instance_info, self.decode_load_balance_filter_pipeline, self.pair_migration_policy)
             ))
 
         if self.enable_adaptive_pd:
@@ -182,7 +184,7 @@ class MigrationScheduler:
             if exist_free_d(instance_info):
                 migration_tasks.append((
                     MigrationType.DYNAMIC_P_TO_D,
-                    self._pair_migration(instance_info, self.dynamic_p_to_d_filter_pipeline, self.defrag_policy)
+                    self._pair_migration(instance_info, self.dynamic_p2d_filter_pipeline, self.defrag_policy)
                 ))
             else:
                 migration_tasks.append((
@@ -192,7 +194,7 @@ class MigrationScheduler:
 
             migration_tasks.append((
                 MigrationType.EASE_D_WITH_P_BUBBLE,
-                self._pair_migration(instance_info, self.ease_d_with_p_bubble_filter_pipeline, self.defrag_policy)
+                self._pair_migration(instance_info, self.ease_d_with_empty_p_filter_pipeline, self.defrag_policy)
             ))
 
         return migration_tasks

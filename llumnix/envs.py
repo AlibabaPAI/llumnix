@@ -23,7 +23,9 @@ from llumnix.constants import (
     DECODE_COMPUTE_BOUND_BATCH_SIZE,
     MISSWAITINGTOKENS_BUSY_THRESHOLD,
     DEFAULT_METRICS_EXPORT_INTERVAL_SEC,
-    RAY_TASK_RETRY_DELAY_MS
+    RAY_TASK_RETRY_DELAY_MS,
+    CACHE_TRANSFER_THRESHOLD,
+    CACHE_TRANSFER_PENALTY_FACTOR
 )
 
 if TYPE_CHECKING:
@@ -50,7 +52,8 @@ if TYPE_CHECKING:
     REMAININGSTEPS_BUSY_THRESHOLD: float = 0.0
     DECODE_COMPUTE_BOUND_BATCH_SIZE: float = 0.0
     MISSWAITINGTOKENS_BUSY_THRESHOLD: float = 0.0
-
+    CACHE_TRANSFER_THRESHOLD: int = 0
+    CACHE_TRANSFER_PENALTY_FACTOR: float = 0.0
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -124,6 +127,12 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     # used in retry manager and scaler method
     "RAY_TASK_RETRY_DELAY_MS":
     lambda: os.getenv("RAY_TASK_RETRY_DELAY_MS", str(RAY_TASK_RETRY_DELAY_MS)),
+
+    # used in cache-aware policy
+    "CACHE_TRANSFER_THRESHOLD":
+    lambda: os.getenv("CACHE_TRANSFER_THRESHOLD", str(CACHE_TRANSFER_THRESHOLD)),
+    "CACHE_TRANSFER_PENALTY_FACTOR":
+    lambda: os.getenv("CACHE_TRANSFER_PENALTY_FACTOR", str(CACHE_TRANSFER_PENALTY_FACTOR)),
 }
 
 

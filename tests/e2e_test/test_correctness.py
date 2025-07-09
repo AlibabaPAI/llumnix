@@ -70,7 +70,7 @@ def run_vllm(model):
         vllm_output[output.prompt] = output.prompt + output.outputs[0].text
     return vllm_output
 
-async def run_vllm_v1(model, enable_pd_disagg, enable_migration):
+async def run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_migration):
     ip = get_ip_address()
     base_port = 35000 + test_times * 100
     
@@ -82,6 +82,7 @@ async def run_vllm_v1(model, enable_pd_disagg, enable_migration):
         ip=ip,
         port=base_port,
         max_model_len=1024,
+        tensor_parallel_size=tensor_parallel_size,
     )
     subprocess.run(raw_serve_command, shell=True, check=True)
 
@@ -290,7 +291,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         generate_serve_command_func = generate_vllm_v1_serve_command
         url = f'http://{ip}:{base_port}/v1/chat/completions'
         
-        engine_prompt_output = await run_vllm_v1(model, enable_pd_disagg, enable_migration)
+        engine_prompt_output = await run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_migration)
     elif engine == "BladeLLM":
         generate_request_func = generate_bladellm_request
         process_api_server_output_func = process_bladellm_api_server_output
@@ -382,6 +383,8 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     for launch_command in launch_commands:
         # make sure env vars are passed
         env, launch_command = parse_launch_command(launch_command)
+        print(f"env: {env}")
+        print(f"launch_command: {launch_command}")
         subprocess.run(launch_command, shell=True, check=True, env=env)
 
     await asyncio.sleep(3)
@@ -410,11 +413,11 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
 
     if not enable_simulator:
         for i, prompt in enumerate(prompts):
-            assert llumnix_output[prompt] == raw_output[prompt]
             with open(f"{i}_llumnix.out", "a+") as f:
                 f.write(str(llumnix_output[prompt]))
             with open(f"{i}_raw.out", "a+") as f:
                 f.write(str(raw_output[prompt]))
+            assert llumnix_output[prompt] == raw_output[prompt]
 
     await asyncio.sleep(3)
 

@@ -46,12 +46,12 @@ def parse_launch_command(launch_command: str) -> Tuple[Dict[str, str], str]:
         else:
             # This is the first part without an '=', so the command starts here
             break
-        
+
     actual_command = ' '.join(command_parts[command_start_index:])
     env = os.environ.copy()
     for k, v in process_env.items():
         env[k] = v
-    
+
     return env, actual_command
 
 def generate_vllm_launch_command(
@@ -235,6 +235,7 @@ def generate_vllm_v1_launch_command(
     **kwargs
 ):
     return None
+
 def generate_vllm_v1_serve_command(
     result_filename: str = "",
     ip: str = get_ip_address(),
@@ -524,7 +525,7 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
             raise TimeoutError(f"Wait for llumnix service timeout ({timeout}s).")
 
         time.sleep(5.0)
-        
+
 def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
     start_time = time.time()
     while True:
@@ -627,6 +628,60 @@ def generate_vllm_serve_service_command_func(
         f"--port {port} "
         f"--enable-pd-disagg "
         f"--enable-migration "
+        f"--pd-ratio 1:1 "
+        f"--max-instances {max_instances} "
+        f"--enable-port-increment "
+        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+    )
+    return command
+
+def generate_vllm_v1_register_service_command_func(
+    engine_type: str,
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000
+):
+    kvt_config_prefill = (
+        '--kv-transfer-config \'{"kv_connector": "HybridConnector", "kv_role": "kv_producer", '
+        '"kv_connector_extra_config": {"backend": "kvt", "kvt_inst_id": "prefill", '
+        '"naming_url": "file:/tmp/vllm.zhanyi_naming"}}\''
+    )
+
+    kvt_config_decode = (
+        '--kv-transfer-config \'{"kv_connector": "HybridConnector", "kv_role": "kv_consumer", '
+        '"kv_connector_extra_config": {"backend": "kvt", "kvt_inst_id": "decode", '
+        '"naming_url": "file:/tmp/vllm.zhanyi_naming"}}\' 1>d.log 2>&1 &'
+    )
+
+    command = (
+        f"python -u -m llumnix.entrypoints.vllm_v1.register_service "
+        f"--engine-type {engine_type} "
+        f"--save-path ./service_test "
+        f"--save-key vllm_v1 "
+        f"--model {model} "
+        f"--max-model-len 4096 "
+        f"--distributed-executor-backend ray "
+        f"--enforce-eager "
+        f"--trust-remote-code "
+        f"{kvt_config_prefill if engine_type == 'prefill' else kvt_config_decode if engine_type == 'decode' else ''}"
+    )
+    return command
+
+def generate_vllm_v1_serve_service_command_func(
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    max_instances: int = 4,
+    result_filename: str = ""
+):
+    command = (
+        f"VLLM_USE_V1=1 VLLM_ENABLE_LLUMNIX=1 VLLM_FORCE_DETOKENIZE=1 RAY_DEDUP_LOGS=0 "
+        f"nohup python -u -m llumnix.entrypoints.vllm_v1.serve "
+        f"--load-registered-service "
+        f"--load-registered-service-path ./service_test/vllm_v1 "
+        f"--host {ip} "
+        f"--port {port} "
+        f"--enable-pd-disagg "
         f"--pd-ratio 1:1 "
         f"--max-instances {max_instances} "
         f"--enable-port-increment "

@@ -73,7 +73,7 @@ def run_vllm(model):
 async def run_vllm_v1(model, enable_pd_disagg, enable_migration):
     ip = get_ip_address()
     base_port = 35000 + test_times * 100
-    
+
     assert enable_pd_disagg is False, "PD disaggregation is not supported in v1"
     assert enable_migration is False, "Migration is not supported in v1"
 
@@ -203,14 +203,14 @@ def generate_correctness_test_config():
         # adaptive pd
         generate_special_correctness_test_config([("enable_pd_disagg", True), ("enable_adaptive_pd", True)], vllm_base_config),
     ]
-    
+
     vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, "global", "thread", False, False]
-    
+
     vllm_v1_config = [
         # vllm_v1_base_config,
         generate_special_correctness_test_config([("tensor_parallel_size", 2)], vllm_v1_base_config),
     ]
-    
+
     bladellm_base_config = ["engine_BladeLLM", "grpc", 1, True, False, False, "global", "thread", False, False]
 
     bladellm_config = [
@@ -283,13 +283,13 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                 engine_pdd_prompt_output = await run_vllm.remote(model)
     elif engine == "vLLM_v1":
         assert not enable_pd_disagg, "PD disaggregation is not supported for vLLM_v1"
-        
+
         generate_request_func = generate_vllm_v1_request
         process_api_server_output_func = process_vllm_v1_api_server_output
         generate_launch_command_func = generate_vllm_v1_launch_command
         generate_serve_command_func = generate_vllm_v1_serve_command
         url = f'http://{ip}:{base_port}/v1/chat/completions'
-        
+
         engine_prompt_output = await run_vllm_v1(model, enable_pd_disagg, enable_migration)
     elif engine == "BladeLLM":
         generate_request_func = generate_bladellm_request

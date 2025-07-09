@@ -245,7 +245,7 @@ def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_e
     if not migration_scheduler._enable_pd():
         for idx in range(INSTANCE_NUM):
             instance_info = InstanceInfo()
-            instance_info.instance_type = InstanceType.NO_CONSTRAINTS
+            instance_info.instance_type = InstanceType.NEUTRAL
             instance_info.instance_id = f"instance_id_{idx}"
             all_instance_infos[instance_info.instance_id] = instance_info
             instance_info.migration_load_metric = MIGRATE_OUT_LOAD_THRESHOLD + random.uniform(-6, 3)

@@ -60,10 +60,16 @@ def create_dummy_prompt(
     seq = Sequence(int(request_id), token_inputs(prompt_tokens), block_size)
     server_info = ServerInfo(None, None, None, None, None)
     seq_group = SequenceGroupLlumnix(
-        request_id, server_info, expected_steps, [seq],
-        time.time(),
-        SamplingParams(best_of=best_of),
-        lora_request)
+        request_id,                  # request_id
+        server_info,                 # server_info
+        expected_steps,              # expected_steps
+        0,                           # num_hit_tokens
+        1,                           # transfer_penalty
+        [seq],                       # seqs
+        time.time(),                 # arrival_time
+        SamplingParams(best_of=best_of),  # sampling_params
+        lora_request                 # lora_request
+    )
 
     return seq, seq_group
 

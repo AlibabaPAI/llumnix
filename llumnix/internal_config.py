@@ -13,6 +13,15 @@
 
 from typing import Union, List
 
+from dataclasses import dataclass
+
+@dataclass
+class DispatchLoadMetricConfig:
+    dispatch_load_metric: str
+    dispatch_prefill_load_metric: str
+    dispatch_decode_load_metric: str
+    dispatch_prefill_as_decode_load_metric: bool
+    dispatch_decode_as_prefill_load_metric: bool
 
 class GlobalSchedulerConfig:
     def __init__(
@@ -30,7 +39,10 @@ class GlobalSchedulerConfig:
             enable_engine_pd_disagg: bool,
             enable_engine_semi_pd_disagg: bool,
             enable_adaptive_pd: bool,
-            is_group_kind_migration_backend: bool) -> None:
+            is_group_kind_migration_backend: bool,
+            dispatch_load_metric_config: DispatchLoadMetricConfig,
+            cache_meta_client_config_path: str=None,
+            ) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy
         self.topk_random_dispatch = topk_random_dispatch
@@ -48,6 +60,9 @@ class GlobalSchedulerConfig:
         self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
         self.is_group_kind_migration_backend = is_group_kind_migration_backend
+
+        self.dispatch_load_metric_config = dispatch_load_metric_config
+        self.cache_meta_client_config_path = cache_meta_client_config_path
 
 
 class MigrationConfig:

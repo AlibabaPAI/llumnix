@@ -44,7 +44,7 @@ def test_gen_next_engine_args_baldellm():
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
     )
     engine_args = BladeLLMEngineArgs(serving_args)
-    next_instance_args = InstanceArgs(instance_type=InstanceType.NO_CONSTRAINTS)
+    next_instance_args = InstanceArgs(instance_type=InstanceType.NEUTRAL)
     next_engine_args: BladeLLMEngineArgs = llumnix_engine_args_factory.gen_next_engine_args(
         engine_args, next_instance_args, 0
     )

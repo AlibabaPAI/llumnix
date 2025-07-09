@@ -54,7 +54,7 @@ def test_gen_next_engine_args_vllm():
         )
     )
     next_engine_args = llumnix_engine_args_factory.gen_next_engine_args(
-        engine_args, InstanceArgs(instance_type=InstanceType.NO_CONSTRAINTS), 0
+        engine_args, InstanceArgs(instance_type=InstanceType.NEUTRAL), 0
     )
     assert next_engine_args is not engine_args
     assert asdict(next_engine_args.engine_args) == asdict(engine_args.engine_args)

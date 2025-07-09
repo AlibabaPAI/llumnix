@@ -429,7 +429,6 @@ class ManagerArgs:
 
     def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
         # Create the GlobalScheduler Configuration.
-    
         dispatch_load_metric_config = DispatchLoadMetricConfig(
             self.dispatch_load_metric,
             self.dispatch_prefill_load_metric,
@@ -437,7 +436,6 @@ class ManagerArgs:
             self.dispatch_prefill_as_decode_load_metric,
             self.dispatch_decode_as_prefill_load_metric
         )
-        
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.dispatch_policy,
                                                         self.topk_random_dispatch,

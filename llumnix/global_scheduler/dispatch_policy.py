@@ -11,15 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Optional
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional
 import random
 import hashlib
 import array
-import torch
 import json
+import torch
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType, INSTANCE_TYPE_TO_METRIC_FIELD, sort_instance_infos
@@ -32,16 +30,15 @@ logger = init_logger(__name__)
 
 
 class DispatchPolicy(ABC):
-    def __init__(self, topk_random_dispatch: int = 1, 
+    def __init__(self, topk_random_dispatch: int = 1,
                  dispatch_load_metric_config: Optional[DispatchLoadMetricConfig] = None):
         self.topk_random_dispatch: int = topk_random_dispatch
         self.dispatch_load_metric_config: Optional[DispatchLoadMetricConfig] = dispatch_load_metric_config
-        
-    
-    def filter(self, 
-               instance_type: InstanceType, 
+
+    def filter(self,
+               instance_type: InstanceType,
                instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int], 
+               instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         raise NotImplementedError
 
@@ -54,8 +51,6 @@ class DispatchPolicy(ABC):
                dispatch_context: Dict,
                ) -> str:
         raise NotImplementedError
-    
-    
 
     def random_choice_from_top_k(self, sorted_instance_infos: List[InstanceInfo]):
         k = min(self.topk_random_dispatch, len(sorted_instance_infos))
@@ -68,10 +63,10 @@ class Flood(DispatchPolicy):
     def __init__(self, topk_random_dispatch: int, dispatch_load_metric_config: DispatchLoadMetricConfig):
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
 
-    def filter(self, 
-               instance_type: InstanceType, 
+    def filter(self,
+               instance_type: InstanceType,
                instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int], 
+               instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         return instance_infos, instance_num_requests
 
@@ -89,13 +84,13 @@ class Balanced(DispatchPolicy):
     def __init__(self, topk_random_dispatch: int, dispatch_load_metric_config: DispatchLoadMetricConfig):
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
 
-    def filter(self, 
-               instance_type: InstanceType, 
+    def filter(self,
+               instance_type: InstanceType,
                instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int], 
+               instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         return instance_infos, instance_num_requests
-    
+
     def select(self,
                  instance_type: InstanceType,
                  instance_num_requests: Dict[str, int],
@@ -112,7 +107,7 @@ class Load(DispatchPolicy):
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
         self.filters = {
               InstanceType.PREFILL: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL]) 
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL])
               ),
               InstanceType.DECODE: MetricBasedFilter(
                   dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
@@ -121,11 +116,11 @@ class Load(DispatchPolicy):
                   dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
               ),
         }
-    
-    def filter(self, 
-               instance_type: InstanceType, 
+
+    def filter(self,
+               instance_type: InstanceType,
                instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int], 
+               instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         instance_infos, instance_num_requests = self.filters[instance_type].filter(instance_infos, instance_num_requests)
         return instance_infos, instance_num_requests
@@ -147,11 +142,11 @@ class Load(DispatchPolicy):
 class Queue(DispatchPolicy):
     def __init__(self, topk_random_dispatch: int, dispatch_load_metric_config: DispatchLoadMetricConfig):
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
-    
-    def filter(self, 
-               instance_type: InstanceType, 
+
+    def filter(self,
+               instance_type: InstanceType,
                instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int], 
+               instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         return instance_infos, instance_num_requests
 
@@ -173,10 +168,10 @@ class RoundRobin(DispatchPolicy):
         self.prev_instance_type_idx: Dict[str, int] = {}
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
 
-    def filter(self, 
-               instance_type: InstanceType, 
+    def filter(self,
+               instance_type: InstanceType,
                instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int], 
+               instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         return instance_infos, instance_num_requests
 
@@ -195,11 +190,11 @@ class RoundRobin(DispatchPolicy):
 
 class CacheAware(DispatchPolicy):
 
-    def __init__(self, 
-                 meta_client: QueryClient, 
-                 chunk_size: int, 
-                 save_unfull_chunk: bool, 
-                 topk_random_dispatch: int, 
+    def __init__(self,
+                 meta_client: QueryClient,
+                 chunk_size: int,
+                 save_unfull_chunk: bool,
+                 topk_random_dispatch: int,
                  dispatch_load_metric_config: DispatchLoadMetricConfig):
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
         self.meta_client = meta_client
@@ -209,7 +204,7 @@ class CacheAware(DispatchPolicy):
         self.transfer_penalty_factor = 0.7
         self.filters = {
               InstanceType.PREFILL: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL]) 
+                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL])
               ),
               InstanceType.DECODE: MetricBasedFilter(
                   dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
@@ -218,11 +213,11 @@ class CacheAware(DispatchPolicy):
                   dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
               ),
         }
-    
-    def filter(self, 
-               instance_type: InstanceType, 
+
+    def filter(self,
+               instance_type: InstanceType,
                instance_infos: Dict[str, InstanceInfo],
-               instance_num_requests: Dict[str, int], 
+               instance_num_requests: Dict[str, int],
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         instance_infos, instance_num_requests = self.filters[instance_type].filter(instance_infos, instance_num_requests)
         return instance_infos, instance_num_requests
@@ -282,9 +277,9 @@ class CacheAware(DispatchPolicy):
         :return: {prefix_hash: [instance_id_0, instance_id_1, ...], ...}
         """
         prefix_hash_hit_info = {}
-        topN = 0  # 0 means return all
+        top_n = 0  # 0 means return all
         for prefix_hash in prefix_hashes:
-            hit_list = self.meta_client.query_cache_locality(prefix_hash, topN)
+            hit_list = self.meta_client.query_cache_locality(prefix_hash, top_n)
             prefix_hash_hit_info[prefix_hash] = hit_list
         return prefix_hash_hit_info
 
@@ -301,12 +296,12 @@ class CacheAware(DispatchPolicy):
         instance_prefix_hit_count = {}
         instance_broken = {}
 
-        for idx, prefix_hash in enumerate(prefix_hashes):
+        for _, prefix_hash in enumerate(prefix_hashes):
             hit_instance_ids = prefix_hash_hit_info.get(prefix_hash, [])
             for instance_id in hit_instance_ids:
                 if not instance_broken.get(instance_id, False):
                     instance_prefix_hit_count[instance_id] = instance_prefix_hit_count.get(instance_id, 0) + 1
-            for instance_id in instance_prefix_hit_count.keys():
+            for instance_id in instance_prefix_hit_count:
                 if instance_id not in hit_instance_ids:
                     instance_broken[instance_id] = True
         return instance_prefix_hit_count
@@ -338,7 +333,7 @@ class CacheAware(DispatchPolicy):
                 max_hit_count = sorted_instance_prefix_hit_count[0][1]
             else:
                 max_hit_count = 0
-            
+
             # Iterate through the sorted instances to find an instance in available_instance_infos
             has_hit = False
             local_hit_count = 0
@@ -348,34 +343,31 @@ class CacheAware(DispatchPolicy):
                     has_hit = True
                     local_hit_count = instance_prefix_hit_count[instance_id]
                     break
-            
+
             if not has_hit:
                 sorted_instance_infos = sort_instance_infos(available_instance_infos.values(),
                                                     getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type]))
                 instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
                 target_instance_id = instance_info_chosen.instance_id
-                
+
             if (max_hit_count - local_hit_count) * self.chunk_size > self.transfer_threshold:
                 hit_length = max_hit_count * self.chunk_size
                 transfer_penalty = self.transfer_penalty_factor
             else:
                 hit_length = local_hit_count * self.chunk_size
                 transfer_penalty = 1
-            
+
             dispatch_context['hit_length'] = hit_length
             dispatch_context['transfer_penalty'] = transfer_penalty
 
             return target_instance_id
-        
-        else:
-            dispatch_load_metric=getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type])
-            sorted_instance_infos = sort_instance_infos(available_instance_infos.values(), dispatch_load_metric)
-            instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
-            instance_id = instance_info_chosen.instance_id
-            logger.info("dispatch request to {}, load: {}".format(instance_id, getattr(instance_info_chosen, dispatch_load_metric)))
-            return instance_id
-                    
 
+        dispatch_load_metric=getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type])
+        sorted_instance_infos = sort_instance_infos(available_instance_infos.values(), dispatch_load_metric)
+        instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
+        instance_id = instance_info_chosen.instance_id
+        logger.info("dispatch request to {}, load: {}".format(instance_id, getattr(instance_info_chosen, dispatch_load_metric)))
+        return instance_id
 
 class DispatchPolicyFactory:
     _POLICY_REGISTRY = {
@@ -394,10 +386,10 @@ class DispatchPolicyFactory:
         if policy_name.lower() == "cacheaware":
             if cache_aware_query_client_config_path is None:
                 raise ValueError("cache_aware_query_client_config_path is required for cacheaware policy")
-            
+
             meta_client = build_meta_client_from_config(cache_aware_query_client_config_path)
             # Get chunk_size and save_unfull_chunk from config
-            with open(cache_aware_query_client_config_path, 'r') as f:
+            with open(cache_aware_query_client_config_path, 'r', encoding='utf-8') as f:
                 cache_aware_query_client_config = json.load(f)
             chunk_size = cache_aware_query_client_config.get("chunk_size", 256)
             save_unfull_chunk = cache_aware_query_client_config.get("save_unfull_chunk", False)

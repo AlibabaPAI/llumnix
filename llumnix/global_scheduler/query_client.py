@@ -5,7 +5,6 @@ import json
 class QueryClient:
     def query_cache_locality(self, hash_key: str) -> float:
         raise NotImplementedError
-    
 
 # class MetaServiceQueryClient(QueryClient):
 #     def __init__(self, config):
@@ -16,7 +15,6 @@ class QueryClient:
 #     def query_cache_locality(self, hash_key: str) -> list[str]:
 #         results = self.client.zreadrange(hash_key, 0)
 #         return [item[0] for item in results]
-    
 
 class MockQueryClient(QueryClient):
     def __init__(self):
@@ -34,7 +32,7 @@ class MockQueryClient(QueryClient):
 
 
 def build_meta_client_from_config(config_path) -> QueryClient:
-    with open(config_path, 'r') as f:
+    with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
     backend_type = config.get("metadata_backend", "mock").lower()
 
@@ -45,4 +43,3 @@ def build_meta_client_from_config(config_path) -> QueryClient:
 
     #  Future: support more backends
     raise ValueError(f"Unsupported metadata backend: {backend_type}")
-

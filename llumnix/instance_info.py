@@ -38,7 +38,6 @@ class InstanceType(str, Enum):
     DECODE = "decode"
     PREFILL_AS_DECODE = "prefill_as_decode"
     DECODE_AS_PREFILL = "decode_as_prefill"
-    
 
 INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
     InstanceType.NO_CONSTRAINTS: 'dispatch_load_metric',
@@ -127,7 +126,6 @@ def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
 class InstanceLoadCalculator:
     def __init__(self, instance_args: InstanceArgs) -> None:
         self.migration_load_calculator = LoadCalculatorFactory.get_load_calculator(instance_args.migration_load_metric)
-            
         self.adaptive_decode_calculator = LoadCalculatorFactory.get_load_calculator('adaptive_decode')
         self.kv_blocks_ratio_calculator = LoadCalculatorFactory.get_load_calculator('kv_blocks_ratio')
         self.remaining_steps_calculator = LoadCalculatorFactory.get_load_calculator('remaining_steps')
@@ -140,7 +138,7 @@ class InstanceLoadCalculator:
             self._compute_load_after_migrate(instance_info, is_migrate_in=False)
         instance_info.migration_load_metric_after_migrate_in = \
             self._compute_load_after_migrate(instance_info, is_migrate_in=True)
-        
+
         instance_info.adaptive_decode = self.adaptive_decode_calculator.compute_instance_load(instance_info)
         instance_info.kv_blocks_ratio = self.kv_blocks_ratio_calculator.compute_instance_load(instance_info)
         instance_info.remaining_steps = self.remaining_steps_calculator.compute_instance_load(instance_info)

@@ -51,7 +51,14 @@ class RequestStatus(str, Enum):
 
 
 class LlumnixRequest:
-    def __init__(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int = math.inf, num_hit_tokens: int = 0, transfer_penalty: int = 1) -> None:
+    def __init__(
+        self,
+        request_id: RequestIDType,
+        server_info: ServerInfo,
+        expected_steps: int = math.inf,
+        num_hit_tokens: int = 0,
+        transfer_penalty: int = 1
+    ) -> None:
         self.request_id = request_id
         self.server_info = server_info
 

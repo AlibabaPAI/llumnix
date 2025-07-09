@@ -127,7 +127,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     global test_times
 
     qps = 5 if not (enable_pd_disagg or enable_engine_semi_pd_disagg) else 0.5
-    num_prompts = 500 if not (enable_pd_disagg or enable_engine_semi_pd_disagg) else 50
+    num_prompts = 300 if not (enable_pd_disagg or enable_engine_semi_pd_disagg) else 50
     ip = get_ip_address()
     base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:

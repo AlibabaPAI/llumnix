@@ -119,7 +119,7 @@ class LlumnixEngineArgsFactory:
                 not self.pdd_config.enable_pd_disagg
                 and not self.pdd_config.enable_engine_pd_disagg
             ):
-                instance_type_list = ["no_constraints"]
+                instance_type_list = ["neutral"]
             else:
                 instance_type_list = ["prefill", "decode"]
             for instance_type in instance_type_list:
@@ -369,8 +369,8 @@ class ManagerArgs:
     dispatch_decode_load_metric: str = None
     dispatch_decode_as_prefill_load_metric: str = None
 
-    # The config file path for initializing QueryClient under the cache-aware policy
-    cache_aware_query_client_config_path: str = None
+    # The config file path for initializing CacheMetaClient under the cache-aware policy
+    cache_meta_client_config_path: str = None
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -451,7 +451,7 @@ class ManagerArgs:
                                                         self.enable_adaptive_pd,
                                                         self.is_group_kind_migration_backend,
                                                         dispatch_load_metric_config,
-                                                        self.cache_aware_query_client_config_path)
+                                                        self.cache_meta_client_config_path)
         return global_scheduler_config
 
     def create_pdd_config(self) -> PDDConfig:
@@ -564,7 +564,7 @@ class ManagerArgs:
                             "and save-key aruguments of register_service.py. "
                             "You can specify the load path through this argument, and registered service (all the engine arguments "
                             "files) under this path will be loaded. The Llumnix will initialize instance based on "
-                            "the engine type (no_constraints, prefill, decode) and the corresponding engine arguments "
+                            "the engine type (neutral, prefill, decode) and the corresponding engine arguments "
                             "loaded from the path.")
         parser.add_argument('--enable-pdd-node-affinity-scheduling',
                             action='store_true',
@@ -697,9 +697,9 @@ class InstanceArgs:
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--instance-type',
                             type=str,
-                            choices=['prefill', 'decode', 'no_constraints'],
+                            choices=['prefill', 'decode', 'neutral'],
                             help="instance type of the engine.\n When not setting --enable-pd-disagg, set --instance-type "
-                            "to no_constraints.\n When setting --enable-pd-disagg, pd-disaggregation is fully "
+                            "to neutral.\n When setting --enable-pd-disagg, pd-disaggregation is fully "
                             "(launch instance + migrate kv cache) implemented via LLuminx (vLLM). In local launch mode, "
                             "set --instance-type as either prefill or decode. In global launch mode, do not set "
                             "--instance-type as manager will automatically determine the type and number of instance.\n "
@@ -789,8 +789,8 @@ class RegisterServiceArgs:
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--engine-type',
                             type=str,
-                            choices=['prefill', 'decode', 'no_constraints'],
-                            default='no_constraints',
+                            choices=['prefill', 'decode', 'neutral'],
+                            default='neutral',
                             help="Engine type of the engine arguments. The actual save filename is generated according to "
                             "the engine type, following the format f\"engine_args_{engine_type}.pkl\".")
         parser.add_argument('--save-key',
@@ -839,7 +839,7 @@ def post_init_llumnix_args(
 
 def load_registered_engine_args(manager_args: ManagerArgs):
     if not manager_args.enable_pd_disagg and not manager_args.enable_engine_pd_disagg:
-        instance_type_list = ['no_constraints']
+        instance_type_list = ['neutral']
     else:
         instance_type_list = ['prefill', 'decode']
     for instance_type in instance_type_list:

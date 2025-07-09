@@ -31,7 +31,7 @@ class DispatchScheduler:
                  enable_adaptive_pd: bool,
                  dispatch_load_metric_config: DispatchLoadMetricConfig,
                  dispatch_latency_metric: Summary = Summary("dummy"),
-                 cache_aware_query_client_config_path: str = None) -> None:
+                 cache_meta_client_config_path: str = None) -> None:
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
         self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
@@ -39,7 +39,7 @@ class DispatchScheduler:
 
         self.dispatch_policy: DispatchPolicy = DispatchPolicyFactory.get_policy(
             dispatch_policy,
-            cache_aware_query_client_config_path=cache_aware_query_client_config_path,
+            cache_meta_client_config_path=cache_meta_client_config_path,
             topk_random_dispatch=topk_random_dispatch,
             dispatch_load_metric_config=dispatch_load_metric_config
         )
@@ -48,7 +48,7 @@ class DispatchScheduler:
 
         # statistics
         self.instance_type_num_requests: Dict[InstanceType, int] = {
-            InstanceType.NO_CONSTRAINTS: 0,
+            InstanceType.NEUTRAL: 0,
             InstanceType.DECODE: 0,
             InstanceType.PREFILL: 0
         }
@@ -115,10 +115,10 @@ class DispatchScheduler:
                                instance_num_requests: Dict[str, int],
                                dispatch_context: Dict,
                                ):
-        instance_type = InstanceType.NO_CONSTRAINTS
+        instance_type = InstanceType.NEUTRAL
 
         with self.dispatch_latency_metric.observe_time(
-            labels={"instance_type": InstanceType.NO_CONSTRAINTS.value}
+            labels={"instance_type": InstanceType.NEUTRAL.value}
         ):
             target_instance_id = self._dispatch(instance_type, instance_infos, instance_num_requests, None, None, dispatch_context)
 

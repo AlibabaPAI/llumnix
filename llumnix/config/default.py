@@ -161,8 +161,8 @@ _C.MANAGER.DISPATCH_PREFILL_AS_DECODE_LOAD_METRIC = 'adaptive_decode'
 _C.MANAGER.DISPATCH_DECODE_LOAD_METRIC = 'remaining_steps'
 # Decode instance dispatch load metric when used for prefilling
 _C.MANAGER.DISPATCH_DECODE_AS_PREFILL_LOAD_METRIC = 'kv_blocks_ratio'
-# The config file path for initializing QueryClient under the cache-aware policy
-_C.MANAGER.CACHE_AWARE_QUERY_CLIENT_CONFIG_PATH = "llumnix/config/query_client_config.json"
+# The config file path for initializing CacheMetaClient under the cache-aware policy
+_C.MANAGER.CACHE_META_CLIENT_CONFIG_PATH = "llumnix/config/query_client_config.json"
 
 # -------------------------- MIGRATION CONFIGURATION --------------------------
 # Enable migrate requests between instances
@@ -196,8 +196,8 @@ _C.MANAGER.SCALE_DOWN_THRESHOLD = -60
 # INSTANCE CONFIGURATION
 # -----------------------------------------------------------------------------
 _C.INSTANCE = LC()
-# Engine types: prefill, decode, no_constraints
-_C.INSTANCE.INSTANCE_TYPE = "no_constraints"
+# Engine types: prefill, decode, neutral
+_C.INSTANCE.INSTANCE_TYPE = "neutral"
 # Enable simulator mode
 _C.INSTANCE.SIMULATOR_MODE = False
 # Profiling result file path when using simulator

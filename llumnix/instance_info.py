@@ -33,14 +33,14 @@ logger = init_logger(__name__)
 
 
 class InstanceType(str, Enum):
-    NO_CONSTRAINTS = "no_constraints"
+    NEUTRAL = "neutral"
     PREFILL = "prefill"
     DECODE = "decode"
     PREFILL_AS_DECODE = "prefill_as_decode"
     DECODE_AS_PREFILL = "decode_as_prefill"
 
 INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
-    InstanceType.NO_CONSTRAINTS: 'dispatch_load_metric',
+    InstanceType.NEUTRAL: 'dispatch_load_metric',
     InstanceType.PREFILL: 'dispatch_prefill_load_metric',
     InstanceType.DECODE: 'dispatch_decode_load_metric',
     InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',

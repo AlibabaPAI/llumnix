@@ -26,7 +26,7 @@ from tests.conftest import ray_env
 @pytest.mark.parametrize("save_key", [None, "test"])
 def test_save_engine_args_and_load_engine_args(ray_env, save_key):
     engine_args = EngineArgs()
-    engine_type = "no_constraints"
+    engine_type = "neutral"
     save_path = "."
     save_engine_args(engine_type, save_path, engine_args, save_key)
     final_save_path = _get_engine_args_filepath(save_path, save_key)

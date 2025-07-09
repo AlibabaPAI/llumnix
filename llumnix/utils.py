@@ -128,13 +128,13 @@ def make_async(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
     return _async_wrapper
 
 def get_service_resouces(service_name: str, num_gpus: int) -> Dict[str, float]:
-    assert service_name in ["prefill", "decode", "no_constraints", None], \
-        "Only support prefill, decode, no_constraints, and None service name currently."
+    assert service_name in ["prefill", "decode", "neutral", None], \
+        "Only support prefill, decode, neutral, and None service name currently."
     if service_name == "prefill":
         resources = {"PREFILL_GPU": num_gpus}
     elif service_name == "decode":
         resources = {"DECODE_GPU": num_gpus}
-    else: # service_name == "no_constraints", service_name is None
+    else: # service_name == "neutral", service_name is None
         resources = {}
     return resources
 

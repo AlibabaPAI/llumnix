@@ -41,7 +41,7 @@ class GlobalSchedulerConfig:
             enable_adaptive_pd: bool,
             is_group_kind_migration_backend: bool,
             dispatch_load_metric_config: DispatchLoadMetricConfig,
-            cache_aware_query_client_config_path: str=None,
+            cache_meta_client_config_path: str=None,
             ) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy
@@ -62,7 +62,7 @@ class GlobalSchedulerConfig:
         self.is_group_kind_migration_backend = is_group_kind_migration_backend
 
         self.dispatch_load_metric_config = dispatch_load_metric_config
-        self.cache_aware_query_client_config_path = cache_aware_query_client_config_path
+        self.cache_meta_client_config_path = cache_meta_client_config_path
 
 
 class MigrationConfig:

@@ -62,6 +62,19 @@ class MigrationFilterPipeline:
                                  for filter in self.registered_filters.values()]
         dst_filter_conditions = [filter.filter_dst_condition(self.filter_config)
                                  for filter in self.registered_filters.values()]
+<<<<<<< HEAD
+=======
+
+        if pair_migration_type == PairMigrationConstraints.NEUTRAL:
+            policy_filter = MigrationFilterPolicyFactory.get_policy("load")
+        elif pair_migration_type in [PairMigrationConstraints.PREFILL_2_DECODE, PairMigrationConstraints.DECODE_2_DECODE]:
+            policy_filter = MigrationFilterPolicyFactory.get_policy('pdd')
+        else:
+            raise ValueError(f"Unsupported pair migration type: {pair_migration_type}")
+        src_filter_conditions.append(policy_filter.filter_src_condition(self.filter_config, pair_migration_type))
+        dst_filter_conditions.append(policy_filter.filter_dst_condition(self.filter_config, pair_migration_type))
+
+>>>>>>> 624c758 (Address review comments)
         filtered_src_instance_infos = [info for info in instance_infos if all(cond(info) for cond in src_filter_conditions)]
         filtered_dst_instance_infos = [info for info in instance_infos if all(cond(info) for cond in dst_filter_conditions)]
         return filtered_src_instance_infos, filtered_dst_instance_infos

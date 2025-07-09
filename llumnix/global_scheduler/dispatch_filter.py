@@ -27,8 +27,8 @@ class DispatchFilter(ABC):
 
 
 class MetricBasedFilter(DispatchFilter):
-    def __init__(self, dispatch_load_metric: str):
-        self.dispatch_load_metric = dispatch_load_metric
+    def __init__(self, metric: str):
+        self.metric = metric
 
     def filter(self,
                instance_infos: Dict[str, InstanceInfo],
@@ -36,7 +36,7 @@ class MetricBasedFilter(DispatchFilter):
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         available_instance_infos, available_instance_num_requests = {}, {}
         for ins_info, ins_num_requests in zip(instance_infos.values(), instance_num_requests.values()):
-            if not getattr(ins_info, self.dispatch_load_metric).is_busy():
+            if not getattr(ins_info, self.metric).is_busy():
                 available_instance_infos[ins_info.instance_id] = ins_info
                 available_instance_num_requests[ins_info.instance_id] = ins_num_requests
         return available_instance_infos, available_instance_num_requests

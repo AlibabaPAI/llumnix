@@ -12,6 +12,7 @@
 # limitations under the License.
 
 from typing import Any, Dict
+import copy
 
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.request_processing_context import RequestProcessingContext
@@ -25,6 +26,10 @@ class LlumnixRequestOuput:
         self.instance_id = instance_id
         self.engine_output = engine_output
         self.request_processing_context: RequestProcessingContext = request_processing_context
+        if request_processing_context.request_output_queue is not None:
+            self.request_processing_context = copy.copy(request_processing_context)
+            # should set queue to None, otherwise it will OOM when use rayqueue
+            self.request_processing_context.request_output_queue = None
 
     def get_engine_output(self):
         return self.engine_output

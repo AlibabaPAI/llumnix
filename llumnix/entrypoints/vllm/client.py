@@ -141,7 +141,7 @@ class LlumnixClientVLLM(LlumnixClient):
             try:
                 request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
                 for request_response in request_responses:
-                    request_response.request_processing_context.set_timestamp('api_server_get_queue_timestamp')
+                    request_response.request_processing_context.add_trace_timeline('api_server_get_queue_timestamp')
                     request_output: RequestOutput = request_response.get_engine_output()
                     request_id = request_response.request_id
                     # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.

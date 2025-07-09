@@ -21,7 +21,7 @@ import torch
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceType, INSTANCE_TYPE_TO_METRIC_FIELD, sort_instance_infos
-from llumnix.global_scheduler.query_client import build_meta_client_from_config, QueryClient
+from llumnix.global_scheduler.query_client import build_meta_client_from_config, CacheMetaClient
 from llumnix.global_scheduler.dispatch_filter import MetricBasedFilter
 from llumnix.internal_config import DispatchLoadMetricConfig
 
@@ -107,13 +107,13 @@ class Load(DispatchPolicy):
         super().__init__(topk_random_dispatch, dispatch_load_metric_config)
         self.filters = {
               InstanceType.PREFILL: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL])
+                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL])
               ),
               InstanceType.DECODE: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
+                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
               ),
-              InstanceType.NO_CONSTRAINTS: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
+              InstanceType.NEUTRAL: MetricBasedFilter(
+                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NEUTRAL])
               ),
         }
 
@@ -191,7 +191,7 @@ class RoundRobin(DispatchPolicy):
 class CacheAware(DispatchPolicy):
 
     def __init__(self,
-                 meta_client: QueryClient,
+                 meta_client: CacheMetaClient,
                  chunk_size: int,
                  save_unfull_chunk: bool,
                  topk_random_dispatch: int,
@@ -204,13 +204,13 @@ class CacheAware(DispatchPolicy):
         self.transfer_penalty_factor = 0.7
         self.filters = {
               InstanceType.PREFILL: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL])
+                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL])
               ),
               InstanceType.DECODE: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
+                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.DECODE])
               ),
-              InstanceType.NO_CONSTRAINTS: MetricBasedFilter(
-                  dispatch_load_metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NO_CONSTRAINTS])
+              InstanceType.NEUTRAL: MetricBasedFilter(
+                  metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NEUTRAL])
               ),
         }
 
@@ -324,7 +324,7 @@ class CacheAware(DispatchPolicy):
         # Query the hit status of each chunk
         prefix_hash_hit_info = self._query_prefix_hash_hit_info(prefix_hashes)
 
-        if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS, InstanceType.DECODE_AS_PREFILL):
+        if instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL, InstanceType.DECODE_AS_PREFILL):
             # Calculate the number of prefix hit chunks for each instance
             instance_prefix_hit_count = self._calc_instance_prefix_hit_count(prefix_hashes, prefix_hash_hit_info)
             # Sort in descending order based on the number of hits
@@ -380,16 +380,16 @@ class DispatchPolicyFactory:
     }
 
     @classmethod
-    def get_policy(cls, policy_name: str, cache_aware_query_client_config_path: str = None, **kwargs) -> DispatchPolicy:
+    def get_policy(cls, policy_name: str, cache_meta_client_config_path: str = None, **kwargs) -> DispatchPolicy:
         policy_class = cls._POLICY_REGISTRY[policy_name.lower()]
 
         if policy_name.lower() == "cacheaware":
-            if cache_aware_query_client_config_path is None:
-                raise ValueError("cache_aware_query_client_config_path is required for cacheaware policy")
+            if cache_meta_client_config_path is None:
+                raise ValueError("cache_meta_client_config_path is required for cacheaware policy")
 
-            meta_client = build_meta_client_from_config(cache_aware_query_client_config_path)
+            meta_client = build_meta_client_from_config(cache_meta_client_config_path)
             # Get chunk_size and save_unfull_chunk from config
-            with open(cache_aware_query_client_config_path, 'r', encoding='utf-8') as f:
+            with open(cache_meta_client_config_path, 'r', encoding='utf-8') as f:
                 cache_aware_query_client_config = json.load(f)
             chunk_size = cache_aware_query_client_config.get("chunk_size", 256)
             save_unfull_chunk = cache_aware_query_client_config.get("save_unfull_chunk", False)

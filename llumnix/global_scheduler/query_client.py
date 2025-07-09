@@ -2,11 +2,11 @@
 import json
 
 
-class QueryClient:
+class CacheMetaClient:
     def query_cache_locality(self, hash_key: str) -> float:
         raise NotImplementedError
 
-# class MetaServiceQueryClient(QueryClient):
+# class MetaServiceClient(CacheMetaClient):
 #     def __init__(self, config):
 #         self.config = config
 #         self.client = MetaServiceClient()
@@ -16,7 +16,7 @@ class QueryClient:
 #         results = self.client.zreadrange(hash_key, 0)
 #         return [item[0] for item in results]
 
-class MockQueryClient(QueryClient):
+class MockCacheMetaClient(CacheMetaClient):
     def __init__(self):
         # Simple mock data, key is hash_key, value is instance_id list
         self.mock_data = {
@@ -31,15 +31,15 @@ class MockQueryClient(QueryClient):
 
 
 
-def build_meta_client_from_config(config_path) -> QueryClient:
+def build_meta_client_from_config(config_path) -> CacheMetaClient:
     with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
     backend_type = config.get("metadata_backend", "mock").lower()
 
     if backend_type == "metaservice":
-        return MetaServiceQueryClient(config_path)
-    elif backend_type == "mock":
-        return MockQueryClient()
+        return MetaServiceClient(config_path)
+    if backend_type == "mock":
+        return MockCacheMetaClient()
 
     #  Future: support more backends
     raise ValueError(f"Unsupported metadata backend: {backend_type}")

@@ -52,7 +52,7 @@ class GlobalScheduler:
                                                     global_scheduler_config.enable_adaptive_pd,
                                                     global_scheduler_config.dispatch_load_metric_config,
                                                     self.global_scheduler_metrics.dispatch_latency,
-                                                    global_scheduler_config.cache_aware_query_client_config_path)
+                                                    global_scheduler_config.cache_meta_client_config_path)
 
         self.migration_scheduler = MigrationScheduler(global_scheduler_config.pair_migration_policy,
                                                       global_scheduler_config.migrate_out_load_threshold,
@@ -77,9 +77,9 @@ class GlobalScheduler:
             )
             if instance_info.instance_id in self.instance_id_set:
                 self.instance_info[instance_info.instance_id] = instance_info
-                if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+                if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                     self.prefill_instance_info[instance_info.instance_id] = instance_info
-                if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
+                if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NEUTRAL):
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
     def _enable_pd(self):
@@ -196,10 +196,10 @@ class GlobalScheduler:
         self.num_instances = len(self.instance_id_set)
 
         if self._enable_pd():
-            if instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+            if instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                 self.prefill_instance_info[instance_id] = new_intance_info
                 self.prefill_instance_num_requests[instance_id] = 0
-            if instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
+            if instance_type in (InstanceType.DECODE, InstanceType.NEUTRAL):
                 self.decode_instance_info[instance_id] = new_intance_info
                 self.decode_instance_num_requests[instance_id] = 0
 
@@ -210,10 +210,10 @@ class GlobalScheduler:
             logger.warning("instance {} is not in instance_info".format(instance_id))
         instance_info = self.instance_info.get(instance_id, None)
         if instance_info and self._enable_pd():
-            if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NO_CONSTRAINTS):
+            if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                 self.prefill_instance_info.pop(instance_id, 0)
                 self.prefill_instance_num_requests.pop(instance_id, 0)
-            if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NO_CONSTRAINTS):
+            if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NEUTRAL):
                 self.decode_instance_info.pop(instance_id, 0)
                 self.decode_instance_num_requests.pop(instance_id, 0)
 

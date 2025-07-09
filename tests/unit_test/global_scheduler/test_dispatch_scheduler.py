@@ -30,7 +30,7 @@ def init_dispatch_scheduler(
         enable_engine_semi_pd_disagg=False,
         enable_adaptive_pd=False,
         dispatch_load_metric_config=None,
-        cache_aware_query_client_config_path=None):
+        cache_meta_client_config_path=None):
     dispatch_scheduler = DispatchScheduler(
         dispatch_policy=policy,
         topk_random_dispatch=topk_random_dispatch,
@@ -39,12 +39,12 @@ def init_dispatch_scheduler(
         enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
         enable_adaptive_pd=enable_adaptive_pd,
         dispatch_load_metric_config=dispatch_load_metric_config,
-        cache_aware_query_client_config_path=cache_aware_query_client_config_path,
+        cache_meta_client_config_path=cache_meta_client_config_path,
     )
     return dispatch_scheduler
 
 
-def init_instances(num_instance: int = 4, instance_type: InstanceType = InstanceType.NO_CONSTRAINTS):
+def init_instances(num_instance: int = 4, instance_type: InstanceType = InstanceType.NEUTRAL):
     instance_info_dict: Dict[str, InstanceInfo] = {}
     instance_num_requests: Dict[str, int] = {}
     for i in range(num_instance):
@@ -103,7 +103,7 @@ def init_pd_instances(num_prefill: int = 4, num_decode: int = 4):
     return instance_info_dict, instance_num_requests, prefill_instance_info_dict, \
         prefill_instance_num_requests, decode_instance_info_dict, decode_instance_num_requests
 
-def test_dispatch_no_constraints():
+def test_dispatch_neutral():
     dispatch_load_metric_config = DispatchLoadMetricConfig(
         dispatch_load_metric='remaining_steps',
         dispatch_prefill_load_metric='kv_blocks_ratio',
@@ -415,7 +415,7 @@ def test_dispatch_rr():
         instance_id = dispatch_scheduler.dispatch_no_constrains(
             instance_infos=instance_info_dict, instance_num_requests=instance_num_requests, dispatch_context={})
         target_instance_id = idx%instance_num
-        assert instance_id == f'instance_{InstanceType.NO_CONSTRAINTS.value}_{target_instance_id}'
+        assert instance_id == f'instance_{InstanceType.NEUTRAL.value}_{target_instance_id}'
 
 @pytest.mark.parametrize("topk_random_dispatch", [1, 2, 3])
 def test_dispatch_topk_random_dispatch(topk_random_dispatch):

@@ -46,7 +46,6 @@ from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.entrypoints.utils import is_gpu_available
 from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs, add_cli_args, get_args
 from llumnix.logging.logger import init_logger
-from llumnix.metrics.timestamps import set_timestamp
 from llumnix.backends.bladellm.protocol import (
     LlumnixOAICompletionsResponse,
     LlumnixServerRequest,
@@ -83,10 +82,8 @@ class LlumnixEntrypoint(Entrypoint):
                     try:
                         if isinstance(stream_resp, LlumnixGenerateStreamResponse):
                             resp_cls = LlumnixOAIChatCompletionsResponse
-                            set_timestamp(
-                                stream_resp.llumnix_trace_info.token_timestamps,
-                                "api_server_generate_timestamp_end",
-                                time.perf_counter(),
+                            stream_resp.llumnix_trace_info.token_timestamps.api_server_generate_timestamp_end = (
+                                time.perf_counter()
                             )
                         else:
                             resp_cls = OAIChatCompletionsResponse
@@ -149,10 +146,8 @@ class LlumnixEntrypoint(Entrypoint):
                     )
                     if isinstance(r, LlumnixGenerateStreamResponse):
                         llumnix_trace_info = r.llumnix_trace_info
-                        set_timestamp(
-                                llumnix_trace_info.token_timestamps,
-                                "api_server_generate_timestamp_end",
-                                time.perf_counter(),
+                        llumnix_trace_info.token_timestamps.api_server_generate_timestamp_end = (
+                            time.perf_counter()
                             )
                         llumnix_trace_info.calc_latency()
                         llumnix_trace_infos.append(llumnix_trace_info)
@@ -226,11 +221,7 @@ class LlumnixEntrypoint(Entrypoint):
                     try:
                         if isinstance(stream_resp, LlumnixGenerateStreamResponse):
                             response_cls = LlumnixOAICompletionsResponse
-                            set_timestamp(
-                                stream_resp.llumnix_trace_info.token_timestamps,
-                                "api_server_generate_timestamp_end",
-                                time.perf_counter(),
-                            )
+                            stream_resp.llumnix_trace_info.token_timestamps.api_server_generate_timestamp_end = time.perf_counter()
                         else:
                             response_cls = OAICompletionsResponse
                         await sse.send(
@@ -286,10 +277,8 @@ class LlumnixEntrypoint(Entrypoint):
                     )
                     if isinstance(r, LlumnixGenerateStreamResponse):
                         llumnix_trace_info = r.llumnix_trace_info
-                        set_timestamp(
-                            llumnix_trace_info.token_timestamps,
-                            "api_server_generate_timestamp_end",
-                            time.perf_counter(),
+                        llumnix_trace_info.token_timestamps.api_server_generate_timestamp_end = (
+                            time.perf_counter()
                         )
                         llumnix_trace_info.calc_latency()
                         llumnix_trace_infos.append(llumnix_trace_info)
@@ -351,7 +340,7 @@ class LlumnixEntrypoint(Entrypoint):
             assert r.error_info is None, f"Some errors occur, benchmark is stopping: {r.error_info}."
 
             if token_timestamps:
-                set_timestamp(token_timestamps, 'api_server_generate_timestamp_end', now)
+                token_timestamps.api_server_generate_timestamp_end = now
                 per_token_latency_breakdown_list.append(token_timestamps.to_latency_breakdown_dict())
 
         output_text = "".join([tok.text for tok in tokens])

@@ -200,7 +200,11 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.request_stream_output_stash.pop(request_id, None)
         self.llumnix_client_metrics.remove_request(request_id=entrypoint_req_id)
 
-    def _process_output_order(self, request_id: int, request_output: GenerateStreamResponse) -> List[GenerateStreamResponse]:
+    def _process_output_order(
+        self,
+        request_id: int,
+        request_output: Union[GenerateStreamResponse, LlumnixGenerateStreamResponse],
+    ) -> List[GenerateStreamResponse]:
         current_completion_tokens = None
         if hasattr(request_output, 'usage'):
             current_completion_tokens = request_output.usage.completion_tokens
@@ -216,9 +220,17 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             logger.info("request {} out-of-order output, last completion tokens is {}"
                         ", current completion tokens is {}, current tokens is {}, stash current output..."
                         .format(request_id,last_completion_tokens,current_completion_tokens,len(request_output.tokens)))
-            if hasattr(request_output, 'request_timestamps'):
-                logger.info("out-of-order request({}) output timestamps: {}".format(
-                    request_id, request_output.request_timestamps.to_latency_breakdown_dict()))
+            if (
+                isinstance(request_output, LlumnixGenerateStreamResponse)
+                and request_output.llumnix_trace_info
+                and request_output.llumnix_trace_info.token_timestamps
+            ):
+                logger.info(
+                    "out-of-order request({}) output timestamps: {}".format(
+                        request_id,
+                        request_output.llumnix_trace_info.token_timestamps.to_latency_breakdown_dict(),
+                    )
+                )
             self.request_stream_output_stash.setdefault(request_id, []).append(request_output)
             return []
 

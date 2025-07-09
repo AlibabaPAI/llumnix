@@ -26,7 +26,7 @@ class LlumnixRequestOuput:
         self.instance_id = instance_id
         self.engine_output = engine_output
         self.request_processing_context: RequestProcessingContext = request_processing_context
-        if request_processing_context.request_output_queue is not None:
+        if request_processing_context is not None and request_processing_context.request_output_queue is not None:
             self.request_processing_context = copy.copy(request_processing_context)
             # should set queue to None, otherwise it will OOM when use rayqueue
             self.request_processing_context.request_output_queue = None

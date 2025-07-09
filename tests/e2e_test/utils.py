@@ -16,7 +16,7 @@ import os
 import time
 import subprocess
 import uuid
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 import pytest
 import requests
@@ -27,6 +27,32 @@ from llumnix.utils import get_ip_address
 from tests import conftest
 from tests.utils import try_convert_to_local_path
 
+def parse_launch_command(launch_command: str) -> Tuple[Dict[str, str], str]:
+    """Parse launch command to process_env and command"""
+    process_env = {}
+    command_parts = launch_command.split()
+    command_start_index = 0
+    for i, part in enumerate(command_parts):
+        if '=' in part:
+            # Check that it's a KEY=VALUE pair at the start, not an argument like --key=value
+            if not part.startswith('-'):
+                key, value = part.split('=', 1)
+                process_env[key] = value
+                # Mark this part as an environment variable
+                command_start_index = i + 1
+            else:
+                # It's an argument, so environment variable declarations have ended
+                break
+        else:
+            # This is the first part without an '=', so the command starts here
+            break
+        
+    actual_command = ' '.join(command_parts[command_start_index:])
+    env = os.environ.copy()
+    for k, v in process_env.items():
+        env[k] = v
+    
+    return env, actual_command
 
 def generate_vllm_launch_command(
     result_filename: str = "",
@@ -222,7 +248,7 @@ def generate_vllm_v1_serve_command(
     pd_ratio: str = "1:1",
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
-    config_path: str = "configs/vllm.yml",
+    config_path: str = "configs/vllm_v1.yml",
     tensor_parallel_size: int = 1,
     enable_migration: bool = True,
     enforce_eager: bool = False,
@@ -231,7 +257,7 @@ def generate_vllm_v1_serve_command(
     **kwargs
 ):
     command = (
-        f"{'NCCL_SOCKET_IFNAME=eth0 ' if tensor_parallel_size > 1 else ''}"
+        f"{'NCCL_SOCKET_IFNAME=eth0 NCCL_IB_DISABLE=1 ' if tensor_parallel_size > 1 else ''}"
         f"VLLM_USE_V1=1 VLLM_ENABLE_LLUMNIX=1 VLLM_FORCE_DETOKENIZE=1 RAY_DEDUP_LOGS=0 "
         f"nohup python -m llumnix.entrypoints.vllm_v1.serve "
         f"--host {ip} "
@@ -252,14 +278,14 @@ def generate_vllm_v1_serve_command(
         f"--tensor-parallel-size {tensor_parallel_size} "
         f"--request-output-queue-type {request_output_queue_type} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
-        f"--pd-ratio {pd_ratio} "
+        # f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
         f"--max-instances {max_instances} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--request-output-forwarding-mode {request_output_forwarding_mode} "
-        f"--config-file {config_path} "
+        # f"--config-file {config_path} "
         f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"

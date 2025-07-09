@@ -24,7 +24,7 @@ from llumnix.instance_info import InstanceInfo, InstanceType, INSTANCE_TYPE_TO_M
 from llumnix.global_scheduler.query_client import build_meta_client_from_config, CacheMetaClient
 from llumnix.global_scheduler.dispatch_filter import MetricBasedFilter
 from llumnix.internal_config import DispatchLoadMetricConfig
-
+import llumnix.envs as llumnix_envs
 
 logger = init_logger(__name__)
 
@@ -200,8 +200,8 @@ class CacheAware(DispatchPolicy):
         self.meta_client = meta_client
         self.chunk_size = chunk_size
         self.save_unfull_chunk = save_unfull_chunk
-        self.transfer_threshold = 1000
-        self.transfer_penalty_factor = 0.7
+        self.transfer_threshold = llumnix_envs.CACHE_TRANSFER_THRESHOLD
+        self.transfer_penalty_factor = llumnix_envs.CACHE_TRANSFER_PENALTY_FACTOR
         self.filters = {
               InstanceType.PREFILL: MetricBasedFilter(
                   metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.PREFILL])

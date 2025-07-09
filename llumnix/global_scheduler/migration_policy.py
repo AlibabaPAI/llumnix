@@ -23,7 +23,7 @@ logger = init_logger(__name__)
 
 class PairMigrationConstraints(str, Enum):
     """Target of Migration."""
-    NEUTRAL = "NEUTRAL"
+    NO_CONSTRAINTS = "NO_CONSTRAINTS"
     # Enable the prefill-decode disaggregration.
     DECODE_2_DECODE = "DECODE_2_DECODE"
     PREFILL_2_DECODE = "PREFILL_2_DECODE"

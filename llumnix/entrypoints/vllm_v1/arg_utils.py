@@ -77,6 +77,9 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
     def get_dp_args(self):
         return self.dp_args
 
+    def get_dp_size(self):
+        return self.dp_args.dp_size
+
 
 @dataclass
 class VLLMV1DPArgs:

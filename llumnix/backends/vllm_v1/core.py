@@ -280,7 +280,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         self.instance_id = instance_id
         self.step_counter = Counter()
         self.instance_info = None
-        self.output_mediator = OutputForwarder(
+        self.output_forwarder = OutputForwarder(
             instance_id,
             request_output_queue_type,
             request_output_forwarding_mode,

@@ -26,6 +26,7 @@ from vllm.transformers_utils.config import maybe_register_config_serialize_by_va
 from vllm.logger import init_logger
 from vllm.config import ParallelConfig, VllmConfig
 from vllm.v1.executor.abstract import Executor
+from vllm.v1.engine.dpcoord import Participant
 
 logger = init_logger(__name__)
 
@@ -55,6 +56,12 @@ class AsyncEngineCore(EngineCore):
         if not self.scheduler.has_requests():
             return {}, False
         scheduler_output = self.scheduler.schedule()
+
+        if scheduler_output.total_num_scheduled_tokens > 0:
+            _dppart: Optional[Participant] = getattr(self, "_dppart", None)
+            if _dppart is not None:
+                _dppart.new_step()
+        
         model_output = await self.execute_model_async(scheduler_output)
         engine_core_outputs = self.scheduler.update_from_output(
             scheduler_output, model_output)  # type: ignore
@@ -94,6 +101,12 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
         AsyncEngineCore.__init__(self, vllm_config, executor_class, log_stats,
                              executor_fail_callback)
 
+        # NOTE(shejiarui): we don't launch vLLM's DPCoordinator
+        self.has_coordinator = False
+        self.publish_dp_lb_stats = (
+                self.has_coordinator
+                and not vllm_config.parallel_config.data_parallel_external_lb)
+        
         self.step_fn = (self.step if self.batch_queue is None else
                         self.step_with_batch_queue)
         self.step_fn_async = self.step_async
@@ -217,7 +230,7 @@ class AsyncDPEngineCoreProc(AsyncEngineCoreProc, DPEngineCoreProc):
                                      executor_class, log_stats, dp_rank)
 
     async def _process_engine_step_async(self):
-        forward_executed = await AsyncEngineCoreProc._process_engine_step(self)
+        forward_executed = await AsyncEngineCoreProc._process_engine_step_async(self)
         self._maybe_publish_request_counts()
         if forward_executed:
             return

@@ -307,11 +307,21 @@ class Scaler:
                         instance_type=get_service_instance_type(service_name),
                     )
                 elif self.engine_args.backend_type == BackendType.VLLM_V1 and \
-                     self.engine_args.get_dp_args().dp_size > 1:
+                     (dp_size := self.engine_args.get_dp_size()) > 1:
                     # Currently data parallelism only support vLLM V1
+                    new_instance_ids: List[str] = []
+                    for _ in range(dp_size):
+                        new_instance_ids.append(random_uuid())
                     # TODO(shejiarui): Add exception handler if DPManager fail
-                    dp_manager = DPManager.from_args(new_instance_id, self.entrypoints_args, 
+                    dp_manager = DPManager.from_args(new_instance_id, new_instance_ids, self.entrypoints_args, 
                                                      self.instance_args, self.engine_args, new_pg)
+                    if self.enable_port_increment:
+                        self.port_offset += dp_size
+                        if self.enable_port_offset_store:
+                            put_data_to_ray_internal_kv("scaler.port_offset", self.port_offset)
+                    if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
+                        self.client_index += dp_size
+                        put_data_to_ray_internal_kv("scaler.client_index", self.client_index)
                 else:
                     # If not prefill/decode service, we do not specify the instance type,
                     # and the instance type is decided by _get_next_instance_type.
@@ -508,8 +518,8 @@ class Scaler:
                               service_name: str = None
                               ) -> PlacementGroup:
         backend_type = engine_args.backend_type
-        if backend_type == BackendType.VLLM_V1 and engine_args.get_dp_args().dp_size > 1:
-            dp_size = engine_args.get_dp_args().dp_size
+        if backend_type == BackendType.VLLM_V1 and engine_args.get_dp_size() > 1:
+            dp_size = engine_args.get_dp_size()
             world_size = engine_args.get_world_size()
             # num_cpus: [lumlet + ActorOutputMediator + (ApiServerActor)] * dp_size
             # num_gpus: world_size * dp_size

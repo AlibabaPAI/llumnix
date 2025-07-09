@@ -42,10 +42,11 @@ logger = init_logger(__name__)
 class DPManager:
     def __init__(self,
                  instance_id: str,
+                 new_instance_ids: List[str],
                  entrypoints_args: EntrypointsArgs,
                  instance_args: InstanceArgs,
                  engine_args: LlumnixEngineArgs,
-                 placement_group: PlacementGroup,):
+                 placement_group: PlacementGroup):
         self.instance_id = instance_id
         self.entrypoints_args = entrypoints_args
         self.instance_args = instance_args
@@ -64,23 +65,24 @@ class DPManager:
         self.port_offset = 0
         self.client_index_offset = 0
 
-        self.instance_ids: List[str] = []
+        self.instance_ids = new_instance_ids
         self.instances: List[ray.actor.ActorHandle] = []
         self.servers: List[ray.actor.ActorHandle] = []
         self._init_instances_and_servers()
         
         try:
-            # TODO(shejiarui): exception need to be handled
             ray.get([server.is_ready.remote() for server in self.servers])
             ray.get([instance.is_ready.remote() for instance in self.instances])
             self.manager.scale_up.remote(self.instance_ids, self.instances, 
                                          [None] * self.dp_size)
         except Exception as e:
+            # TODO(shejiarui): exception need to be handled
             logger.exception(e)
 
     @classmethod
     def from_args(cls,
                   instance_id: str,
+                  new_instance_ids: List[str],
                   entrypoints_args: EntrypointsArgs,
                   instance_args: InstanceArgs,
                   engine_args: LlumnixEngineArgs,
@@ -93,6 +95,7 @@ class DPManager:
         )(cls)
         dp_manager = dp_manager_class.remote(
             instance_id,
+            new_instance_ids,
             entrypoints_args,
             instance_args,
             engine_args,
@@ -107,8 +110,7 @@ class DPManager:
         dp_rank_local = 0
         
         for rank in range(self.dp_size):
-            new_instance_id = random_uuid()
-            self.instance_ids.append(new_instance_id)
+            new_instance_id = self.instance_ids[rank]
                 
             instance = Llumlet.from_args(
                 new_instance_id,
@@ -186,7 +188,7 @@ class DPManager:
         """
         tasks = [
             asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready.remote)
-            for instance in self.instances.values()
+            for instance in self.instances
         ]
         # Note that llumnix run server and scale up instance in manager after instance is ready,
         # so the waiting time here will not include the initialization time of instance.

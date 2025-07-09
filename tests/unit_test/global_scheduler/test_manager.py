@@ -69,6 +69,13 @@ class MockLlumlet:
     def generate(self, request_id, server_info, expected_steps, *args, **kwargs):
         self.request_id_set.add(request_id)
         self.num_requests = len(self.request_id_set)
+
+        if 'prefill_instance_id' in kwargs:
+            assert self.instance_id == kwargs['prefill_instance_id']
+
+        if 'semi_d_inst_id' in kwargs:
+            assert self.instance_id == kwargs['semi_d_inst_id']
+
         return self.num_requests
 
     def abort(self, request_id):
@@ -82,7 +89,7 @@ class MockLlumlet:
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 
-    def migrate_out(self, dst_instance_actor, dst_instance_id):
+    def migrate_out(self, dst_instance_actor, dst_instance_id, instance_type):
         self.num_migrate_out += 1
         ray.get(dst_instance_actor.migrate_in.remote(self.actor_name))
         time.sleep(0.1)
@@ -100,6 +107,7 @@ class MockLlumlet:
 
     def get_engine_disagg_inst_id(self) -> str:
         return self.engine_disagg_inst_id
+
 
 def init_manager(
         enable_pd_disagg: bool = False,
@@ -214,17 +222,18 @@ def test_generate(ray_env, manager: Manager, llumlet):
 def test_generate_pdd(ray_env):
     manager = init_manager(enable_engine_pd_disagg=True)
     prefill_llumlet: MockLlumlet = generate_llumlet()
-    instance_id = ray.get(prefill_llumlet.get_instance_id.remote())
-    ray.get(manager.scale_up.remote(instance_id, prefill_llumlet, InstanceType("prefill")))
+    prefill_instance_id = ray.get(prefill_llumlet.get_instance_id.remote())
+    ray.get(manager.scale_up.remote(prefill_instance_id, prefill_llumlet, InstanceType("prefill")))
     decode_llumlet: MockLlumlet = generate_llumlet()
-    instance_id = ray.get(decode_llumlet.get_instance_id.remote())
-    ray.get(manager.scale_up.remote(instance_id, decode_llumlet, InstanceType("decode")))
+    decode_instance_id = ray.get(decode_llumlet.get_instance_id.remote())
+    ray.get(manager.scale_up.remote(decode_instance_id, decode_llumlet, InstanceType("decode")))
 
     request_id = random_uuid()
     num_requests = ray.get(prefill_llumlet.get_num_requests.remote())
     assert num_requests == 0
     server_info = ServerInfo(None, None, None, None, None)
-    ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None))
+    ray.get(manager.generate.remote(request_id, server_info, math.inf, None, None,
+                                    prefill_instance_id=prefill_instance_id))
     time.sleep(1.0)
     num_requests = ray.get(prefill_llumlet.get_num_requests.remote())
     assert num_requests == 1
@@ -301,3 +310,11 @@ def test_poll_instance_info_loop_and_migrate(ray_env, manager: Manager):
             assert num_migrate_in > 1 and num_migrate_out == 0
         elif i == num_instances - 1:
             assert num_migrate_in == 0 and num_migrate_out > 1
+
+@pytest.mark.asyncio
+async def test_get_instance_self_assigned_id(ray_env, manager: Manager):
+    instance_id = random_uuid()
+    env_instance_id = random_uuid()
+    llumlet_actor = MockLlumlet.remote(env_instance_id)
+    engine_self_assigned_id = await manager._get_engine_self_assigned_id.remote(instance_id, llumlet_actor)
+    assert engine_self_assigned_id == env_instance_id

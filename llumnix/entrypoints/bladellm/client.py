@@ -21,6 +21,7 @@ import msgspec
 import ray
 
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
+from blade_llm.service.communications.protocol_msgspec import Stats
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
 from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
@@ -244,6 +245,10 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     def close(self):
         pass
+
+    async def get_stats(self) -> Stats:
+        # TODO(KuilongCui): Add get_stats implementation.
+        return Stats()
 
     async def get_metrics(self) -> str:
         instance = self.instances[list(self.instances.keys())[0]]

@@ -72,7 +72,7 @@ from llumnix.utils import BackendType
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.timestamps import set_timestamp, RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
-from llumnix.utils import RequestIDType
+from llumnix.utils import RequestIDType, exception_wrapper_async
 from llumnix.backends.backend_interface import BackendInterface
 
 logger = init_logger(__name__)
@@ -189,7 +189,6 @@ class AsyncBackQueueWrapper:
         self.current_step_metrics: RequestTimestamps = None
         while True:
             request_outputs, server_info_outputs = [], []
-
             resp, server_info = await get_single_response()
             request_outputs.append(resp)
             server_info_outputs.append(server_info)
@@ -272,7 +271,6 @@ def setup_dist(serving_args: ServingArgs):
 
 
 class AsyncLLMEngineLlumnixMixin:
-    # pylint: disable=unused-argument
     def __init__(self,
                  instance_id: str,
                  placement_group: PlacementGroup,
@@ -338,6 +336,7 @@ class AsyncLLMEngineLlumnixMixin:
             self.worker_migration_stubs = [migration_worker_pb2_grpc.MigrationWorkerStub(channel) for channel in self.worker_migration_channels]
 
     def handle_request_barriers(self):
+        # pylint: disable=unused-argument
         async def finish_callback(resp_list, request_barriers: List[RequestBarrier]):
             for request_barrier in request_barriers:
                 request_barrier.notify()
@@ -710,17 +709,25 @@ class BackendBladeLLM(BackendInterface):
             decode_instance_id = kwargs.get("decode_instance_id", "")
             if decode_instance_id:
                 server_request.decode_instances = [decode_instance_id]
+
         if self.engine_args.enable_semi_pd_mode:
+            server_request.kvt_meta_info = {}
+
             server_request.kvt_meta_info['semi_p_inst_id'] = kwargs.get("semi_p_inst_id", None)
             server_request.kvt_meta_info['semi_d_inst_id'] = kwargs.get("semi_d_inst_id", None)
             assert server_request.kvt_meta_info['semi_d_inst_id'] == self.engine_disagg_inst_id
 
             # If the decode instance is the same as the prefill instance, ignore pdd.
             if server_request.kvt_meta_info['semi_p_inst_id'] == server_request.kvt_meta_info['semi_d_inst_id']:
-                server_request.kvt_meta_info['semi_p_inst_id'] = None
-                server_request.kvt_meta_info['semi_d_inst_id'] = None
+                server_request.kvt_meta_info['semi_d_inst_id'] = ""
+                server_request.kvt_meta_info['semi_p_inst_id'] = ""
 
-        await self.engine.add_request_wrapper(server_info, server_request)
+        if self.engine_args.enable_semi_pd_mode:
+            # TODO(KuilongCui): add exception handle
+            add_request_exception_wrapper = exception_wrapper_async(self.engine.add_request_wrapper)
+            asyncio.create_task(add_request_exception_wrapper(server_info, server_request))
+        else:
+            await self.engine.add_request_wrapper(server_info, server_request)
 
     async def abort_request(self, request_id: Union[int, Iterable[int]]) -> None:
         if isinstance(request_id, int):
@@ -766,8 +773,8 @@ class BackendBladeLLM(BackendInterface):
 
             if not backend_request.should_abort_migration():
                 incremental_blocks = self.engine.scheduler.get_request_incremental_blocks(backend_request, pre_stage_num_blocks)
-                backend_request.detokenizer_state = self.engine.scheduler._detokenizer.get_state(backend_request.request_id)
-                backend_request.req_metrics = self.engine._req_tracker.get_req_metrics(backend_request.request_id)
+                backend_request.detokenizer_migration_state = self.engine.scheduler._detokenizer.get_state(backend_request.request_id)
+                backend_request.req_tracker_migration_state = self.engine._req_tracker.get_req_metrics(backend_request.request_id)
             else:
                 self.engine.scheduler.running_filter_request_ids.remove(backend_request.request_id)
 
@@ -852,7 +859,7 @@ class BackendBladeLLM(BackendInterface):
 
         backend_request.reset_migration_states_dst()
         self.engine._back_queue[request_id] = self.engine.resp_queue
-        self.engine._req_tracker.req_metrics_map[request_id] = backend_request.req_metrics
+        self.engine._req_tracker.req_metrics_map[request_id] = backend_request.req_tracker_migration_state
         await self.add_running_request(backend_request)
 
         self.engine.scheduler.llumnix_metrics.scheduler_step_metrics(self.engine.scheduler)

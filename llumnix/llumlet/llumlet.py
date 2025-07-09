@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import asyncio
-from typing import List, Union, Iterable, Any
+from typing import List, Union, Iterable, Any, Optional
 import time
 
 import ray
@@ -32,7 +32,7 @@ from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import RequestIDType, BackendType
+from llumnix.utils import MigrationType, RequestIDType, BackendType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -169,8 +169,12 @@ class Llumlet:
         request_ids = set(request_id)
         await self.backend_engine.abort_request(request_ids)
 
-    async def migrate_out(self, dst_instance_actor: ray.actor.ActorHandle, dst_instance_id: str) -> List[RequestIDType]:
-        return await self.migration_coordinator.migrate_out(dst_instance_actor, dst_instance_id)
+    async def migrate_out(self,
+                          dst_instance_actor: ray.actor.ActorHandle,
+                          dst_instance_id: str,
+                          migration_type: Optional[MigrationType] = None) -> List[RequestIDType]:
+        return await self.migration_coordinator.migrate_out(
+            dst_instance_actor, dst_instance_id, migration_type)
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

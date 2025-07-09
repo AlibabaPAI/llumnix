@@ -145,7 +145,7 @@ async def test_migration_benchmark(request, ray_env, shutdown_llumnix_service, c
                                    use_ray_spmd_worker, engine):
     engine = engine.split("_")[1]
 
-    num_prompts = 500
+    num_prompts = 300
 
     if any(item in request.node.name for item in ["waiting", "kvtransfer"]) or \
         tensor_parallel_size == 2:

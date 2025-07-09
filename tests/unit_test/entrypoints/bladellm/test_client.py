@@ -61,7 +61,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.msg_decoder = msgspec.msgpack.Decoder()
         self.llumnix_client_metrics = LlumnixClientMetrics(server_id="server_id")
         if loop:
-            loop.create_task(self.get_request_outputs_loop())
+            self.output_task = loop.create_task(self.get_request_outputs_loop())
 
     def _process_output_order(
         self, request_id: int, request_output: GenerateStreamResponse
@@ -78,6 +78,12 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.entrypoint_req_id_to_llumnix_req_id[request_id] = request_id
         self.request_stream[request_id] = asyncio.Queue()
 
+    async def clear_output_loop(self):
+        self.output_task.cancel()
+        try:
+            await self.output_task
+        except asyncio.CancelledError:
+            pass
 
 @ray.remote(num_cpus=0)
 class MockLlumlet:
@@ -244,7 +250,8 @@ async def test_drop_request(ray_env):
         request_id not in client.request_stream_output_stash and \
         request_id not in client.llumnix_req_id_to_entrypoint_req_id and \
         request_id not in client.entrypoint_req_id_to_llumnix_req_id
-
+    
+    await client.clear_output_loop()
 
 @pytest.mark.asyncio
 async def test_clear_client_request_states(ray_env):
@@ -282,3 +289,5 @@ async def test_clear_client_request_states(ray_env):
         request_id not in client.request_instance and \
         request_id not in client.llumnix_req_id_to_entrypoint_req_id and \
         request_id not in client.entrypoint_req_id_to_llumnix_req_id
+    
+    await client.clear_output_loop()

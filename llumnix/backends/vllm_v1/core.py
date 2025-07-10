@@ -173,17 +173,24 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     ) -> Tuple[Dict[str, LlumnixRequestOutputs], Dict[str, ServerInfo]]:
         server_request_outputs = {}
         server_info_dict = {}
-        for client_index, engine_core_outputs in engine_core_outputs_dict.items():
-            request_processing_context = self.reqeust_processing_context_table[client_index]
-            server_id = request_processing_context.server_id
+        for _, engine_core_outputs in engine_core_outputs_dict.items():
+            request_processing_context_dict={}
+            server_id = None
+            server_info = None
+            for engine_core_output in engine_core_outputs.outputs:
+                request_id = engine_core_output.request_id
+                request_processing_context:RequestProcessingContext = self.reqeust_processing_context_table[request_id]
+                request_processing_context_dict[request_id] = request_processing_context
+                if server_id is None:
+                    server_id = request_processing_context.server_id
+                    server_info = request_processing_context.get_server_info()
 
             server_request_outputs[server_id] = LlumnixRequestOutputs(
                 instance_id=self.instance_id,
                 engine_outputs=engine_core_outputs,
-                request_timestamps_dict=None,
+                request_processing_context_dict=request_processing_context_dict
             )
-            if server_id not in server_info_dict:
-                server_info_dict[server_id] = request_processing_context.get_server_info()
+            server_info_dict[server_id] = server_info
 
         return server_request_outputs, server_info_dict
 
@@ -254,7 +261,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         # TODO(zhaozhiyu): remove mapping, create a new request type to carry server_info
         request_type = EngineCoreRequestType.ADD
         request: EngineCoreRequest = kwargs["engine_core_request"]
-        self.reqeust_processing_context_table[request.client_index] = request_processing_context
+        self.reqeust_processing_context_table[request.request_id] = request_processing_context
         await self.input_queue.put((request_type, request))
 
 

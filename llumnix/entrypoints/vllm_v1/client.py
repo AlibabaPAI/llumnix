@@ -19,6 +19,7 @@ import asyncio
 
 import ray.actor
 
+from llumnix.request_processing_context import RequestProcessingContext
 from vllm.v1.engine import EngineCoreOutput
 from vllm.v1.engine.core_client import AsyncMPClient
 from vllm.v1.executor.abstract import Executor
@@ -32,7 +33,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
 from llumnix.server_info import ServerInfo
-from llumnix.constants import WAIT_MANAGER_INTERVAL
+from llumnix.constants import LLUMNIX_TRACE_REQUEST, WAIT_MANAGER_INTERVAL
 from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception, is_traced_request
 from llumnix.request_output import LlumnixRequestOutputs
 from llumnix.entrypoints.client import LlumnixClient
@@ -71,10 +72,13 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             raise ValueError("Unsupported feature: multiple sequence decoding")
         logger.info("Client received request {}".format(request_id))
         # pylint: disable=unexpected-keyword-arg
-        server_info_copy = copy.deepcopy(self.server_info)
+        request_processing_context: RequestProcessingContext = RequestProcessingContext.deepcopy_from_server_info(
+            server_info=self.server_info,
+            enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
+        )
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
-            await self._generate_by_manager(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_manager(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
@@ -82,28 +86,25 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
-            await self._generate_by_instance(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_instance(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,
                                    request_id: str,
-                                   server_info: ServerInfo,
+                                   request_processing_context: RequestProcessingContext,
                                    prompt: str,
                                    sampling_params: SamplingParams,
                                    *args,
                                    **kwargs) -> AsyncStream:
-        if is_traced_request(server_info):
-            # Hack request timestamps in server_info for latency breakdown.
-            server_info.request_timestamps = RequestTimestamps()
-            set_timestamp(server_info, "api_server_generate_timestamp", time.perf_counter())
+        request_processing_context.add_trace_timeline('api_server_generate_timestamp')
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.generate, request_id, server_info, prompt, sampling_params, *args, **kwargs
+            self.manager.generate, request_id, request_processing_context, prompt, sampling_params, *args, **kwargs
         )
 
     # pylint: disable=arguments-differ
     async def _generate_by_instance(self,
                                     request_id: str,
-                                    server_info: ServerInfo,
+                                    request_processing_context: RequestProcessingContext,
                                     prompt: str,
                                     sampling_params: SamplingParams,
                                     *args,
@@ -115,7 +116,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     self.instances[instance_id].generate,
-                    request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
+                    request_id, request_processing_context, expected_steps, prompt, sampling_params, *args, **kwargs
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))

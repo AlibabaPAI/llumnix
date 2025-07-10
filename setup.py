@@ -38,7 +38,8 @@ LICENSE_HEADER = (
     "# limitations under the License.\n"
 )
 
-# To auto generate version like 0.1.1.dev135+g1234abc {guessed_next_ver}.dev{distance}+g{git_hash}
+# To auto generate version like 0.1.1.dev135+g1234abc.d20250710 
+# {guessed_next_ver}.dev{distance}+g{git_hash}.d{date}
 # and write into llumnix/version.py
 def scm_version():
     return {

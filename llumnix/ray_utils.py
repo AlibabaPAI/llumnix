@@ -108,7 +108,6 @@ def initialize_placement_group(
             placement_group_specs = []
             for _ in range(dp_size):
                 placement_group_specs += placement_group_specs_per_dp
-            logger.info(f"[sjr] {placement_group_specs=}")
         elif num_gpus >= 1:
             # bundle_0: All CPU Actors + Worker_0, bundle_1-N-1: Worker_1...Worker_N-1
             placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)

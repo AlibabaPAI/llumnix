@@ -257,44 +257,9 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         await self.input_queue.put((request_type, request))
 
 
-# TODO(shejiarui): Add a common parent class for AsyncEngineCoreProc and AsyncDPEngineCoreProc
 class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlumnix):
-    def __init__(self,
-                 instance_id: str,
-                 placement_group: PlacementGroup,
-                 request_output_queue_type: QueueType,
-                 disable_async_output_proc: bool,
-                 backend_type: BackendType,
-                 request_output_forwarding_mode: RequestOutputForwardingMode,
-                 abort_request_callback: Coroutine,
-                 vllm_config: VllmConfig,
-                 on_head_node: bool,
-                 handshake_address: str,
-                 executor_class: type[Executor],
-                 log_stats: bool,):
-        
-        # Change EngineCore.scheduler to SchedulerLlumnix
-        vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
-        AsyncDPEngineCoreProc.__init__(self, vllm_config, on_head_node, 
-                                       handshake_address, executor_class, log_stats)
-        self.instance_id = instance_id
-        self.step_counter = Counter()
-        self.instance_info = None
-        self.output_forwarder = OutputForwarder(
-            instance_id,
-            request_output_queue_type,
-            request_output_forwarding_mode,
-            abort_request_callback,
-            placement_group,
-            backend_type,
-        )
-        
-        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
-        self.disable_async_output_proc = disable_async_output_proc
-        self.server_info_table = {}
-
-        assert isinstance(self.scheduler, SchedulerLlumnix), \
-            "EngineCore.scheduler failed to set to SchedulerLlumnix"
+    def __init__(self, *args, **kwargs):
+        AsyncEngineCoreProcLlumnix.__init__(self, *args, **kwargs)
 
     @classmethod
     def from_engine_args(
@@ -312,7 +277,6 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         dp_rank_local: Optional[int] = None,
     ) -> "AsyncDPEngineCoreProcLlumnix":
         """Creates an DPEngineCoreProc from the engine arguments."""
-        # TODO(shejiarui): set it to None in EngineArgs
         engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()

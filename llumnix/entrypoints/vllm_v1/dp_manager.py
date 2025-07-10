@@ -166,12 +166,10 @@ class DPManager:
                     logger.exception("Error in dpmanager(instance_id: {}) done_scale_up.".format(self.instance_id))
                 await self.clear_dp_ray_resources()
 
-        logger.info(f"[sjr] Try to register instances and servers to Manager.")
         await asyncio_wait_for_ray_remote_call_with_timeout(
             self.manager.scale_up.remote, self.instance_ids, self.instances, instance_type,
             placement_group, self.servers
         )
-        logger.info(f"[sjr] Manager scaled up for instances and servers.")
 
     @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     async def clear_dp_ray_resources(self):

@@ -32,7 +32,7 @@ from blade_llm.protocol import (
     OAICompletionsResponse,
     OAILogprobs,
     Token,
-    TokenUsage,
+    TokenUsage
 )
 from blade_llm.service.otel_provider import extract_trace_headers
 from blade_llm.service.request_parser import extract_kvt_meta
@@ -141,7 +141,7 @@ class LlumnixEntrypoint(Entrypoint):
                             )
                             for token in r.tokens
                         ]
-                        if isinstance(r.tokens[0], msgspec.Struct)
+                        if len(r.tokens) > 0 and isinstance(r.tokens[0], msgspec.Struct)
                         else r.tokens
                     )
                     if isinstance(r, LlumnixGenerateStreamResponse):
@@ -169,7 +169,7 @@ class LlumnixEntrypoint(Entrypoint):
                             },
                             logprobs=(
                                 OAILogprobs(content=tokens)
-                                if tokens[0].logprob is not None or tokens[0].top_logprobs is not None
+                                if len(tokens) > 0 and (tokens[0].logprob is not None or tokens[0].top_logprobs is not None)
                                 else None
                             ),
                         )
@@ -272,7 +272,7 @@ class LlumnixEntrypoint(Entrypoint):
                             )
                             for token in r.tokens
                         ]
-                        if isinstance(r.tokens[0], msgspec.Struct)
+                        if len(r.tokens) > 0 and isinstance(r.tokens[0], msgspec.Struct)
                         else r.tokens
                     )
                     if isinstance(r, LlumnixGenerateStreamResponse):
@@ -297,7 +297,7 @@ class LlumnixEntrypoint(Entrypoint):
                             text=''.join(tok.text for tok in tokens),
                             logprobs=(
                                 OAILogprobs(content=tokens)
-                                if tokens[0].logprob is not None or tokens[0].top_logprobs is not None
+                                if len(tokens) > 0 and (tokens[0].logprob is not None or tokens[0].top_logprobs is not None)
                                 else None
                             ),
                         )
@@ -397,6 +397,6 @@ def setup_llumnix_api_server(engine_args: ServingArgs, loop: asyncio.AbstractEve
         bladellm_engine_args = BladeLLMEngineArgs(engine_args)
         global llumnix_client
         entrypoints_context = setup_llumnix(entrypoints_args, manager_args, instance_args, bladellm_engine_args, launch_args)
-        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop)
+        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, loop, instance_args)
 
     return llumnix_client

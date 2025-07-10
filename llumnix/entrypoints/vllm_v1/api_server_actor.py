@@ -16,7 +16,7 @@ from dataclasses import fields
 
 import uvloop
 
-from llumnix.arg_utils import VLLMV1EntrypointsArgs
+from llumnix.arg_utils import InstanceArgs, VLLMV1EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgs
@@ -30,12 +30,13 @@ class APIServerActorVLLMV1(APIServerActor):
     def __init__(self,
                  instance_id: str,
                  entrypoints_args: VLLMV1EntrypointsArgs,
+                 instance_args: InstanceArgs,
                  engine_args: VLLMV1EngineArgs,
                  scaler: "ray.actor.ActorHandle",
                  manager: "ray.actor.ActorHandle",
                  instance: "ray.actor.ActorHandle"):
         self.client_index = entrypoints_args.client_index
-        super().__init__(instance_id, entrypoints_args, engine_args,
+        super().__init__(instance_id, entrypoints_args, instance_args, engine_args,
                          scaler, manager, instance)
 
     def _set_host(self, entrypoints_args: VLLMV1EntrypointsArgs, engine_args):

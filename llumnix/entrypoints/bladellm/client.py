@@ -26,6 +26,8 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
+from llumnix.arg_utils import InstanceArgs
+from llumnix.instance_info import InstanceType
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
@@ -42,7 +44,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
     def __init__(self,
                  args: ServingArgs,
                  entrypoints_context: EntrypointsContext,
-                 loop: asyncio.AbstractEventLoop):
+                 loop: asyncio.AbstractEventLoop,
+                 instance_args: InstanceArgs,):
         MultiProcessingLLMClient.__init__(self, args, -1, -1)
 
         self.entrypoint_req_id_to_llumnix_req_id = {} # int32 -> int32
@@ -54,6 +57,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.timestamps_stream: Dict[int, asyncio.Queue] = {}
 
         LlumnixClient.__init__(self, entrypoints_context, loop)
+        self.instance_args = instance_args
+        self.enable_generate_by_instance = self._check_genenrate_by_instance(instance_args)
 
     def get_request_timestamps_generator(self, entrypoint_req_id: int) -> Optional[asyncio.Queue]:
         return self.timestamps_stream.get(entrypoint_req_id, None)
@@ -96,13 +101,27 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         # pylint: disable=broad-except
         except Exception as e:
             self._handle_generate_by_manager_error(request_id, e)
+
+            if not self.enable_generate_by_instance:
+                self._clear_client_request_states(request_id)
+                return error_resp(request_id, err_code=500,
+                                  err_msg="Manager is unavailable and can't genenrate by present instance.")
+
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
                 return LLMResponse(request_id, resp_queue=results_queue)
+
             await self._generate_by_instance(request_id, reuqest_processing_context, request)
 
         return LLMResponse(request_id, resp_queue=results_queue)
+
+    def _check_genenrate_by_instance(self, instance_args: InstanceArgs) -> bool:
+        if instance_args.enable_engine_pd_disagg:
+            return instance_args.instance_type == InstanceType.PREFILL
+        if instance_args.enable_engine_semi_pd_disagg:
+            return True
+        return True
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self, request_id: int, request_processing_context: RequestProcessingContext, request: bytes):

@@ -75,6 +75,7 @@ setup(
     description='Efficient and easy multi-instance LLM serving',
     long_description=readme(),
     long_description_content_type="text/markdown",
+    setup_requires=['setuptools_scm'],
     author='Llumnix Team',
     url='https://github.com/AlibabaPAI/llumnix',
     license="Apache 2.0",

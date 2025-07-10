@@ -45,7 +45,7 @@ def scm_version():
     return {
         'version_scheme': setuptools_scm.version.guess_next_dev_version,
         'local_scheme': setuptools_scm.version.get_local_node_and_date,
-        'write_to': os.path.join(ROOT_DIR, 'llumnix', 'version.py'),
+        'write_to': 'llumnix/version.py',
         'write_to_template': f"{LICENSE_HEADER}\n__version__ = {{version!r}}\n",
     }
 

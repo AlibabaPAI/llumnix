@@ -9,3 +9,4 @@ pyyaml
 yacs
 pyzmq
 setuptools <= 70.0.0
+setuptools_scm == 7.1.0

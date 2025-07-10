@@ -21,11 +21,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
 
 
-
-
-
 class RequestProcessingContext():
-
     def __init__(
         self,
         server_id: str,

@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
+from typing import Dict, Optional
 import subprocess
 from dataclasses import dataclass
 from llumnix.metrics.timestamps import RequestTimestamps
@@ -50,8 +50,8 @@ def is_gpu_available() -> bool:
 
 @dataclass
 class LlumnixTraceInfo:
-    latencys: Dict[str, float] | None = None
-    token_timestamps: RequestTimestamps | None = None
+    latencys: Optional[Dict[str, float]] = None
+    token_timestamps: Optional[RequestTimestamps] = None
 
     def calc_latency(self):
         if self.token_timestamps is not None:

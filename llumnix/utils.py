@@ -325,9 +325,9 @@ def exception_wrapper_async(func):
     async def wrapper(*args, **kwargs):
         try:
             return await func(*args, **kwargs)
-        except Exception as e:
-            logger.exception("Unexpected exception in {}: {}".format(func.__name__, str(e)))
-            raise
+        # pylint: disable=broad-except
+        except Exception:
+            logger.exception("Error in {}".format(func.__name__))
     return wrapper
 
 def log_manager_exception(e: Exception, method_name: str, request_id: str = None):

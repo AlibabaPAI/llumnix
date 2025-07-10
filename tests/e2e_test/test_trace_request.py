@@ -12,6 +12,7 @@
 # limitations under the License.
 
 
+import itertools
 import random
 import subprocess
 import asyncio
@@ -72,8 +73,6 @@ test_times = 0
 @pytest.mark.parametrize("model", [try_convert_to_local_path("Qwen/Qwen2.5-7B")])
 @pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
 @pytest.mark.parametrize("request_output_queue_type", ["rayqueue", "zmq"])
-@pytest.mark.parametrize("enable_request_trace", [True, False])
-@pytest.mark.parametrize("is_stream", [True, False])
 async def test_request_trace(
     request,
     ray_env,
@@ -82,8 +81,6 @@ async def test_request_trace(
     model,
     engine,
     request_output_queue_type,
-    enable_request_trace,
-    is_stream,
 ):
     engine = engine.split("_")[1]
     global test_times
@@ -130,61 +127,65 @@ async def test_request_trace(
     wait_for_llumnix_service_ready(ip_ports)
 
     await asyncio.sleep(3)
-    llumnix_trace_info = None
-    for api in engine_apis[engine]:
-        url = f"{endpoint}{api}"
 
-        request_json = get_requests(api, is_stream)
-        headers = {"X-Llumnix-Trace": "true"} if enable_request_trace else {}
-        with requests.post(
-            url, json=request_json, stream=is_stream, headers=headers, timeout=60
-        ) as resp:
-            if not is_stream:
-                output = resp.json()
-                if enable_request_trace:
-                    assert (
-                        "llumnix_trace_info" in output and output["llumnix_trace_info"]
-                    ), "llumnix debug info is missing"
-                    llumnix_trace_info = output["llumnix_trace_info"]
-                if not enable_request_trace:
-                    assert (
-                        "llumnix_trace_info" not in output
-                    ), "reqeust trace mode is not enabled but return llumnix trace info"
-            if is_stream:
-                has_trace_info = False
-                for chunk_bytes in resp.iter_content(
-                    chunk_size=None, decode_unicode=False
-                ):
-                    chunk = (
-                        chunk_bytes.decode("utf-8")
-                        .removeprefix("data:")
-                        .replace("\x00", "")
-                        .strip()
-                    )
-                    try:
-                        if chunk in ("", "[DONE]"):
-                            continue
-                        chunk_json = json.loads(str(chunk.strip()))
-                        if (
-                            "llumnix_trace_info" in chunk_json
-                            and chunk_json["llumnix_trace_info"]
-                        ):
-                            has_trace_info = True
-                    except json.JSONDecodeError:
-                        print(f"json decode error, {chunk.strip()}")
-                if enable_request_trace:
-                    assert has_trace_info, "llumnix trace info is missing"
-                if not enable_request_trace:
-                    assert (
-                        not has_trace_info
-                    ), "reqeust trace mode is not enabled but return llumnix trace info"
-        if (
-            enable_request_trace
-            and api in ["/generate", "/v1/chat/completions"]
-            and not is_stream
-        ):
-            with open("trace_info.txt", "a", encoding="utf-8") as f:
-                f.write(process_llumnix_trace_info(request.node.name, llumnix_trace_info))
+    is_stream_list = [True, False]
+    enable_request_trace_list = [True, False]
+    for is_stream, enable_request_trace in itertools.product(is_stream_list, enable_request_trace_list):
+        llumnix_trace_info = None
+        for api in engine_apis[engine]:
+            url = f"{endpoint}{api}"
+
+            request_json = get_requests(api, is_stream)
+            headers = {"X-Llumnix-Trace": "true"} if enable_request_trace else {}
+            with requests.post(
+                url, json=request_json, stream=is_stream, headers=headers, timeout=60
+            ) as resp:
+                if not is_stream:
+                    output = resp.json()
+                    if enable_request_trace:
+                        assert (
+                            "llumnix_trace_info" in output and output["llumnix_trace_info"]
+                        ), "llumnix debug info is missing"
+                        llumnix_trace_info = output["llumnix_trace_info"]
+                    if not enable_request_trace:
+                        assert (
+                            "llumnix_trace_info" not in output
+                        ), "reqeust trace mode is not enabled but return llumnix trace info"
+                if is_stream:
+                    has_trace_info = False
+                    for chunk_bytes in resp.iter_content(
+                        chunk_size=None, decode_unicode=False
+                    ):
+                        chunk = (
+                            chunk_bytes.decode("utf-8")
+                            .removeprefix("data:")
+                            .replace("\x00", "")
+                            .strip()
+                        )
+                        try:
+                            if chunk in ("", "[DONE]"):
+                                continue
+                            chunk_json = json.loads(str(chunk.strip()))
+                            if (
+                                "llumnix_trace_info" in chunk_json
+                                and chunk_json["llumnix_trace_info"]
+                            ):
+                                has_trace_info = True
+                        except json.JSONDecodeError:
+                            print(f"json decode error, {chunk.strip()}")
+                    if enable_request_trace:
+                        assert has_trace_info, "llumnix trace info is missing"
+                    if not enable_request_trace:
+                        assert (
+                            not has_trace_info
+                        ), "reqeust trace mode is not enabled but return llumnix trace info"
+            if (
+                enable_request_trace
+                and api in ["/generate", "/v1/chat/completions"]
+                and not is_stream
+            ):
+                with open("trace_info.txt", "a", encoding="utf-8") as f:
+                    f.write(process_llumnix_trace_info(request.node.name, llumnix_trace_info))
 
     await asyncio.sleep(1)
 

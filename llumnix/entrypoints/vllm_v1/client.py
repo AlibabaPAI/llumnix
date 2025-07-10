@@ -18,6 +18,7 @@ import asyncio
 
 import ray.actor
 
+from llumnix.request_processing_context import RequestProcessingContext
 from vllm.v1.engine import EngineCoreOutput
 from vllm.v1.engine.core_client import AsyncMPClient, DPAsyncMPClient
 from vllm.v1.executor.abstract import Executor

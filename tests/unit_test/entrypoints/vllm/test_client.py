@@ -27,7 +27,7 @@ from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.utils import random_uuid
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.ray_utils import get_instance_name
-from llumnix.metrics.timestamps import RequestTimestamps
+from llumnix.request_processing_context import RequestProcessingContext
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env
@@ -36,8 +36,12 @@ from tests.conftest import ray_env
 def get_request_output_engine(request_id, instance_id="", finished=False):
     completion_output = CompletionOutput(0, "", [], 0.0, None)
     request_output = RequestOutput(request_id, "", [], None, [completion_output], finished=finished)
-    request_output.request_timestamps = RequestTimestamps()
-    llumnix_response = LlumnixRequestOuputVLLM(request_id, instance_id, request_output, request_output.request_timestamps)
+    llumnix_response = LlumnixRequestOuputVLLM(
+        request_id,
+        instance_id,
+        request_output,
+        RequestProcessingContext(None, None, None, None, None),
+    )
     return llumnix_response
 
 
@@ -102,7 +106,7 @@ def gen_llumnix_request_output(
         request_id=request_id,
         instance_id="mock_instance_id",
         engine_output=gen_request_output(request_id, tokens_len, output_len, finished),
-        request_processing_context=None,
+        request_processing_context=RequestProcessingContext(None, None, None, None, None),
     )
 
 

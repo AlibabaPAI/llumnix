@@ -23,15 +23,29 @@ ROOT_DIR = os.path.dirname(__file__)
 VERSION_SCHEME = setuptools_scm.version.guess_next_dev_version
 LOCAL_SCHEME = setuptools_scm.version.get_local_node_and_date
 
+LICENSE_HEADER = (
+    "# Copyright (c) 2024, Alibaba Group;\n"
+    "# Licensed under the Apache License, Version 2.0 (the \"License\");\n"
+    "# you may not use this file except in compliance with the License.\n"
+    "# You may obtain a copy of the License at\n"
+    "\n"
+    "# http://www.apache.org/licenses/LICENSE-2.0\n"
+    "\n"
+    "# Unless required by applicable law or agreed to in writing, software\n"
+    "# distributed under the License is distributed on an \"AS IS\" BASIS,\n"
+    "# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n"
+    "# See the License for the specific language governing permissions and\n"
+    "# limitations under the License.\n"
+)
 
-# To auto generate version like 1.0.1.dev2+g1234abc {guessed_next_ver}.dev{distance}+g{git_hash}
-# and write into blade_llm/version.py
+# To auto generate version like 0.1.1.dev135+g1234abc {guessed_next_ver}.dev{distance}+g{git_hash}
+# and write into llumnix/version.py
 def scm_version():
     return {
-        'version_scheme': VERSION_SCHEME,
-        'local_scheme': LOCAL_SCHEME,
-        'write_to': 'llumnix/version.py',
-        'write_to_template': '__version__ = {version!r}',
+        'version_scheme': setuptools_scm.version.guess_next_dev_version,
+        'local_scheme': setuptools_scm.version.get_local_node_and_date,
+        'write_to': os.path.join(ROOT_DIR, 'llumnix', 'version.py'),
+        'write_to_template': f"{LICENSE_HEADER}\n__version__ = {{version!r}}\n",
     }
 
 def get_path(*filepath) -> str:

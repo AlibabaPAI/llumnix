@@ -23,5 +23,6 @@ jobs:
     - name: Build whl
       run: |
         python3 -m pip install --upgrade setuptools wheel
-        python3 -m pip install protobuf==3.20.1 grpcio grpcio-tools
+        python3 -m pip install protobuf==3.20.1 grpcio grpcio-tools setuptools_scm
         python3 setup.py bdist_wheel
+        ls dist

@@ -81,7 +81,6 @@ async def run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_migr
         model=model,
         ip=ip,
         port=base_port,
-        max_model_len=1024,
         tensor_parallel_size=tensor_parallel_size,
     )
     subprocess.run(raw_serve_command, shell=True, check=True)
@@ -208,7 +207,9 @@ def generate_correctness_test_config():
     vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, "global", "thread", False, False]
     
     vllm_v1_config = [
-        # vllm_v1_base_config,
+        vllm_v1_base_config,
+        
+        # tp=2
         generate_special_correctness_test_config([("tensor_parallel_size", 2)], vllm_v1_base_config),
     ]
     
@@ -239,13 +240,12 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("enable_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)], bladellm_base_config),
     ]
 
-    # return vllm_config + vllm_v1_config + bladellm_config
-    return vllm_v1_config
+    return vllm_config + vllm_v1_config + bladellm_config
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
-@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B-Instruct')])
 @pytest.mark.parametrize(config_schema, generate_correctness_test_config())
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator,
@@ -381,17 +381,13 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                enable_migration=enable_migration,
                                                max_instances=instance_count))
     for launch_command in launch_commands:
-        # make sure env vars are passed
-        env, launch_command = parse_launch_command(launch_command)
-        print(f"env: {env}")
-        print(f"launch_command: {launch_command}")
-        subprocess.run(launch_command, shell=True, check=True, env=env)
+        subprocess.run(launch_command, shell=True, check=True)
 
     await asyncio.sleep(3)
 
+    # TODO(zhaozhiyu): remove this special judge in the future
     if engine =="vLLM_v1":
         # special wait_for_llumnix_service_ready for vllm v1
-        # TODO(zhaozhiyu): remove this special judge
         wait_for_llumnix_service_ready_vllm_v1(ip_ports)
     else:
         wait_for_llumnix_service_ready(ip_ports)
@@ -412,11 +408,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
         raw_output = engine_semi_pd_prompt_output
 
     if not enable_simulator:
-        for i, prompt in enumerate(prompts):
-            with open(f"{i}_llumnix.out", "a+") as f:
-                f.write(str(llumnix_output[prompt]))
-            with open(f"{i}_raw.out", "a+") as f:
-                f.write(str(raw_output[prompt]))
+        for prompt in prompts:
             assert llumnix_output[prompt] == raw_output[prompt]
 
     await asyncio.sleep(3)

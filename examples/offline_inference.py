@@ -20,7 +20,6 @@ from llumnix import (
     ManagerArgs,
     InstanceArgs,
     Llumlet,
-    ServerInfo,
     QueueType,
     BackendType,
     LaunchArgs,
@@ -30,6 +29,7 @@ from llumnix import (
     LlumnixRequestOuputVLLM,
 )
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
+from llumnix.request_processing_context import RequestProcessingContext
 
 from tests.utils import try_convert_to_local_path
 from tests.conftest import cleanup_ray_env_func
@@ -83,7 +83,7 @@ while num_instance == 0:
 # The requests‘ outputs will be put to the request_output_queue no matter which instance it's running in.
 server_id = str(uuid.uuid4().hex)
 request_output_queue = RayQueueServer()
-server_info = ServerInfo(server_id, QueueType("rayqueue"), request_output_queue, None, None)
+request_processing_context = RequestProcessingContext(server_id, QueueType("rayqueue"), request_output_queue.queue, None, None)
 
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.
@@ -107,7 +107,7 @@ async def main():
     for request in prompts:
         request_id = str(uuid.uuid4().hex)
         await manager.generate.remote(request_id=request_id,
-                                      server_info=server_info,
+                                      request_processing_context=request_processing_context,
                                       prompt=request,
                                       params=sampling_params)
 

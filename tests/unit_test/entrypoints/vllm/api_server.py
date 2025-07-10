@@ -76,8 +76,9 @@ def setup_entrypoints_context(request_output_queue_type: QueueType, instance_id)
     tests.unit_test.entrypoints.vllm.api.instance = instance
     ip = '127.0.0.1'
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_type)
-    server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue,
+    server_info = ServerInfo(random_uuid(), request_output_queue_type, request_output_queue.queue,
                              ip, request_output_queue.port)
+    # pylint: disable=too-many-function-args
     entrypoints_context = EntrypointsContext(
         None,
         manager,
@@ -85,7 +86,6 @@ def setup_entrypoints_context(request_output_queue_type: QueueType, instance_id)
         request_output_queue,
         None,
         server_info,
-        None,
         None,
     )
 

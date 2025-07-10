@@ -13,7 +13,6 @@
 
 import asyncio
 from typing import List, Union, Iterable, Any, Optional
-import time
 
 import ray
 import ray.actor
@@ -25,12 +24,11 @@ from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, Instance
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
-from llumnix.server_info import ServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
-from llumnix.metrics.timestamps import set_timestamp
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import MigrationType, RequestIDType, BackendType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
@@ -154,13 +152,20 @@ class Llumlet:
         await self.backend_engine.is_ready()
         return self.backend_engine.engine_disagg_inst_id
 
-    async def generate(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        set_timestamp(server_info, 'llumlet_generate_timestamp', time.time())
+    async def generate(
+        self,
+        request_id: RequestIDType,
+        request_processing_context: RequestProcessingContext,
+        expected_steps: int,
+        *args,
+        **kwargs,
+    ) -> None:
+        request_processing_context.add_trace_timeline("llumlet_generate_timestamp")
         self.llumlet_metrics.llumlet_request_qps.increase(
             labels={"instance_id": self.instance_id}
         )
         await self.backend_engine.add_request(
-            request_id, server_info, expected_steps, *args, **kwargs
+            request_id, request_processing_context, expected_steps, *args, **kwargs
         )
 
     async def abort(self, request_id: Union[RequestIDType, Iterable[RequestIDType]]) -> None:

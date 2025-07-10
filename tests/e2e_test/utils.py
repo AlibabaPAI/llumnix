@@ -40,7 +40,6 @@ def generate_vllm_launch_command(
     model: str = try_convert_to_local_path("facebook/opt-125m"),
     max_model_len: int = 4096,
     log_instance_info: bool = False,
-    log_request_timestamps: bool = False,
     request_migration_policy: str = 'SR',
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
@@ -63,7 +62,6 @@ def generate_vllm_launch_command(
         f"--initial-instances {instances_num} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
-        f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
         f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
@@ -100,7 +98,6 @@ def generate_vllm_serve_command(
     model: str = try_convert_to_local_path("facebook/opt-125m"),
     max_model_len: int = 4096,
     log_instance_info: bool = False,
-    log_request_timestamps: bool = True,
     request_migration_policy: str = 'SR',
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
@@ -123,7 +120,6 @@ def generate_vllm_serve_command(
         f"--port {port} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
-        f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
         f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "

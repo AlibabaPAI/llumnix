@@ -39,6 +39,7 @@ from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import EngineState
@@ -87,7 +88,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
 
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         self.disable_async_output_proc = disable_async_output_proc
-        self.server_info_table = {}
+        self.reqeust_processing_context_table = {}
 
         assert isinstance(self.scheduler, SchedulerLlumnix), \
             "EngineCore.scheduler failed to set to SchedulerLlumnix"
@@ -173,8 +174,8 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         server_request_outputs = {}
         server_info_dict = {}
         for client_index, engine_core_outputs in engine_core_outputs_dict.items():
-            server_info = self.server_info_table[client_index]
-            server_id = server_info.server_id
+            request_processing_context = self.reqeust_processing_context_table[client_index]
+            server_id = request_processing_context.server_id
 
             server_request_outputs[server_id] = LlumnixRequestOutputs(
                 instance_id=self.instance_id,
@@ -182,7 +183,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 request_timestamps_dict=None,
             )
             if server_id not in server_info_dict:
-                server_info_dict[server_id] = server_info
+                server_info_dict[server_id] = request_processing_context.get_server_info()
 
         return server_request_outputs, server_info_dict
 
@@ -246,14 +247,14 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     async def add_request_async(
         self,
         request_id: str,
-        server_info: ServerInfo,
+        request_processing_context: RequestProcessingContext,
         expected_steps: int,
         *args, **kwargs,
     ):
         # TODO(zhaozhiyu): remove mapping, create a new request type to carry server_info
         request_type = EngineCoreRequestType.ADD
         request: EngineCoreRequest = kwargs["engine_core_request"]
-        self.server_info_table[request.client_index] = server_info
+        self.reqeust_processing_context_table[request.client_index] = request_processing_context
         await self.input_queue.put((request_type, request))
 
 
@@ -309,8 +310,8 @@ class BackendVLLMV1(BackendInterface):
     async def execute_driver_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
-    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        await self.engine.add_request_async(request_id, server_info, expected_steps, *args, **kwargs)
+    async def add_request(self, request_id: str, request_processing_context: RequestProcessingContext, expected_steps: int, *args, **kwargs) -> None:
+        await self.engine.add_request_async(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
     async def commit_dst_request(self,
                                  request_id: RequestIDType,

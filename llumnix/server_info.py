@@ -11,22 +11,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from llumnix.queue.ray_queue_server import RayQueueServer
+from ray.util.queue import Queue
 from llumnix.queue.queue_type import QueueType
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 class ServerInfo:
     def __init__(self,
                  server_id: str,
                  request_output_queue_type: QueueType,
-                 request_output_queue: RayQueueServer,
+                 request_output_queue: Queue,
                  request_output_queue_ip: str,
                  request_output_queue_port: int) -> None:
         self.server_id = server_id
         self.request_output_queue_type = request_output_queue_type
+        self.request_output_queue = None
         if request_output_queue_type == QueueType.RAYQUEUE:
             assert request_output_queue is not None
-        self.request_output_queue = request_output_queue.queue if request_output_queue_type == QueueType.RAYQUEUE else None
+        self.request_output_queue = request_output_queue if request_output_queue_type == QueueType.RAYQUEUE else None
         self.request_output_queue_ip = request_output_queue_ip
         self.request_output_queue_port = request_output_queue_port
 

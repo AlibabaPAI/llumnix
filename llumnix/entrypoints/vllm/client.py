@@ -11,9 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
-import time
 import asyncio
 from typing import Dict, List
 import ray.actor
@@ -24,10 +22,12 @@ from vllm import SamplingParams
 
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
-from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
-from llumnix.server_info import ServerInfo
-from llumnix.constants import WAIT_MANAGER_INTERVAL
-from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception
+from llumnix.request_processing_context import RequestProcessingContext
+from llumnix.constants import WAIT_MANAGER_INTERVAL, LLUMNIX_TRACE_REQUEST
+from llumnix.utils import (
+    asyncio_wait_for_ray_remote_call_with_timeout,
+    log_instance_exception,
+)
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
 from llumnix.entrypoints.client import LlumnixClient
 
@@ -51,11 +51,15 @@ class LlumnixClientVLLM(LlumnixClient):
         # pylint: disable=unexpected-keyword-arg
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
         self.request_stream[request_id] = results_generator
-        server_info_copy = copy.deepcopy(self.server_info)
+        request_processing_context: RequestProcessingContext = RequestProcessingContext.deepcopy_from_server_info(
+            server_info=self.server_info,
+            enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
+        )
+        kwargs.pop(LLUMNIX_TRACE_REQUEST, None)
 
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
-            await self._generate_by_manager(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_manager(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
@@ -64,42 +68,40 @@ class LlumnixClientVLLM(LlumnixClient):
             if self.manager_available:
                 self.manager_available = False
                 return results_generator
-            await self._generate_by_instance(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_instance(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
 
         return results_generator
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,
                                    request_id: str,
-                                   server_info: ServerInfo,
+                                   request_processing_context: RequestProcessingContext,
                                    prompt: str,
                                    sampling_params: SamplingParams,
                                    *args,
                                    **kwargs) -> AsyncStream:
-        if self.log_request_timestamps:
-            # Hack request timestamps in server_info for latency breakdown.
-            server_info.request_timestamps = RequestTimestamps()
-            set_timestamp(server_info, "api_server_generate_timestamp", time.time())
+        request_processing_context.add_trace_timeline("api_server_generate_timestamp")
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.generate, request_id, server_info, prompt, sampling_params, *args, **kwargs
+            self.manager.generate, request_id, request_processing_context, prompt, sampling_params, *args, **kwargs
         )
 
     # pylint: disable=arguments-differ
     async def _generate_by_instance(self,
                                     request_id: str,
-                                    server_info: ServerInfo,
+                                    request_processing_context: RequestProcessingContext,
                                     prompt: str,
                                     sampling_params: SamplingParams,
                                     *args,
                                     **kwargs) -> AsyncStream:
         try:
             if self.instance_num_requests:
+                request_processing_context.add_trace_timeline("api_server_generate_timestamp")
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     self.instances[instance_id].generate,
-                    request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
+                    request_id, request_processing_context, expected_steps, prompt, sampling_params, *args, **kwargs
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
@@ -139,8 +141,8 @@ class LlumnixClientVLLM(LlumnixClient):
             try:
                 request_responses: List[LlumnixRequestOuputVLLM] = await self.request_output_queue.get()
                 for request_response in request_responses:
+                    request_response.request_processing_context.add_trace_timeline('api_server_get_queue_timestamp')
                     request_output: RequestOutput = request_response.get_engine_output()
-                    set_timestamp(request_output, 'api_server_get_queue_timestamp', time.time())
                     request_id = request_response.request_id
                     # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                     if request_id not in self.request_stream:
@@ -148,7 +150,7 @@ class LlumnixClientVLLM(LlumnixClient):
                     # Update when request_id is in self.request_streams.
                     self.request_instance[request_id] = request_response.instance_id
 
-                    processed_output = self._process_output_order(request_id, request_output)
+                    processed_output = self._process_output_order(request_id, request_response)
                     if not processed_output:
                         continue
                     self.request_stream[request_id].put(processed_output)
@@ -170,10 +172,11 @@ class LlumnixClientVLLM(LlumnixClient):
         else:
             logger.error("Request {} not found.".format(request_id))
 
-    def _process_output_order(self, request_id: str, request_output: RequestOutput) -> RequestOutput:
+    def _process_output_order(self, request_id: str, request_output: LlumnixRequestOuputVLLM) -> LlumnixRequestOuputVLLM:
+        engine_output = request_output.get_engine_output()
         current_completion_tokens = None
-        if hasattr(request_output, "outputs") and len(request_output.outputs) > 0:
-            current_completion_tokens = len(request_output.outputs[-1].token_ids)
+        if hasattr(engine_output, "outputs") and len(engine_output.outputs) > 0:
+            current_completion_tokens = len(engine_output.outputs[-1].token_ids)
 
         if not current_completion_tokens:
             # request_output has no outputs, return the request_output directly.
@@ -188,9 +191,13 @@ class LlumnixClientVLLM(LlumnixClient):
                     request_id, last_completion_tokens, current_completion_tokens
                 )
             )
-            if hasattr(request_output, 'request_timestamps'):
-                logger.info("out-of-order request({}) output timestamps: {}".format(
-                    request_id, request_output.request_timestamps.to_latency_breakdown_dict()))
+            if request_output.request_processing_context.enable_trace:
+                logger.info(
+                    "out-of-order request({}) output timestamps: {}".format(
+                        request_id,
+                        request_output.request_processing_context.trace_timeline.to_latency_breakdown_dict(),
+                    )
+                )
             return None
         self.request_stream_last_completion_tokens[request_id] = current_completion_tokens
 

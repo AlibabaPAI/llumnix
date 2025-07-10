@@ -11,20 +11,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 from dataclasses import dataclass
 from typing import Dict, Any, Iterable
+from llumnix.constants import REQUEST_TIMESTAMPS_ATTR_STR
+from llumnix.logging.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 def set_timestamp(obj: Any, timestamp_attr: str, timestamp: float):
     if not isinstance(obj, Iterable):
-        obj = [obj,]
+        _set_timestamp_single_obj(obj, timestamp_attr, timestamp)
+        return
     objs = list(obj)
     for item in objs:
-        if hasattr(item, "request_timestamps"):
-            if hasattr(item.request_timestamps, timestamp_attr):
-                setattr(item.request_timestamps, timestamp_attr, timestamp)
-        elif hasattr(item, timestamp_attr):
-            setattr(item, timestamp_attr, timestamp)
+        _set_timestamp_single_obj(item, timestamp_attr, timestamp)
+
+def _set_timestamp_single_obj(item: Any, timestamp_attr: str, timestamp: float):
+    if hasattr(item, REQUEST_TIMESTAMPS_ATTR_STR):
+        if hasattr(item.request_timestamps, timestamp_attr):
+            setattr(item.request_timestamps, timestamp_attr, timestamp)
+    elif hasattr(item, timestamp_attr):
+        setattr(item, timestamp_attr, timestamp)
 
 def get_timestamp(item: Any, timestamp_attr: str):
     if hasattr(item, "request_timestamps") and hasattr(
@@ -79,3 +88,10 @@ class RequestTimestamps:
                 (self.api_server_generate_timestamp_end - self.api_server_get_queue_timestamp) * 1000,
         }
         return latency_dict
+
+    def set_timestamp(self, timestamp_attr: str, timestamp: float = None):
+        if not hasattr(self, timestamp_attr):
+            logger.warning("Timestamp attribute {} not found in RequestTimestamps.".format(timestamp_attr))
+        if timestamp is None:
+            timestamp = time.perf_counter()
+        setattr(self, timestamp_attr, timestamp)

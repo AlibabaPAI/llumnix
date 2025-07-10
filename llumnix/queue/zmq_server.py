@@ -13,7 +13,7 @@
 
 import asyncio
 import time
-from typing import (Coroutine, Any)
+from typing import (Coroutine, Any, Iterable)
 from typing_extensions import Never
 
 import zmq
@@ -27,7 +27,7 @@ from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
 from llumnix.logging.logger import init_logger
 from llumnix.constants import (RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RETRY_BIND_ADDRESS_INTERVAL,
                                MAX_BIND_ADDRESS_RETRY_TIMES, ZMQ_IO_THREADS, ZMQ_RPC_TIMEOUT)
-from llumnix.metrics.timestamps import set_timestamp
+from llumnix.request_output import LlumnixRequestOuput
 from llumnix.utils import get_ip_address, get_free_port
 
 logger = init_logger(__name__)
@@ -141,16 +141,18 @@ class ZmqServer(QueueServerBase):
     def _make_handler_coro(self, identity,
                            message) -> Coroutine[Any, Any, Never]:
         request = cloudpickle.loads(message)
-        if (
-            isinstance(
-                request, (RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest)
-            )
-            and request.send_time
-        ):
+        if isinstance(request, RPCPutNoWaitQueueRequest) and request.send_time:
+            now_time = time.perf_counter()
+            send_time = request.send_time
             self.queue_server_metrics.queue_trans_latency.observe(
-                (time.perf_counter() - request.send_time) * 1000
+                (now_time - request.send_time) * 1000
             )
             self.queue_server_metrics.queue_trans_size_bytes.observe(len(message))
+            obj_list = [request.item] if not isinstance(request.item, Iterable) else request.item
+            for obj in obj_list:
+                if isinstance(obj, LlumnixRequestOuput):
+                    obj.request_processing_context.add_trace_timeline('queue_client_send_timestamp', send_time)
+                    obj.request_processing_context.add_trace_timeline('queue_server_receive_timestamp', now_time)
         if request == RPCUtilityRequest.IS_SERVER_READY:
             return self._is_server_ready(identity)
         if isinstance(request, RPCPutNoWaitQueueRequest):
@@ -178,7 +180,6 @@ class ZmqServer(QueueServerBase):
         # while client raises exception to outside (but ActorOutputForwarder will not die).
         try:
             item = put_nowait_queue_request.item
-            set_timestamp(item, 'queue_server_receive_timestamp', time.time())
             self.put_nowait(item)
             await asyncio.wait_for(
                 self.socket.send_multipart(
@@ -203,7 +204,6 @@ class ZmqServer(QueueServerBase):
     async def _put_nowait_batch(self, identity, put_nowait_batch_queue_request: RPCPutNoWaitBatchQueueRequest):
         try:
             items = put_nowait_batch_queue_request.items
-            set_timestamp(items, 'queue_server_receive_timestamp', time.time())
             self.put_nowait_batch(items)
             await asyncio.wait_for(
                 self.socket.send_multipart(

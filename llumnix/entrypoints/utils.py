@@ -11,8 +11,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
+from typing import Dict, Optional
 import subprocess
+from dataclasses import dataclass
+from llumnix.metrics.timestamps import RequestTimestamps
 
 from llumnix.logging.logger import init_logger
 
@@ -28,8 +30,7 @@ class EntrypointsContext:
                  request_output_queue: "QueueServerBase",
                  server: "APIServerActor",
                  server_info: "ServerInfo",
-                 log_requests: bool,
-                 log_request_timestamps: bool):
+                 log_requests: bool,):
         self.scaler = scaler
         self.manager = manager
         self.instances = instances
@@ -37,7 +38,6 @@ class EntrypointsContext:
         self.server = server
         self.server_info = server_info
         self.log_requests = log_requests
-        self.log_request_timestamps = log_request_timestamps
 
 def is_gpu_available() -> bool:
     try:
@@ -46,3 +46,19 @@ def is_gpu_available() -> bool:
     # pylint: disable=bare-except
     except:
         return False
+
+
+@dataclass
+class LlumnixTraceInfo:
+    latencys: Optional[Dict[str, float]] = None
+    token_timestamps: Optional[RequestTimestamps] = None
+
+    def calc_latency(self):
+        if self.token_timestamps is not None:
+            self.latencys = self.token_timestamps.to_latency_breakdown_dict()
+
+    def dict(self):
+        return {
+            "latencys": self.latencys,
+            "token_timestamps": self.token_timestamps,
+        }

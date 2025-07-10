@@ -14,7 +14,7 @@
 from enum import Enum
 import math
 
-from llumnix.server_info import ServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import RequestIDType
 
 
@@ -51,9 +51,9 @@ class RequestStatus(str, Enum):
 
 
 class LlumnixRequest:
-    def __init__(self, request_id: RequestIDType, server_info: ServerInfo, expected_steps: int = math.inf) -> None:
+    def __init__(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, expected_steps: int = math.inf) -> None:
         self.request_id = request_id
-        self.server_info = server_info
+        self.request_processing_context: RequestProcessingContext = request_processing_context
 
         # strict pre-migration args
         self.expected_steps = expected_steps

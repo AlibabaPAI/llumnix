@@ -29,6 +29,7 @@ from llumnix.utils import random_uuid
 from llumnix.ray_utils import get_instance_name
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.llumnix_client_metrics import LlumnixClientMetrics
+from llumnix.request_processing_context import RequestProcessingContext
 
 
 # pylint: disable=unused-import
@@ -45,7 +46,6 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.instance_num_requests: Dict[str, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True
-        self.log_request_timestamps = False
         self.server_info = ServerInfo( server_id="server_id",
                  request_output_queue_type='zmq',
                  request_output_queue=None,
@@ -265,7 +265,12 @@ async def test_clear_client_request_states(ray_env):
     instance_id = random_uuid()
 
     request_output = GenerateStreamResponse(req_id=request_id)
-    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, msgspec.msgpack.encode(request_output))
+    llumnix_response = LlumnixRequestOuput(
+        request_output.req_id,
+        instance_id,
+        msgspec.msgpack.encode(request_output),
+        RequestProcessingContext(None, None, None, None, None),
+    )
     await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
@@ -279,7 +284,12 @@ async def test_clear_client_request_states(ray_env):
     request_output.is_finished = True
     client._process_output_order = MagicMock()
     client._process_output_order.return_value = [request_output]
-    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, msgspec.msgpack.encode(request_output))
+    llumnix_response = LlumnixRequestOuput(
+        request_output.req_id,
+        instance_id,
+        msgspec.msgpack.encode(request_output),
+        RequestProcessingContext(None, None, None, None, None),
+    )
     await client.request_output_queue.put([llumnix_response])
     # yield to get request outputs
     await asyncio.sleep(3.0)
@@ -289,5 +299,5 @@ async def test_clear_client_request_states(ray_env):
         request_id not in client.request_instance and \
         request_id not in client.llumnix_req_id_to_entrypoint_req_id and \
         request_id not in client.entrypoint_req_id_to_llumnix_req_id
-    
+
     await client.clear_output_loop()

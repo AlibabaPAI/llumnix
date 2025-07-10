@@ -25,7 +25,7 @@ from vllm.core.scheduler import SchedulingBudget
 
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix
-from llumnix.server_info import ServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 
 def initialize_scheduler(*,
                          max_num_seqs=1000,
@@ -58,9 +58,9 @@ def create_dummy_prompt(
     # and prompt "0 ... block_size".
     prompt_tokens = list(range(prompt_length))
     seq = Sequence(int(request_id), token_inputs(prompt_tokens), block_size)
-    server_info = ServerInfo(None, None, None, None, None)
+    request_processing_context = RequestProcessingContext(None, None, None, None, None)
     seq_group = SequenceGroupLlumnix(
-        request_id, server_info, expected_steps, [seq],
+        request_id, request_processing_context, expected_steps, [seq],
         time.time(),
         SamplingParams(best_of=best_of),
         lora_request)

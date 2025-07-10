@@ -34,7 +34,6 @@ from llumnix.queue.zmq_utils import (
     get_zmq_socket_name,
 )
 from llumnix.constants import ZMQ_RPC_TIMEOUT, ZMQ_IO_THREADS
-from llumnix.metrics.timestamps import set_timestamp
 
 logger = init_logger(__name__)
 
@@ -97,10 +96,6 @@ class ZmqClient(QueueClientBase):
         self, request: RPC_REQUEST_TYPE, ip: str, port: int, error_message: str
     ):
         async def do_rpc_call(socket: zmq.asyncio.Socket, request: RPC_REQUEST_TYPE):
-            if isinstance(
-                request, (RPCPutNoWaitQueueRequest, RPCPutNoWaitBatchQueueRequest)
-            ) and self.need_record_latency():
-                request.send_time = time.perf_counter()
 
             await socket.send_multipart([cloudpickle.dumps(request)])
 
@@ -136,17 +131,17 @@ class ZmqClient(QueueClientBase):
                         error_message="Unable to start RPC Server")
 
     async def put_nowait(self, item: Any, server_info: ServerInfo):
-        set_timestamp(item, 'queue_client_send_timestamp', time.time())
+        queue_request = RPCPutNoWaitQueueRequest(item=item, send_time=time.perf_counter())
         await self._send_one_way_rpc_request(
-                        request=RPCPutNoWaitQueueRequest(item=item),
+                        request=queue_request,
                         ip=server_info.request_output_queue_ip,
                         port=server_info.request_output_queue_port,
                         error_message="Unable to put items into queue.")
 
     async def put_nowait_batch(self, items: Iterable, server_info: ServerInfo):
-        set_timestamp(items, 'queue_client_send_timestamp', time.time())
+        batch_queue_request = RPCPutNoWaitBatchQueueRequest(items=items, send_time=time.perf_counter())
         await self._send_one_way_rpc_request(
-                        request=RPCPutNoWaitBatchQueueRequest(items=items),
+                        request=batch_queue_request,
                         ip=server_info.request_output_queue_ip,
                         port=server_info.request_output_queue_port,
                         error_message="Unable to put items into queue.")

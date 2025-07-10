@@ -38,17 +38,15 @@ from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
 from llumnix.backends.profiling import LatencyMemData
-from llumnix.server_info import ServerInfo
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
-from llumnix.utils import make_async, BackendType
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
-from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
-from llumnix.utils import RequestIDType, MigrationResponse, asyncio_wait_for_ray_remote_call_with_timeout
+from llumnix.utils import make_async, BackendType, RequestIDType, MigrationResponse, asyncio_wait_for_ray_remote_call_with_timeout
 from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)
@@ -60,9 +58,9 @@ class LlumnixRequestOutputFactory(RequestOutputFactory):
         # Determine the type based on a condition, for example:
         if hasattr(seq_group,
                    'embeddings') and seq_group.embeddings is not None:
-            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.server_info
+            return EmbeddingRequestOutput.from_seq_group(seq_group), seq_group.request_processing_context
         # pylint: disable=too-many-function-args
-        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.server_info
+        return RequestOutput.from_seq_group(seq_group, use_cache), seq_group.request_processing_context
 
 
 class LLMEngineLlumnix(_AsyncLLMEngine):
@@ -156,7 +154,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
              is_last_step, is_first_step_output, skip) = ctx.output_queue.popleft()
 
         # Filter out outputs of migrating requests.
-        server_infos = []
+        request_processing_contexts: List[RequestProcessingContext] = []
         if outputs:
             new_outputs = []
             new_scheduled_seq_groups = []
@@ -167,7 +165,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                 new_scheduled_seq_groups.append(scheduled_seq_group)
                 new_seq_group_metadata_list.append(seq_group_meta)
                 new_outputs.append(seq_group_output)
-                server_infos.append(seq_group.server_info)
+                request_processing_contexts.append(seq_group.request_processing_context)
             scheduler_outputs.scheduled_seq_groups = new_scheduled_seq_groups
             outputs[0].outputs = new_outputs
             seq_group_metadata_list = new_seq_group_metadata_list
@@ -179,17 +177,18 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             ctx.output_queue.appendleft((outputs, seq_group_metadata_list, scheduler_outputs, is_async,
                                          is_last_step, is_first_step_output, skip))
 
-        set_timestamp(server_infos, 'engine_process_model_outputs_timestamp_begin', time.time())
+        now_time = time.perf_counter()
+        for request_processing_context in request_processing_contexts:
+            request_processing_context.add_trace_timeline('engine_process_model_outputs_timestamp_begin',now_time)
 
         super()._process_model_outputs(ctx, request_id)
 
         if ctx.request_outputs:
-            request_outputs, server_infos = zip(*ctx.request_outputs)
+            _, request_processing_contexts = zip(*ctx.request_outputs)
 
-            for request_output, server_info in zip(request_outputs, server_infos):
-                if hasattr(server_info, 'request_timestamps'):
-                    request_output.request_timestamps = server_info.request_timestamps
-            set_timestamp(request_outputs, 'engine_process_model_outputs_timestamp_end', time.time())
+            now_time = time.perf_counter()
+            for request_processing_context in request_processing_contexts:
+                request_processing_context.add_trace_timeline('engine_process_model_outputs_timestamp_end', now_time)
 
         if not self.disable_async_output_proc:
             while self._output_proc_done_event_queue.qsize() > 0:
@@ -198,17 +197,18 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
     async def _process_request_outputs(
         self,
-        outputs: List[Tuple[RequestOutput, ServerInfo]],
-    ) -> Tuple[List[RequestOutput], List[ServerInfo]]:
+        outputs: List[Tuple[RequestOutput, RequestProcessingContext]],
+    ) -> Tuple[List[RequestOutput], List[RequestProcessingContext]]:
         request_outputs = []
-        server_infos = []
+        request_processing_contexts: List[RequestProcessingContext] = []
         if outputs:
-            request_outputs, server_infos = zip(*outputs)
+            request_outputs, request_processing_contexts = zip(*outputs)
             request_outputs = list(request_outputs)
-            server_infos = list(server_infos)
+            request_processing_contexts = list(request_processing_contexts)
 
-        set_timestamp(request_outputs, 'engine_step_timestamp_begin', self.step_begin_time)
-        set_timestamp(request_outputs, 'engine_step_timestamp_end', time.time())
+        for context in request_processing_contexts:
+            context.add_trace_timeline('engine_step_timestamp_begin', self.step_begin_time)
+            context.add_trace_timeline('engine_step_timestamp_end')
 
         for request_output in request_outputs:
             if request_output.finished:
@@ -241,39 +241,38 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
         self.instance_info = instance_info
 
-        set_timestamp(request_outputs, 'engine_put_queue_timestamp', time.time())
+        for context in request_processing_contexts:
+            context.add_trace_timeline("engine_put_queue_timestamp")
+            context.add_trace_timeline("engine_step_postprocess_timestamp_end")
 
         if request_outputs:
-            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, server_infos)
+            server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, request_processing_contexts)
             if server_request_outputs:
                 await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
-        set_timestamp(request_outputs, 'engine_step_postprocess_timestamp_end', time.time())
-
-        return request_outputs, server_infos
+        return request_outputs, request_processing_contexts
 
     def _gen_server_request_outputs(
         self,
         request_outputs: List[RequestOutput],
-        server_infos: List[ServerInfo]
-    ) -> Tuple[Dict[str, List[LlumnixRequestOuput]], Dict[str, ServerInfo]]:
+        request_processing_contexts: List[RequestProcessingContext]
+    ) -> Tuple[Dict[str, List[LlumnixRequestOuput]], Dict[str, RequestProcessingContext]]:
         server_request_outputs = defaultdict(list)
         server_info_dict = {}
         # Reorganize data in orther to put request output to queue in batch at one time.
-        for request_output, server_info in zip(request_outputs, server_infos):
-            server_id = server_info.server_id
-            request_timestamps = None if not hasattr(request_output, "request_timestamps") else request_output.request_timestamps
+        for request_output, request_processing_context in zip(request_outputs, request_processing_contexts):
+            server_id = request_processing_context.server_id
             llumnix_resquest_output = LlumnixRequestOuput(
-                request_output.request_id, self.instance_id, request_output, request_timestamps
+                request_output.request_id, self.instance_id, request_output, request_processing_context
             )
             server_request_outputs[server_id].append(llumnix_resquest_output)
             if server_id not in server_info_dict:
-                server_info_dict[server_id] = server_info
+                server_info_dict[server_id] = request_processing_context.get_server_info()
 
         return server_request_outputs, server_info_dict
 
-    async def step_async(self) -> Tuple[List[RequestOutput], List[ServerInfo]]:
-        self.step_begin_time = time.time()
+    async def step_async(self) -> Tuple[List[RequestOutput], List[RequestProcessingContext]]:
+        self.step_begin_time = time.perf_counter()
         # pylint: disable=too-many-function-args
         outputs = await super().step_async(0)
         return await self._process_request_outputs(outputs)
@@ -293,11 +292,11 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         self.instance_info = instance_info
 
     # pylint: disable=invalid-overridden-method
-    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs):
+    async def add_request(self, request_id: str, request_processing_context: RequestProcessingContext, expected_steps: int, *args, **kwargs):
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler[0].waiting[-1]
-        set_timestamp(server_info, 'engine_add_request_timestamp', time.time())
-        self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(request_id, server_info, expected_steps, [seq_group.get_seqs()[0]],
+        request_processing_context.add_trace_timeline('engine_add_request_timestamp')
+        self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(request_id, request_processing_context, expected_steps, [seq_group.get_seqs()[0]],
                                                              seq_group.metrics.arrival_time, seq_group.sampling_params, seq_group.lora_request,
                                                              seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
                                                              seq_group.priority)
@@ -405,8 +404,8 @@ class BackendVLLM(BackendInterface):
     async def execute_driver_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
-    async def add_request(self, request_id: str, server_info: ServerInfo, expected_steps: int, *args, **kwargs) -> None:
-        await self.engine.add_request(request_id, server_info, expected_steps, *args, **kwargs)
+    async def add_request(self, request_id: str, request_processing_context: RequestProcessingContext, expected_steps: int, *args, **kwargs) -> None:
+        await self.engine.add_request(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
     async def commit_dst_request(self,
                                  request_id: RequestIDType,

@@ -12,13 +12,14 @@
 # limitations under the License.
 
 import time
+from typing import Iterable
 
 import ray
 from ray.util.queue import Queue as RayQueue
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from llumnix.queue.queue_server_base import QueueServerBase
-from llumnix.metrics.timestamps import set_timestamp
+from llumnix.request_output import LlumnixRequestOuput
 from llumnix.utils import random_uuid
 
 
@@ -45,13 +46,17 @@ class RayQueueServer(QueueServerBase):
             self.queue_server_metrics.queue_trans_latency.observe(
                 (time.perf_counter() - send_time) * 1000
             )
-        set_timestamp(item, 'queue_server_receive_timestamp', time.time())
+        # process trace info
+        obj_list = [item] if not isinstance(item, Iterable) else item
+        for obj in obj_list:
+            if isinstance(obj, LlumnixRequestOuput):
+                obj.request_processing_context.add_trace_timeline('queue_client_send_timestamp', send_time)
+                obj.request_processing_context.add_trace_timeline('queue_server_receive_timestamp')
         return item
 
     async def get_nowait_batch(self):
         qsize = await self.queue.actor.qsize.remote()
         items = await self.queue.actor.get_nowait_batch.remote(qsize)
-        set_timestamp(items, 'queue_server_receive_timestamp', time.time())
         return items
 
     async def run_server_loop(self):

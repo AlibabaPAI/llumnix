@@ -24,6 +24,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
 from llumnix.utils import BackendType
 
+
 logger = init_logger(__name__)
 
 class EngineState(str, Enum):

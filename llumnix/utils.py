@@ -29,11 +29,11 @@ from enum import Enum
 import psutil
 from typing_extensions import ParamSpec
 import ray
-import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
-from llumnix.constants import RAY_RPC_TIMEOUT
+from llumnix.constants import RAY_RPC_TIMEOUT, LLUMNIX_TRACE_REQUEST, REQUEST_TIMESTAMPS_ATTR_STR
+
 
 logger = init_logger(__name__)
 
@@ -416,3 +416,13 @@ def log_worker_exception(e: Exception, instance_id: str, rank: str, method_name:
                 method_name, instance_id, rank, request_id,
             )
         )
+
+
+def is_traced_request(
+    item: Union["LlumnixRequestOuput", "ServerInfo", "LlumnixServerRequest", Dict[str, Any], "SamplingParams"],
+):
+    if isinstance(item, dict):
+        return item.get(LLUMNIX_TRACE_REQUEST, False)
+    return (
+        hasattr(item, REQUEST_TIMESTAMPS_ATTR_STR) and getattr(item, REQUEST_TIMESTAMPS_ATTR_STR)
+    ) or (hasattr(item, LLUMNIX_TRACE_REQUEST) and getattr(item, LLUMNIX_TRACE_REQUEST))

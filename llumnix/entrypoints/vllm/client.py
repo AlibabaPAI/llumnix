@@ -98,6 +98,9 @@ class LlumnixClientVLLM(LlumnixClient):
                 request_processing_context.add_trace_timeline("api_server_generate_timestamp")
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1
+                # save the instance_id which the request dispatch to
+                # drop the response in get_request_outputs_loop() if response is not from this instance
+                self.request_generate_by_instance_dict[request_id] = instance_id
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     self.instances[instance_id].generate,
@@ -146,6 +149,10 @@ class LlumnixClientVLLM(LlumnixClient):
                     request_id = request_response.request_id
                     # Request could be dispatched twice when manager is dead, the first request will free the request_streams when finished.
                     if request_id not in self.request_stream:
+                        continue
+                    instance_id = request_response.instance_id
+                    if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
+                        # avoid return duplicative response from different instance
                         continue
                     # Update when request_id is in self.request_streams.
                     self.request_instance[request_id] = request_response.instance_id

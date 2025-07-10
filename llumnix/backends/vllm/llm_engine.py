@@ -89,6 +89,7 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
             backend_type,
         )
         self.disable_async_output_proc = disable_async_output_proc
+        self.request_ids = set()
 
     # pylint: disable=W0221
     @classmethod
@@ -213,6 +214,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         for request_output in request_outputs:
             if request_output.finished:
                 logger.info("Engine finished request {}".format(request_output.request_id))
+                if request_output.request_id in self.request_ids:
+                    self.request_ids.remove(request_output.request_id)
 
         instance_info: InstanceInfo = self.instance_info
         instance_info.instance_id = self.instance_id
@@ -293,6 +296,10 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
 
     # pylint: disable=invalid-overridden-method
     async def add_request(self, request_id: str, request_processing_context: RequestProcessingContext, expected_steps: int, *args, **kwargs):
+        if request_id in self.request_ids:
+            logger.error('Request {} already exists in LLMEngineLlumnix.'.format(request_id))
+            return
+        self.request_ids.add(request_id)
         super().add_request(request_id, *args, **kwargs)
         seq_group = self.scheduler[0].waiting[-1]
         request_processing_context.add_trace_timeline('engine_add_request_timestamp')
@@ -301,6 +308,9 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
                                                              seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
                                                              seq_group.priority)
 
+    def clear_request(self, request_id) -> None:
+        if request_id in self.request_ids:
+            self.request_ids.remove(request_id)
 
 class BackendVLLM(BackendInterface):
     def __init__(
@@ -551,6 +561,8 @@ class BackendVLLM(BackendInterface):
             asyncio.create_task(
                 self._run_workers_async(
                     "pop_migrating_out_seq_group_metadata", backend_request.request_id))
+        self.engine.clear_request(backend_request.request_id)
+
         return self.engine.scheduler[0].free_src_request(backend_request)
 
     def get_instance_info(self):

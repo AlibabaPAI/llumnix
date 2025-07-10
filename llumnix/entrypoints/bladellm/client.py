@@ -26,6 +26,8 @@ from blade_llm.service.args import ServingArgs
 from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
 from blade_llm.service.communications.response import error_resp
 
+from llumnix.arg_utils import InstanceArgs
+from llumnix.instance_info import InstanceType
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_MANAGER_INTERVAL
@@ -42,7 +44,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
     def __init__(self,
                  args: ServingArgs,
                  entrypoints_context: EntrypointsContext,
-                 loop: asyncio.AbstractEventLoop):
+                 loop: asyncio.AbstractEventLoop,
+                 instance_args: InstanceArgs,):
         MultiProcessingLLMClient.__init__(self, args, -1, -1)
 
         self.entrypoint_req_id_to_llumnix_req_id = {} # int32 -> int32
@@ -54,6 +57,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.timestamps_stream: Dict[int, asyncio.Queue] = {}
 
         LlumnixClient.__init__(self, entrypoints_context, loop)
+        self.instance_args = instance_args
+        self.enable_generate_by_instance = self._check_genenrate_by_instance(instance_args)
 
     def get_request_timestamps_generator(self, entrypoint_req_id: int) -> Optional[asyncio.Queue]:
         return self.timestamps_stream.get(entrypoint_req_id, None)
@@ -92,17 +97,25 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
             await self._generate_by_manager(request_id, reuqest_processing_context, request)
-            self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
             self._handle_generate_by_manager_error(request_id, e)
-            # Do not re-generate the request to avoid duplicate requests.
-            if self.manager_available:
-                self.manager_available = False
-                return LLMResponse(request_id, resp_queue=results_queue)
+
+            if not self.enable_generate_by_instance:
+                self._clear_client_request_states(request_id)
+                return error_resp(request_id, err_code=500,
+                                  err_msg="Manager is unavailable and can't genenrate by present instance.")
+
             await self._generate_by_instance(request_id, reuqest_processing_context, request)
 
         return LLMResponse(request_id, resp_queue=results_queue)
+
+    def _check_genenrate_by_instance(self, instance_args: InstanceArgs) -> bool:
+        if instance_args.enable_engine_pd_disagg:
+            return instance_args.instance_type == InstanceType.PREFILL
+        if instance_args.enable_engine_semi_pd_disagg:
+            return True
+        return True
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self, request_id: int, request_processing_context: RequestProcessingContext, request: bytes):
@@ -119,6 +132,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 request_processing_context.add_trace_timeline("api_server_generate_timestamp")
                 self.instance_num_requests[instance_id] += 1
+                # save the instance_id which the request dispatch to
+                # drop the response in get_request_outputs_loop() if response is not from this instance
+                self.request_generate_by_instance_dict[request_id] = instance_id
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     self.instances[instance_id].generate, request_id, request_processing_context, -1, server_request=request
                 )
@@ -156,6 +172,10 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                     if request_id not in self.request_stream:
                         continue
                     self.request_instance[request_id] = request_response.instance_id
+                    instance_id = request_response.instance_id
+                    if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
+                        # avoid return duplicative response from different instance
+                        continue
 
                     if request_response.request_processing_context.enable_trace:
                         request_response.request_processing_context.add_trace_timeline('api_server_get_queue_timestamp')

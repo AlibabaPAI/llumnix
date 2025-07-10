@@ -21,7 +21,7 @@ from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 import ray.actor
 
-from llumnix.arg_utils import EntrypointsArgs
+from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.logging.logger import init_logger
@@ -36,6 +36,7 @@ class APIServerActor(ABC):
     def __init__(self,
                  instance_id: str,
                  entrypoints_args: EntrypointsArgs,
+                 instance_args: InstanceArgs,
                  engine_args,
                  scaler: ray.actor.ActorHandle,
                  manager: ray.actor.ActorHandle,
@@ -43,6 +44,7 @@ class APIServerActor(ABC):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
         self.entrypoints_args = entrypoints_args
+        self.instance_args = instance_args
         self.engine_args = engine_args
         self.scaler = scaler
         self.manager = manager
@@ -126,6 +128,7 @@ class APIServerActor(ABC):
                   instance_id: str,
                   placement_group: PlacementGroup,
                   entrypoints_args: EntrypointsArgs,
+                  instance_args: InstanceArgs,
                   engine_args,
                   scaler: ray.actor.ActorHandle,
                   manager: ray.actor.ActorHandle,
@@ -144,7 +147,7 @@ class APIServerActor(ABC):
             )
         )
         api_server = api_server_class.remote(
-            instance_id, entrypoints_args, engine_args, scaler, manager, instance)
+            instance_id, entrypoints_args, instance_args, engine_args, scaler, manager, instance)
 
         return api_server
 

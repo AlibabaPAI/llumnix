@@ -63,6 +63,7 @@ class LlumnixClient(ABC):
         self.request_stream_last_completion_tokens: Dict[RequestIDType, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True
+        self.request_generate_by_instance_dict: Dict[RequestIDType, int] = {}
 
         # metrics
         self.llumnix_client_metrics = LlumnixClientMetrics(server_id = self.server_info.server_id)
@@ -123,6 +124,7 @@ class LlumnixClient(ABC):
     def _clear_client_request_states(self, request_id: RequestIDType):
         self.request_stream_last_completion_tokens.pop(request_id, None)
         self.request_instance.pop(request_id, None)
+        self.request_generate_by_instance_dict.pop(request_id, None)
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
         instance_id = self.request_instance.get(request_id, None)

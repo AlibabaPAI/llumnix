@@ -53,7 +53,7 @@ class APIServerActorBladeLLM(APIServerActor):
         engine_args.host = self.host
 
         self.loop = asyncio.new_event_loop()
-        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, self.loop)
+        llumnix_client = LlumnixClientBladeLLM(engine_args, entrypoints_context, self.loop, self.instance_args)
         import llumnix.entrypoints.bladellm.api_server
         llumnix.entrypoints.bladellm.api_server.llumnix_client = llumnix_client
         web_app = LlumnixEntrypoint(client=llumnix_client, args=engine_args).create_web_app()

@@ -189,8 +189,9 @@ def generate_raw_vllm_v1_serve_command(
     **kwargs
 ):
     """Generate raw vllm v1 serve command without Llumnix"""
+    compilation_config = '{"use_cudagraph":0}'
     command = (
-        f"VLLM_USE_V1=1 RAY_DEDUP_LOGS=0 "
+        f"VLLM_USE_V1=1 RAY_DEDUP_LOGS=0 VLLM_FORCE_DETOKENIZE=1 "
         f"nohup vllm serve {model} "
         f"--host {ip} "
         f"--port {port} "
@@ -199,6 +200,7 @@ def generate_raw_vllm_v1_serve_command(
         f"--trust-remote-code "
         f"--tensor-parallel-size {tensor_parallel_size} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
+        f"--compilation-config='{compilation_config}' "
         f"{'> raw_vllm_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     print(f"Going to run command: {command}")
@@ -493,7 +495,6 @@ def process_bladellm_api_server_output(output):
 async def get_llumnix_response(prompt, url, generate_request_func, process_api_server_output_func):
     timeout = aiohttp.ClientTimeout(total=60)
     request = generate_request_func(prompt)
-    print(f"[zzy] request: {request}")
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(url, json=request) as resp:
             output = await resp.json()

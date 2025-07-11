@@ -105,6 +105,10 @@ bladellm_trace_test: check_pytest_installed
 vllm_bench_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_vLLM and not _v1 or not engine_' --tb=long ./tests/e2e_test/test_bench.py
 
+.PHONY: vllm_v1_bench_test
+vllm_v1_bench_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_vLLM_v1 or not engine_' --tb=long ./tests/e2e_test/test_bench.py
+
 .PHONY: bladellm_bench_test
 bladellm_bench_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_bench.py

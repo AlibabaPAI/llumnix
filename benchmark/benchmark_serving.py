@@ -69,6 +69,7 @@ async def async_request_gen(generator, qps: float, distribution="uniform", coeff
 
 class GenerationBackend(str, Enum):
     vLLM = "vLLM"
+    vLLM_v1 = "vLLM_v1"
     BladeLLM = "BladeLLM"
     NaiveHfPipeline = "NaiveHfPipeline"
     RayGen = "RayGen"
@@ -85,6 +86,30 @@ def vllm_server_req_func(prompt, output_len):
         "ignore_eos": True,
         "stream": False,
     }
+    return request_dict
+
+def vllm_v1_server_req_func(prompt, output_len):
+    request_dict = {
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.0,
+        "top_k": 1,
+        "stream": "false",
+        "ignore_eos": "false",
+        "presence_penalty": 1.1,
+        "repetition_penalty": 1.1,
+        "max_tokens": max(output_len, 1),
+        "ignore_eos": "true",
+    }
+
     return request_dict
 
 def bladellm_server_req_func(prompt, output_len):
@@ -134,6 +159,36 @@ async def inner_query_model(prompt, verbose, ip_ports, server_req_func):
                 output['response_len'] = expected_response_len
                 if verbose and 'generated_text' in output:
                     print(json.dumps(output['generated_text']))
+                num_finished_requests += 1
+                print("num_finised_requests: {}".format(num_finished_requests))
+                return (prompt, output)
+        except aiohttp.ClientError as e:
+            print(f"Connect to {ip_ports[server_id]} failed with: {str(e)}")
+            sys.exit(1)
+            
+async def inner_query_model_vllm_v1(prompt, verbose, ip_ports, server_req_func):
+    prompt, prompt_len, expected_response_len = prompt
+
+    # Evenly dispatch request to the given api servers.
+    global server_num_requests
+    server_id = min(server_num_requests, key=server_num_requests.get)
+    server_num_requests[server_id] += 1
+    timeout = aiohttp.ClientTimeout(total=4*60*60)
+    global num_finished_requests
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        request = server_req_func(prompt, expected_response_len)
+        if verbose:
+            print('Querying model')
+        try:
+            async with session.post(f'http://{ip_ports[server_id]}/v1/chat/completions', json=request) as resp:
+                if verbose:
+                    print('Done')
+                output = await resp.json()
+                # necessary for latency calc
+                output['response_len'] = expected_response_len
+                if verbose and 'choices' in output:
+                    print(json.dumps(output["choices"][0]["message"]["content"]))
                 num_finished_requests += 1
                 print("num_finised_requests: {}".format(num_finished_requests))
                 return (prompt, output)
@@ -459,6 +514,8 @@ async def benchmark(
 
     if backend == GenerationBackend.vLLM:
         query_model = partial(inner_query_model, server_req_func=vllm_server_req_func)
+    elif backend == GenerationBackend.vLLM_v1:
+        query_model = partial(inner_query_model_vllm_v1, server_req_func=vllm_v1_server_req_func)
     elif backend == GenerationBackend.BladeLLM:
         query_model = partial(inner_query_model, server_req_func=bladellm_server_req_func)
     else:
@@ -491,6 +548,11 @@ async def benchmark(
     async for prompt in async_prompts:
         tasks.append(asyncio.create_task(query_model(prompt, verbose, ip_ports)))
     queries = await asyncio.gather(*tasks)
+    
+    if backend == GenerationBackend.vLLM_v1:
+        print(f"vLLM v1 has no benchmark api yet, returning None.")
+        return (None,) * 11
+    
     dur_s = time.time() - start_time
     median_token_latency = np.median(m._per_token_latencies)
     median_e2e_latency = np.median(m._request_latencies)
@@ -831,6 +893,9 @@ def main():
         args.log_latencies,
         args.fail_on_response_failure,
     ))
+    
+    if throughput is None:
+        return
 
     file_name = os.path.splitext(args.log_filename)[0] + "_latency_info.json"
     results = []

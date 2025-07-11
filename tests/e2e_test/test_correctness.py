@@ -245,7 +245,7 @@ def generate_correctness_test_config():
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
-@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B-Instruct')])
+@pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize(config_schema, generate_correctness_test_config())
 async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
                            engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator,

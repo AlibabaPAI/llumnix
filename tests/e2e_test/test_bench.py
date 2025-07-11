@@ -28,9 +28,10 @@ from llumnix.utils import get_ip_address, wait_port_free
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env
-from tests.e2e_test.utils import (generate_vllm_launch_command, generate_bench_command, to_markdown_table,
-                    wait_for_llumnix_service_ready, shutdown_llumnix_service, generate_special_test_config,
-                    generate_vllm_serve_command, generate_bladellm_launch_command, check_log_exception,
+from tests.e2e_test.utils import (generate_bench_command, to_markdown_table,
+                    wait_for_llumnix_service_ready, wait_for_llumnix_service_ready_vllm_v1,
+                    shutdown_llumnix_service, generate_special_test_config, check_log_exception,
+                    generate_vllm_serve_command, generate_vllm_v1_serve_command,
                     generate_bladellm_serve_command)
 from tests.utils import try_convert_to_local_path
 
@@ -93,6 +94,15 @@ def generate_bench_test_config():
         generate_special_bench_test_config([("request_output_queue_type", "rayqueue")], vllm_base_config),
     ]
 
+    vllm_v1_base_config = ["engine_vLLM_v1", False, "zmq", False, False]
+    
+    vllm_v1_config = [
+        vllm_v1_base_config,
+
+        # rayqueue
+        generate_special_bench_test_config([("request_output_queue_type", "rayqueue")], vllm_v1_base_config),
+    ]
+    
 
     bladellm_base_config = ["engine_BladeLLM", False, "zmq", False, False]
 
@@ -113,7 +123,7 @@ def generate_bench_test_config():
                                            bladellm_base_config),
     ]
 
-    return vllm_config + bladellm_config
+    return vllm_config + vllm_v1_config + bladellm_config
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for simple benchmark")
@@ -122,7 +132,7 @@ def generate_bench_test_config():
 async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model,
                                 engine, enable_pd_disagg, request_output_queue_type, enable_engine_semi_pd_disagg,
                                 enable_adaptive_pd):
-    engine = engine.split("_")[1]
+    engine = "_".join(engine.split("_")[1:])
 
     global test_times
 
@@ -138,9 +148,11 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
     num_instances = device_count
     pd_ratio = "1:1" if not enable_adaptive_pd else "1:3"
 
-    if "vLLM" in engine:
+    if engine == "vLLM":
         generate_serve_command = generate_vllm_serve_command
-    elif "BladeLLM" in engine:
+    elif engine == "vLLM_v1":
+        generate_serve_command = generate_vllm_v1_serve_command
+    elif engine == "BladeLLM":
         generate_serve_command = generate_bladellm_serve_command
     else:
         raise ValueError(f"Unknown engine: {engine}")
@@ -156,15 +168,20 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             port=base_port,
                                             model=model,
                                             pd_ratio=pd_ratio,
-                                            enable_migration=True,
-                                            dispatch_policy="load",
+                                            enable_migration=True if "vLLM_v1" not in engine else False,
+                                            dispatch_policy="flood",
                                             enable_pd_disagg=enable_pd_disagg,
                                             enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
                                             enable_adaptive_pd=enable_adaptive_pd,
                                             request_output_queue_type=request_output_queue_type,
                                             max_instances=num_instances)
     subprocess.run(serve_command, shell=True, check=True)
-    wait_for_llumnix_service_ready(ip_ports)
+    # TODO(zhaozhiyu): remove this special judge in the future
+    if engine =="vLLM_v1":
+        # special wait_for_llumnix_service_ready for vllm v1
+        wait_for_llumnix_service_ready_vllm_v1(ip_ports)
+    else:
+        wait_for_llumnix_service_ready(ip_ports)
 
     def run_bench_command(command):
         # pylint: disable=consider-using-with
@@ -196,8 +213,9 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
 
     await asyncio.sleep(5)
 
-    with open("performance.txt", "a", encoding="utf-8") as f:
-        f.write(parse_log_file(title=request.node.name))
+    if engine != "vLLM_v1":
+        with open("performance.txt", "a", encoding="utf-8") as f:
+            f.write(parse_log_file(title=request.node.name))
 
     await asyncio.sleep(3)
 

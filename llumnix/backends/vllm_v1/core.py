@@ -29,12 +29,12 @@ from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreO
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
 
-
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
-from llumnix.backends.vllm_v1.async_core import AsyncEngineCoreProc
+from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc, 
+                                                 AsyncDPEngineCoreProc)
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.backends.profiling import LatencyMemData
@@ -52,8 +52,8 @@ from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.utils import RequestIDType, MigrationResponse, BackendType
 from llumnix.request_output import LlumnixRequestOutputs
 
-
 logger = init_logger(__name__)
+
 
 class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     def __init__(self,
@@ -258,6 +258,76 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         await self.input_queue.put((request_type, request))
 
 
+class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlumnix):
+    def __init__(self, *args, **kwargs):
+        AsyncEngineCoreProcLlumnix.__init__(self, *args, **kwargs)
+
+    @classmethod
+    def from_engine_args(
+        cls,
+        instance_id: str,
+        placement_group: PlacementGroup,
+        request_output_queue_type: QueueType,
+        migration_config: MigrationConfig,
+        engine_args: AsyncEngineArgs,
+        backend_type: BackendType,
+        request_output_forwarding_mode: RequestOutputForwardingMode,
+        abort_request_callback: Coroutine,
+        latency_mem: Optional[LatencyMemData] = None,
+        dp_rank: int = 0,
+        dp_rank_local: Optional[int] = None,
+    ) -> "AsyncDPEngineCoreProcLlumnix":
+        """Creates an DPEngineCoreProc from the engine arguments."""
+        engine_args.speculative_config = None
+        # Create the engine configs.
+        engine_config = engine_args.create_engine_config()
+        logger.info("engine_config: {}".format(engine_config))
+        # Hack to pass placement_group for init workers.
+        engine_config.parallel_config.placement_group = placement_group
+        engine_config.parallel_config.data_parallel_rank = dp_rank
+        engine_config.parallel_config.data_parallel_rank_local = dp_rank_local
+        # Initialize the cluster and specify the executor class.
+        # pylint: disable=import-outside-toplevel
+        if latency_mem is not None:
+            raise NotImplementedError('vLLM v1 sim_executor not implemented yet')
+        elif engine_config.parallel_config.use_ray:
+            from llumnix.backends.vllm_v1.executor import LlumnixRayDistributedExecutor
+            executor_class = LlumnixRayDistributedExecutor
+            executor_class.migration_config = migration_config
+            executor_class.instance_id = instance_id
+            logger.debug("executor_class set to LlumnixRayDistributedExecutor")
+        else:
+            raise ValueError('Unsupported executor backend')
+
+        engine = cls(
+            instance_id=instance_id,
+            placement_group=placement_group,
+            request_output_queue_type=request_output_queue_type,
+            disable_async_output_proc=engine_args.disable_async_output_proc,
+            backend_type=backend_type,
+            request_output_forwarding_mode=request_output_forwarding_mode,
+            abort_request_callback=abort_request_callback,
+            vllm_config=engine_config,
+            on_head_node=None,
+            handshake_address=None,
+            executor_class=executor_class,
+            log_stats=not engine_args.disable_log_stats,
+        )
+        return engine
+
+    async def _process_engine_step_async(self) -> bool:
+        """Overloading super()._process_engine_step_async() to update instance info"""
+        forward_executed = await AsyncEngineCoreProcLlumnix._process_engine_step_async(self)        
+        self._maybe_publish_request_counts()
+        if forward_executed:
+            return 
+
+        if self.engines_running:
+            self._dppart.new_step()
+            self.execute_dummy_batch()
+        return
+
+
 class BackendVLLMV1(BackendInterface):
     def __init__(
         self,
@@ -265,21 +335,38 @@ class BackendVLLMV1(BackendInterface):
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         instance_args: InstanceArgs,
-        llumnix_engine_args: LlumnixEngineArgs
+        llumnix_engine_args: LlumnixEngineArgs,
+        dp_rank: int = 0,
+        dp_rank_local: Optional[int] = None
     ) -> None:
         self.engine_disagg_inst_id = instance_id
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args() # type: ignore
         self.migration_config = instance_args.create_migration_config()
-        self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
-            instance_id=instance_id,
-            placement_group=placement_group,
-            request_output_queue_type=request_output_queue_type,
-            migration_config=self.migration_config,
-            engine_args=engine_args,
-            backend_type=BackendType.VLLM_V1,
-            request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
-            abort_request_callback=self.abort_request,
-        )
+        if engine_args.data_parallel_size > 1:
+            self.engine: AsyncDPEngineCoreProcLlumnix = AsyncDPEngineCoreProcLlumnix.from_engine_args(
+                instance_id=instance_id,
+                placement_group=placement_group,
+                request_output_queue_type=request_output_queue_type,
+                migration_config=self.migration_config,            
+                engine_args=engine_args,
+                backend_type=BackendType.VLLM_V1,
+                request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
+                abort_request_callback=self.abort_request,
+                dp_rank=dp_rank,
+                dp_rank_local=dp_rank_local
+            )
+        else:
+            # FIXME(zhaozhiyu): check args
+            self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
+                instance_id=instance_id,
+                placement_group=placement_group,
+                request_output_queue_type=request_output_queue_type,
+                migration_config=self.migration_config,            
+                engine_args=engine_args,
+                backend_type=BackendType.VLLM_V1,
+                request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
+                abort_request_callback=self.abort_request,
+            )
         asyncio.create_task(self.engine.run_busy_loop_async())
 
         self.instance_id = instance_id

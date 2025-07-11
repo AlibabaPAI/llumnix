@@ -37,6 +37,7 @@ SCALER_NAME = "scaler"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
+DPMANAGER_NAME = "dpmanager_"
 
 
 def get_manager_name() -> str:
@@ -54,6 +55,8 @@ def get_server_name(instance_id: str) -> str:
 def get_instance_name(instance_id: str) -> str:
     return f"{INSTANCE_NAME_PREFIX}{instance_id}"
 
+def get_dpmanager_name(instance_id: str) -> str:
+    return f"{DPMANAGER_NAME}{instance_id}"
 
 # pylint: disable=dangerous-default-value
 def initialize_placement_group(
@@ -63,6 +66,7 @@ def initialize_placement_group(
     detached: bool = False,
     block: bool = True,
     node_id: str = None,
+    dp_size: int = 1,
     resources: Dict[str, float] = {}
 ) -> PlacementGroup:
     """Initialize the distributed cluster probably with Ray.
@@ -96,8 +100,16 @@ def initialize_placement_group(
 
     try:
         # Create a new placement group
-        # bundle_0: All GPU Actors + Worker_0, bundle_1-N-1: Worker_1...Worker_N-1
-        if num_gpus >= 1:
+        if dp_size > 1:
+            # bundle_N: DP rank N, CPU Actors + Worker * world_size
+            num_cpu_per_dp = num_cpus // dp_size
+            world_size = num_gpus // dp_size
+            placement_group_specs_per_dp = [{"CPU": num_cpu_per_dp, "GPU": world_size}]
+            placement_group_specs = []
+            for _ in range(dp_size):
+                placement_group_specs += placement_group_specs_per_dp
+        elif num_gpus >= 1:
+            # bundle_0: All CPU Actors + Worker_0, bundle_1-N-1: Worker_1...Worker_N-1
             placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)
         else:
             placement_group_specs = [{"CPU": num_cpus}]

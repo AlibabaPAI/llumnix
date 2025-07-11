@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
+from typing import Any, Optional
 import os
 from enum import Enum
 
@@ -22,7 +22,7 @@ from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
-from llumnix.utils import BackendType
+from llumnix.utils import (BackendType, ray_get_with_timeout)
 
 
 logger = init_logger(__name__)
@@ -60,7 +60,9 @@ def init_backend_engine(instance_id: str,
                         placement_group: PlacementGroup,
                         request_output_queue_type: QueueType,
                         instance_args: InstanceArgs,
-                        llumnix_engine_args: LlumnixEngineArgs) -> BackendInterface:
+                        llumnix_engine_args: LlumnixEngineArgs,
+                        dp_rank: int = 0,
+                        dp_rank_local: Optional[int] = None) -> BackendInterface:
     backend_type = llumnix_engine_args.backend_type
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel
@@ -77,7 +79,8 @@ def init_backend_engine(instance_id: str,
                                      placement_group,
                                      request_output_queue_type,
                                      instance_args,
-                                     llumnix_engine_args)
+                                     llumnix_engine_args,
+                                     dp_rank, dp_rank_local)
     elif backend_type == BackendType.BLADELLM:
         # pylint: disable=import-outside-toplevel
         from llumnix.backends.bladellm.llm_engine import BackendBladeLLM

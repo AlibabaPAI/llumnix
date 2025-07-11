@@ -73,6 +73,7 @@ from llumnix.constants import (
     WATCH_DEPLOYMENT_INTERVAL,
     MAX_ACTOR_METHOD_RETRIES,
     HEARTBEAT_LOOP_INTERVAL,
+    DPMANAGER_INIT_TIMEOUT,
 )
 from llumnix import envs as llumnix_envs
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR
@@ -80,6 +81,7 @@ from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.manager import Manager
+from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
 
 logger = init_logger(__name__)
 
@@ -303,6 +305,22 @@ class Scaler:
                         new_pg,
                         instance_type=get_service_instance_type(service_name),
                     )
+                elif self.engine_args.backend_type == BackendType.VLLM_V1 and \
+                     (dp_size := self.engine_args.get_dp_size()) > 1:
+                    # Currently data parallelism only support vLLM V1
+                    new_instance_ids: List[str] = []
+                    for _ in range(dp_size):
+                        new_instance_ids.append(random_uuid())
+                    # TODO(shejiarui): Add exception handler if DPManager fail
+                    dp_manager = DPManager.from_args(new_instance_id, new_instance_ids, self.entrypoints_args, 
+                                                     self.instance_args, self.engine_args, new_pg)
+                    if self.enable_port_increment:
+                        self.port_offset += dp_size
+                        if self.enable_port_offset_store:
+                            put_data_to_ray_internal_kv("scaler.port_offset", self.port_offset)
+                    if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
+                        self.client_index += dp_size
+                        put_data_to_ray_internal_kv("scaler.client_index", self.client_index)
                 else:
                     # If not prefill/decode service, we do not specify the instance type,
                     # and the instance type is decided by _get_next_instance_type.
@@ -391,18 +409,19 @@ class Scaler:
                 # Not check right after scaler initialized, so sleep at the beginning.
                 await asyncio.sleep(interval)
                 curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
-                assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
-                tasks = []
-                for instance_id in curr_pgs:
-                    server_exists = instance_id in curr_servers
-                    instance_exists = instance_id in curr_instances
-                    if not server_exists or not instance_exists:
-                        tasks.append(
-                            asyncio.create_task(
-                                watch_instance_deployment_states(instance_id, server_exists, instance_exists)
-                            )
-                        )
-                await asyncio.gather(*tasks, return_exceptions=True)
+                # # TODO(shejiarui): fix it in DP
+                # assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
+                # tasks = []
+                # for instance_id in curr_pgs:
+                #     server_exists = instance_id in curr_servers
+                #     instance_exists = instance_id in curr_instances
+                #     if not server_exists or not instance_exists:
+                #         tasks.append(
+                #             asyncio.create_task(
+                #                 watch_instance_deployment_states(instance_id, server_exists, instance_exists)
+                #             )
+                #         )
+                # await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(
@@ -497,8 +516,22 @@ class Scaler:
                               service_name: str = None
                               ) -> PlacementGroup:
         backend_type = engine_args.backend_type
-        # num_cpus=2+(0/1), for Llumlet + ActorOutputForwarder + (ApiServerActor)
-        if not BackendType.is_sim_backend(backend_type):
+        if backend_type == BackendType.VLLM_V1 and engine_args.get_dp_size() > 1:
+            dp_size = engine_args.get_dp_size()
+            world_size = engine_args.get_world_size()
+            # num_cpus: [lumlet + ActorOutputMediator + (ApiServerActor)] * dp_size
+            # num_gpus: world_size * dp_size
+            placement_group = initialize_placement_group(
+                placement_group_name,
+                num_cpus=(2+int(init_server)) * dp_size,
+                num_gpus=world_size * dp_size,
+                dp_size=dp_size,
+                detached=True,
+                block=block,
+                node_id=node_id,
+            )
+        elif not BackendType.is_sim_backend(backend_type):
+            # num_cpus=2+(0/1), for Llumlet + ActorOutputForwarder + (ApiServerActor)
             # num_gpus=world_size, for world_size Workers
             world_size = engine_args.get_world_size()
             resources = get_service_resouces(service_name, world_size)

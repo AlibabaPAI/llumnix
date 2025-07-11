@@ -11,9 +11,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Tuple
+from typing import Tuple, Union, Optional
 import copy
 import pickle
+from dataclasses import dataclass
 
 from llumnix.logging.logger import init_logger
 from llumnix.utils import BackendType, LaunchMode
@@ -45,12 +46,23 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
                  engine_args: "AsyncEngineArgs",
                  backend_type: BackendType = BackendType.VLLM_V1) -> None:
         self.world_size = self._get_world_size(engine_args)
+        self.dp_args = self._get_dp_args(engine_args)
         engine_args = self._get_engine_args(engine_args)
         super().__init__(engine_args=engine_args, backend_type=backend_type)
 
     def _get_world_size(self, engine_args: "AsyncEngineArgs"):
         world_size = engine_args.pipeline_parallel_size * engine_args.tensor_parallel_size
         return world_size
+    
+    def _get_dp_args(self, engine_args: Union["AsyncEngineArgs", LlumnixEngineArgs]):
+        if isinstance(engine_args, LlumnixEngineArgs):
+            return engine_args.dp_args
+        return VLLMV1DPArgs(engine_args.data_parallel_size, 
+                            engine_args.data_parallel_rank,
+                            engine_args.data_parallel_size_local,
+                            engine_args.data_parallel_address, 
+                            engine_args.data_parallel_rpc_port,
+                            engine_args.data_parallel_backend)
 
     def _get_engine_args(self, engine_args: "AsyncEngineArgs"):
         return pickle.dumps(engine_args)
@@ -61,6 +73,24 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
 
     def get_world_size(self):
         return self.world_size
+
+    def get_dp_args(self):
+        return self.dp_args
+
+    def get_dp_size(self):
+        return self.dp_args.dp_size
+
+
+@dataclass
+class VLLMV1DPArgs:
+    """Data parallelism related arguments in vLLM V1.
+    """
+    dp_size: int
+    dp_rank: Optional[int]
+    dp_size_local: int
+    dp_address: str
+    dp_rpc_port: int
+    dp_backend: str
 
 
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:

@@ -42,7 +42,9 @@ class Llumlet:
                  instance_args: InstanceArgs,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
-                 llumnix_engine_args: LlumnixEngineArgs) -> None:
+                 llumnix_engine_args: LlumnixEngineArgs,
+                 dp_rank: int = 0,
+                 dp_rank_local: Optional[int] = None) -> None:
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
         logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
@@ -57,7 +59,8 @@ class Llumlet:
                                                                     placement_group,
                                                                     request_output_queue_type,
                                                                     instance_args,
-                                                                    llumnix_engine_args)
+                                                                    llumnix_engine_args,
+                                                                    dp_rank, dp_rank_local)
         if self.enable_migration:
             self.migration_coordinator = MigrationCoordinator(
                 self.instance_id,
@@ -81,15 +84,20 @@ class Llumlet:
                   instance_args: InstanceArgs,
                   placement_group: PlacementGroup,
                   request_output_queue_type: QueueType,
-                  engine_args: LlumnixEngineArgs):
+                  engine_args: LlumnixEngineArgs,
+                  dp_rank: int = 0,
+                  dp_rank_local: Optional[int] = None):
         backend_type = engine_args.backend_type
         assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.VLLM_V1, BackendType.SIM_VLLM], \
             f'unimplemented backend {BackendType}'
         # There could be some cuda related imports or codes inside the llm engine of llumlet, so we allocate gpu to llumlet.
+        bundle_index = 0
         if backend_type == BackendType.VLLM:
             num_gpus = NUM_GPUS_VLLM_GPU_ACTOR
         elif backend_type == BackendType.VLLM_V1:
             num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
+            if dp_rank > 0:
+                bundle_index = dp_rank
         elif backend_type == BackendType.BLADELLM:
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR
         else: # backend_type == BackendType.SIM_VLLM
@@ -101,7 +109,7 @@ class Llumlet:
                                     lifetime="detached")(cls).options(
                                         scheduling_strategy=PlacementGroupSchedulingStrategy(
                                             placement_group=placement_group,
-                                            placement_group_bundle_index=0,
+                                            placement_group_bundle_index=bundle_index,
                                             placement_group_capture_child_tasks=True
                                         )
                                     )
@@ -109,7 +117,8 @@ class Llumlet:
                                        instance_args,
                                        placement_group,
                                        request_output_queue_type,
-                                       engine_args)
+                                       engine_args,
+                                       dp_rank, dp_rank_local)
 
         return llumlet
 

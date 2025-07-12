@@ -85,6 +85,10 @@ vllm_offline_test:
 vllm_correctness_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
 
+.PHONY: vllm_v1_correctness_test
+vllm_v1_correctness_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_vLLM_v1 or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
+
 .PHONY: bladellm_correctness_test
 bladellm_correctness_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_BladeLLM or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
@@ -116,6 +120,10 @@ bladellm_migration_test: check_pytest_installed
 .PHONY: vllm_register_service_test
 vllm_register_service_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_register_service.py
+
+.PHONY: vllm_v1_register_service_test
+vllm_v1_register_service_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_vLLM_v1 or not engine_' --tb=long ./tests/e2e_test/test_register_service.py
 
 .PHONY: bladellm_register_service_test
 bladellm_register_service_test: check_pytest_installed

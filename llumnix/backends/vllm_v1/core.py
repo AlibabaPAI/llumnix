@@ -248,6 +248,8 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             instance_info.timestamp = self.instance_info.timestamp
             instance_info.profiling_data = self.instance_info.profiling_data
             instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
+        if self.instance_info is None:
+            instance_info.instance_id = self.instance_id
         self.instance_info = instance_info
 
     # pylint: disable=invalid-overridden-method,unused-argument

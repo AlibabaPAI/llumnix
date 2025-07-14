@@ -1,20 +1,21 @@
-# from third_party.MetaService.src.python.metaservice_client import MetaServiceClient
 import json
+
+from metaservice_client import MetaServiceClient
 
 
 class CacheMetaClient:
-    def query_cache_locality(self, hash_key: str) -> float:
+    def query_cache_locality(self, hash_key: str, top_n: int = 0) -> float:
         raise NotImplementedError
 
-# class MetaServiceClient(CacheMetaClient):
-#     def __init__(self, config):
-#         self.config = config
-#         self.client = MetaServiceClient()
-#         self.client.initialize(config)
+class MetaServiceCacheClient(CacheMetaClient):
+    def __init__(self, config):
+        self.config = config
+        self.client = MetaServiceClient()
+        self.client.initialize(config)
 
-#     def query_cache_locality(self, hash_key: str) -> list[str]:
-#         results = self.client.zreadrange(hash_key, 0)
-#         return [item[0] for item in results]
+    def query_cache_locality(self, hash_key: str, top_n: int = 0) -> list[str]:
+        results = self.client.zreadrange(hash_key, 0)
+        return [item[0] for item in results]
 
 class MockCacheMetaClient(CacheMetaClient):
     def __init__(self):
@@ -25,7 +26,7 @@ class MockCacheMetaClient(CacheMetaClient):
             "hash_key_3": ["instance_1", "instance_5"],
         }
 
-    def query_cache_locality(self, hash_key: str) -> list[str]:
+    def query_cache_locality(self, hash_key: str, top_n: int = 0) -> list[str]:
         # Return corresponding instance_id list, return empty list if not exists
         return self.mock_data.get(hash_key, [])
 
@@ -37,7 +38,7 @@ def build_meta_client_from_config(config_path) -> CacheMetaClient:
     backend_type = config.get("metadata_backend", "mock").lower()
 
     if backend_type == "metaservice":
-        return MetaServiceClient(config_path)
+        return MetaServiceCacheClient(config_path)
     if backend_type == "mock":
         return MockCacheMetaClient()
 

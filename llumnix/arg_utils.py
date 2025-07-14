@@ -476,7 +476,7 @@ class ManagerArgs:
                             help='instance scaling load metric')
         parser.add_argument('--dispatch-policy',
                             type=str,
-                            choices=['balanced', 'load', 'queue', 'flood', 'rr'],
+                            choices=['balanced', 'load', 'queue', 'flood', 'rr', 'cacheaware'],
                             help='The request dispatch policy.\n\n'
                             '* "balanced" dispatch request to the instance with minimum requests dispatched.\n'
                             '* "load" dispatch request to the instance with lowest instance load.\n'

@@ -154,8 +154,8 @@ class GlobalScheduler:
         return scale_up_num, scale_down_num
 
     def scale_up(self,
-                       instance_id: Union[str, Iterable[str]],
-                       instance_type: Union[InstanceType, List[InstanceType]]) -> int:
+                 instance_id: Union[str, Iterable[str]],
+                 instance_type: Union[InstanceType, List[InstanceType]]) -> int:
         if isinstance(instance_id, str):
             instance_id, instance_type = [instance_id], [instance_type]
         instance_ids, instance_types = list(instance_id), list(instance_type)

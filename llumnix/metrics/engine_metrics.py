@@ -18,7 +18,6 @@ from typing import Any, Dict, List
 from llumnix.metrics.base_metrics import BaseMetrics
 from llumnix.metrics.metrics_types import _REGISTRY, Status, MetricEntry, PassiveStatus
 from llumnix.metrics.exporters import MultiExporter
-from llumnix.metrics.dumper import Dumper, DummyDumper
 from llumnix.instance_info import InstanceInfo
 from llumnix.logging.logger import init_logger
 
@@ -82,9 +81,6 @@ class EngineMetrics(BaseMetrics):
             metrics_sampling_interval=self.metrics_sampling_interval,
         )
 
-        self.dumper: Dumper = None
-        self._init_dumper()
-
         self.start_metrics_export_loop()
 
     def start_metrics_export_loop(self):
@@ -105,9 +101,6 @@ class EngineMetrics(BaseMetrics):
         t = threading.Thread(target=_worker, daemon=True, name="engine_metrics_export_loop")
         t.start()
 
-    def dump(self):
-        self.dumper.dump(_REGISTRY.describe_ignore_labels())
-
     def to_instance_info(self) -> InstanceInfo:
         return InstanceInfo(
             **{
@@ -115,6 +108,3 @@ class EngineMetrics(BaseMetrics):
                 for metric in _REGISTRY.describe_ignore_labels()
             }
         )
-
-    def _init_dumper(self):
-        self.dumper = DummyDumper()

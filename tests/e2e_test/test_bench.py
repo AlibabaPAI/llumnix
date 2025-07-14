@@ -157,7 +157,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             model=model,
                                             pd_ratio=pd_ratio,
                                             enable_migration=True,
-                                            dispatch_policy="flood",
+                                            dispatch_policy="load",
                                             enable_pd_disagg=enable_pd_disagg,
                                             enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
                                             enable_adaptive_pd=enable_adaptive_pd,

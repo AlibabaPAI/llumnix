@@ -26,6 +26,7 @@ from vllm.transformers_utils.config import maybe_register_config_serialize_by_va
 from vllm.logger import init_logger
 from vllm.config import ParallelConfig, VllmConfig
 from vllm.v1.executor.abstract import Executor
+from vllm.v1.engine.dpcoord import Participant
 
 logger = init_logger(__name__)
 
@@ -53,6 +54,7 @@ class AsyncEngineCore(EngineCore):
         """
         try:
             return await self.model_executor.execute_model_async(scheduler_output)
+        # pylint: disable=try-except-raise
         except SystemExit:
             raise
         except Exception as err:
@@ -72,6 +74,7 @@ class AsyncEngineCore(EngineCore):
         was executed.
         """
 
+        # pylint: disable=pointless-string-statement
         """
         The origin codes of vLLM (commit id: 6c01a):
 
@@ -109,6 +112,7 @@ class AsyncEngineCore(EngineCore):
         scheduler_output = self.scheduler.schedule()
 
         if scheduler_output.total_num_scheduled_tokens > 0:
+            # pylint: disable=invalid-name
             _dppart: Optional[Participant] = getattr(self, "_dppart", None)
             if _dppart is not None:
                 _dppart.new_step()
@@ -132,11 +136,11 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
     def __init__(
         self,
         vllm_config: VllmConfig,
-        local_client: bool,             # pylint: disable=unused-argument
-        handshake_address: str,         # pylint: disable=unused-argument
+        local_client: bool, # pylint: disable=unused-argument
+        handshake_address: str, # pylint: disable=unused-argument
         executor_class: type[Executor],
         log_stats: bool,
-        client_handshake_address: Optional[str] = None,
+        client_handshake_address: Optional[str] = None, # pylint: disable=unused-argument
         engine_index: int = 0,
         driver_tensor_queue_union: Union[None, Any] = None,
     ):

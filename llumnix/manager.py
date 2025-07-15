@@ -88,8 +88,7 @@ class Manager:
         if launch_args is not None:
             self.launch_mode: LaunchMode = launch_args.launch_mode
             self.backend_type: BackendType = launch_args.backend_type
-
-        logger.info("Launch mode: {}, backend type: {}".format(self.launch_mode, self.backend_type))
+            logger.info("Launch mode: {}, backend type: {}".format(self.launch_mode, self.backend_type))
 
         # migration args
         self.enable_migration = manager_args.enable_migration

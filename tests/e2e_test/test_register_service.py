@@ -110,10 +110,6 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
         wait_port_free(base_port + i)
         ip_ports.append(f"{ip}:{base_port + i}")
 
-    if engine == "vLLM_v1":
-        subprocess.run('rm -rvf /tmp/vllm.zhanyi_naming/*', shell=True, check=True)
-        subprocess.run('mkdir -pv /tmp/vllm.zhanyi_naming/', shell=True, check=True)
-
     commands = []
     commands.append(
         generate_register_service_command_func(

@@ -495,13 +495,13 @@ def generate_vllm_v1_register_service_command_func(
     kvt_config_prefill = (
         '--kv-transfer-config \'{"kv_connector": "HybridConnector", "kv_role": "kv_producer", '
         '"kv_connector_extra_config": {"backend": "kvt", "kvt_inst_id": "prefill", '
-        '"naming_url": "file:/tmp/vllm.zhanyi_naming"}}\''
+        '"naming_url": "file:/tmp/vllm.naming"}}\''
     )
 
     kvt_config_decode = (
         '--kv-transfer-config \'{"kv_connector": "HybridConnector", "kv_role": "kv_consumer", '
         '"kv_connector_extra_config": {"backend": "kvt", "kvt_inst_id": "decode", '
-        '"naming_url": "file:/tmp/vllm.zhanyi_naming"}}\''
+        '"naming_url": "file:/tmp/vllm.naming"}}\''
     )
 
     command = (
@@ -611,6 +611,8 @@ def cleanup_ci_outputs_func():
     subprocess.run('rm -rf *.png', shell=True, check=False)
     subprocess.run('rm -rf *.npy', shell=True, check=False)
     subprocess.run('rm -rf *.json', shell=True, check=False)
+    subprocess.run('rm -rvf /tmp/vllm.naming/*', shell=True, check=False)
+    subprocess.run('mkdir -pv /tmp/vllm.naming/', shell=True, check=False)
 
 @pytest.fixture
 def shutdown_llumnix_service():

@@ -133,6 +133,7 @@ class LlumnixEngineArgsFactory:
         current_engine_args: LlumnixEngineArgs,
         next_instance_args: 'InstanceArgs',
         port_offset: int = 0,
+        instance_id: str = None,
     ) -> LlumnixEngineArgs:
         raise NotImplementedError
 
@@ -293,10 +294,6 @@ class VLLMV1EntrypointsArgs:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        # pylint: disable=import-outside-toplevel
-        from vllm.entrypoints.openai.cli_args import make_arg_parser
-        parser = make_arg_parser(parser)
-
         parser.add_argument('--launch-ray-cluster',
                             action='store_true',
                             help='if launch ray cluster')
@@ -635,6 +632,8 @@ class InstanceArgs:
             # for local launch mode
             if self.enable_engine_pd_disagg:
                 self.instance_type = engine_args.disagg_options.inst_role
+        elif backend_type == BackendType.VLLM_V1:
+            self.enable_engine_pd_disagg = (engine_args.kv_transfer_config is not None)
         else:
             self.enable_engine_pd_disagg = False
 

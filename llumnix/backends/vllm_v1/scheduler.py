@@ -127,7 +127,6 @@ class SchedulerLlumnix(Scheduler):
         )
 
         if scheduler_output is not None:
-            logger.debug("scheduler_output.num_scheduled_tokens=%s", str(scheduler_output.num_scheduled_tokens))
             for new_req in scheduler_output.scheduled_new_reqs:
                 instance_info.running_seq_lens.append(new_req.num_computed_tokens)
                 instance_info.num_seqs = len(instance_info.running_seq_lens)

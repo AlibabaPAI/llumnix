@@ -17,7 +17,7 @@ import signal
 import asyncio
 import queue
 
-from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc
+from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc, _core_init
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.logging_utils.dump_input import dump_engine_exception
 from vllm.v1.engine import EngineCoreOutputs, EngineCoreRequestType
@@ -34,27 +34,85 @@ class AsyncEngineCore(EngineCore):
     """Extension of EngineCore to add async methods."""
 
     async def execute_model_async(self, scheduler_output: SchedulerOutput):
+        """
+        The origin codes of vLLM (commit id: 6c01a):
+
         try:
-            return await self.model_executor.execute_model_async(scheduler_output)
-        except BaseException as err:
+            return self.model_executor.execute_model(scheduler_output)
+        except SystemExit:
+            raise
+        except Exception as err:
+            # We do not want to catch BaseException here since we're only
+            # interested in dumping info when the exception is due to an
+            # error from execute_model itself.
+
             # NOTE: This method is exception-free
             dump_engine_exception(self.vllm_config, scheduler_output,
                                   self.scheduler.make_stats())
-            # Re-raise exception
+            raise err
+        """
+        try:
+            return await self.model_executor.execute_model_async(scheduler_output)
+        except SystemExit:
+            raise
+        except Exception as err:
+            # We do not want to catch BaseException here since we're only
+            # interested in dumping info when the exception is due to an
+            # error from execute_model itself.
+
+            # NOTE: This method is exception-free
+            dump_engine_exception(self.vllm_config, scheduler_output,
+                                  self.scheduler.make_stats())
             raise err
 
     async def step_async(self) -> Tuple[Dict[int, EngineCoreOutputs], bool]:
-        """Schedule, execute, and make output."""
+        """Schedule, execute, and make output.
+
+        Returns tuple of outputs and a flag indicating whether the model
+        was executed.
+        """
+
+        """
+        The origin codes of vLLM (commit id: 6c01a):
 
         kvconn = self.scheduler.get_kv_connector()
         if kvconn:
-            kvconn.step(self.scheduler)
+            kvconn.step()
 
         # Check for any requests remaining in the scheduler - unfinished,
         # or finished and not yet removed from the batch.
         if not self.scheduler.has_requests():
             return {}, False
         scheduler_output = self.scheduler.schedule()
+
+        if scheduler_output.total_num_scheduled_tokens > 0:
+            _dppart: Optional[Participant] = getattr(self, "_dppart", None)
+            if _dppart is not None:
+                _dppart.new_step()
+
+        model_output = self.execute_model(scheduler_output)
+        engine_core_outputs = self.scheduler.update_from_output(
+            scheduler_output, model_output)  # type: ignore
+
+        return (engine_core_outputs,
+                scheduler_output.total_num_scheduled_tokens > 0)
+        """
+
+        kvconn = self.scheduler.get_kv_connector()
+        if kvconn:
+            kvconn.step()
+
+        # Check for any requests remaining in the scheduler - unfinished,
+        # or finished and not yet removed from the batch.
+        if not self.scheduler.has_requests():
+            return {}, False
+        scheduler_output = self.scheduler.schedule()
+
+        if scheduler_output.total_num_scheduled_tokens > 0:
+            _dppart: Optional[Participant] = getattr(self, "_dppart", None)
+            if _dppart is not None:
+                _dppart.new_step()
+
         model_output = await self.execute_model_async(scheduler_output)
         engine_core_outputs = self.scheduler.update_from_output(
             scheduler_output, model_output)  # type: ignore
@@ -74,12 +132,67 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
     def __init__(
         self,
         vllm_config: VllmConfig,
-        on_head_node: bool,             # pylint: disable=unused-argument
+        local_client: bool,             # pylint: disable=unused-argument
         handshake_address: str,         # pylint: disable=unused-argument
         executor_class: type[Executor],
         log_stats: bool,
+        client_handshake_address: Optional[str] = None,
         engine_index: int = 0,
+        driver_tensor_queue_union: Union[None, Any] = None,
     ):
+        """
+        The original codes of vLLM (commit id: 6c01a):
+
+        self.input_queue = queue.Queue[tuple[EngineCoreRequestType, Any]]()
+        self.output_queue = queue.Queue[Union[tuple[int, EngineCoreOutputs],
+                                              bytes]]()
+        executor_fail_callback = lambda: self.input_queue.put_nowait(
+            (EngineCoreRequestType.EXECUTOR_FAILED, b''))
+
+        self.engine_index = engine_index
+        identity = self.engine_index.to_bytes(length=2, byteorder="little")
+
+        with self._perform_handshakes(handshake_address, identity,
+                                      local_client, vllm_config,
+                                      client_handshake_address) as addresses:
+            self.client_count = len(addresses.outputs)
+
+            # Set up data parallel environment.
+            self.has_coordinator = addresses.coordinator_output is not None
+            self.frontend_stats_publish_address = (
+                addresses.frontend_stats_publish_address)
+            # Only publish request queue stats to coordinator for "internal"
+            # LB mode.
+            self.publish_dp_lb_stats = (
+                self.has_coordinator
+                and not vllm_config.parallel_config.data_parallel_external_lb)
+
+            self._init_data_parallel(vllm_config)
+            _core_init(self, vllm_config)
+
+            super().__init__(vllm_config, executor_class, log_stats,
+                             executor_fail_callback, driver_tensor_queue_union)
+
+        self.step_fn = (self.step if self.batch_queue is None else
+                        self.step_with_batch_queue)
+
+        # Background Threads and Queues for IO. These enable us to
+        # overlap ZMQ socket IO with GPU since they release the GIL,
+        # and to overlap some serialization/deserialization with the
+        # model forward pass.
+        # Threads handle Socket <-> Queues and core_busy_loop uses Queue.
+        threading.Thread(target=self.process_input_sockets,
+                         args=(addresses.inputs, addresses.coordinator_input,
+                               identity),
+                         daemon=True).start()
+        self.output_thread = threading.Thread(
+            target=self.process_output_sockets,
+            args=(addresses.outputs, addresses.coordinator_output,
+                  self.engine_index),
+            daemon=True)
+        self.output_thread.start()
+        """
+
         self.input_queue = asyncio.Queue[tuple[EngineCoreRequestType, Any]]()
         self.output_queue = queue.Queue[Union[tuple[int, EngineCoreOutputs],
                                               bytes]]()
@@ -90,9 +203,10 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
 
         self.has_coordinator = False
         self._init_data_parallel(vllm_config)
+        _core_init(self, vllm_config)
 
         AsyncEngineCore.__init__(self, vllm_config, executor_class, log_stats,
-                             executor_fail_callback)
+                                 executor_fail_callback, driver_tensor_queue_union)
 
         self.step_fn = (self.step if self.batch_queue is None else
                         self.step_with_batch_queue)

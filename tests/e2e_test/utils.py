@@ -295,6 +295,29 @@ def generate_vllm_request(prompt):
 def process_vllm_api_server_output(output):
     return output['text'][0]
 
+def generate_vllm_v1_request(prompt):
+    request = {
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.0,
+        "stream": "false",
+        "ignore_eos": "false",
+        "presence_penalty": 1.1,
+        "repetition_penalty": 1.1,
+    }
+    return request
+
+def process_vllm_v1_api_server_output(output):
+    return output["choices"][0]["message"]["content"]
+
 def generate_bladellm_request(prompt):
     request = {
         "messages": [
@@ -339,6 +362,42 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
                 response = requests.get(f"http://{ip_port}/is_ready", timeout=5)
                 print(f"Entrypoint {ip_port} is ready.")
                 if 'true' not in response.text.lower():
+                    all_ready = False
+                    break
+            except requests.RequestException:
+                all_ready = False
+                break
+
+        if all_ready:
+            return True
+
+        elapsed_time = time.time() - start_time
+        if elapsed_time > timeout:
+            raise TimeoutError(f"Wait for llumnix service timeout ({timeout}s).")
+
+        time.sleep(5.0)
+
+def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
+    start_time = time.time()
+    while True:
+        all_ready = True
+        for ip_port in ip_ports:
+            try:
+                request = {
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a helpful assistant."
+                        },
+                        {
+                            "role": "user",
+                            "content": "hello"
+                        }
+                    ],
+                    "max_tokens": 1,
+                }
+                response = requests.post(f"http://{ip_port}/v1/chat/completions", json=request, timeout=5)
+                if response.status_code != 200:
                     all_ready = False
                     break
             except requests.RequestException:
@@ -427,6 +486,61 @@ def generate_vllm_serve_service_command_func(
     )
     return command
 
+def generate_vllm_v1_register_service_command_func(
+    engine_type: str,
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000
+):
+    kvt_config_prefill = (
+        '--kv-transfer-config \'{"kv_connector": "HybridConnector", "kv_role": "kv_producer", '
+        '"kv_connector_extra_config": {"backend": "kvt", "kvt_inst_id": "prefill", '
+        '"naming_url": "file:/tmp/vllm.zhanyi_naming"}}\''
+    )
+
+    kvt_config_decode = (
+        '--kv-transfer-config \'{"kv_connector": "HybridConnector", "kv_role": "kv_consumer", '
+        '"kv_connector_extra_config": {"backend": "kvt", "kvt_inst_id": "decode", '
+        '"naming_url": "file:/tmp/vllm.zhanyi_naming"}}\''
+    )
+
+    command = (
+        f"python -u -m llumnix.entrypoints.vllm_v1.register_service "
+        f"--engine-type {engine_type} "
+        f"--save-path ./service_test "
+        f"--save-key vllm_v1 "
+        f"--model {model} "
+        f"--max-model-len 4096 "
+        f"--distributed-executor-backend ray "
+        f"--enforce-eager "
+        f"--trust-remote-code "
+        f"{kvt_config_prefill if engine_type == 'prefill' else kvt_config_decode if engine_type == 'decode' else ''}"
+    )
+    return command
+
+def generate_vllm_v1_serve_service_command_func(
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    max_instances: int = 4,
+    result_filename: str = ""
+):
+    command = (
+        f"BLLM_KVTRANS_FSNAMING_KEEPALIVE_S=36000 BLLM_KVTRANS_FSNAMING_TOLERATE_S=360000 "
+        f"VLLM_USE_V1=1 VLLM_ENABLE_LLUMNIX=1 VLLM_FORCE_DETOKENIZE=1 RAY_DEDUP_LOGS=0 "
+        f"nohup python -u -m llumnix.entrypoints.vllm_v1.serve "
+        f"--load-registered-service "
+        f"--load-registered-service-path ./service_test/vllm_v1 "
+        f"--host {ip} "
+        f"--port {port} "
+        f"--enable-engine-pd-disagg "
+        f"--pd-ratio 1:1 "
+        f"--max-instances {max_instances} "
+        f"--enable-port-increment "
+        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+    )
+    return command
+
 def generate_bladellm_register_service_command_func(
     engine_type: str,
     model: str = try_convert_to_local_path("facebook/opt-125m"),
@@ -483,6 +597,7 @@ def shutdown_llumnix_service_func():
     subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.bladellm.serve', shell=True, check=False)
     subprocess.run('pkill -f multiprocessing', shell=True, check=False)
+    subprocess.run('pkill -f vllm', shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
     subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
     time.sleep(1.0)

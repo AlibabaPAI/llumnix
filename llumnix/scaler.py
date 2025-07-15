@@ -585,6 +585,7 @@ class Scaler:
             current_engine_args=engine_args,
             next_instance_args=next_instance_args,
             port_offset=self.port_offset,
+            instance_id=instance_id,
         )
 
         if self.enable_port_increment:

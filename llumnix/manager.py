@@ -89,6 +89,8 @@ class Manager:
             self.launch_mode: LaunchMode = launch_args.launch_mode
             self.backend_type: BackendType = launch_args.backend_type
 
+        logger.info("Launch mode: {}, backend type: {}".format(self.launch_mode, self.backend_type))
+
         # migration args
         self.enable_migration = manager_args.enable_migration
         self.pair_migration_frequency = manager_args.pair_migration_frequency
@@ -125,16 +127,18 @@ class Manager:
 
     async def generate(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, *args, **kwargs) -> None:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
-            if self.manager_args.enable_engine_pd_disagg:
-                dispatch_kwargs["decode_instance_id"] = self.instance_id_2_engine_inner_inst_id[decode_instance_id]
-            elif self.manager_args.enable_engine_semi_pd_disagg:
-                dispatch_kwargs["semi_p_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(prefill_instance_id, None)
-                dispatch_kwargs["semi_d_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(decode_instance_id, None)
+            if self.backend_type == BackendType.BLADELLM:
+                if self.manager_args.enable_engine_pd_disagg:
+                    dispatch_kwargs["decode_instance_id"] = self.instance_id_2_engine_inner_inst_id[decode_instance_id]
+                elif self.manager_args.enable_engine_semi_pd_disagg:
+                    dispatch_kwargs["semi_p_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(prefill_instance_id, None)
+                    dispatch_kwargs["semi_d_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(decode_instance_id, None)
 
-            if not self.manager_args.enable_engine_semi_pd_disagg:
-                target_instance_id = prefill_instance_id
-            else:
+            if (self.backend_type == BackendType.BLADELLM and self.manager_args.enable_engine_semi_pd_disagg) or \
+                (self.backend_type == BackendType.VLLM_V1 and self.manager_args.enable_engine_pd_disagg):
                 target_instance_id = decode_instance_id
+            else:
+                target_instance_id = prefill_instance_id
             return target_instance_id
 
         self.manager_metrics.manager_request_qps.increase(

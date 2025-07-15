@@ -49,11 +49,11 @@ from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import RAY_RPC_TIMEOUT
-from llumnix.utils import RequestIDType, MigrationResponse, BackendType
+from llumnix.utils import RequestIDType, MigrationResponse, BackendType, get_free_port
 from llumnix.request_output import LlumnixRequestOutputs
 
-
 logger = init_logger(__name__)
+
 
 class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     def __init__(self,
@@ -265,10 +265,10 @@ class BackendVLLMV1(BackendInterface):
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         instance_args: InstanceArgs,
-        llumnix_engine_args: LlumnixEngineArgs
+        llumnix_engine_args: LlumnixEngineArgs,
     ) -> None:
         self.engine_disagg_inst_id = instance_id
-        engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args() # type: ignore
+        engine_args = self._load_and_reconfig_engine_args(llumnix_engine_args)
         self.migration_config = instance_args.create_migration_config()
         self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
             instance_id=instance_id,
@@ -302,6 +302,10 @@ class BackendVLLMV1(BackendInterface):
         self._remove_running_request_ret: Dict[str] = {}
         self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
 
+    def _load_and_reconfig_engine_args(self, llumnix_engine_args: LlumnixEngineArgs):
+        engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args()
+        engine_args.kv_transfer_config.engine_available_port = get_free_port()
+        return engine_args
 
     def stop(self):
         self.engine.stop()

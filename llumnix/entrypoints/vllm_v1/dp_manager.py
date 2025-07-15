@@ -140,6 +140,7 @@ class DPManager:
                 new_instance_id,
                 self.placement_group,
                 self.entrypoints_args,
+                self.instance_args,
                 self.engine_args,
                 self.scaler,
                 self.manager,

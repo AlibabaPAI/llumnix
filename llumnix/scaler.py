@@ -530,8 +530,14 @@ class Scaler:
                                         engine_args: LlumnixEngineArgs,
                                         placement_group: PlacementGroup,
                                         instance_type: InstanceType = None):
-        async def ready_scale_up(instance_id: str, instance: Llumlet, instance_type: InstanceType,
-                                 next_entrypoints_args: EntrypointsArgs, next_engine_args: LlumnixEngineArgs):
+
+        async def ready_scale_up(
+            instance_id: str,
+            instance: Llumlet,
+            next_entrypoints_args: EntrypointsArgs,
+            next_instance_args: InstanceArgs,
+            next_engine_args: LlumnixEngineArgs,
+        ):
             try:
                 instance_ready = False
                 await asyncio_wait_for_ray_remote_call_with_timeout(
@@ -544,6 +550,7 @@ class Scaler:
                     placement_group,
                     backend_type,
                     next_entrypoints_args,
+                    next_instance_args,
                     next_engine_args,
                     self.scaler,
                     self.manager,
@@ -552,6 +559,7 @@ class Scaler:
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     server.is_ready, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
                 )
+                instance_type = next_instance_args.instance_type
                 await self._scale_up(instance_id, instance, instance_type)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
@@ -606,8 +614,8 @@ class Scaler:
             ready_scale_up(
                 instance_id,
                 instance,
-                next_instance_args.instance_type,
                 next_entrypoints_args,
+                next_instance_args,
                 next_engine_args,
             )
         )
@@ -617,6 +625,7 @@ class Scaler:
                      placement_group: PlacementGroup,
                      backend_type: BackendType,
                      entrypoints_args: EntrypointsArgs,
+                     instance_args: InstanceArgs,
                      engine_args,
                      scaler: ray.actor.ActorHandle,
                      manager: ray.actor.ActorHandle,
@@ -628,6 +637,7 @@ class Scaler:
                 instance_id,
                 placement_group,
                 entrypoints_args,
+                instance_args,
                 engine_args,
                 scaler,
                 manager,
@@ -642,6 +652,7 @@ class Scaler:
                 instance_id,
                 placement_group,
                 entrypoints_args,
+                instance_args,
                 engine_args,
                 scaler,
                 manager,
@@ -654,6 +665,7 @@ class Scaler:
                 instance_id,
                 placement_group,
                 entrypoints_args,
+                instance_args,
                 engine_args,
                 scaler,
                 manager,

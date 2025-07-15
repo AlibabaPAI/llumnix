@@ -248,10 +248,14 @@ class AsyncBackQueueWrapper:
         logger.debug("Trans_wrapper {} is going to remove request {} at step {}.".format(
             self.instance_id, request_id, expired_step))
 
-    def add_request(self, request_id: int, request_processing_context: RequestProcessingContext) -> None:
+    def add_request(self, request_id: int, request_processing_context: RequestProcessingContext) -> bool:
+        if request_id in self.request_processing_context_map:
+            logger.error("Request {} already exists in Trans_wrapper.".format(request_id))
+            return False
         self.request_processing_context_map[request_id] = request_processing_context
         logger.debug("Trans_wrapper {} add_request {} from server {}.".format(
             self.instance_id, request_id, request_processing_context.server_id))
+        return True
 
     def clear(self):
         self.request_processing_context_map = {}
@@ -464,9 +468,9 @@ class AsyncLLMEngineLlumnixMixin:
         if request_processing_context.enable_trace:
             request_processing_context.add_trace_timeline('engine_add_request_timestamp')
             self.request_metrics_queue_dict[server_request.id] = asyncio.Queue()
-        self.trans_wrapper.add_request(server_request.id, request_processing_context)
-        # pylint: disable=protected-access
-        await self._client._add_request(server_request, self.resp_queue)
+        if self.trans_wrapper.add_request(server_request.id, request_processing_context):
+            # pylint: disable=protected-access
+            await self._client._add_request(server_request, self.resp_queue)
 
     async def drop_request(self, req_id: int):
         logger.debug("Engine {} drop request {}.".format(self.instance_id, req_id))

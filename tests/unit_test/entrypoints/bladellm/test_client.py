@@ -46,6 +46,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.instance_num_requests: Dict[str, int] = {}
         self.num_finished_requests = 0
         self.manager_available = True
+        self.request_generate_by_instance_dict = {}
         self.server_info = ServerInfo( server_id="server_id",
                  request_output_queue_type='zmq',
                  request_output_queue=None,

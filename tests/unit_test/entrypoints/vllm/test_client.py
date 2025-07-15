@@ -53,6 +53,7 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
             init_request_output_queue_server(ip="127.0.0.1", queue_type="rayqueue")
         self.request_instance = {}
         self.global_instances = {}
+        self.request_generate_by_instance_dict = {}
         if loop:
             loop.create_task(self.get_request_outputs_loop())
             loop.create_task(self.request_output_queue.run_server_loop())

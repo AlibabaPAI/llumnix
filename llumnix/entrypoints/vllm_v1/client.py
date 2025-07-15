@@ -45,6 +45,7 @@ def get_completion_tokens(engine_core_output: EngineCoreOutput) -> Optional[int]
         current_completion_tokens = engine_core_output.kv_transfer_params.get("num_output_tokens", None)
     return current_completion_tokens
 
+
 class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     def __init__(
         self,

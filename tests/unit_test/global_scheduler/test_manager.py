@@ -19,11 +19,11 @@ import ray
 import pytest
 import numpy as np
 
-from llumnix.arg_utils import ManagerArgs, InstanceArgs
+from llumnix.arg_utils import ManagerArgs, InstanceArgs, LaunchArgs
 from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.request_processing_context import RequestProcessingContext
-from llumnix.utils import random_uuid
+from llumnix.utils import random_uuid, LaunchMode, BackendType
 from llumnix.ray_utils import (
     get_placement_group_name,
     get_instance_name,
@@ -118,6 +118,7 @@ def init_manager(
         enable_pd_disagg=enable_pd_disagg,
         enable_engine_pd_disagg=enable_engine_pd_disagg,
         enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg)
+    backend_type = BackendType.VLLM if not enable_engine_semi_pd_disagg else BackendType.BLADELLM
     manager_args.log_instance_info = False
     # manager is initialized by scaler
     scaler: Scaler = Scaler.from_args(
@@ -125,7 +126,7 @@ def init_manager(
         manager_args=manager_args,
         instance_args=InstanceArgs(migration_backend="rayrpc"),
         engine_args=None,
-        launch_args=None,
+        launch_args=LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=backend_type),
     )
     ray.get(scaler.is_ready.remote())
     manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')

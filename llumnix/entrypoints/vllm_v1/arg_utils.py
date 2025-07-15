@@ -14,12 +14,21 @@
 from typing import Tuple
 import copy
 import pickle
+from dataclasses import dataclass, field
 
 from llumnix.logging.logger import init_logger
 from llumnix.utils import BackendType, LaunchMode
-from llumnix.arg_utils import (VLLMV1EntrypointsArgs, ManagerArgs, InstanceArgs, LlumnixEngineArgsFactory,
-                               LlumnixArgumentParser, LlumnixEngineArgs, load_registered_engine_args,
-                               init_llumnix_args_v1, post_init_llumnix_args)
+from llumnix.arg_utils import (
+    VLLMV1EntrypointsArgs,
+    ManagerArgs,
+    InstanceArgs,
+    LlumnixEngineArgsFactory,
+    LlumnixArgumentParser,
+    LlumnixEngineArgs,
+    load_registered_engine_args,
+    init_llumnix_args_v1,
+    post_init_llumnix_args
+)
 from llumnix.internal_config import MigrationConfig
 from llumnix.config import LlumnixConfig
 
@@ -32,12 +41,19 @@ class VLLMV1EngineArgsFactory(LlumnixEngineArgsFactory):
         self,
         current_engine_args: LlumnixEngineArgs,
         next_instance_args: InstanceArgs,
-        port_offset: int = 0
+        port_offset: int = 0,
+        instance_id: str = None,
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
             instance_type = next_instance_args.instance_type
             current_engine_args = self.engine_args_dict[instance_type]
-        return copy.deepcopy(current_engine_args)
+
+        if self.pdd_config.enable_engine_pd_disagg:
+            next_engine_args = copy.deepcopy(current_engine_args)
+            next_engine_args.revised_args.kvt_inst_id = instance_id
+            next_engine_args.revised_args.kv_port += port_offset
+
+        return next_engine_args
 
 
 class VLLMV1EngineArgs(LlumnixEngineArgs):
@@ -45,8 +61,14 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
                  engine_args: "AsyncEngineArgs",
                  backend_type: BackendType = BackendType.VLLM_V1) -> None:
         self.world_size = self._get_world_size(engine_args)
-        engine_args = self._get_engine_args(engine_args)
-        super().__init__(engine_args=engine_args, backend_type=backend_type)
+        super().__init__(
+            engine_args=self._get_engine_args(engine_args),
+            backend_type=backend_type
+        )
+
+        self.revised_args = RevisedArgs()
+        if engine_args.kv_transfer_config:
+            self.revised_args.kv_port = engine_args.kv_transfer_config.kv_port
 
     def _get_world_size(self, engine_args: "AsyncEngineArgs"):
         world_size = engine_args.pipeline_parallel_size * engine_args.tensor_parallel_size
@@ -56,27 +78,42 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
         return pickle.dumps(engine_args)
 
     def load_engine_args(self):
-        engine_args = pickle.loads(self.engine_args)
+        # pylint: disable=import-outside-toplevel
+        from vllm.engine.arg_utils import AsyncEngineArgs
+        engine_args: AsyncEngineArgs = pickle.loads(self.engine_args)
+        if self.revised_args.kvt_inst_id:
+            engine_args.kv_transfer_config.kv_connector_extra_config["kvt_inst_id"] = self.revised_args.kvt_inst_id
+        if self.revised_args.kv_port:
+            engine_args.kv_transfer_config.kv_port = self.revised_args.kv_port
         return engine_args
 
     def get_world_size(self):
         return self.world_size
 
 
+@dataclass
+class RevisedArgs:
+    # bladellm engine args need to revised
+    kvt_inst_id: str = field(default=None)
+    kv_port: int = field(default=None)
+
+
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:
     parser.set_namespace("llumnix")
+    parser = VLLMV1EntrypointsArgs.add_cli_args(parser)
     parser = ManagerArgs.add_cli_args(parser)
     parser = InstanceArgs.add_cli_args(parser)
     parser.set_namespace("vllm")
-    parser = VLLMV1EntrypointsArgs.add_cli_args(parser)
+    # pylint: disable=import-outside-toplevel
+    from vllm.entrypoints.openai.cli_args import make_arg_parser
+    parser = make_arg_parser(parser)
 
     return parser
 
 def add_engine_cli_args(parser: "ArgumentParser") -> "Namespace":
     # pylint: disable=import-outside-toplevel
-    from vllm.engine.arg_utils import AsyncEngineArgs
-
-    parser = AsyncEngineArgs.add_cli_args(parser)
+    from vllm.entrypoints.openai.cli_args import make_arg_parser
+    parser = make_arg_parser(parser)
 
     return parser
 

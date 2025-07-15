@@ -11,16 +11,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
-
 from llumnix.arg_utils import RegisterServiceArgs, save_engine_args
-from llumnix.entrypoints.vllm_v1.arg_utils import add_engine_cli_args, get_engine_args, VLLMV1EngineArgs
-
-# TODO(s5u13b): Add examples for pdd launch.
+from llumnix.entrypoints.vllm_v1.arg_utils import (
+    add_engine_cli_args,
+    get_engine_args,
+    VLLMV1EngineArgs,
+)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    from vllm.utils import FlexibleArgumentParser
+    parser: FlexibleArgumentParser = FlexibleArgumentParser()
     RegisterServiceArgs.add_cli_args(parser)
 
     parser = add_engine_cli_args(parser)

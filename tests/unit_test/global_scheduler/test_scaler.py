@@ -44,7 +44,7 @@ def init_scaler(manager_args = None):
             manager_args=manager_args,
             instance_args=InstanceArgs(migration_backend="rayrpc"),
             engine_args=None,
-            launch_args=None,
+            launch_args=LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.VLLM),
         )
     except ValueError:
         scaler = ray.get_actor(get_scaler_name(), namespace='llumnix')
@@ -246,9 +246,10 @@ def test_pd_disagg_gloal_launch_instance_type(ray_env):
         enable_port_offset_store=False,
         load_registered_service=False,
     )
+    launch_args = LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=BackendType.VLLM)
     # Scaler will get scaler actor handle inside the constructor.
     _ = DummyScaler.options(name=get_scaler_name()).remote()
-    scaler = Scaler(None, manager_args, None, None, None)
+    scaler = Scaler(EntrypointsArgs(), manager_args, InstanceArgs(), EngineArgs(), launch_args)
 
     assert scaler._get_next_instance_type(0, 0, [1, 2]) == InstanceType.PREFILL
     scaler.inflight_num_prefill_instances += 1

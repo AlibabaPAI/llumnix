@@ -28,15 +28,20 @@ from tests.e2e_test.utils import (
     check_log_exception,
     shutdown_llumnix_service,
     generate_vllm_register_service_command_func,
+    generate_vllm_v1_register_service_command_func,
     generate_bladellm_register_service_command_func,
     generate_vllm_serve_service_command_func,
+    generate_vllm_v1_serve_service_command_func,
     generate_bladellm_serve_service_command_func,
     wait_for_llumnix_service_ready,
     generate_vllm_request,
     process_vllm_api_server_output,
+    generate_vllm_v1_request,
+    process_vllm_v1_api_server_output,
     generate_bladellm_request,
     process_bladellm_api_server_output,
-    get_llumnix_response
+    get_llumnix_response,
+    wait_for_llumnix_service_ready_vllm_v1,
 )
 from tests.utils import try_convert_to_local_path
 
@@ -63,15 +68,20 @@ test_times = 0
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM", "engine_vLLM_v1"])
 async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, model, engine):
-    engine = engine.split("_")[1]
+    engine = "_".join(engine.split("_")[1:])
+
+    if engine == "vLLM_v1":
+        model = '/mnt/data/models/Qwen2.5-1.5B-Instruct'
 
     global test_times
 
     ip = get_ip_address()
     base_port = 40000 + random.randint(0, 46) + test_times * 100
     if "BladeLLM" in engine:
+        base_port += 1250
+    elif "vLLM_v1" in engine:
         base_port += 2500
     device_count = min(2, torch.cuda.device_count())
     instance_count = device_count
@@ -82,6 +92,12 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
         generate_request_func = generate_vllm_request
         process_api_server_output_func = process_vllm_api_server_output
         url = f'http://{ip}:{base_port}/generate'
+    elif engine == "vLLM_v1":
+        generate_register_service_command_func = generate_vllm_v1_register_service_command_func
+        genertate_serve_service_command_func = generate_vllm_v1_serve_service_command_func
+        generate_request_func = generate_vllm_v1_request
+        process_api_server_output_func = process_vllm_v1_api_server_output
+        url = f'http://{ip}:{base_port}/v1/chat/completions'
     else:
         generate_register_service_command_func = generate_bladellm_register_service_command_func
         genertate_serve_service_command_func = generate_bladellm_serve_service_command_func
@@ -115,7 +131,10 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
         print(f"Going to run command: {command}")
         subprocess.run(command, shell=True, check=True)
 
-    wait_for_llumnix_service_ready(ip_ports)
+    if engine == "vLLM_v1":
+        wait_for_llumnix_service_ready_vllm_v1(ip_ports)
+    else:
+        wait_for_llumnix_service_ready(ip_ports)
 
     await asyncio.sleep(3)
 

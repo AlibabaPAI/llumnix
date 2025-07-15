@@ -83,7 +83,7 @@ vllm_offline_test:
 
 .PHONY: vllm_correctness_test
 vllm_correctness_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
+	@pytest -v -x -s -k 'engine_vLLM and not _v1 or not engine_' --tb=long ./tests/e2e_test/test_correctness.py
 
 .PHONY: bladellm_correctness_test
 bladellm_correctness_test: check_pytest_installed
@@ -91,7 +91,7 @@ bladellm_correctness_test: check_pytest_installed
 
 .PHONY: vllm_trace_test
 vllm_trace_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_trace_request.py
+	@pytest -v -x -s -k 'engine_vLLM and not _v1 or not engine_' --tb=long ./tests/e2e_test/test_trace_request.py
 
 .PHONY: bladellm_trace_test
 bladellm_trace_test: check_pytest_installed
@@ -99,7 +99,7 @@ bladellm_trace_test: check_pytest_installed
 
 .PHONY: vllm_bench_test
 vllm_bench_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_bench.py
+	@pytest -v -x -s -k 'engine_vLLM and not _v1 or not engine_' --tb=long ./tests/e2e_test/test_bench.py
 
 .PHONY: bladellm_bench_test
 bladellm_bench_test: check_pytest_installed
@@ -107,7 +107,7 @@ bladellm_bench_test: check_pytest_installed
 
 .PHONY: vllm_migration_test
 vllm_migration_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_migration.py
+	@pytest -v -x -s -k 'engine_vLLM and not _v1 or not engine_' --tb=long ./tests/e2e_test/test_migration.py
 
 .PHONY: bladellm_migration_test
 bladellm_migration_test: check_pytest_installed
@@ -115,7 +115,11 @@ bladellm_migration_test: check_pytest_installed
 
 .PHONY: vllm_register_service_test
 vllm_register_service_test: check_pytest_installed
-	@pytest -v -x -s -k 'engine_vLLM or not engine_' --tb=long ./tests/e2e_test/test_register_service.py
+	@pytest -v -x -s -k 'engine_vLLM and not _v1 or not engine_' --tb=long ./tests/e2e_test/test_register_service.py
+
+.PHONY: vllm_v1_register_service_test
+vllm_v1_register_service_test: check_pytest_installed
+	@pytest -v -x -s -k 'engine_vLLM_v1 or not engine_' --tb=long ./tests/e2e_test/test_register_service.py
 
 .PHONY: bladellm_register_service_test
 bladellm_register_service_test: check_pytest_installed

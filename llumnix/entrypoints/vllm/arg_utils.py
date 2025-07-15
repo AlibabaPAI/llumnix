@@ -34,7 +34,8 @@ class VLLMEngineArgsFactory(LlumnixEngineArgsFactory):
         self,
         current_engine_args: LlumnixEngineArgs,
         next_instance_args: InstanceArgs,
-        port_offset: int = 0
+        port_offset: int = 0,
+        instance_id: str = None,
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
             instance_type = next_instance_args.instance_type

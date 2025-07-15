@@ -116,8 +116,8 @@ class DispatchScheduler:
         return target_instance_id
 
     def dispatch_no_constrains(self,
-                 instance_infos: Dict[str, InstanceInfo],
-                 instance_num_requests: Dict[str, int]):
+                               instance_infos: Dict[str, InstanceInfo],
+                               instance_num_requests: Dict[str, int]):
         instance_type = InstanceType.NO_CONSTRAINTS
         phase_elements = [(instance_infos, instance_num_requests)]
 

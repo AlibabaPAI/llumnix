@@ -15,7 +15,7 @@ from blade_llm.service.block_space_manager import BlockSpaceManager
 from llumnix.metrics.metrics_types import Status, PassiveStatus
 
 from llumnix.metrics.engine_metrics import EngineMetrics
-from llumnix.metrics.dumper import LoggerDumper
+
 
 class BladeLLMMetrics(EngineMetrics):
     def __init__(self):
@@ -23,10 +23,6 @@ class BladeLLMMetrics(EngineMetrics):
         self.num_cached_request_ids = Status("num_cached_request_ids")
         self.num_wait_update_request_ids = PassiveStatus("num_wait_update_request_ids")
         self.num_trans_wrapper_cached_request = PassiveStatus("num_trans_wrapper_cached_request")
-        self.dump_step = 0
-
-    def _init_dumper(self,):
-        self.dumper = LoggerDumper()
 
     def block_manager_init_metrics(self, block_manager: BlockSpaceManager):
         self.num_total_gpu_blocks.observe(block_manager.num_total_gpu_blocks)
@@ -61,5 +57,3 @@ class BladeLLMMetrics(EngineMetrics):
         self.num_killed_requests.observe(scheduler.get_num_killed_requests())
         self.num_blocks_first_waiting_request.observe(scheduler.get_num_blocks_first_waiting_request())
         self.num_blocks_last_running_request.observe(scheduler.get_num_blocks_last_running_request())
-        if self.dump_step % 100 == 0:
-            self.dump()

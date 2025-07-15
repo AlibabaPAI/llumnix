@@ -503,7 +503,6 @@ def generate_vllm_v1_register_service_command_func(
         '"kv_connector_extra_config": {"backend": "kvt", "kvt_inst_id": "decode", '
         '"naming_url": "file:/tmp/vllm.zhanyi_naming"}}\''
     )
-    model = '/mnt/data/models/Qwen2.5-1.5B-Instruct'
 
     command = (
         f"python -u -m llumnix.entrypoints.vllm_v1.register_service "

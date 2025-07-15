@@ -68,12 +68,12 @@ test_times = 0
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
-@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM"])
-# If test vLLM v1, please use following parameters.
-# @pytest.mark.parametrize("model", ['/mnt/data/models/Qwen2.5-1.5B-Instruct'])
-# @pytest.mark.parametrize("engine", ["engine_vLLM_v1"])
+@pytest.mark.parametrize("engine", ["engine_vLLM", "engine_BladeLLM", "engine_vLLM_v1"])
 async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, model, engine):
     engine = "_".join(engine.split("_")[1:])
+
+    if engine == "vLLM_v1":
+        model = '/mnt/data/models/Qwen2.5-1.5B-Instruct'
 
     global test_times
 

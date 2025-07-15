@@ -121,17 +121,16 @@ class Scaler:
         ray.get(self.manager.is_ready.remote())
 
         # launch args
-        if launch_args is not None:
-            self.launch_mode: LaunchMode = launch_args.launch_mode
-            self.backend_type: BackendType = launch_args.backend_type
+        self.launch_mode: LaunchMode = launch_args.launch_mode
+        self.backend_type: BackendType = launch_args.backend_type
 
-            engine_args_factory_cls = self._get_engine_args_factory_cls(self.backend_type)
-            self.llumnix_engine_args_factory: LlumnixEngineArgsFactory = engine_args_factory_cls(
-                enable_port_increment=self.enable_port_increment,
-                load_registered_service=self.load_registered_service,
-                load_registered_service_path=self.load_registered_service_path,
-                pdd_config=self.pdd_config,
-            )
+        engine_args_factory_cls = self._get_engine_args_factory_cls(self.backend_type)
+        self.llumnix_engine_args_factory: LlumnixEngineArgsFactory = engine_args_factory_cls(
+            enable_port_increment=self.enable_port_increment,
+            load_registered_service=self.load_registered_service,
+            load_registered_service_path=self.load_registered_service_path,
+            pdd_config=self.pdd_config,
+        )
 
         self.port_offset = 0
         if self.enable_port_increment:
@@ -148,7 +147,7 @@ class Scaler:
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
 
-        if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
+        if self.backend_type == BackendType.VLLM_V1:
             # Mantain a monotonically increasing `client_index` for vLLM V1 APIServer.
             # It will be passed to APIServerActor through EntrypointsArgs.
             # TODO(shejiarui): Do not use ray interval kv.
@@ -171,7 +170,7 @@ class Scaler:
         # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
 
-        if hasattr(self, "launch_mode") and self.launch_mode == LaunchMode.GLOBAL:
+        if self.launch_mode == LaunchMode.GLOBAL:
             assert self.entrypoints_args is not None and self.engine_args is not None
             self.last_timeout_instance_id = None
             if self.pdd_config.enable_pdd_node_affinity_scheduling:
@@ -795,7 +794,7 @@ class Scaler:
             self.prefill_instance_id_set.discard(ins_id)
             self.decode_instance_id_set.discard(ins_id)
         self.num_instances = len(self.instances)
-        logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instances.keys()))
+        logger.info("num_instances: {}, instances: {}".format(self.num_instances, list(self.instances.keys())))
 
         await self._clear_instance_ray_resources(instance_ids)
 

@@ -71,9 +71,7 @@ class BaseOutputForwarder(ABC):
         tasks = []
         for server_id, req_outputs in server_request_outputs.items():
             server_info = server_info_dict[server_id]
-            for req_output in req_outputs:
-                # Set the timestamp for each request output.
-                req_output.request_processing_context.add_trace_timeline('engine_actor_put_queue_timestamp')
+            self.add_trace_timeline(req_outputs, trace_name="engine_actor_put_queue_timestamp")
             tasks.append(asyncio.create_task(request_output_queue_client.put_nowait(req_outputs, server_info)))
         rets = await asyncio.gather(*tasks, return_exceptions=True)
         aborted_request_ids = []
@@ -92,6 +90,17 @@ class BaseOutputForwarder(ABC):
                     aborted_request_ids.append(req_output.request_id)
 
         return aborted_request_ids
+
+    def add_trace_timeline(self, req_outputs: LlumnixRequestOutputsType, trace_name: str):
+        if isinstance(req_outputs, LlumnixRequestOutputs):
+            # for vllm_v1
+            for request_processing_context in req_outputs.request_processing_context_dict.values():
+                request_processing_context.add_trace_timeline(trace_name)
+            return
+        # for blade and vllm_v0
+        for req_output in req_outputs:
+            # Set the timestamp for each request output.
+            req_output.request_processing_context.add_trace_timeline(trace_name)
 
 
 class ActorOutputForwarder(BaseOutputForwarder):
@@ -112,8 +121,7 @@ class ActorOutputForwarder(BaseOutputForwarder):
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         # fake metric, for alignment
         for req_outputs in server_request_outputs.values():
-            for req_output in req_outputs:
-                req_output.request_processing_context.add_trace_timeline('engine_thread_put_queue_timestamp')
+            self.add_trace_timeline(req_outputs, trace_name="engine_thread_put_queue_timestamp")
         if self.engine_actor_handle is None:
             # The lifetime of ActorOutputForwarder is the same as the lifetime of the instance actor,
             # so we do not handling exception here.
@@ -148,8 +156,7 @@ class ThreadOutputForwarder(BaseOutputForwarder):
                                     server_request_outputs: Dict[str, LlumnixRequestOutputsType],
                                     server_info_dict: Dict[str, ServerInfo]) -> None:
         for req_outputs in server_request_outputs.values():
-            for req_output in req_outputs:
-                req_output.request_processing_context.add_trace_timeline('engine_thread_put_queue_timestamp')
+            self.add_trace_timeline(req_outputs, trace_name="engine_thread_put_queue_timestamp")
         if self.put_queue_loop_thread.is_alive():
             self.server_request_outputs_queue.put_nowait((server_request_outputs, server_info_dict))
         # Ensure engine will die if put queue loop thread is dead.

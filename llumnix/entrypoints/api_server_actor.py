@@ -132,7 +132,8 @@ class APIServerActor(ABC):
                   engine_args,
                   scaler: ray.actor.ActorHandle,
                   manager: ray.actor.ActorHandle,
-                  instance: ray.actor.ActorHandle):
+                  instance: ray.actor.ActorHandle,
+                  bundle_index: int = 0):
         api_server_class = ray.remote(
             num_cpus=1,
             num_gpus=num_gpus,
@@ -142,7 +143,7 @@ class APIServerActor(ABC):
         )(cls).options(
             scheduling_strategy=PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
-                placement_group_bundle_index=0,
+                placement_group_bundle_index=bundle_index,
                 placement_group_capture_child_tasks=True
             )
         )

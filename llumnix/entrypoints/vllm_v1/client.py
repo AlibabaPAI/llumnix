@@ -12,7 +12,6 @@
 # limitations under the License.
 
 from typing import Any, Dict, List, Tuple, Optional, Union
-import copy
 import math
 import time
 import asyncio
@@ -20,9 +19,8 @@ import asyncio
 import ray.actor
 
 from vllm.v1.engine import EngineCoreOutput
-from vllm.v1.engine.core_client import AsyncMPClient
+from vllm.v1.engine.core_client import AsyncMPClient, DPAsyncMPClient
 from vllm.v1.executor.abstract import Executor
-
 from vllm.engine.async_llm_engine import AsyncStream
 from vllm.config import VllmConfig
 from vllm import SamplingParams
@@ -30,14 +28,15 @@ from vllm.v1.request import EngineCoreRequest
 
 from llumnix.logging.logger import init_logger
 from llumnix.entrypoints.utils import EntrypointsContext
-from llumnix.metrics.timestamps import RequestTimestamps, set_timestamp
-from llumnix.server_info import ServerInfo
-from llumnix.constants import WAIT_MANAGER_INTERVAL
-from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception, is_traced_request
+from llumnix.metrics.timestamps import set_timestamp
+from llumnix.constants import LLUMNIX_TRACE_REQUEST, WAIT_MANAGER_INTERVAL
+from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception
 from llumnix.request_output import LlumnixRequestOutputs
 from llumnix.entrypoints.client import LlumnixClient
+from llumnix.request_processing_context import RequestProcessingContext
 
 logger = init_logger(__name__)
+
 
 def get_completion_tokens(engine_core_output: EngineCoreOutput) -> Optional[int]:
     current_completion_tokens = None
@@ -72,10 +71,13 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             raise ValueError("Unsupported feature: multiple sequence decoding")
         logger.info("Client received request {}".format(request_id))
         # pylint: disable=unexpected-keyword-arg
-        server_info_copy = copy.deepcopy(self.server_info)
+        request_processing_context: RequestProcessingContext = RequestProcessingContext.deepcopy_from_server_info(
+            server_info=self.server_info,
+            enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
+        )
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
-            await self._generate_by_manager(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_manager(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
@@ -83,28 +85,25 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
-            await self._generate_by_instance(request_id, server_info_copy, prompt, sampling_params, *args, **kwargs)
+            await self._generate_by_instance(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,
                                    request_id: str,
-                                   server_info: ServerInfo,
+                                   request_processing_context: RequestProcessingContext,
                                    prompt: str,
                                    sampling_params: SamplingParams,
                                    *args,
                                    **kwargs) -> AsyncStream:
-        if is_traced_request(server_info):
-            # Hack request timestamps in server_info for latency breakdown.
-            server_info.request_timestamps = RequestTimestamps()
-            set_timestamp(server_info, "api_server_generate_timestamp", time.perf_counter())
+        request_processing_context.add_trace_timeline('api_server_generate_timestamp')
         await asyncio_wait_for_ray_remote_call_with_timeout(
-            self.manager.generate, request_id, server_info, prompt, sampling_params, *args, **kwargs
+            self.manager.generate, request_id, request_processing_context, prompt, sampling_params, *args, **kwargs
         )
 
     # pylint: disable=arguments-differ
     async def _generate_by_instance(self,
                                     request_id: str,
-                                    server_info: ServerInfo,
+                                    request_processing_context: RequestProcessingContext,
                                     prompt: str,
                                     sampling_params: SamplingParams,
                                     *args,
@@ -116,7 +115,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 expected_steps = math.inf # ignore enable_pd_disagg when skip manager dispatch
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     self.instances[instance_id].generate,
-                    request_id, server_info, expected_steps, prompt, sampling_params, *args, **kwargs
+                    request_id, request_processing_context, expected_steps, prompt, sampling_params, *args, **kwargs
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
@@ -229,3 +228,18 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
     async def call_utility_async(self, method: str, *args) -> Any:
         instance = list(self.instances.values())[0]
         return await instance.call_engine_utility_async.remote(method, *args)
+
+
+class LlumnixDPClientVLLMV1(LlumnixClientVLLMV1, DPAsyncMPClient):
+    def __init__(self, *args, **kwargs):
+        self.current_wave = 0
+
+        LlumnixClientVLLMV1.__init__(self, *args, **kwargs)
+
+    async def add_request_async(self, request: EngineCoreRequest) -> None:
+        self._ensure_output_queue_task()
+
+        request.current_wave = self.current_wave
+        request.client_index = self.client_index
+
+        await self.generate(None, request.sampling_params, request.request_id, engine_core_request=request)

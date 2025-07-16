@@ -57,7 +57,9 @@ class APIServerActorVLLM(APIServerActor):
         )
         self.server = uvicorn.Server(config)
         self.loop = asyncio.new_event_loop()
-        llumnix.entrypoints.vllm.api_server.llumnix_client = LlumnixClientVLLM(entrypoints_context, self.loop)
+        llumnix_client = LlumnixClientVLLM(entrypoints_context, self.loop)
+        llumnix.entrypoints.vllm.api_server.llumnix_client = llumnix_client
+        self.llumnix_client = llumnix_client
         asyncio.set_event_loop(self.loop)
         try:
             self.loop.run_until_complete(self.server.serve())

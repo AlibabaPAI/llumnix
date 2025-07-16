@@ -12,7 +12,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Any
+from typing import Dict, List, Tuple, Any
 import asyncio
 
 import ray
@@ -54,7 +54,8 @@ class LlumnixClient(ABC):
         self.server_info: ServerInfo = entrypoints_context.server_info
         self.log_requests: bool = entrypoints_context.log_requests
 
-        self.request_instance: Dict[RequestIDType, str] = {}
+        self.instance_requests: Dict[str, set[RequestIDType]] = {}
+        self.request_instances: Dict[RequestIDType, List[str]] = {}
         # TODO(s5u13): Consider a better way to get instance handle without calling ray.
         self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
@@ -87,6 +88,10 @@ class LlumnixClient(ABC):
     def _process_output_order(self, request_id: RequestIDType, request_output: Any):
         raise NotImplementedError
 
+    @abstractmethod
+    def process_instances_dead(self, dead_instance_ids: List[str]) -> None:
+        raise NotImplementedError
+
     async def is_ready(self) -> bool:
         return await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.is_ready)
 
@@ -108,33 +113,37 @@ class LlumnixClient(ABC):
         logger.info("Server stopped (instance_ids: {}).".format(instance_ids))
 
     async def _abort(self, request_id: RequestIDType) -> None:
-        instance_id, instance = self._get_instance_for_abort(request_id)
-        if instance:
-            self.global_instances[instance_id] = instance
-            logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
-            try:
-                await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort, request_id)
-                self._clear_client_request_states(request_id)
-            except Exception as e: # pylint: disable=broad-except
-                log_instance_exception(e, instance_id, "_abort", request_id)
+        instance_ids, instances = self._get_instance_for_abort(request_id)
+        if instances:
+            for instance_id, instance in zip(instance_ids, instances):
+                self.global_instances[instance_id] = instance
+                logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
+                try:
+                    # instance should not throw error if aborting request id is not existed
+                    await asyncio_wait_for_ray_remote_call_with_timeout(instance.abort, request_id)
+                    self._clear_client_request_states(request_id)
+                except Exception as e: # pylint: disable=broad-except
+                    log_instance_exception(e, instance_id, "_abort", request_id)
         else:
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
                 request_id, instance_id, instance))
 
     def _clear_client_request_states(self, request_id: RequestIDType):
         self.request_stream_last_completion_tokens.pop(request_id, None)
-        self.request_instance.pop(request_id, None)
         self.request_generate_by_instance_dict.pop(request_id, None)
+        self.request_instances.pop(request_id, [])
+        # self.instance_requests will clean at func process_instances_dead
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
-        instance_id = self.request_instance.get(request_id, None)
-        if instance_id is None:
-            instance = None
-        else:
-            instance = self.global_instances[instance_id] \
-                if instance_id in self.global_instances else get_instance(instance_id)
-
-        return instance_id, instance
+        instance_ids = self.request_instances.get(request_id, [])
+        instances = []
+        for instance_id in instance_ids:
+            instances.append(
+                self.global_instances[instance_id]
+                if instance_id in self.global_instances
+                else get_instance(instance_id)
+            )
+        return instance_ids, instances
 
     async def _update_global_instances_loop(self):
         await asyncio.sleep(INIT_GLOBAL_INSTANCES_INTERVAL)

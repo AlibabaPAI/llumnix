@@ -144,6 +144,8 @@ class Scaler:
         self.prefill_instance_id_set = set()
         self.decode_instance_id_set = set()
 
+        self.instance_id_api_server_dict: Dict[str, ray.actor.ActorHandle] = {}
+
         self.inflight_num_prefill_instances = 0
         self.inflight_num_decode_instances = 0
 
@@ -405,12 +407,25 @@ class Scaler:
                 )
                 await asyncio_wait_for_ray_remote_call_with_timeout(self.manager.scale_down, instance_id)
 
+        def update_api_servers(instance_ids: List[str]):
+            # delete dead api servers
+            current_ids = list(self.instance_id_api_server_dict.keys())
+            for instance_id in current_ids:
+                if instance_id not in instance_ids:
+                    self.instance_id_api_server_dict.pop(instance_id, None)
+            # add new api servers
+            for instance_id in instance_ids:
+                if instance_id not in self.instance_id_api_server_dict:
+                    self.instance_id_api_server_dict[instance_id] = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+
+
         while True:
             try:
                 # Not check right after scaler initialized, so sleep at the beginning.
                 await asyncio.sleep(interval)
                 # pylint: disable=unused-variable
                 curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
+                update_api_servers(curr_servers)
                 # # TODO(shejiarui): fix it in DP
                 # assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
                 # tasks = []
@@ -595,6 +610,7 @@ class Scaler:
                     server.is_ready, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
                 )
                 instance_type = next_instance_args.instance_type
+                self.instance_id_api_server_dict[instance_id] = server
                 await self._scale_up(instance_id, instance, instance_type)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
@@ -843,8 +859,19 @@ class Scaler:
             self.decode_instance_id_set.discard(ins_id)
         self.num_instances = len(self.instances)
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, list(self.instances.keys())))
-
+        await self.cancel_api_server_request(instance_ids)
         await self._clear_instance_ray_resources(instance_ids)
+
+    async def cancel_api_server_request(self, dead_instance_ids: List[str]) -> None:
+        tasks = []
+        for _, api_server_actor_handle in self.instance_id_api_server_dict.items():
+            api_server_actor_handle: APIServerActor = api_server_actor_handle
+            task = asyncio.gather(
+                asyncio_wait_for_ray_remote_call_with_timeout(api_server_actor_handle.clear_dead_instances, dead_instance_ids),
+                return_exceptions=True
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks)
 
     def is_ready(self) -> bool:
         return True

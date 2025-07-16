@@ -155,6 +155,7 @@ class Manager:
                 request_id, request_processing_context, request_expected_steps, target_instance_id, *args, **kwargs
             )
         )
+        return prefill_instance_id, decode_instance_id
 
     async def _generate_with_exception_handling(self,
                                                 request_id: RequestIDType,

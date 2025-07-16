@@ -77,10 +77,8 @@ class LlumnixClientMetrics(BaseMetrics):
             self.request_received_timestamps[reqeust_id] = time.perf_counter()
 
     def remove_request(self, request_id: str):
-        if not self.request_received_timestamps.pop(request_id, None):
-            logger.warning('Request id {} not in dict request_received_timestamps, skip del.'.format(request_id))
-        if not self.request_last_token_received_timestamp.pop(request_id, None):
-            logger.warning('Request id {} not in dict request_pre_chunk_received_timestamp, skip del.'.format(request_id))
+        self.request_received_timestamps.pop(request_id, None)
+        self.request_last_token_received_timestamp.pop(request_id, None)
 
     def observe_tpot_and_ttft(self, request_id: str):
         if request_id not in self.request_received_timestamps:

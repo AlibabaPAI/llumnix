@@ -95,14 +95,14 @@ def generate_bench_test_config():
     ]
 
     vllm_v1_base_config = ["engine_vLLM_v1", False, "zmq", False, False]
-    
+
     vllm_v1_config = [
         vllm_v1_base_config,
 
         # rayqueue
         generate_special_bench_test_config([("request_output_queue_type", "rayqueue")], vllm_v1_base_config),
     ]
-    
+
 
     bladellm_base_config = ["engine_BladeLLM", False, "zmq", False, False]
 
@@ -168,7 +168,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             port=base_port,
                                             model=model,
                                             pd_ratio=pd_ratio,
-                                            enable_migration=True if "vLLM_v1" not in engine else False,
+                                            enable_migration="vLLM_v1" not in engine,
                                             dispatch_policy="load",
                                             enable_pd_disagg=enable_pd_disagg,
                                             enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,

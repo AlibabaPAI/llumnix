@@ -103,7 +103,6 @@ def vllm_v1_server_req_func(prompt, output_len):
         "temperature": 0.0,
         "top_k": 1,
         "stream": "false",
-        "ignore_eos": "false",
         "presence_penalty": 1.1,
         "repetition_penalty": 1.1,
         "max_tokens": max(output_len, 1),
@@ -550,6 +549,8 @@ async def benchmark(
     queries = await asyncio.gather(*tasks)
     
     if backend == GenerationBackend.vLLM_v1:
+        # NOTE(zhaozhiyu): vLLM v1 benchmark interface is not supported yet,
+        # bench test for vLLM v1 is just a stress test now
         print(f"vLLM v1 has no benchmark api yet, returning None.")
         return (None,) * 11
     

@@ -46,12 +46,12 @@ def parse_launch_command(launch_command: str) -> Tuple[Dict[str, str], str]:
         else:
             # This is the first part without an '=', so the command starts here
             break
-        
+
     actual_command = ' '.join(command_parts[command_start_index:])
     env = os.environ.copy()
     for k, v in process_env.items():
         env[k] = v
-    
+
     return env, actual_command
 
 def generate_vllm_launch_command(
@@ -189,7 +189,6 @@ def generate_raw_vllm_v1_serve_command(
     **kwargs
 ):
     """Generate raw vllm v1 serve command without Llumnix"""
-    compilation_config = '{"use_cudagraph":0}'
     command = (
         f"VLLM_USE_V1=1 RAY_DEDUP_LOGS=0 VLLM_FORCE_DETOKENIZE=1 "
         f"nohup vllm serve {model} "
@@ -200,7 +199,6 @@ def generate_raw_vllm_v1_serve_command(
         f"--trust-remote-code "
         f"--tensor-parallel-size {tensor_parallel_size} "
         f"--max-num-batched-tokens {max_num_batched_tokens} "
-        f"--compilation-config='{compilation_config}' "
         f"{'> raw_vllm_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
     print(f"Going to run command: {command}")
@@ -259,7 +257,7 @@ def generate_vllm_v1_serve_command(
     **kwargs
 ):
     command = (
-        f"{'NCCL_SOCKET_IFNAME=eth0 NCCL_IB_DISABLE=1 ' if tensor_parallel_size > 1 else ''}"
+        f"{'NCCL_SOCKET_IFNAME=eth0 ' if tensor_parallel_size > 1 else ''}"
         f"VLLM_USE_V1=1 VLLM_ENABLE_LLUMNIX=1 VLLM_FORCE_DETOKENIZE=1 RAY_DEDUP_LOGS=0 "
         f"nohup python -m llumnix.entrypoints.vllm_v1.serve "
         f"--host {ip} "
@@ -523,11 +521,11 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
             raise TimeoutError(f"Wait for llumnix service timeout ({timeout}s).")
 
         time.sleep(5.0)
-        
+
 def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
     start_time = time.time()
     while True:
-        all_ready = True
+        all_ready = False
         for ip_port in ip_ports:
             try:
                 request = {
@@ -544,47 +542,10 @@ def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
                     "max_tokens": 1,
                 }
                 response = requests.post(f"http://{ip_port}/v1/chat/completions", json=request, timeout=5)
-                if response.status_code != 200:
-                    all_ready = False
+                if response.status_code == 200:
+                    all_ready = True
                     break
             except requests.RequestException:
-                all_ready = False
-                break
-
-        if all_ready:
-            return True
-
-        elapsed_time = time.time() - start_time
-        if elapsed_time > timeout:
-            raise TimeoutError(f"Wait for llumnix service timeout ({timeout}s).")
-
-        time.sleep(5.0)
-
-def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
-    start_time = time.time()
-    while True:
-        all_ready = True
-        for ip_port in ip_ports:
-            try:
-                request = {
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are a helpful assistant."
-                        },
-                        {
-                            "role": "user",
-                            "content": "hello"
-                        }
-                    ],
-                    "max_tokens": 1,
-                }
-                response = requests.post(f"http://{ip_port}/v1/chat/completions", json=request, timeout=5)
-                if response.status_code != 200:
-                    all_ready = False
-                    break
-            except requests.RequestException:
-                all_ready = False
                 break
 
         if all_ready:

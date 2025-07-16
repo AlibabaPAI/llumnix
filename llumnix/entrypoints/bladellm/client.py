@@ -123,6 +123,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
             return LLMResponse(request_id, resp_queue=results_queue)
         except Exception as e: # pylint: disable=broad-except
             logger.error("Unexpected error in llumnix client generate.{}".format(e))
+            self._clear_client_request_states(request_id)
             return error_resp(request_id, err_code=500,
                                     err_msg="Error when llumnix client generate request.")
 

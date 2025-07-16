@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import asyncio
+from typing import List
 
 import uvicorn
 
@@ -72,3 +73,8 @@ class APIServerActorVLLM(APIServerActor):
 
         if self.loop.is_running():
             self.loop.call_soon_threadsafe(stop_server)
+
+    def clear_dead_instances(self, dead_instance_ids: List[str]) -> None:
+        logger.info("Api server actor clear dead instances: {}".format(dead_instance_ids))
+        self.llumnix_client.process_instances_dead(dead_instance_ids)
+

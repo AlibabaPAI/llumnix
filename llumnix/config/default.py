@@ -162,7 +162,7 @@ _C.MANAGER.DISPATCH_DECODE_LOAD_METRIC = 'remaining_steps'
 # Decode instance dispatch load metric when used for prefilling
 _C.MANAGER.DISPATCH_DECODE_AS_PREFILL_LOAD_METRIC = 'kv_blocks_ratio'
 # The config file path for initializing CacheMetaClient under the cache-aware policy
-_C.MANAGER.CACHE_META_CLIENT_CONFIG_PATH = "/mnt/baizhuoyan/MetaService/tests/config_test.json"
+_C.MANAGER.CACHE_META_CLIENT_CONFIG_PATH = "llumnix/config/mock_query_client.json"
 
 # -------------------------- MIGRATION CONFIGURATION --------------------------
 # Enable migrate requests between instances

@@ -1,7 +1,5 @@
 import json
 
-from metaservice_client import MetaServiceClient
-
 
 class CacheMetaClient:
     def query_cache_locality(self, hash_key: str, top_n: int = 0) -> float:
@@ -9,6 +7,8 @@ class CacheMetaClient:
 
 class MetaServiceCacheClient(CacheMetaClient):
     def __init__(self, config):
+        # Import metaservice_client only here to avoid import errors in other places
+        from metaservice_client import MetaServiceClient
         self.config = config
         self.client = MetaServiceClient()
         self.client.initialize(config)

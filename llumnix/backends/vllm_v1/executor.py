@@ -70,7 +70,7 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
     # only changed num_gpus assigned for Worker.
     def _init_workers_ray(self, placement_group: "PlacementGroup",
                           **ray_remote_kwargs):
-        num_gpus = envs.VLLM_RAY_PER_WORKER_GPUS
+        # num_gpus = envs.VLLM_RAY_PER_WORKER_GPUS
 
         # The driver dummy worker does not actually use any resources.
         # It holds the resource for the driver worker.
@@ -89,57 +89,94 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
 
         logger.info("use_ray_spmd_worker: %s", self.use_ray_spmd_worker)
 
-        # Create the workers.
-        bundle_indices: list[int]
-        if envs.VLLM_RAY_BUNDLE_INDICES:
-            # Use the bundle indices specified by the user.
-            bundle_indices = list(
-                map(int, envs.VLLM_RAY_BUNDLE_INDICES.split(",")))
-            assert len(bundle_indices) == self.parallel_config.world_size, \
-            ("VLLM_RAY_BUNDLE_INDICES must have the same size"
-            f" as the world size, but got {bundle_indices=} "
-            f"and {self.parallel_config.world_size=}")
-            assert len(set(bundle_indices)) == len(bundle_indices), \
-            ("VLLM_RAY_BUNDLE_INDICES cannot have duplicate values,"
-            f" but got {bundle_indices=}")
-        else:
-            # use the first N bundles that have GPU resources.
-            bundle_indices = []
-            for bundle_id, bundle in enumerate(placement_group.bundle_specs):
-                if bundle.get(current_platform.ray_device_key, 0):
-                    bundle_indices.append(bundle_id)
-            bundle_indices = bundle_indices[:self.parallel_config.world_size]
+        ######################################################################
+        ##################### vLLM v1 origin code ############################
+        ######################################################################
+        # bundle_indices: list[int]
+        # if envs.VLLM_RAY_BUNDLE_INDICES:
+        #     # Use the bundle indices specified by the user.
+        #     bundle_indices = list(
+        #         map(int, envs.VLLM_RAY_BUNDLE_INDICES.split(",")))
+        #     assert len(bundle_indices) == self.parallel_config.world_size, \
+        #     ("VLLM_RAY_BUNDLE_INDICES must have the same size"
+        #     f" as the world size, but got {bundle_indices=} "
+        #     f"and {self.parallel_config.world_size=}")
+        #     assert len(set(bundle_indices)) == len(bundle_indices), \
+        #     ("VLLM_RAY_BUNDLE_INDICES cannot have duplicate values,"
+        #     f" but got {bundle_indices=}")
+        # else:
+        #     # use the first N bundles that have GPU resources.
+        #     bundle_indices = []
+        #     for bundle_id, bundle in enumerate(placement_group.bundle_specs):
+        #         if bundle.get(current_platform.ray_device_key, 0):
+        #             bundle_indices.append(bundle_id)
+        #     bundle_indices = bundle_indices[:self.parallel_config.world_size]
 
+        # worker_metadata: list[RayWorkerMetaData] = []
+        # driver_ip = get_ip()
+        # for rank, bundle_id in enumerate(bundle_indices):
+        #     scheduling_strategy = PlacementGroupSchedulingStrategy(
+        #         placement_group=placement_group,
+        #         placement_group_capture_child_tasks=True,
+        #         placement_group_bundle_index=bundle_id,
+        #     )
+
+        #     if current_platform.ray_device_key == "GPU":
+        #         # NV+AMD GPUs, and Intel XPUs
+        #         worker = ray.remote(
+        #             num_cpus=0,
+        #             num_gpus=num_gpus,
+        #             scheduling_strategy=scheduling_strategy,
+        #             **ray_remote_kwargs,
+        #         )(RayWorkerWrapper).remote(vllm_config=self.vllm_config,
+        #                                    rpc_rank=rank)
+        #     else:
+        #         worker = ray.remote(
+        #             num_cpus=0,
+        #             num_gpus=0,
+        #             resources={current_platform.ray_device_key: num_gpus},
+        #             scheduling_strategy=scheduling_strategy,
+        #             **ray_remote_kwargs,
+        #         )(RayWorkerWrapper).remote(vllm_config=self.vllm_config,
+        #                                    rpc_rank=rank)
+        #     worker_metadata.append(
+        #         RayWorkerMetaData(worker=worker, created_rank=rank))
+        ######################################################################
+
+        # Create the workers.
+        dp_rank = self.parallel_config.data_parallel_rank
+        world_size = self.parallel_config.world_size
         worker_metadata: list[RayWorkerMetaData] = []
         driver_ip = get_ip()
-        for rank, bundle_id in enumerate(bundle_indices):
+
+        # Every bundle contains resources for all workers.
+        for rank in range(world_size):
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
                 placement_group_capture_child_tasks=True,
-                placement_group_bundle_index=bundle_id,
+                placement_group_bundle_index=dp_rank,
             )
-
-            num_gpus = 1 if rank > 0 else NUM_GPUS_VLLM_V1_GPU_ACTOR
+            num_gpus = 1
+            if rank == 0:
+                num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
             if current_platform.ray_device_key == "GPU":
                 # NV+AMD GPUs, and Intel XPUs
                 worker = ray.remote(
                     num_cpus=0,
-                    num_gpus=NUM_GPUS_VLLM_V1_GPU_ACTOR,
+                    num_gpus=num_gpus,
                     scheduling_strategy=scheduling_strategy,
                     **ray_remote_kwargs,
-                )(RayWorkerWrapper).remote(vllm_config=self.vllm_config,
-                                           rpc_rank=rank)
+                )(RayWorkerWrapper).remote(vllm_config=self.vllm_config, rpc_rank=rank)
             else:
+                logger.warning("Llumnix currently has no QA on non-GPU devices.")
                 worker = ray.remote(
                     num_cpus=0,
                     num_gpus=0,
                     resources={current_platform.ray_device_key: num_gpus},
                     scheduling_strategy=scheduling_strategy,
                     **ray_remote_kwargs,
-                )(RayWorkerWrapper).remote(vllm_config=self.vllm_config,
-                                           rpc_rank=rank)
-            worker_metadata.append(
-                RayWorkerMetaData(worker=worker, created_rank=rank))
+                )(RayWorkerWrapper).remote(vllm_config=self.vllm_config, rpc_rank=rank)
+            worker_metadata.append(RayWorkerMetaData(worker=worker, created_rank=rank))
 
         worker_ips = ray.get([
             each.worker.get_node_ip.remote()  # type: ignore[attr-defined]

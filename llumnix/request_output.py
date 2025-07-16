@@ -14,7 +14,6 @@
 from typing import Any, Dict
 import copy
 
-from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import RequestIDType
 
@@ -37,7 +36,12 @@ class LlumnixRequestOuput:
 class LlumnixRequestOutputs:
     """Wrapper of vLLM v1 EngineCoreOutputs"""
     def __init__(self, instance_id: str, engine_outputs: Any,
-                 request_timestamps_dict: Dict[RequestIDType, RequestTimestamps] = None):
+                 request_processing_context_dict: Dict[RequestIDType, RequestProcessingContext] = None):
         self.instance_id = instance_id
         self.engine_outputs = engine_outputs
-        self.request_timestamps_dict = request_timestamps_dict
+        self.request_processing_context_dict: Dict[RequestIDType, RequestProcessingContext] = request_processing_context_dict
+        for request_id, context in self.request_processing_context_dict.items():
+            if context.request_output_queue is not None:
+                new_context = copy.copy(context)
+                new_context.request_output_queue = None
+                self.request_processing_context_dict[request_id] = new_context

@@ -31,7 +31,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, BackendType, LaunchMode
 from llumnix.config import get_llumnix_config
 from llumnix.entrypoints.utils import is_gpu_available
-from llumnix.constants import SERVER_TIMEOUT_KEEP_ALIVE
+from llumnix.constants import LLUMNIX_TRACE_HEADER, LLUMNIX_TRACE_REQUEST, SERVER_TIMEOUT_KEEP_ALIVE
 from llumnix.metrics.timestamps import set_timestamp
 
 # Code file with __main__ should set the logger name to inherit the llumnix logger configuration.
@@ -89,8 +89,13 @@ async def generate(request: Request) -> Response:
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
 
+    # collect and return request latencys
+    request_trace_param = {
+        LLUMNIX_TRACE_REQUEST: request.headers.get(LLUMNIX_TRACE_HEADER, "False").lower() in ('true', '1')
+    }
+
     # Use LlumnixClientVLLMV1's generate and abort api to replace with vLLM AsyncLLM's generate and abort api.
-    results_generator = await llumnix_client.generate(prompt, sampling_params, request_id)
+    results_generator = await llumnix_client.generate(prompt, sampling_params, request_id, **request_trace_param)
 
     # Streaming case
     async def stream_results() -> AsyncGenerator[bytes, None]:

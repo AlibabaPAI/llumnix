@@ -42,6 +42,7 @@ CHECK_DEPLOYMENT_STATES_INTERVAL: float = 30.0
 WATCH_DEPLOYMENT_INTERVAL: float = 10.0
 INSTANCE_READY_TIMEOUT: float = 300.0
 SERVER_READY_TIMEOUT: float = 30.0
+DPMANAGER_INIT_TIMEOUT: float = 300.0
 
 # llumnix/global_scheduler/dispatch_scheduler.py
 DISPATCH_LOG_FREQUENCY: int = 100
@@ -96,7 +97,7 @@ RAYRPC_MIGRATION_TIMEOUT = 100.0
 # llumnix/entrypoints/api_server_actor.py
 SERVER_GRACEFUL_SHUTDOWN_TIMEOUT: float = 10.0
 # NOTE(shejiarui): vLLM V1 need more time to start server.
-SERVER_START_TIMEOUT: float = 30.0
+SERVER_START_TIMEOUT: float = 240.0
 SERVER_STOP_TIMEOUT: float = 10.0
 
 # llumnix/llumlet/migration_coordinator.py

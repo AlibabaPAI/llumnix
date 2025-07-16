@@ -20,7 +20,7 @@ from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import RequestIDType, MigrationResponse
 from llumnix.constants import RAY_RPC_TIMEOUT
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceContext, InstanceInfo
 
 
 class BackendInterface(ABC):
@@ -339,5 +339,12 @@ class BackendInterface(ABC):
     def get_instance_info(self) -> InstanceInfo:
         """
         Get instance info from backend engine.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_engine_context(self) -> InstanceContext:
+        """
+        Get engine context from backend engine.
         """
         raise NotImplementedError

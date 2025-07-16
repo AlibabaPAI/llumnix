@@ -20,7 +20,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
+from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType, InstanceContext
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
@@ -157,9 +157,9 @@ class Llumlet:
         await self.backend_engine.is_ready()
         return self.instance_args.instance_type
 
-    async def get_engine_disagg_inst_id(self) -> str:
+    async def get_engine_context(self) -> str:
         await self.backend_engine.is_ready()
-        return self.backend_engine.engine_disagg_inst_id
+        return self.backend_engine.get_engine_context()
 
     async def generate(
         self,

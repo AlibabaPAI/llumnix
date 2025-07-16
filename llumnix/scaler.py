@@ -524,14 +524,14 @@ class Scaler:
                               service_name: str = None
                               ) -> PlacementGroup:
         backend_type = engine_args.backend_type
-        if backend_type == BackendType.VLLM_V1 and engine_args.get_dp_size() > 1:
+        if backend_type == BackendType.VLLM_V1:
             dp_size = engine_args.get_dp_size()
             world_size = engine_args.get_world_size()
-            # num_cpus: [lumlet + ActorOutputMediator + (ApiServerActor)] * dp_size
+            # num_cpus: [lumlet + ActorOutputMediator + (ApiServerActor)] * dp_size + dp_manager
             # num_gpus: world_size * dp_size
             placement_group = initialize_placement_group(
                 placement_group_name,
-                num_cpus=(2+int(init_server)) * dp_size,
+                num_cpus=(2+int(init_server)) * dp_size + 1,
                 num_gpus=world_size * dp_size,
                 dp_size=dp_size,
                 detached=True,

@@ -16,6 +16,7 @@ from typing import List
 import ray
 import ray.actor
 from ray.util.placement_group import PlacementGroup
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.state import list_actors
 
 from llumnix.logging.logger import init_logger
@@ -103,7 +104,14 @@ class DPManager:
             num_cpus=1,
             name=get_dpmanager_name(instance_id),
             namespace="llumnix",
-        )(cls)
+            lifetime="detached",
+        )(cls).options(
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_bundle_index=0,
+                placement_group_capture_child_tasks=True
+            )
+        )
         dp_manager = dp_manager_class.remote(
             instance_id,
             new_instance_ids,

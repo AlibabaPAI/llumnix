@@ -247,8 +247,15 @@ class MockMigrationScheduler(MigrationScheduler):
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg",
                          [(True, False, False), (False, True, False), (False, False, True), (False, False, False)])
 def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg):
+    dispatch_load_metric_config = DispatchLoadMetricConfig(
+            dispatch_load_metric='remaining_steps',
+            dispatch_prefill_load_metric='kv_blocks_ratio',
+            dispatch_decode_load_metric='remaining_steps',
+            dispatch_prefill_as_decode_load_metric='adaptive_decode',
+            dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
+        )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 enable_engine_pd_disagg, enable_engine_semi_pd_disagg, False)
+                                                 enable_engine_pd_disagg, enable_engine_semi_pd_disagg, False, dispatch_load_metric_config)
     all_instance_infos: Dict[str, InstanceInfo] = {}
     if not migration_scheduler._enable_pd():
         for idx in range(INSTANCE_NUM):
@@ -301,8 +308,15 @@ def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_e
 
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_semi_pd_disagg", [(True, False), (False, True)])
 def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_disagg):
+    dispatch_load_metric_config = DispatchLoadMetricConfig(
+            dispatch_load_metric='remaining_steps',
+            dispatch_prefill_load_metric='kv_blocks_ratio',
+            dispatch_decode_load_metric='remaining_steps',
+            dispatch_prefill_as_decode_load_metric='adaptive_decode',
+            dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
+        )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 False, enable_engine_semi_pd_disagg, True)
+                                                 False, enable_engine_semi_pd_disagg, True, dispatch_load_metric_config)
     KvBlocksRatioLoad.BUSY_THRESHOLD = 5
     RemainingStepsLoad.BUSY_THRESHOLD = 5
     AdaptiveDecodeBatchLoad.DECODE_COMPUTE_BOUND_BATCH_SIZE = 5

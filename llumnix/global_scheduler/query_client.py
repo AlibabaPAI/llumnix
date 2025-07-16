@@ -6,7 +6,7 @@ import json
 class CacheMetaClient:
     def query_cache_locality(self, hash_key: str, top_n: int = 0) -> float:
         raise NotImplementedError
-    
+
     # for test
     def insert_cache_locality(self, hash_key: str, instance_id: str) -> None:
         raise NotImplementedError
@@ -22,7 +22,7 @@ class MetaServiceCacheClient(CacheMetaClient):
     def query_cache_locality(self, hash_key: str, top_n: int = 0) -> list[str]:
         results = self.client.zreadrange(hash_key, 0)
         return [item[0] for item in results]
-    
+
     def insert_cache_locality(self, hash_key: str, instance_id: str) -> None:
         self.client.zwrite(hash_key, instance_id, 0)
 
@@ -41,7 +41,6 @@ class MockCacheMetaClient(CacheMetaClient):
 
     def insert_cache_locality(self, hash_key: str, instance_id: str) -> None:
         self.mock_data.setdefault(hash_key, []).append(instance_id)
-
 
 
 def build_meta_client_from_config(config_path) -> CacheMetaClient:

@@ -33,7 +33,7 @@ from vllm import envs as vllm_envs
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceContext, InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
@@ -582,3 +582,6 @@ class BackendVLLM(BackendInterface):
 
     def get_instance_info(self):
         return self.engine.instance_info
+
+    def get_engine_context(self):
+        return InstanceContext(local_engine_id=self.instance_id)

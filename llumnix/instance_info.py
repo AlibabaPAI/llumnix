@@ -13,7 +13,8 @@
 
 import copy
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Tuple
+from enum import Enum
+from typing import Dict, Iterable, List, Tuple, Optional
 
 from llumnix.logging.logger import init_logger
 from llumnix.load_computation import (
@@ -31,7 +32,6 @@ from llumnix.utils import InstanceType
 
 logger = init_logger(__name__)
 
-
 INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
     InstanceType.NEUTRAL: 'dispatch_load_metric',
     InstanceType.PREFILL: 'dispatch_prefill_load_metric',
@@ -39,6 +39,23 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
     InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
     InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
 }
+
+
+@dataclass
+class InstanceContext:
+    # used for blade_llm
+    local_engine_id: Optional[str] = None
+    # used for vllm_v1 pd
+    kvt_engine_available_port: Optional[int] = None
+    engine_host: Optional[str] = None
+
+
+class InstanceType(str, Enum):
+    NO_CONSTRAINTS = "no_constraints"
+    PREFILL = "prefill"
+    DECODE = "decode"
+    PREFILL_AS_DECODE = "prefill_as_decode"
+    DECODE_AS_PREFILL = "decode_as_prefill"
 
 
 @dataclass

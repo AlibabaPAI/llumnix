@@ -24,7 +24,7 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_filter import CustomFilter
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceInfo, InstanceContext
 from llumnix.arg_utils import (
     ManagerArgs,
     EntrypointsArgs,
@@ -99,7 +99,7 @@ class Manager:
         self.enable_pd_disagg = manager_args.enable_pd_disagg
 
         # scheduling states
-        self.instance_id_2_engine_inner_inst_id: Dict[str, str] = {}
+        self.instance_context: Dict[str, InstanceContext] = {}
         self.polling_interval = manager_args.polling_interval
         global_scheduler_config = manager_args.create_global_scheduler_config()
         self.global_scheduler = GlobalScheduler(global_scheduler_config)
@@ -128,10 +128,18 @@ class Manager:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
             if self.backend_type == BackendType.BLADELLM:
                 if self.manager_args.enable_engine_pd_disagg:
-                    dispatch_kwargs["decode_instance_id"] = self.instance_id_2_engine_inner_inst_id[decode_instance_id]
+                    dispatch_kwargs["decode_instance_id"] = self.instance_context[decode_instance_id].local_engine_id
                 elif self.manager_args.enable_engine_semi_pd_disagg:
-                    dispatch_kwargs["semi_p_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(prefill_instance_id, None)
-                    dispatch_kwargs["semi_d_inst_id"] = self.instance_id_2_engine_inner_inst_id.get(decode_instance_id, None)
+                    dispatch_kwargs["semi_p_inst_id"] = self.instance_context[prefill_instance_id].local_engine_id
+                    dispatch_kwargs["semi_d_inst_id"] = self.instance_context[decode_instance_id].local_engine_id
+
+            if self.backend_type == BackendType.VLLM_V1 and self.manager_args.enable_engine_pd_disagg:
+                dispatch_kwargs["llumnix_scheduler"] = True
+                dispatch_kwargs["prefill_kvt_engine_available_port"] = \
+                    self.instance_context[prefill_instance_id].kvt_engine_available_port
+                dispatch_kwargs["prefill_engine_host"] = self.instance_context[prefill_instance_id].engine_host
+                dispatch_kwargs["prefill_instance_id"] = prefill_instance_id
+                dispatch_kwargs["decode_instance_id"] = decode_instance_id
 
             if (self.backend_type == BackendType.BLADELLM and self.manager_args.enable_engine_semi_pd_disagg) or \
                 (self.backend_type == BackendType.VLLM_V1 and self.manager_args.enable_engine_pd_disagg):
@@ -282,13 +290,13 @@ class Manager:
                 exc_info=True, stack_info=True
             )
 
-    async def _get_engine_self_assigned_id(self, ins_id: str, instance_actor: Llumlet) -> str:
+    async def _get_engine_context(self, ins_id: str, instance_actor: Llumlet) -> InstanceContext:
         try:
-            engine_self_assigned_id = await asyncio_wait_for_ray_remote_call_with_timeout(
-                instance_actor.get_engine_disagg_inst_id)
-            self.instance_id_2_engine_inner_inst_id[ins_id] = engine_self_assigned_id
-            logger.info("Bind instance id {} with engine instance id {}.".format(ins_id, engine_self_assigned_id))
-            return engine_self_assigned_id
+            engine_context = await asyncio_wait_for_ray_remote_call_with_timeout(
+                instance_actor.get_engine_context)
+            self.instance_context[ins_id] = engine_context
+            logger.info("Bind instance id {} with engine context {}.".format(ins_id, engine_context))
+            return engine_context
         # pylint: disable=broad-except
         except Exception as e:
             log_instance_exception(e, ins_id, "scale_up")
@@ -314,7 +322,7 @@ class Manager:
         for ins_idx, ins_info in enumerate(zip(instance_ids, instance_actor_handles)):
             ins_id, ins_actor = ins_info
             if ins_id not in self.instances:
-                task = asyncio.gather(self._get_engine_self_assigned_id(ins_id, ins_actor), return_exceptions=True)
+                task = asyncio.gather(self._get_engine_context(ins_id, ins_actor), return_exceptions=True)
                 task.add_done_callback(
                     partial(
                         self_assign_id_success_callback,
@@ -345,12 +353,8 @@ class Manager:
         indeed_update = not set(instance_ids).issubset(self.instances.keys())
 
         if indeed_update:
-            if self.manager_args.enable_engine_pd_disagg or self.manager_args.enable_engine_semi_pd_disagg:
-                available_instance_ids, available_instance_actors, available_instance_types = \
-                    await self._get_available_instances(instance_ids, instance_actor_handles, instance_types)
-            else:
-                available_instance_ids, available_instance_actors, available_instance_types = \
-                    instance_ids, instance_actor_handles, instance_types
+            available_instance_ids, available_instance_actors, available_instance_types = \
+                await self._get_available_instances(instance_ids, instance_actor_handles, instance_types)
 
             self.global_scheduler.scale_up(available_instance_ids, available_instance_types)
 
@@ -388,7 +392,7 @@ class Manager:
                 indeed_update = True
                 self.pending_rebuild_migration_instances += 1
                 self.instances.pop(ins_id)
-                self.instance_id_2_engine_inner_inst_id.pop(ins_id, None)
+                self.instance_context.pop(ins_id, None)
             else:
                 logger.warning("instance {} is not in instances".format(ins_id))
 

@@ -28,10 +28,11 @@ from vllm import envs as vllm_envs
 from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreOutputs
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
+from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceContext, InstanceInfo, InstanceType
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc,
                                                  AsyncDPEngineCoreProc)
@@ -44,7 +45,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
-from llumnix.utils import make_async
+from llumnix.utils import get_ip_address, make_async
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
@@ -58,6 +59,7 @@ logger = init_logger(__name__)
 class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     def __init__(self,
                  instance_id: str,
+                 instance_type: InstanceType,
                  placement_group: PlacementGroup,
                  request_output_queue_type: QueueType,
                  disable_async_output_proc: bool,
@@ -75,6 +77,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
         super().__init__(vllm_config, on_head_node, handshake_address, executor_class, log_stats, engine_index)
         self.instance_id = instance_id
+        self.instance_type = instance_type
         self.step_counter = Counter()
         self.instance_info = None
         self.output_forwarder = OutputForwarder(
@@ -98,6 +101,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     def from_engine_args(
         cls,
         instance_id: str,
+        instance_type: InstanceType,
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
@@ -130,6 +134,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
 
         engine = cls(
             instance_id=instance_id,
+            instance_type=instance_type,
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
             disable_async_output_proc=engine_args.disable_async_output_proc,
@@ -179,18 +184,20 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             server_info = None
             for engine_core_output in engine_core_outputs.outputs:
                 request_id = engine_core_output.request_id
-                request_processing_context:RequestProcessingContext = self.reqeust_processing_context_table[request_id]
-                request_processing_context_dict[request_id] = request_processing_context
-                if server_id is None:
-                    server_id = request_processing_context.server_id
-                    server_info = request_processing_context.get_server_info()
+                if request_id in self.reqeust_processing_context_table:
+                    request_processing_context: RequestProcessingContext = self.reqeust_processing_context_table[request_id]
+                    request_processing_context_dict[request_id] = request_processing_context
+                    if server_id is None:
+                        server_id = request_processing_context.server_id
+                        server_info = request_processing_context.get_server_info()
 
-            server_request_outputs[server_id] = LlumnixRequestOutputs(
-                instance_id=self.instance_id,
-                engine_outputs=engine_core_outputs,
-                request_processing_context_dict=request_processing_context_dict
-            )
-            server_info_dict[server_id] = server_info
+            if server_id is not None:
+                server_request_outputs[server_id] = LlumnixRequestOutputs(
+                    instance_id=self.instance_id,
+                    engine_outputs=engine_core_outputs,
+                    request_processing_context_dict=request_processing_context_dict
+                )
+                server_info_dict[server_id] = server_info
 
         return server_request_outputs, server_info_dict
 
@@ -263,6 +270,24 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         # TODO(zhaozhiyu): remove mapping, create a new request type to carry server_info
         request_type = EngineCoreRequestType.ADD
         request: EngineCoreRequest = kwargs["engine_core_request"]
+
+        if "llumnix_scheduler" in kwargs:
+            prefill_instance_id = kwargs["prefill_instance_id"]
+            decode_instance_id = kwargs["decode_instance_id"]
+            assert decode_instance_id == self.instance_id
+
+            kv_transfer_params = {}
+            if request.sampling_params.extra_args is None:
+                request.sampling_params.extra_args = {}
+            request.sampling_params.extra_args['kv_transfer_params'] = kv_transfer_params
+
+            if prefill_instance_id == decode_instance_id:
+                if self.instance_info.instance_type == InstanceType.DECODE:
+                    kv_transfer_params[D_DISAGG] = False
+            else:
+                kv_transfer_params["remote_host"] = kwargs["prefill_engine_host"]
+                kv_transfer_params["remote_port"] = kwargs["prefill_kvt_engine_available_port"]
+
         self.reqeust_processing_context_table[request.request_id] = request_processing_context
         await self.input_queue.put((request_type, request))
 
@@ -277,6 +302,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
     def from_engine_args(
         cls,
         instance_id: str,
+        instance_type: InstanceType,
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
         migration_config: MigrationConfig,
@@ -313,6 +339,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
 
         engine = cls(
             instance_id=instance_id,
+            instance_type=instance_type,
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
             disable_async_output_proc=engine_args.disable_async_output_proc,
@@ -351,12 +378,14 @@ class BackendVLLMV1(BackendInterface):
         dp_rank: int = 0,
         dp_rank_local: Optional[int] = None
     ) -> None:
-        self.engine_disagg_inst_id = instance_id
+        self.instance_id = instance_id
+        self.host = get_ip_address()
         engine_args = self._load_and_reconfig_engine_args(llumnix_engine_args)
         self.migration_config = instance_args.create_migration_config()
         if engine_args.data_parallel_size > 1:
             self.engine: AsyncDPEngineCoreProcLlumnix = AsyncDPEngineCoreProcLlumnix.from_engine_args(
                 instance_id=instance_id,
+                instance_type=instance_args.instance_type,
                 placement_group=placement_group,
                 request_output_queue_type=request_output_queue_type,
                 migration_config=self.migration_config,
@@ -371,6 +400,7 @@ class BackendVLLMV1(BackendInterface):
             # FIXME(zhaozhiyu): check args
             self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
                 instance_id=instance_id,
+                instance_type=instance_args.instance_type,
                 placement_group=placement_group,
                 request_output_queue_type=request_output_queue_type,
                 migration_config=self.migration_config,
@@ -381,7 +411,6 @@ class BackendVLLMV1(BackendInterface):
             )
         asyncio.create_task(self.engine.run_busy_loop_async())
 
-        self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.vllm_config.parallel_config.world_size:
             self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix"))
@@ -505,3 +534,10 @@ class BackendVLLMV1(BackendInterface):
 
     def get_instance_info(self):
         return self.engine.instance_info
+
+    def get_engine_context(self):
+        kvt_engine_available_port = self.engine.vllm_config.kv_transfer_config.engine_available_port
+        return InstanceContext(
+            local_engine_id=self.instance_id,
+            kvt_engine_available_port=kvt_engine_available_port,
+            engine_host=self.host)

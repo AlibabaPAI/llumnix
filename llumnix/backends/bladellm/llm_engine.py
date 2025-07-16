@@ -60,7 +60,7 @@ from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import OutputForwarder, RequestOutputForwardingMode
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
-from llumnix.instance_info import InstanceInfo
+from llumnix.instance_info import InstanceContext, InstanceInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
@@ -897,3 +897,6 @@ class BackendBladeLLM(BackendInterface):
 
     def get_instance_info(self):
         return self.engine.instance_info
+
+    def get_engine_context(self):
+        return InstanceContext(local_engine_id=self.engine_disagg_inst_id)

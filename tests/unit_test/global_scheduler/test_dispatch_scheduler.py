@@ -99,7 +99,7 @@ def init_pd_instances(num_prefill: int = 4, num_decode: int = 4):
         decode_instance_num_requests[instance_info.instance_id] = 0
         instance_info_dict[instance_info.instance_id] = instance_info
         instance_num_requests[instance_info.instance_id] = 0
-    
+
     return instance_info_dict, instance_num_requests, prefill_instance_info_dict, \
         prefill_instance_num_requests, decode_instance_info_dict, decode_instance_num_requests
 
@@ -138,7 +138,12 @@ def test_dispatch_pd(enable_pd_disagg):
         dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
     )
     dispatch_scheduler: DispatchScheduler = init_dispatch_scheduler(
-        policy="rr", enable_pd_disagg=enable_pd_disagg, enable_engine_pd_disagg=not enable_pd_disagg, enable_adaptive_pd=False, dispatch_load_metric_config=dispatch_load_metric_config)
+        policy="rr",
+        enable_pd_disagg=enable_pd_disagg,
+        enable_engine_pd_disagg=not enable_pd_disagg,
+        enable_adaptive_pd=False,
+        dispatch_load_metric_config=dispatch_load_metric_config
+    )
     instance_num: int = 4
     instance_info_dict, instance_num_requests, prefill_instance_info_dict, prefill_instance_num_requests, \
         decode_instance_info_dict, decode_instance_num_requests = init_pd_instances(instance_num, instance_num)
@@ -209,10 +214,20 @@ def test_dispatch_adaptive_pd(enable_pd_disagg):
     assert not enable_pd_disagg or decode_instance_id is None
     instance_dispatch_info[prefill_instance_id] += 1
     instance_dispatch_info[decode_instance_id] += 1
-    lowest_load_prefill_instance_id = min(prefill_instance_info_dict,
-                                          key=lambda x: getattr(prefill_instance_info_dict[x], dispatch_load_metric_config.dispatch_prefill_load_metric))
-    lowest_load_decode_instance_id = min(decode_instance_info_dict,
-                                          key=lambda x: getattr(decode_instance_info_dict[x], dispatch_load_metric_config.dispatch_decode_load_metric))
+    lowest_load_prefill_instance_id = min(
+        prefill_instance_info_dict,
+        key=lambda x: getattr(
+            prefill_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_prefill_load_metric
+        )
+    )
+    lowest_load_decode_instance_id = min(
+        decode_instance_info_dict,
+        key=lambda x: getattr(
+            decode_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_decode_load_metric
+        )
+    )
     assert prefill_instance_id == lowest_load_prefill_instance_id
     assert enable_pd_disagg or decode_instance_id == lowest_load_decode_instance_id
     assert instance_dispatch_info[prefill_instance_id] == instance_num_requests[prefill_instance_id]
@@ -237,9 +252,19 @@ def test_dispatch_adaptive_pd(enable_pd_disagg):
     instance_dispatch_info[prefill_instance_id] += 1
     instance_dispatch_info[decode_instance_id] += 1
     lowest_load_decode_as_prefill_instance_id = min(
-        decode_instance_info_dict,key=lambda x: getattr(decode_instance_info_dict[x], dispatch_load_metric_config.dispatch_decode_as_prefill_load_metric))
+        decode_instance_info_dict,
+        key=lambda x: getattr(
+            decode_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_decode_as_prefill_load_metric
+        )
+    )
     lowest_load_decode_instance_id = min(
-        decode_instance_info_dict, key=lambda x: getattr(decode_instance_info_dict[x], dispatch_load_metric_config.dispatch_decode_load_metric))
+        decode_instance_info_dict,
+        key=lambda x: getattr(
+            decode_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_decode_load_metric
+        )
+    )
     assert prefill_instance_id == lowest_load_decode_as_prefill_instance_id
     assert enable_pd_disagg or decode_instance_id == prefill_instance_id
     assert prefill_instance_id not in prefill_instance_info_dict
@@ -264,10 +289,20 @@ def test_dispatch_adaptive_pd(enable_pd_disagg):
     assert not enable_pd_disagg or decode_instance_id is None
     instance_dispatch_info[prefill_instance_id] += 1
     instance_dispatch_info[decode_instance_id] += 1
-    lowest_load_prefill_instance_id = min(prefill_instance_info_dict,
-                                          key=lambda x: getattr(prefill_instance_info_dict[x], dispatch_load_metric_config.dispatch_prefill_load_metric))
-    lowest_load_decode_instance_id = min(decode_instance_info_dict,
-                                          key=lambda x: getattr(decode_instance_info_dict[x], dispatch_load_metric_config.dispatch_decode_load_metric))
+    lowest_load_prefill_instance_id = min(
+        prefill_instance_info_dict,
+        key=lambda x: getattr(
+            prefill_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_prefill_load_metric
+        )
+    )
+    lowest_load_decode_instance_id = min(
+        decode_instance_info_dict,
+        key=lambda x: getattr(
+            decode_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_decode_load_metric
+        )
+    )
     assert prefill_instance_id == lowest_load_prefill_instance_id
     assert enable_pd_disagg or decode_instance_id == lowest_load_decode_instance_id
     assert instance_dispatch_info[prefill_instance_id] == instance_num_requests[prefill_instance_id]
@@ -322,9 +357,19 @@ def test_dispatch_adaptive_pd(enable_pd_disagg):
     instance_dispatch_info[prefill_instance_id] += 1
     instance_dispatch_info[decode_instance_id] += 1
     lowest_load_prefill_instance_id = min(
-        prefill_instance_info_dict, key=lambda x: getattr(prefill_instance_info_dict[x], dispatch_load_metric_config.dispatch_prefill_load_metric))
+        prefill_instance_info_dict,
+        key=lambda x: getattr(
+            prefill_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_prefill_load_metric
+        )
+    )
     lowest_load_prefill_as_decode_instance_id = min(
-        prefill_instance_info_dict, key=lambda x: getattr(prefill_instance_info_dict[x], dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric))
+        prefill_instance_info_dict,
+        key=lambda x: getattr(
+            prefill_instance_info_dict[x],
+            dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric
+        )
+    )
     assert prefill_instance_id == lowest_load_prefill_instance_id
     assert enable_pd_disagg or decode_instance_id == lowest_load_prefill_as_decode_instance_id
     assert instance_dispatch_info[prefill_instance_id] == instance_num_requests[prefill_instance_id]
@@ -488,7 +533,11 @@ def test_dispatch_topk_random_dispatch(topk_random_dispatch):
         dispatch_prefill_as_decode_load_metric='adaptive_decode',
         dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
     )
-    dispatch_scheduler = init_dispatch_scheduler(policy='load', topk_random_dispatch=topk_random_dispatch, dispatch_load_metric_config=dispatch_load_metric_config)
+    dispatch_scheduler = init_dispatch_scheduler(
+        policy='load',
+        topk_random_dispatch=topk_random_dispatch,
+        dispatch_load_metric_config=dispatch_load_metric_config
+    )
     instance_info_dict, instance_num_requests = init_instances(instance_num)
     instance_id_set = set()
     for _ in range(num_tests):

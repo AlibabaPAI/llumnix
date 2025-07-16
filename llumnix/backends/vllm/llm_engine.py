@@ -307,10 +307,21 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         request_processing_context.add_trace_timeline('engine_add_request_timestamp')
         hit_length = kwargs.get("hit_length", 0)
         transfer_penalty = kwargs.get("transfer_penalty", 1)
-        self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(request_id, request_processing_context, expected_steps, hit_length, transfer_penalty, [seq_group.get_seqs()[0]],
-                                                             seq_group.metrics.arrival_time, seq_group.sampling_params, seq_group.lora_request,
-                                                             seq_group.trace_headers, seq_group.prompt_adapter_request, seq_group.encoder_seq,
-                                                             seq_group.priority)
+        self.scheduler[0].waiting[-1] = SequenceGroupLlumnix(
+            request_id,
+            request_processing_context,
+            expected_steps,
+            hit_length,
+            transfer_penalty,
+            [seq_group.get_seqs()[0]],
+            seq_group.metrics.arrival_time,
+            seq_group.sampling_params,
+            seq_group.lora_request,
+            seq_group.trace_headers,
+            seq_group.prompt_adapter_request,
+            seq_group.encoder_seq,
+            seq_group.priority
+        )
 
     def clear_request(self, request_id) -> None:
         if request_id in self.request_ids:

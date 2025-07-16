@@ -80,7 +80,6 @@ from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.manager import Manager
-from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
 
 logger = init_logger(__name__)
 
@@ -304,6 +303,9 @@ class Scaler:
                         instance_type=get_service_instance_type(service_name),
                     )
                 elif self.engine_args.backend_type == BackendType.VLLM_V1:
+                    # pylint: disable=import-outside-toplevel
+                    from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
+                    
                     # Use DPManager to launch both normal instances and DP group.
                     dp_size = self.engine_args.get_dp_size()
 

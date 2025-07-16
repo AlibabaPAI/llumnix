@@ -80,6 +80,7 @@ from llumnix.ray_utils import clear_gloo_backend_ray_resources
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.manager import Manager
+from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
 
 logger = init_logger(__name__)
 
@@ -303,18 +304,23 @@ class Scaler:
                         instance_type=get_service_instance_type(service_name),
                     )
                 elif self.engine_args.backend_type == BackendType.VLLM_V1:
-                    # pylint: disable=import-outside-toplevel
-                    from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
-
                     # Use DPManager to launch both normal instances and DP group.
                     dp_size = self.engine_args.get_dp_size()
-                    # Assign dp_size random ids for instances and servers.
+
+                    # Assign dp_size ids/ports/client_indice for instances and servers.
                     new_instance_ids = [random_uuid() for _ in range(dp_size)]
+                    new_port_offset = [self.port_offset+i for i in range(dp_size)]
+                    new_client_index = [self.client_index+i for i in range(dp_size)]
+
                     # TODO(shejiarui): Add exception handler if DPManager failed.
-                    # pylint: disable=unused-variable
-                    dp_manager = DPManager.from_args(new_instance_id, new_instance_ids, self.entrypoints_args,
-                                                     self.instance_args, self.engine_args, new_pg)
-                    # Assign dp_size ports and client_indice for instances and servers.
+                    dp_manager = DPManager.from_args(new_instance_id, new_instance_ids, new_port_offset, new_client_index,
+                                                     self.entrypoints_args, self.instance_args, self.engine_args, new_pg)
+                    asyncio.create_task(
+                        asyncio_wait_for_ray_remote_call_with_timeout(
+                            dp_manager.is_ready, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
+                        )
+                    )
+
                     if self.enable_port_increment:
                         self.port_offset += dp_size
                         if self.enable_port_offset_store:

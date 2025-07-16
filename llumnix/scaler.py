@@ -305,7 +305,7 @@ class Scaler:
                 elif self.engine_args.backend_type == BackendType.VLLM_V1:
                     # pylint: disable=import-outside-toplevel
                     from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
-                    
+
                     # Use DPManager to launch both normal instances and DP group.
                     dp_size = self.engine_args.get_dp_size()
 

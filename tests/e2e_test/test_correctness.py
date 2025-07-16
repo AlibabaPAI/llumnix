@@ -82,6 +82,7 @@ async def run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_migr
         ip=ip,
         port=base_port,
         tensor_parallel_size=tensor_parallel_size,
+        enforce_eager=True,
     )
     subprocess.run(raw_serve_command, shell=True, check=True)
 

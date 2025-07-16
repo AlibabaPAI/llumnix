@@ -217,7 +217,8 @@ async def test_dispatch_and_expected_steps(global_scheduler: GlobalScheduler):
     instance_ids = [instance_info.instance_id for instance_info in instance_infos]
     global_scheduler.scale_up(instance_ids, [InstanceType.NEUTRAL]*len(instance_ids))
     global_scheduler.update_instance_infos(instance_infos)
-    instance_id, _, request_expected_steps = global_scheduler.dispatch(0)
+    dispatch_context = {}
+    instance_id, _, request_expected_steps = global_scheduler.dispatch(0, dispatch_context)
     assert instance_id in instance_ids
     assert request_expected_steps == math.inf
 
@@ -230,7 +231,8 @@ async def test_dispatch_pd_disagg_and_expected_steps():
     global_scheduler.scale_up(instance_ids, [InstanceType.NEUTRAL]*len(instance_ids))
     global_scheduler.update_instance_infos(instance_infos)
 
-    target_instance_id, _, request_expected_steps, = global_scheduler.dispatch(0)
+    dispatch_context = {}
+    target_instance_id, _, request_expected_steps, = global_scheduler.dispatch(0, dispatch_context)
     assert target_instance_id in instance_ids
     assert request_expected_steps == 1
 
@@ -252,11 +254,12 @@ async def test_dispatch_adaptive_pd_disagg_and_expected_steps():
     global_scheduler.scale_up(decode_instance_id, InstanceType.DECODE)
     global_scheduler.update_instance_infos([decode_instance_info])
 
-    target_instance_id, _, request_expected_steps = global_scheduler.dispatch(0)
+    dispatch_context = {}
+    target_instance_id, _, request_expected_steps = global_scheduler.dispatch(0, dispatch_context)
     assert target_instance_id == prefill_instance_id
     assert request_expected_steps == 1
 
     KvBlocksRatioLoad.BUSY_THRESHOLD = 0
-    target_instance_id, _, request_expected_steps = global_scheduler.dispatch(0)
+    target_instance_id, _, request_expected_steps = global_scheduler.dispatch(0, dispatch_context)
     assert target_instance_id == decode_instance_id
     assert request_expected_steps == math.inf

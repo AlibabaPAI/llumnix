@@ -417,6 +417,66 @@ def test_dispatch_rr():
         target_instance_id = idx%instance_num
         assert instance_id == f'instance_{InstanceType.NEUTRAL.value}_{target_instance_id}'
 
+def test_dispatch_cacheaware():
+    num_tests = 100
+    dispatch_load_metric_config = DispatchLoadMetricConfig(
+        dispatch_load_metric='remaining_steps',
+        dispatch_prefill_load_metric='kv_blocks_ratio',
+        dispatch_decode_load_metric='remaining_steps',
+        dispatch_prefill_as_decode_load_metric='adaptive_decode',
+        dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
+    )
+    dispatch_scheduler = init_dispatch_scheduler(
+        policy='cacheaware',
+        dispatch_load_metric_config=dispatch_load_metric_config,
+        cache_meta_client_config_path='llumnix/config/mock_query_client_config.json'
+    )
+
+    # With cache hit
+    for _ in range(num_tests):
+        instance_info_dict, instance_num_requests = init_instances()
+        target_instance_id = random.choice(list(instance_info_dict.keys()))
+        prompt_token_ids = [random.randint(1, 10000) for _ in range(random.randint(500, 1000))]
+        dispatch_context = {
+            "engine_core_request": type("Dummy", (), {
+                "prompt_token_ids": prompt_token_ids
+            })()
+        }
+        # Calculate hash_id for each chunk and insert into cache locality
+        token_chunks = dispatch_scheduler.dispatch_policy._chunk_tokens(prompt_token_ids)
+        hash_ids = dispatch_scheduler.dispatch_policy._prefix_hash(token_chunks)
+        for hash_id in hash_ids:
+            dispatch_scheduler.dispatch_policy.meta_client.insert_cache_locality(hash_id, target_instance_id)
+
+        instance_id = dispatch_scheduler.dispatch_no_constrains(
+            instance_infos=instance_info_dict,
+            instance_num_requests=instance_num_requests,
+            dispatch_context=dispatch_context
+        )
+        assert instance_id == target_instance_id
+
+    # Without cache hit
+    for _ in range(num_tests):
+        instance_info_dict, instance_num_requests = init_instances()
+        prompt_token_ids = [random.randint(1, 10000) for _ in range(random.randint(500, 1000))]
+        dispatch_context = {
+            "engine_core_request": type("Dummy", (), {
+                "prompt_token_ids": prompt_token_ids
+            })()
+        }
+        # Expect to select the instance with the minimum load
+        target_instance_id = min(
+            instance_info_dict.items(),
+            key=lambda item: getattr(item[1], dispatch_load_metric_config.dispatch_load_metric)
+        )[0]
+
+        instance_id = dispatch_scheduler.dispatch_no_constrains(
+            instance_infos=instance_info_dict,
+            instance_num_requests=instance_num_requests,
+            dispatch_context=dispatch_context
+        )
+        assert instance_id == target_instance_id
+
 @pytest.mark.parametrize("topk_random_dispatch", [1, 2, 3])
 def test_dispatch_topk_random_dispatch(topk_random_dispatch):
     num_tests = 200

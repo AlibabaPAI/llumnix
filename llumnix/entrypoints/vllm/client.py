@@ -124,6 +124,7 @@ class LlumnixClientVLLM(LlumnixClient):
                                     *args,
                                     **kwargs) -> AsyncStream:
         try:
+            # pylint: disable=no-else-return
             if self.instance_num_requests:
                 request_processing_context.add_trace_timeline("api_server_generate_timestamp")
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)

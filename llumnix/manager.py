@@ -123,7 +123,7 @@ class Manager:
 
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
-    async def generate(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, *args, **kwargs) -> None:
+    async def generate(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, *args, **kwargs) -> tuple[str, str]:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
             if self.backend_type == BackendType.BLADELLM:
                 if self.manager_args.enable_engine_pd_disagg:

@@ -51,7 +51,8 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
         self.request_stream_last_completion_tokens: Dict[str, int] = {}
         self.request_output_queue = \
             init_request_output_queue_server(ip="127.0.0.1", queue_type="rayqueue")
-        self.request_instance = {}
+        self.request_instances = {}
+        self.instance_requests = {}
         self.global_instances = {}
         self.request_generate_by_instance_dict = {}
         if loop:

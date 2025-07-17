@@ -145,6 +145,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
     # pylint: disable=arguments-differ
     async def _generate_by_instance(self, request_id: int, request_processing_context: RequestProcessingContext, request: bytes):
         try:
+            # pylint: disable=no-else-return
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 request_processing_context.add_trace_timeline("api_server_generate_timestamp")

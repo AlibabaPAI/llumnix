@@ -41,7 +41,6 @@ from llumnix.utils import (
     log_instance_exception,
     BackendType,
     LaunchMode,
-    run_coroutine_in_new_thread
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -121,8 +120,6 @@ class Manager:
 
         # metrics
         self.manager_metrics = ManagerMetrics()
-
-        run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
 
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 

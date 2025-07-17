@@ -133,10 +133,11 @@ class LlumnixClient(ABC):
         self.request_generate_by_instance_dict.pop(request_id, None)
         instance_ids = self.request_instances.pop(request_id, set())
         for instance_id in instance_ids:
-            self.instance_requests[instance_id].remove(request_id)
+            if instance_id in self.instance_requests and request_id in self.instance_requests[instance_id]:
+                self.instance_requests[instance_id].remove(request_id)
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
-        instance_ids = self.request_instances.get(request_id, set())
+        instance_ids = list(self.request_instances.get(request_id, set()))
         instances = []
         for instance_id in instance_ids:
             instances.append(

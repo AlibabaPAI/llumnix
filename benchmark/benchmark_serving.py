@@ -101,7 +101,8 @@ def vllm_v1_server_req_func(prompt, output_len):
             }
         ],
         "temperature": 0.0,
-        "top_k": 1,
+        "top_p": 0.5,
+        "top_k": 10,
         "stream": "false",
         "presence_penalty": 1.1,
         "repetition_penalty": 1.1,

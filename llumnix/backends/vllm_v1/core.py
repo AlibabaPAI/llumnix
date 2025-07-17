@@ -21,6 +21,7 @@ import ray
 from ray.util.placement_group import PlacementGroup
 import ray.actor
 
+import vllm.envs as vllm_envs
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.config import VllmConfig
 from vllm.utils import Counter
@@ -290,6 +291,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
+        engine_config.parallel_config.data_parallel_master_port = vllm_envs.VLLM_DP_MASTER_PORT
         logger.info("engine_config: {}".format(engine_config))
         # Hack to pass placement_group for init workers.
         engine_config.parallel_config.placement_group = placement_group

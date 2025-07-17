@@ -60,9 +60,12 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
             loop.create_task(self.request_output_queue.run_server_loop())
 
     # pylint: disable=arguments-differ,invalid-overridden-method
-    def generate(self, request_id):
+    def generate(self, request_id, instance_id=None):
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
         self.request_stream[request_id] = results_generator
+        if instance_id:
+            self.request_instances[request_id] = [instance_id]
+            self.instance_requests.setdefault(instance_id, set()).add(request_id)
 
 
 @ray.remote(num_cpus=0)
@@ -208,21 +211,26 @@ async def test_abort_and_abort_request(ray_env):
     request_id = random_uuid()
     # Add request_id to request_streams for get_request_outputs_loop.
     client.generate(request_id)
-    instance_id = random_uuid()
 
     # test no instance_id case
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned is None and instance_returned is None
+    assert len(instance_id_returned) == 0 and len(instance_returned) == 0
+
+    request_id = random_uuid()
+    instance_id = random_uuid()
+    client.generate(request_id, instance_id)
 
     request_output_engine = get_request_output_engine(request_id, instance_id, False)
     client.request_output_queue.queue.put(([request_output_engine], None), block=True)
     # yield to get request outputs
     await asyncio.sleep(3.0)
 
+
     # test no instance case
-    assert request_id in client.request_instance and client.request_instance[request_id] == instance_id
+    assert request_id in client.request_instances and client.request_instances[request_id] == [instance_id]
+    assert instance_id in client.instance_requests and request_id in client.instance_requests[instance_id]
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned == instance_id and instance_returned is None
+    assert instance_id_returned == [instance_id] and instance_returned == [None]
 
     # why must set namespace?
     instance = MockLlumlet.options(name=get_instance_name(instance_id),
@@ -230,7 +238,7 @@ async def test_abort_and_abort_request(ray_env):
 
     # test correct case
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned == instance_id and instance_returned == instance
+    assert instance_id_returned == [instance_id] and instance_returned == [instance]
     await client.abort(request_id)
     assert client.global_instances[instance_id] == instance
     num_aborts = ray.get(instance.get_num_aborts.remote())
@@ -238,7 +246,7 @@ async def test_abort_and_abort_request(ray_env):
 
     # test abort_request
     request_id1 = random_uuid()
-    client.request_instance[request_id1] = instance_id
+    client.generate(request_id1, instance_id)
     client.abort_request(request_id1)
     await asyncio.sleep(3.0)
     num_aborts = ray.get(instance.get_num_aborts.remote())
@@ -247,7 +255,8 @@ async def test_abort_and_abort_request(ray_env):
     # test request states
     assert request_id not in client.request_stream and \
         request_id not in client.request_stream_last_completion_tokens and \
-        request_id not in client.request_instance
+        request_id not in client.request_instances and \
+        request_id not in client.instance_requests[instance_id]
 
 
 @pytest.mark.asyncio
@@ -258,8 +267,8 @@ async def test_clear_client_request_states(ray_env):
 
     request_id = random_uuid()
     # Add request_id to request_streams for get_request_outputs_loop.
-    client.generate(request_id)
     instance_id = random_uuid()
+    client.generate(request_id, instance_id)
 
     request_output_engine = get_request_output_engine(request_id, instance_id, False)
     client.request_output_queue.queue.put(([request_output_engine], None), block=True)
@@ -268,7 +277,8 @@ async def test_clear_client_request_states(ray_env):
 
     # test request states
     assert request_id in client.request_stream and \
-        request_id in client.request_instance
+        request_id in client.request_instances and \
+        request_id in client.instance_requests[instance_id]
 
     request_output_engine.engine_output.finished = True
     client._process_output_order = MagicMock()
@@ -279,4 +289,5 @@ async def test_clear_client_request_states(ray_env):
 
     # test request states
     assert request_id not in client.request_stream and \
-        request_id not in client.request_instance
+        request_id not in client.request_instances and \
+        request_id not in client.instance_requests[instance_id]

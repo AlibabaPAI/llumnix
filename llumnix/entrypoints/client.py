@@ -131,8 +131,9 @@ class LlumnixClient(ABC):
     def _clear_client_request_states(self, request_id: RequestIDType):
         self.request_stream_last_completion_tokens.pop(request_id, None)
         self.request_generate_by_instance_dict.pop(request_id, None)
-        self.request_instances.pop(request_id, [])
-        # self.instance_requests will clean at func process_instances_dead
+        instance_ids = self.request_instances.pop(request_id, [])
+        for instance_id in instance_ids:
+            self.instance_requests[instance_id].remove(request_id)
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
         instance_ids = self.request_instances.get(request_id, [])

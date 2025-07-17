@@ -56,7 +56,8 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.request_output_queue = asyncio.Queue()
         self.llumnix_req_id_to_entrypoint_req_id = {}
         self.entrypoint_req_id_to_llumnix_req_id = {}
-        self.request_instance = {}
+        self.request_instances = {}
+        self.instance_requests = {}
         self.global_instances = {}
         self.msg_encoder = msgspec.msgpack.Encoder()
         self.msg_decoder = msgspec.msgpack.Decoder()
@@ -74,10 +75,13 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         return res
 
     # pylint: disable=arguments-differ,invalid-overridden-method
-    async def _add_request(self, request_id):
+    async def _add_request(self, request_id, instance_id=None):
         self.llumnix_req_id_to_entrypoint_req_id[request_id] = request_id
         self.entrypoint_req_id_to_llumnix_req_id[request_id] = request_id
         self.request_stream[request_id] = asyncio.Queue()
+        if instance_id:
+            self.request_instances[request_id] = [instance_id]
+            self.instance_requests.setdefault(instance_id, set()).add(request_id)
 
     async def clear_output_loop(self):
         self.output_task.cancel()
@@ -219,25 +223,22 @@ async def test_drop_request(ray_env):
 
     # test no instance_id case
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned is None and instance_returned is None
+    assert len(instance_id_returned) == 0 and len(instance_returned) == 0
 
-    request_output = GenerateStreamResponse(req_id=request_id)
-    llumnix_response = LlumnixRequestOuput(request_output.req_id, instance_id, msgspec.msgpack.encode(request_output))
-    await client.request_output_queue.put([llumnix_response])
-    # yield to get request outputs
-    await asyncio.sleep(3.0)
+    request_id = random.randint(0, 1024)
+    await client._add_request(request_id, instance_id)
 
     # test no instance case
-    assert request_id in client.request_instance and client.request_instance[request_id] == instance_id
+    assert request_id in client.request_instances and client.request_instances[request_id] == [instance_id]
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned == instance_id and instance_returned is None
+    assert instance_id_returned == [instance_id] and instance_returned == [None]
 
     instance = MockLlumlet.options(name=get_instance_name(instance_id),
                                    namespace="llumnix").remote()
 
     # test correct case
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned == instance_id and instance_returned == instance
+    assert instance_id_returned == [instance_id] and instance_returned == [instance]
     await client.drop_request(request_id)
     time.sleep(3.0)
     assert client.global_instances[instance_id] == instance
@@ -247,11 +248,12 @@ async def test_drop_request(ray_env):
     # test request states
     assert request_id not in client.request_stream and \
         request_id not in client.request_stream_last_completion_tokens and \
-        request_id not in client.request_instance and \
+        request_id not in client.request_instances and \
         request_id not in client.request_stream_output_stash and \
         request_id not in client.llumnix_req_id_to_entrypoint_req_id and \
-        request_id not in client.entrypoint_req_id_to_llumnix_req_id
-    
+        request_id not in client.entrypoint_req_id_to_llumnix_req_id and \
+        request_id not in client.instance_requests
+
     await client.clear_output_loop()
 
 @pytest.mark.asyncio
@@ -262,8 +264,8 @@ async def test_clear_client_request_states(ray_env):
 
     request_id = random.randint(0, 1024)
     # Add request_id to request_streams for get_request_outputs_loop.
-    await client._add_request(request_id)
     instance_id = random_uuid()
+    await client._add_request(request_id, instance_id)
 
     request_output = GenerateStreamResponse(req_id=request_id)
     llumnix_response = LlumnixRequestOuput(
@@ -278,9 +280,10 @@ async def test_clear_client_request_states(ray_env):
 
     # test request states
     assert request_id in client.request_stream and \
-        request_id in client.request_instance and \
+        request_id in client.request_instances and \
         request_id in client.llumnix_req_id_to_entrypoint_req_id and \
-        request_id in client.entrypoint_req_id_to_llumnix_req_id
+        request_id in client.entrypoint_req_id_to_llumnix_req_id and \
+        request_id in client.instance_requests[instance_id]
 
     request_output.is_finished = True
     client._process_output_order = MagicMock()
@@ -297,8 +300,9 @@ async def test_clear_client_request_states(ray_env):
 
     # test request states
     assert request_id not in client.request_stream and \
-        request_id not in client.request_instance and \
+        request_id not in client.request_instances and \
         request_id not in client.llumnix_req_id_to_entrypoint_req_id and \
-        request_id not in client.entrypoint_req_id_to_llumnix_req_id
+        request_id not in client.entrypoint_req_id_to_llumnix_req_id and \
+        request_id not in client.instance_requests
 
     await client.clear_output_loop()

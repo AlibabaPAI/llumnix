@@ -156,13 +156,14 @@ class LlumnixClientVLLM(LlumnixClient):
         await self._abort(request_id)
 
     def abort_request(self, request_id: str) -> None:
-        instance_id, instance = self._get_instance_for_abort(request_id)
-        if instance:
-            logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
-            asyncio.create_task(self._abort_request(instance_id, instance, request_id))
+        instance_ids, instances = self._get_instance_for_abort(request_id)
+        if instances:
+            for instance_id, instance in zip(instance_ids, instances):
+                logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
+                asyncio.create_task(self._abort_request(instance_id, instance, request_id))
         else:
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
-                request_id, instance_id, instance))
+                request_id, instance_ids, instances))
 
     async def _abort_request(self, instance_id: str, instance: ray.actor.ActorHandle, request_id: str):
         try:

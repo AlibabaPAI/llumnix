@@ -16,6 +16,7 @@ from typing import List
 import ray
 import ray.actor
 from ray.util.placement_group import PlacementGroup
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.state import list_actors
 
 from llumnix.logging.logger import init_logger
@@ -37,6 +38,8 @@ class DPManager:
     def __init__(self,
                  instance_id: str,
                  new_instance_ids: List[str],
+                 new_port_offset: List[int],
+                 new_client_index: List[int],
                  entrypoints_args: EntrypointsArgs,
                  instance_args: InstanceArgs,
                  engine_args: LlumnixEngineArgs,
@@ -51,10 +54,10 @@ class DPManager:
         self.scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
         self.manager = ray.get_actor(get_manager_name(), namespace="llumnix")
 
-        self.port_offset = 0
-        self.client_index_offset = 0
-
         self.instance_ids = new_instance_ids
+        self.port_offsets = new_port_offset
+        self.client_indice = new_client_index
+
         self.instances: List[ray.actor.ActorHandle] = []
         self.servers: List[ray.actor.ActorHandle] = []
 
@@ -72,10 +75,8 @@ class DPManager:
                 # No instances or servers found, create them
                 self._init_instances_and_servers()
             elif found_instances == self.dp_size and found_servers == self.dp_size:
-                for actor in instance_actors:
-                    self.instances.append(ray.get_actor(actor.actor_id))
-                for actor in server_actors:
-                    self.servers.append(ray.get_actor(actor.actor_id))
+                self.instances.append(ray.get_actor(instance.actor_id) for instance in instance_actors)
+                self.servers.append(ray.get_actor(server.actor_id) for server in server_actors)
             else:
                 raise(RuntimeError("DPManager restarted but found not exactly dp_size instances and servers. "
                                    "Restart the whole DP group."))
@@ -92,6 +93,8 @@ class DPManager:
     def from_args(cls,
                   instance_id: str,
                   new_instance_ids: List[str],
+                  new_port_offset: List[int],
+                  new_client_index: List[int],
                   entrypoints_args: EntrypointsArgs,
                   instance_args: InstanceArgs,
                   engine_args: LlumnixEngineArgs,
@@ -101,10 +104,19 @@ class DPManager:
             num_cpus=1,
             name=get_dpmanager_name(instance_id),
             namespace="llumnix",
-        )(cls)
+            lifetime="detached",
+        )(cls).options(
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_bundle_index=0,
+                placement_group_capture_child_tasks=True
+            )
+        )
         dp_manager = dp_manager_class.remote(
             instance_id,
             new_instance_ids,
+            new_port_offset,
+            new_client_index,
             entrypoints_args,
             instance_args,
             engine_args,
@@ -131,10 +143,8 @@ class DPManager:
             )
             self.instances.append(instance)
 
-            self.entrypoints_args.port += self.port_offset
-            self.entrypoints_args.client_index += self.client_index_offset
-            self.port_offset += 1
-            self.client_index_offset += 1
+            self.entrypoints_args.port += self.port_offsets[rank]
+            self.entrypoints_args.client_index = self.client_indice[rank]
             server = APIServerActorVLLMV1.from_args(
                 NUM_GPUS_VLLM_V1_GPU_ACTOR,
                 new_instance_id,
@@ -148,3 +158,6 @@ class DPManager:
                 bundle_index=rank
             )
             self.servers.append(server)
+
+    def is_ready(self):
+        return True

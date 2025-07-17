@@ -101,13 +101,15 @@ def initialize_placement_group(
     try:
         # Create a new placement group
         if dp_size > 1:
-            # bundle_N: DP rank N, CPU Actors + Worker * world_size
-            num_cpu_per_dp = num_cpus // dp_size
+            num_cpu_per_dp = (num_cpus - 1) // dp_size
             world_size = num_gpus // dp_size
-            placement_group_specs_per_dp = [{"CPU": num_cpu_per_dp, "GPU": world_size}]
-            placement_group_specs = []
-            for _ in range(dp_size):
-                placement_group_specs += placement_group_specs_per_dp
+            # bundle_0: DPManager + CPU Actors + Worker * world_size
+            first_bundle = {"CPU": num_cpu_per_dp + 1, "GPU": world_size}
+            # bundle_1~bundle_N: CPU Actors + Worker * world_size
+            regular_bundle = {"CPU": num_cpu_per_dp, "GPU": world_size}
+            placement_group_specs = [first_bundle]
+            for _ in range(dp_size - 1):
+                placement_group_specs.append(regular_bundle)
         elif num_gpus >= 1:
             # bundle_0: All CPU Actors + Worker_0, bundle_1-N-1: Worker_1...Worker_N-1
             placement_group_specs = [{"CPU": num_cpus, "GPU": 1}] + [{"GPU": 1}] * (num_gpus - 1)

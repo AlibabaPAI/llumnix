@@ -16,7 +16,7 @@ import os
 import time
 import subprocess
 import uuid
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 import pytest
 import requests
@@ -27,6 +27,32 @@ from llumnix.utils import get_ip_address
 from tests import conftest
 from tests.utils import try_convert_to_local_path
 
+def parse_launch_command(launch_command: str) -> Tuple[Dict[str, str], str]:
+    """Parse launch command to process_env and command"""
+    process_env = {}
+    command_parts = launch_command.split()
+    command_start_index = 0
+    for i, part in enumerate(command_parts):
+        if '=' in part:
+            # Check that it's a KEY=VALUE pair at the start, not an argument like --key=value
+            if not part.startswith('-'):
+                key, value = part.split('=', 1)
+                process_env[key] = value
+                # Mark this part as an environment variable
+                command_start_index = i + 1
+            else:
+                # It's an argument, so environment variable declarations have ended
+                break
+        else:
+            # This is the first part without an '=', so the command starts here
+            break
+
+    actual_command = ' '.join(command_parts[command_start_index:])
+    env = os.environ.copy()
+    for k, v in process_env.items():
+        env[k] = v
+
+    return env, actual_command
 
 def generate_vllm_launch_command(
     result_filename: str = "",
@@ -142,6 +168,124 @@ def generate_vllm_serve_command(
         f"{'--simulator-mode ' if enable_simulator else ''}"
         f"--request-output-forwarding-mode {request_output_forwarding_mode} "
         f"--config-file {config_path} "
+        f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
+        f"{'--disable-async-output-proc ' if enable_simulator else ''}"
+        f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+    )
+    print(f"Going to run command: {command}")
+    return command
+
+def generate_raw_vllm_v1_serve_command(
+    result_filename: str = "",
+    launch_ray_cluster: bool = False,
+    HEAD_NODE_IP: str = "127.0.0.1",
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    max_model_len: int = 4096,
+    max_num_batched_tokens: int = 16000,
+    tensor_parallel_size: int = 1,
+    enforce_eager: bool = False,
+    **kwargs
+):
+    """Generate raw vllm v1 serve command without Llumnix"""
+    command = (
+        f"VLLM_USE_V1=1 RAY_DEDUP_LOGS=0 VLLM_FORCE_DETOKENIZE=1 "
+        f"nohup vllm serve {model} "
+        f"--host {ip} "
+        f"--port {port} "
+        f"{'--enforce-eager' if enforce_eager else ''} "
+        f"--max-model-len {max_model_len} "
+        f"--trust-remote-code "
+        f"--tensor-parallel-size {tensor_parallel_size} "
+        f"--max-num-batched-tokens {max_num_batched_tokens} "
+        f"{'> raw_vllm_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
+    )
+    print(f"Going to run command: {command}")
+    return command
+
+def generate_vllm_v1_launch_command(
+    result_filename: str = "",
+    launch_ray_cluster: bool = False,
+    HEAD_NODE_IP: str = "127.0.0.1",
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    instances_num: int = 1,
+    dispatch_policy: str = "load",
+    migration_backend: str = "gloo",
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    max_model_len: int = 4096,
+    log_instance_info: bool = False,
+    log_request_timestamps: bool = False,
+    request_migration_policy: str = 'SR',
+    max_num_batched_tokens: int = 16000,
+    enable_pd_disagg: bool = False,
+    instance_type: str = "no_constraints",
+    tensor_parallel_size: int = 1,
+    enable_simulator: bool = False,
+    request_output_queue_type: str = "zmq",
+    config_file: str = "configs/vllm.yml",
+    enable_migration: bool = True,
+    enforce_eager: bool = False,
+    request_output_forwarding_mode: str = "thread",
+    **kwargs
+):
+    return None
+def generate_vllm_v1_serve_command(
+    result_filename: str = "",
+    ip: str = get_ip_address(),
+    port: int = 37000,
+    dispatch_policy: str = "load",
+    migration_backend: str = "gloo",
+    model: str = try_convert_to_local_path("facebook/opt-125m"),
+    max_model_len: int = 4096,
+    log_instance_info: bool = False,
+    log_request_timestamps: bool = True,
+    request_migration_policy: str = 'SR',
+    max_num_batched_tokens: int = 16000,
+    enable_pd_disagg: bool = False,
+    enable_adaptive_pd: bool = False,
+    pd_ratio: str = "1:1",
+    enable_simulator: bool = False,
+    request_output_queue_type: str = "zmq",
+    config_path: str = "configs/vllm_v1.yml",
+    tensor_parallel_size: int = 1,
+    enable_migration: bool = True,
+    enforce_eager: bool = False,
+    max_instances: int = 4,
+    request_output_forwarding_mode: str = "thread",
+    **kwargs
+):
+    command = (
+        f"{'NCCL_SOCKET_IFNAME=eth0 ' if tensor_parallel_size > 1 else ''}"
+        f"VLLM_USE_V1=1 VLLM_ENABLE_LLUMNIX=1 VLLM_FORCE_DETOKENIZE=1 RAY_DEDUP_LOGS=0 "
+        f"nohup python -m llumnix.entrypoints.vllm_v1.serve "
+        f"--host {ip} "
+        f"--port {port} "
+        f"{'--log-filename manager ' if log_instance_info else ''}"
+        f"{'--log-instance-info ' if log_instance_info else ''}"
+        f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
+        f"{'--enable-migration' if enable_migration else ''} "
+        f"--model {model} "
+        f"--distributed-executor-backend ray "
+        f"{'--enforce-eager' if enforce_eager else ''} "
+        f"--max-model-len {max_model_len} "
+        f"--dispatch-policy {dispatch_policy} "
+        f"--trust-remote-code "
+        f"--request-migration-policy {request_migration_policy} "
+        f"--migration-backend {migration_backend} "
+        f"--migration-buffer-blocks 32 "
+        f"--tensor-parallel-size {tensor_parallel_size} "
+        f"--request-output-queue-type {request_output_queue_type} "
+        f"--max-num-batched-tokens {max_num_batched_tokens} "
+        # f"--pd-ratio {pd_ratio} "
+        f"--enable-port-increment "
+        f"--max-instances {max_instances} "
+        f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
+        f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
+        f"{'--simulator-mode ' if enable_simulator else ''}"
+        f"--request-output-forwarding-mode {request_output_forwarding_mode} "
+        # f"--config-file {config_path} "
         f"{'--profiling-result-file-path /mnt/model/simulator/Qwen2.5-7B.pkl ' if enable_simulator else ''}"
         f"{'--disable-async-output-proc ' if enable_simulator else ''}"
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
@@ -308,6 +452,7 @@ def generate_vllm_v1_request(prompt):
             }
         ],
         "temperature": 0.0,
+        "top_k": 1,
         "stream": "false",
         "ignore_eos": "false",
         "presence_penalty": 1.1,
@@ -380,7 +525,7 @@ def wait_for_llumnix_service_ready(ip_ports, timeout=120):
 def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
     start_time = time.time()
     while True:
-        all_ready = True
+        all_ready = False
         for ip_port in ip_ports:
             try:
                 request = {
@@ -397,11 +542,10 @@ def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
                     "max_tokens": 1,
                 }
                 response = requests.post(f"http://{ip_port}/v1/chat/completions", json=request, timeout=5)
-                if response.status_code != 200:
-                    all_ready = False
+                if response.status_code == 200:
+                    all_ready = True
                     break
             except requests.RequestException:
-                all_ready = False
                 break
 
         if all_ready:
@@ -592,11 +736,14 @@ def generate_bladellm_serve_service_command_func(
 
 def shutdown_llumnix_service_func():
     subprocess.run('pkill -f llumnix.entrypoints.vllm.api_server', shell=True, check=False)
+    subprocess.run('pkill -f llumnix.entrypoints.vllm_v1.api_server', shell=True, check=False)
     subprocess.run('pkill -f benchmark_serving.py', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.vllm.serve', shell=True, check=False)
+    subprocess.run('pkill -f llumnix.entrypoints.vllm_v1.serve', shell=True, check=False)
     subprocess.run('pkill -f blade_llm_server', shell=True, check=False)
     subprocess.run('pkill -f llumnix.entrypoints.bladellm.serve', shell=True, check=False)
     subprocess.run('pkill -f multiprocessing', shell=True, check=False)
+    subprocess.run("pkill -f 'vllm serve'", shell=True, check=False)
     subprocess.run('rm -rf /tmp/kvt-*', shell=True, check=False)
     subprocess.run(f'rm -rf {NAMING_URL.split(":")[1] + "/*"}', shell=True, check=False)
     time.sleep(1.0)

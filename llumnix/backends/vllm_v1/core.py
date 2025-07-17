@@ -400,7 +400,8 @@ class BackendVLLMV1(BackendInterface):
 
     def _load_and_reconfig_engine_args(self, llumnix_engine_args: LlumnixEngineArgs):
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args()
-        engine_args.kv_transfer_config.engine_available_port = get_free_port()
+        if engine_args.kv_transfer_config is not None:
+            engine_args.kv_transfer_config.engine_available_port = get_free_port()
         return engine_args
 
     def stop(self):

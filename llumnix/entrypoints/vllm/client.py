@@ -85,14 +85,10 @@ class LlumnixClientVLLM(LlumnixClient):
                     **kwargs
                 )
 
-            if prefill_instance_id == decode_instance_id:
-                # disable pd-disagg
-                self.request_instances[request_id] = [prefill_instance_id]
-                self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
-            else:
-                # pd-disagg or semi-pd
-                self.request_instances[request_id] = [prefill_instance_id, decode_instance_id]
-                self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
+            self.request_instances[request_id] = set([prefill_instance_id])
+            self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
+            if decode_instance_id:
+                self.request_instances[request_id].add(decode_instance_id)
                 self.instance_requests.setdefault(decode_instance_id, set()).add(request_id)
             return results_generator
         except Exception as e: # pylint: disable=broad-except
@@ -177,8 +173,9 @@ class LlumnixClientVLLM(LlumnixClient):
         for dead_instance_id in dead_instance_ids:
             for request_id in self.instance_requests.get(dead_instance_id, []):
                 logger.error("Request {} is cancelled because instance {} is dead".format(request_id, dead_instance_id))
-                reqeust_stream = self.request_stream[request_id]
-                reqeust_stream.finish(BaseException("Server internal error, please retry."))
+                if request_id in self.request_stream:
+                    reqeust_stream = self.request_stream[request_id]
+                    reqeust_stream.finish(BaseException("Server internal error, please retry."))
                 self._clear_client_request_states(request_id)
             self.instance_requests.pop(dead_instance_id, None)
 
@@ -194,6 +191,7 @@ class LlumnixClientVLLM(LlumnixClient):
                     if request_id not in self.request_stream:
                         continue
                     instance_id = request_response.instance_id
+                    self.request_instances.setdefault(request_id, set()).add(instance_id)
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue

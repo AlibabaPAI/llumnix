@@ -55,7 +55,7 @@ class LlumnixClient(ABC):
         self.log_requests: bool = entrypoints_context.log_requests
 
         self.instance_requests: Dict[str, set[RequestIDType]] = {}
-        self.request_instances: Dict[RequestIDType, List[str]] = {}
+        self.request_instances: Dict[RequestIDType, set[str]] = {}
         # TODO(s5u13): Consider a better way to get instance handle without calling ray.
         self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
@@ -131,12 +131,12 @@ class LlumnixClient(ABC):
     def _clear_client_request_states(self, request_id: RequestIDType):
         self.request_stream_last_completion_tokens.pop(request_id, None)
         self.request_generate_by_instance_dict.pop(request_id, None)
-        instance_ids = self.request_instances.pop(request_id, [])
+        instance_ids = self.request_instances.pop(request_id, set())
         for instance_id in instance_ids:
             self.instance_requests[instance_id].remove(request_id)
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
-        instance_ids = self.request_instances.get(request_id, [])
+        instance_ids = self.request_instances.get(request_id, set())
         instances = []
         for instance_id in instance_ids:
             instances.append(
@@ -144,6 +144,8 @@ class LlumnixClient(ABC):
                 if instance_id in self.global_instances
                 else get_instance(instance_id)
             )
+        # vllm and blade will check if request_id existed, it will not cause error if request_id is not existed.
+        # Function drop_request in blade is not work correctly when enable semi-pd.
         return instance_ids, instances
 
     async def _update_global_instances_loop(self):

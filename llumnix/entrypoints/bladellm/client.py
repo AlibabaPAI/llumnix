@@ -79,7 +79,11 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         resp_stream = await self._generate(llumnix_req_id, internal_request)
         return resp_stream
 
-    async def _generate(self, request_id: int, request: bytes | ServerRequest | LlumnixServerRequest) -> LLMResponse:
+    async def _generate(
+        self,
+        request_id: int,
+        request: Union[bytes, ServerRequest, LlumnixServerRequest],
+    ) -> LLMResponse:
         logger.info("Client receive request {}.".format(request_id))
         try:
             results_queue = asyncio.Queue()
@@ -111,14 +115,10 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
                 prefill_instance_id, decode_instance_id =  await self._generate_by_instance(request_id, reuqest_processing_context, request)
 
-            if prefill_instance_id == decode_instance_id:
-                # disable pd-disagg
-                self.request_instances[request_id] = [prefill_instance_id]
-                self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
-            else:
-                # pd-disagg or semi-pd
-                self.request_instances[request_id] = [prefill_instance_id, decode_instance_id]
-                self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
+            self.request_instances[request_id] = set([prefill_instance_id])
+            self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
+            if decode_instance_id:
+                self.request_instances[request_id].add(decode_instance_id)
                 self.instance_requests.setdefault(decode_instance_id, set()).add(request_id)
             return LLMResponse(request_id, resp_queue=results_queue)
         except Exception as e: # pylint: disable=broad-except
@@ -159,7 +159,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
                 # return prefill instance id and decode instance id
-                return instance_id, instance_id
+                # decode instance id is same as prefill instance id when disable-pd-disagg, so return None here
+                # decode instance id is determined in prefill instance when enable-pd-disagg, so return None here
+                return instance_id, None
             else:
                 logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available.".format(WAIT_MANAGER_INTERVAL))
@@ -192,6 +194,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                     if request_id not in self.request_stream:
                         continue
                     instance_id = request_response.instance_id
+                    self.request_instances.setdefault(request_id, set()).add(instance_id)
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue
@@ -243,13 +246,14 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         for dead_instance_id in dead_instance_ids:
             for request_id in self.instance_requests.get(dead_instance_id, []):
                 logger.error("Request {} is cancelled because instance {} is dead".format(request_id, dead_instance_id))
-                reset_resp = GenerateStreamResponse(
-                    req_id=request_id,
-                    is_ok=False,
-                    error_info=ErrorInfo(code=500, message="Server internal error, please retry"),
-                )
-                request_queue = self.request_stream[request_id]
-                request_queue.put_nowait(reset_resp)
+                if request_id in self.request_stream:
+                    reset_resp = GenerateStreamResponse(
+                        req_id=request_id,
+                        is_ok=False,
+                        error_info=ErrorInfo(code=500, message="Server internal error, please retry"),
+                    )
+                    request_queue = self.request_stream[request_id]
+                    request_queue.put_nowait(reset_resp)
                 self._clear_client_request_states(request_id)
             self.instance_requests.pop(dead_instance_id, None)
 

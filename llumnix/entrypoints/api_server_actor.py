@@ -56,7 +56,7 @@ class APIServerActor(ABC):
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         self.request_output_queue = init_request_output_queue_server(
             self.host, self.request_output_queue_type)
-        self.llumnix_client:"LlumnixClient" = None
+        self.llumnix_client: "LlumnixClient" = None
 
         self._setup_entrypoints_context(self.scaler, self.manager, self.instance_id, self.instance)
         self._start_server_thread()

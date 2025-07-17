@@ -107,7 +107,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
         )
         subprocess.run(decode_launch_command, shell=True, check=True)
 
-    await asyncio.sleep(60)
+    await asyncio.sleep(90)
 
     bladellm_outputs = {}
     for prompt in prompts:

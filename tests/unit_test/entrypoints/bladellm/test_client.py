@@ -80,7 +80,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.entrypoint_req_id_to_llumnix_req_id[request_id] = request_id
         self.request_stream[request_id] = asyncio.Queue()
         if instance_id:
-            self.request_instances[request_id] = [instance_id]
+            self.request_instances[request_id] = set([instance_id])
             self.instance_requests.setdefault(instance_id, set()).add(request_id)
 
     async def clear_output_loop(self):
@@ -229,7 +229,7 @@ async def test_drop_request(ray_env):
     await client._add_request(request_id, instance_id)
 
     # test no instance case
-    assert request_id in client.request_instances and client.request_instances[request_id] == [instance_id]
+    assert request_id in client.request_instances and client.request_instances[request_id] == set([instance_id])
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
     assert instance_id_returned == [instance_id] and instance_returned == [None]
 

@@ -64,7 +64,7 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
         self.request_stream[request_id] = results_generator
         if instance_id:
-            self.request_instances[request_id] = [instance_id]
+            self.request_instances[request_id] = set([instance_id])
             self.instance_requests.setdefault(instance_id, set()).add(request_id)
 
 
@@ -227,7 +227,7 @@ async def test_abort_and_abort_request(ray_env):
 
 
     # test no instance case
-    assert request_id in client.request_instances and client.request_instances[request_id] == [instance_id]
+    assert request_id in client.request_instances and client.request_instances[request_id] == set([instance_id])
     assert instance_id in client.instance_requests and request_id in client.instance_requests[instance_id]
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
     assert instance_id_returned == [instance_id] and instance_returned == [None]

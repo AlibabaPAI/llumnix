@@ -52,6 +52,7 @@ class MockManager:
         self._num_generates += 1
         await self.request_output_queue.put_nowait(
             [get_request_output_engine(request_id, self.instance_id, finished=True)], server_info)
+        return self.instance_id, self.instance_id
 
     @classmethod
     def from_args(cls, request_output_queue_type: QueueType, instance_id):

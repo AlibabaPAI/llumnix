@@ -91,13 +91,13 @@ class GlobalScheduler:
                                    expected_steps: int):
         if not self._enable_pd():
             # when enable_pd_disagg is False, prefill_instance_id and decode_instance_id are the same
-            logger.info("dispath request {} to instance {}.".format(request_id, prefill_instance_id))
+            logger.info("dispatch request {} to instance {}.".format(request_id, prefill_instance_id))
         else:
             if self.global_scheduler_config.enable_pd_disagg:
-                logger.info("dispath request {} to {} instance ({}), expected_steps: {}.".format(
+                logger.info("dispatch request {} to {} instance ({}), expected_steps: {}.".format(
                     request_id, self.instance_info[prefill_instance_id].instance_type, prefill_instance_id, expected_steps))
             else:
-                logger.info("dispath request {} to {} instance ({}) for prefill, {} instance ({}) for decode.".format(
+                logger.info("dispatch request {} to {} instance ({}) for prefill, {} instance ({}) for decode.".format(
                     request_id, self.instance_info[prefill_instance_id].instance_type, prefill_instance_id,
                     self.instance_info[decode_instance_id].instance_type, decode_instance_id))
 

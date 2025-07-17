@@ -23,7 +23,7 @@ from blade_llm.service.communications.engine_client import MultiProcessingLLMCli
 from blade_llm.service.communications.protocol_msgspec import Stats
 from blade_llm.service.communications.response import LLMResponse
 from blade_llm.service.args import ServingArgs
-from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse
+from blade_llm.protocol_msgspec import ServerRequest, GenerateStreamResponse, ErrorInfo
 from blade_llm.service.communications.response import error_resp
 
 from llumnix.arg_utils import InstanceArgs
@@ -79,36 +79,53 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         resp_stream = await self._generate(llumnix_req_id, internal_request)
         return resp_stream
 
-    async def _generate(self, request_id: int, request: bytes | ServerRequest | LlumnixServerRequest) -> LLMResponse:
+    async def _generate(
+        self,
+        request_id: int,
+        request: Union[bytes, ServerRequest, LlumnixServerRequest],
+    ) -> LLMResponse:
         logger.info("Client receive request {}.".format(request_id))
-        results_queue = asyncio.Queue()
-        self.request_stream[request_id] = results_queue
-        reuqest_processing_context: RequestProcessingContext = (
-            RequestProcessingContext.deepcopy_from_server_info(
-                self.server_info,
-                enable_trace=isinstance(request, LlumnixServerRequest)
-                and request.llumnix_trace_request,
-            )
-        )
-
-        if not isinstance(request, bytes):
-            request = self.msg_encoder.encode(request)
-        # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
-        # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
-            await self._generate_by_manager(request_id, reuqest_processing_context, request)
-        # pylint: disable=broad-except
-        except Exception as e:
-            self._handle_generate_by_manager_error(request_id, e)
+            results_queue = asyncio.Queue()
+            self.request_stream[request_id] = results_queue
+            reuqest_processing_context: RequestProcessingContext = (
+                RequestProcessingContext.deepcopy_from_server_info(
+                    self.server_info,
+                    enable_trace=isinstance(request, LlumnixServerRequest)
+                    and request.llumnix_trace_request,
+                )
+            )
 
-            if not self.enable_generate_by_instance:
-                self._clear_client_request_states(request_id)
-                return error_resp(request_id, err_code=500,
-                                  err_msg="Manager is unavailable and can't genenrate by present instance.")
+            if not isinstance(request, bytes):
+                request = self.msg_encoder.encode(request)
+            # This request's outputs will be put to the request_output_queue of this api server no matter which instance it's running in.
+            # If manager is unavailable, request will be directly added to the llumlet held by api server.
+            try:
+                prefill_instance_id, decode_instance_id = await self._generate_by_manager(
+                    request_id, reuqest_processing_context, request
+                )
+            # pylint: disable=broad-except
+            except Exception as e:
+                self._handle_generate_by_manager_error(request_id, e)
 
-            await self._generate_by_instance(request_id, reuqest_processing_context, request)
+                if not self.enable_generate_by_instance:
+                    self._clear_client_request_states(request_id)
+                    return error_resp(request_id, err_code=500,
+                                    err_msg="Manager is unavailable and can't genenrate by present instance.")
 
-        return LLMResponse(request_id, resp_queue=results_queue)
+                prefill_instance_id, decode_instance_id =  await self._generate_by_instance(request_id, reuqest_processing_context, request)
+
+            self.request_instances[request_id] = set([prefill_instance_id])
+            self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
+            if decode_instance_id:
+                self.request_instances[request_id].add(decode_instance_id)
+                self.instance_requests.setdefault(decode_instance_id, set()).add(request_id)
+            return LLMResponse(request_id, resp_queue=results_queue)
+        except Exception as e: # pylint: disable=broad-except
+            logger.error("Unexpected error in llumnix client generate.{}".format(e))
+            self._clear_client_request_states(request_id)
+            return error_resp(request_id, err_code=500,
+                                    err_msg="Error when llumnix client generate request.")
 
     def _check_genenrate_by_instance(self, instance_args: InstanceArgs) -> bool:
         if instance_args.enable_engine_pd_disagg:
@@ -121,13 +138,14 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
     async def _generate_by_manager(self, request_id: int, request_processing_context: RequestProcessingContext, request: bytes):
         request_processing_context.add_trace_timeline("api_server_generate_timestamp")
         # await to catch exception
-        await asyncio_wait_for_ray_remote_call_with_timeout(
+        return await asyncio_wait_for_ray_remote_call_with_timeout(
             self.manager.generate, str(request_id), request_processing_context, server_request=request
         )
 
     # pylint: disable=arguments-differ
     async def _generate_by_instance(self, request_id: int, request_processing_context: RequestProcessingContext, request: bytes):
         try:
+            # pylint: disable=no-else-return
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 request_processing_context.add_trace_timeline("api_server_generate_timestamp")
@@ -140,6 +158,10 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
+                # return prefill instance id and decode instance id
+                # decode instance id is same as prefill instance id when disable-pd-disagg, so return None here
+                # decode instance id is determined in prefill instance when enable-pd-disagg, so return None here
+                return instance_id, None
             else:
                 logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available.".format(WAIT_MANAGER_INTERVAL))
@@ -171,8 +193,8 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                     # the request_streams when finished. Or the request is dropped already.
                     if request_id not in self.request_stream:
                         continue
-                    self.request_instance[request_id] = request_response.instance_id
                     instance_id = request_response.instance_id
+                    self.request_instances.setdefault(request_id, set()).add(instance_id)
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue
@@ -219,6 +241,21 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.request_stream.pop(request_id, None)
         self.request_stream_output_stash.pop(request_id, None)
         self.llumnix_client_metrics.remove_request(request_id=entrypoint_req_id)
+
+    def process_instances_dead(self, dead_instance_ids: List[str]) -> None:
+        for dead_instance_id in dead_instance_ids:
+            for request_id in self.instance_requests.get(dead_instance_id, []):
+                logger.error("Request {} is cancelled because instance {} is dead".format(request_id, dead_instance_id))
+                if request_id in self.request_stream:
+                    reset_resp = GenerateStreamResponse(
+                        req_id=request_id,
+                        is_ok=False,
+                        error_info=ErrorInfo(code=500, message="Server internal error, please retry"),
+                    )
+                    request_queue = self.request_stream[request_id]
+                    request_queue.put_nowait(reset_resp)
+                self._clear_client_request_states(request_id)
+            self.instance_requests.pop(dead_instance_id, None)
 
     def _process_output_order(
         self,

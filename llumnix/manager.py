@@ -14,7 +14,7 @@
 import asyncio
 import csv
 import os
-from typing import Dict, List, Union, Iterable
+from typing import Dict, List, Tuple, Union, Iterable
 from functools import partial
 
 import ray
@@ -123,7 +123,7 @@ class Manager:
 
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
-    async def generate(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, *args, **kwargs) -> None:
+    async def generate(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, *args, **kwargs) -> Tuple[str, str]:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
             if self.backend_type == BackendType.BLADELLM:
                 if self.manager_args.enable_engine_pd_disagg:
@@ -155,6 +155,7 @@ class Manager:
                 request_id, request_processing_context, request_expected_steps, target_instance_id, *args, **kwargs
             )
         )
+        return prefill_instance_id, decode_instance_id
 
     async def _generate_with_exception_handling(self,
                                                 request_id: RequestIDType,

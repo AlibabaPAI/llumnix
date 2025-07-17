@@ -48,29 +48,55 @@ class LlumnixClientVLLM(LlumnixClient):
         if sampling_params.n > 1:
             raise ValueError("Unsupported feature: multiple sequence decoding")
         logger.info("Client received request {}".format(request_id))
-        # pylint: disable=unexpected-keyword-arg
-        results_generator = AsyncStream(request_id, cancel=self.abort_request)
-        self.request_stream[request_id] = results_generator
-        request_processing_context: RequestProcessingContext = RequestProcessingContext.deepcopy_from_server_info(
-            server_info=self.server_info,
-            enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
-        )
-        kwargs.pop(LLUMNIX_TRACE_REQUEST, None)
-
-        # If manager is unavailable, request will be directly added to the llumlet held by api server.
         try:
-            await self._generate_by_manager(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
-            self.manager_available = True
-        # pylint: disable=broad-except
-        except Exception as e:
-            self._handle_generate_by_manager_error(request_id, e)
-            # Do not re-generate the request to avoid duplicate requests.
-            if self.manager_available:
-                self.manager_available = False
-                return results_generator
-            await self._generate_by_instance(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
+            # pylint: disable=unexpected-keyword-arg
+            results_generator = AsyncStream(request_id, cancel=self.abort_request)
+            self.request_stream[request_id] = results_generator
+            request_processing_context: RequestProcessingContext = RequestProcessingContext.deepcopy_from_server_info(
+                server_info=self.server_info,
+                enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
+            )
+            kwargs.pop(LLUMNIX_TRACE_REQUEST, None)
 
-        return results_generator
+            # If manager is unavailable, request will be directly added to the llumlet held by api server.
+            try:
+                prefill_instance_id, decode_instance_id = await self._generate_by_manager(
+                    request_id,
+                    request_processing_context,
+                    prompt,
+                    sampling_params,
+                    *args,
+                    **kwargs
+                )
+                self.manager_available = True
+            # pylint: disable=broad-except
+            except Exception as e:
+                self._handle_generate_by_manager_error(request_id, e)
+                # Do not re-generate the request to avoid duplicate requests.
+                if self.manager_available:
+                    self.manager_available = False
+                    return results_generator
+                prefill_instance_id, decode_instance_id = await self._generate_by_instance(
+                    request_id,
+                    request_processing_context,
+                    prompt,
+                    sampling_params,
+                    *args,
+                    **kwargs
+                )
+
+            self.request_instances[request_id] = set([prefill_instance_id])
+            self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
+            if decode_instance_id:
+                self.request_instances[request_id].add(decode_instance_id)
+                self.instance_requests.setdefault(decode_instance_id, set()).add(request_id)
+            return results_generator
+        except Exception as e: # pylint: disable=broad-except
+            logger.error("Unexpected error in llumnix client generate.{}".format(e))
+            self._clear_client_request_states(request_id)
+            error_async_stream = AsyncStream(request_id, cancel=self.abort_request)
+            error_async_stream.finish(BaseException("Error when llumnix client generate request."))
+            return error_async_stream
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,
@@ -81,7 +107,7 @@ class LlumnixClientVLLM(LlumnixClient):
                                    *args,
                                    **kwargs) -> AsyncStream:
         request_processing_context.add_trace_timeline("api_server_generate_timestamp")
-        await asyncio_wait_for_ray_remote_call_with_timeout(
+        return await asyncio_wait_for_ray_remote_call_with_timeout(
             self.manager.generate, request_id, request_processing_context, prompt, sampling_params, *args, **kwargs
         )
 
@@ -94,6 +120,7 @@ class LlumnixClientVLLM(LlumnixClient):
                                     *args,
                                     **kwargs) -> AsyncStream:
         try:
+            # pylint: disable=no-else-return
             if self.instance_num_requests:
                 request_processing_context.add_trace_timeline("api_server_generate_timestamp")
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
@@ -108,6 +135,8 @@ class LlumnixClientVLLM(LlumnixClient):
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
+                # return prefill instance id and decode instance id
+                return instance_id, instance_id
             else:
                 logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
@@ -123,13 +152,14 @@ class LlumnixClientVLLM(LlumnixClient):
         await self._abort(request_id)
 
     def abort_request(self, request_id: str) -> None:
-        instance_id, instance = self._get_instance_for_abort(request_id)
-        if instance:
-            logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
-            asyncio.create_task(self._abort_request(instance_id, instance, request_id))
+        instance_ids, instances = self._get_instance_for_abort(request_id)
+        if instances:
+            for instance_id, instance in zip(instance_ids, instances):
+                logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
+                asyncio.create_task(self._abort_request(instance_id, instance, request_id))
         else:
             logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
-                request_id, instance_id, instance))
+                request_id, instance_ids, instances))
 
     async def _abort_request(self, instance_id: str, instance: ray.actor.ActorHandle, request_id: str):
         try:
@@ -138,6 +168,16 @@ class LlumnixClientVLLM(LlumnixClient):
         # pylint: disable=broad-except
         except Exception as e:
             log_instance_exception(e, instance_id, "_abort_request", request_id)
+
+    def process_instances_dead(self, dead_instance_ids: List[str]) -> None:
+        for dead_instance_id in dead_instance_ids:
+            for request_id in self.instance_requests.get(dead_instance_id, []):
+                logger.error("Request {} is cancelled because instance {} is dead".format(request_id, dead_instance_id))
+                if request_id in self.request_stream:
+                    reqeust_stream = self.request_stream[request_id]
+                    reqeust_stream.finish(BaseException("Server internal error, please retry."))
+                self._clear_client_request_states(request_id)
+            self.instance_requests.pop(dead_instance_id, None)
 
     async def get_request_outputs_loop(self):
         while True:
@@ -151,11 +191,10 @@ class LlumnixClientVLLM(LlumnixClient):
                     if request_id not in self.request_stream:
                         continue
                     instance_id = request_response.instance_id
+                    self.request_instances.setdefault(request_id, set()).add(instance_id)
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue
-                    # Update when request_id is in self.request_streams.
-                    self.request_instance[request_id] = request_response.instance_id
 
                     processed_output = self._process_output_order(request_id, request_response)
                     if not processed_output:

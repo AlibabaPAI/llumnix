@@ -14,6 +14,7 @@
 from abc import ABC, abstractmethod
 import threading
 import time
+from typing import List
 
 import requests
 import ray
@@ -55,6 +56,7 @@ class APIServerActor(ABC):
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         self.request_output_queue = init_request_output_queue_server(
             self.host, self.request_output_queue_type)
+        self.llumnix_client: "LlumnixClient" = None
 
         self._setup_entrypoints_context(self.scaler, self.manager, self.instance_id, self.instance)
         self._start_server_thread()
@@ -154,3 +156,6 @@ class APIServerActor(ABC):
 
     def is_ready(self) -> bool:
         return True
+
+    def clear_dead_instances(self, dead_instance_ids: List[str]) -> None:
+        pass

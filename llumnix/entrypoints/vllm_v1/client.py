@@ -34,6 +34,7 @@ from llumnix.constants import LLUMNIX_TRACE_REQUEST, WAIT_MANAGER_INTERVAL
 from llumnix.utils import asyncio_wait_for_ray_remote_call_with_timeout, log_instance_exception
 from llumnix.request_output import LlumnixRequestOutputs
 from llumnix.entrypoints.client import LlumnixClient
+from llumnix.request_processing_context import RequestProcessingContext
 
 logger = init_logger(__name__)
 

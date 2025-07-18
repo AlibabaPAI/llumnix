@@ -452,11 +452,13 @@ def generate_vllm_v1_request(prompt):
             }
         ],
         "temperature": 0.0,
-        "top_k": 1,
         "stream": "false",
         "ignore_eos": "false",
         "presence_penalty": 1.1,
         "repetition_penalty": 1.1,
+        "temperature": 0.0,
+        "top_p": 0.5,
+        "top_k": 10,
     }
     return request
 

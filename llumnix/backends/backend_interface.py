@@ -18,9 +18,9 @@ import ray.actor
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.request_processing_context import RequestProcessingContext
-from llumnix.utils import RequestIDType, MigrationResponse
+from llumnix.utils import RequestIDType, MigrationResponse, InstanceContext
 from llumnix.constants import RAY_RPC_TIMEOUT
-from llumnix.instance_info import InstanceContext, InstanceInfo
+from llumnix.instance_info import InstanceInfo
 
 
 class BackendInterface(ABC):

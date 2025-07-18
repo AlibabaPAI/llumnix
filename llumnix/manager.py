@@ -24,7 +24,7 @@ from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
 from llumnix.global_scheduler.migration_filter import CustomFilter
-from llumnix.instance_info import InstanceInfo, InstanceContext
+from llumnix.instance_info import InstanceInfo
 from llumnix.arg_utils import (
     ManagerArgs,
     EntrypointsArgs,
@@ -42,6 +42,7 @@ from llumnix.utils import (
     BackendType,
     LaunchMode,
     InstanceType,
+    InstanceContext,
 )
 from llumnix.ray_utils import (
     get_manager_name,

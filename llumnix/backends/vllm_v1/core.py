@@ -32,7 +32,7 @@ from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceContext, InstanceInfo, InstanceType
+from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc,
                                                  AsyncDPEngineCoreProc)
@@ -50,7 +50,14 @@ from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
 from llumnix.constants import RAY_RPC_TIMEOUT
-from llumnix.utils import RequestIDType, MigrationResponse, BackendType, get_free_port
+from llumnix.utils import (
+    RequestIDType,
+    MigrationResponse,
+    BackendType,
+    get_free_port,
+    InstanceContext,
+    InstanceType,
+)
 from llumnix.request_output import LlumnixRequestOutputs
 
 logger = init_logger(__name__)

@@ -33,7 +33,7 @@ from vllm import envs as vllm_envs
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceContext, InstanceInfo
+from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
@@ -46,7 +46,14 @@ from llumnix.backends.output_forwarder import RequestOutputForwardingMode, Outpu
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
-from llumnix.utils import make_async, BackendType, RequestIDType, MigrationResponse, asyncio_wait_for_ray_remote_call_with_timeout
+from llumnix.utils import (
+    make_async,
+    BackendType,
+    RequestIDType,
+    MigrationResponse,
+    asyncio_wait_for_ray_remote_call_with_timeout,
+    InstanceContext,
+)
 from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)

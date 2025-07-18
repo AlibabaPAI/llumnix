@@ -60,7 +60,7 @@ from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import OutputForwarder, RequestOutputForwardingMode
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
-from llumnix.instance_info import InstanceContext, InstanceInfo
+from llumnix.instance_info import InstanceInfo
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
 from llumnix.backends.bladellm.proto import migration_worker_pb2_grpc
@@ -68,7 +68,7 @@ from llumnix.backends.bladellm.proto.migration_worker_pb2 import RecvCacheReques
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_RPC_TIMEOUT
-from llumnix.utils import BackendType
+from llumnix.utils import BackendType, InstanceContext
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs

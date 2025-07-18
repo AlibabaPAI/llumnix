@@ -41,15 +41,6 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
 }
 
 
-@dataclass
-class InstanceContext:
-    # used for blade_llm
-    local_engine_id: Optional[str] = None
-    # used for vllm_v1 pd
-    kvt_engine_available_port: Optional[int] = None
-    engine_host: Optional[str] = None
-
-
 class InstanceType(str, Enum):
     NO_CONSTRAINTS = "no_constraints"
     PREFILL = "prefill"

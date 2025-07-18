@@ -54,6 +54,15 @@ class InstanceType(str, Enum):
     DECODE_AS_PREFILL = "decode_as_prefill"
 
 
+@dataclass
+class InstanceContext:
+    # used for blade_llm
+    local_engine_id: Optional[str] = None
+    # used for vllm_v1 pd
+    kvt_engine_available_port: Optional[int] = None
+    engine_host: Optional[str] = None
+
+
 class BackendType(str, Enum):
     VLLM = "vLLM"
     VLLM_V1 = "vLLM v1"

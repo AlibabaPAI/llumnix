@@ -20,11 +20,12 @@ import os
 import pickle
 from typing import List, Tuple, Union, Dict
 from abc import ABC, abstractmethod
+import copy
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig, DispatchLoadMetricConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
-from llumnix.utils import BackendType, LaunchMode
+from llumnix.utils import BackendType, LaunchMode, InstanceType
 from llumnix.logging.logger import init_logger
 
 logger = init_logger(__name__)
@@ -115,10 +116,7 @@ class LlumnixEngineArgsFactory:
         self.enable_port_increment: bool = enable_port_increment
 
         if self.load_registered_service:
-            if (
-                not self.pdd_config.enable_pd_disagg
-                and not self.pdd_config.enable_engine_pd_disagg
-            ):
+            if not self.enable_pd:
                 instance_type_list = ["neutral"]
             else:
                 instance_type_list = ["prefill", "decode"]
@@ -126,6 +124,10 @@ class LlumnixEngineArgsFactory:
                 self.engine_args_dict[instance_type] = load_engine_args(
                     instance_type, self.load_registered_service_path
                 )
+
+    @property
+    def enable_pd(self) -> bool:
+        return self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg
 
     @abstractmethod
     def gen_next_engine_args(
@@ -225,6 +227,25 @@ class EntrypointsArgs:
                             type=str,
                             help="path to config file of arguments")
         return parser
+
+    @staticmethod
+    def get_next_entrypoints_args(
+        entrypoints_args: "EntrypointsArgs",
+        enable_port_increment: bool,
+        port_offset: int,
+        client_index: int = None,
+    ) -> "EntrypointsArgs":
+        next_entrypoints_args = copy.deepcopy(entrypoints_args)
+
+        if client_index is not None:
+            next_entrypoints_args.client_index = client_index
+
+        if not enable_port_increment:
+            return next_entrypoints_args
+
+        next_entrypoints_args.port += port_offset
+
+        return next_entrypoints_args
 
 
 @dataclass
@@ -777,6 +798,13 @@ class InstanceArgs:
                             'engine step are fowarded to a seperate actor/thread, and the seperate actor/thread transfers the '
                             'request outputs to api servers using zmq.')
         return parser
+
+    @staticmethod
+    def get_next_instance_args(instance_args: "InstanceArgs", instance_type: InstanceType) -> "InstanceArgs":
+        next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
+        next_instance_args.instance_type = instance_type
+
+        return next_instance_args
 
 
 @dataclass

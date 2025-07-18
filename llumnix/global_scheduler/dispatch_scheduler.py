@@ -14,10 +14,11 @@
 from typing import Dict, Tuple, Optional
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceType, InstanceInfo
+from llumnix.instance_info import InstanceInfo
 from llumnix.constants import DISPATCH_LOG_FREQUENCY
 from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory, DispatchPolicy, DispatchLoadMetricConfig
 from llumnix.metrics.metrics_types import Summary
+from llumnix.utils import InstanceType
 
 logger = init_logger(__name__)
 

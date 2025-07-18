@@ -16,7 +16,8 @@ import random
 from typing import Dict
 
 import pytest
-from llumnix.instance_info import InstanceInfo, InstanceType
+from llumnix.instance_info import InstanceInfo
+from llumnix.utils import InstanceType
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
 from llumnix.load_computation import KvBlocksRatioLoad, RemainingStepsLoad, AdaptiveDecodeBatchLoad, MissWaitingTokensLoad

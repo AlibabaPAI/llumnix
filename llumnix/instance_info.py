@@ -13,7 +13,6 @@
 
 import copy
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Dict, Iterable, List, Tuple
 
 from llumnix.logging.logger import init_logger
@@ -28,16 +27,9 @@ from llumnix.load_computation import (
 )
 from llumnix.llumlet.request import RequestInferenceType
 from llumnix.arg_utils import InstanceArgs
+from llumnix.utils import InstanceType
 
 logger = init_logger(__name__)
-
-
-class InstanceType(str, Enum):
-    NEUTRAL = "neutral"
-    PREFILL = "prefill"
-    DECODE = "decode"
-    PREFILL_AS_DECODE = "prefill_as_decode"
-    DECODE_AS_PREFILL = "decode_as_prefill"
 
 INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
     InstanceType.NEUTRAL: 'dispatch_load_metric',

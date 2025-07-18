@@ -37,7 +37,7 @@ SCALER_NAME = "scaler"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
-DPMANAGER_NAME = "dpmanager_"
+DPMANAGER_NAME_PREFIX = "dp_manager_"
 
 
 def get_manager_name() -> str:
@@ -55,8 +55,8 @@ def get_server_name(instance_id: str) -> str:
 def get_instance_name(instance_id: str) -> str:
     return f"{INSTANCE_NAME_PREFIX}{instance_id}"
 
-def get_dpmanager_name(instance_id: str) -> str:
-    return f"{DPMANAGER_NAME}{instance_id}"
+def get_dp_manager_name(instance_id: str) -> str:
+    return f"{DPMANAGER_NAME_PREFIX}{instance_id}"
 
 # pylint: disable=dangerous-default-value
 def initialize_placement_group(
@@ -235,6 +235,24 @@ async def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None
         return False
     except Exception: # pylint: disable=broad-except
         logger.exception("Error in kill_instance (instance_id: {})".format(instance_id))
+        return False
+    return True
+
+async def kill_dp_manager(instance_id: str, dp_manager: ray.actor.ActorHandle = None) -> bool:
+    try:
+        if not dp_manager:
+            dp_manager = ray.get_actor(get_dp_manager_name(instance_id), namespace="llumnix")
+        try:
+            await dp_manager.stop.remote()
+        # pylint: disable=bare-except
+        except:
+            pass
+        ray.kill(dp_manager)
+        logger.info("Kill dp manager {}.".format(instance_id))
+    except ValueError:
+        return False
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in kill_dp_manager (instance_id: {})".format(instance_id))
         return False
     return True
 

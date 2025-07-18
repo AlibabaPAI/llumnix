@@ -85,7 +85,7 @@ class LlumnixClientVLLM(LlumnixClient):
                     **kwargs
                 )
 
-            self.request_instances[request_id] = set([prefill_instance_id])
+            self.request_instances[request_id].add(prefill_instance_id)
             self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
             if decode_instance_id:
                 self.request_instances[request_id].add(decode_instance_id)
@@ -191,7 +191,7 @@ class LlumnixClientVLLM(LlumnixClient):
                     if request_id not in self.request_stream:
                         continue
                     instance_id = request_response.instance_id
-                    self.request_instances.setdefault(request_id, set()).add(instance_id)
+                    self.request_instances[request_id].add(instance_id)
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue

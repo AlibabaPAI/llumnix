@@ -20,17 +20,17 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, InstanceType
+from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.backends.backend_interface import BackendInterface
 from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
-from llumnix.ray_utils import get_instance_name, log_actor_ray_info
+from llumnix.ray_utils import get_instance_name, log_actor_ray_info, remove_placement_group
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import MigrationType, RequestIDType, BackendType
+from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -50,17 +50,19 @@ class Llumlet:
         logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
             self.instance_id, llumnix_engine_args.backend_type, instance_args.instance_type))
         self.instance_args: InstanceArgs = instance_args
-        self.enable_migration = instance_args.enable_migration
-        self.actor_name = get_instance_name(instance_id)
+        self.placement_group = placement_group
+        self.actor_handle = ray.get_actor(name=get_instance_name(instance_id), namespace="llumnix")
 
-        self.instance_load_calculator = InstanceLoadCalculator(instance_args=self.instance_args)
+        self.instance_load_calculator = InstanceLoadCalculator(instance_args=instance_args)
 
-        self.backend_engine: BackendInterface = init_backend_engine(self.instance_id,
+        self.backend_engine: BackendInterface = init_backend_engine(instance_id,
                                                                     placement_group,
                                                                     request_output_queue_type,
                                                                     instance_args,
                                                                     llumnix_engine_args,
                                                                     dp_rank, dp_rank_local)
+
+        self.enable_migration = instance_args.enable_migration
         if self.enable_migration:
             self.migration_coordinator = MigrationCoordinator(
                 self.instance_id,
@@ -135,8 +137,8 @@ class Llumlet:
     def stop(self):
         if self.backend_engine.state == EngineState.RUNNING:
             self.backend_engine.stop()
-        self_actor = ray.get_actor(name=self.actor_name, namespace="llumnix")
-        ray.kill(self_actor)
+        ray.kill(self.actor_handle)
+        remove_placement_group(self.placement_group)
 
     # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager
     def get_instance_info(self) -> InstanceInfo:
@@ -157,9 +159,9 @@ class Llumlet:
         await self.backend_engine.is_ready()
         return self.instance_args.instance_type
 
-    async def get_engine_disagg_inst_id(self) -> str:
+    async def get_engine_context(self) -> str:
         await self.backend_engine.is_ready()
-        return self.backend_engine.engine_disagg_inst_id
+        return self.backend_engine.get_engine_context()
 
     async def generate(
         self,

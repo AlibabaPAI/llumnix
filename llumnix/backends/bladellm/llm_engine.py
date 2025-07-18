@@ -68,7 +68,7 @@ from llumnix.backends.bladellm.proto.migration_worker_pb2 import RecvCacheReques
 from llumnix.backends.bladellm.sequence import GenerationGroupStateLlumnix
 from llumnix.backends.bladellm.worker import WorkerProcessesRay
 from llumnix.constants import RAY_RPC_TIMEOUT
-from llumnix.utils import BackendType
+from llumnix.utils import BackendType, InstanceContext
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
@@ -897,3 +897,6 @@ class BackendBladeLLM(BackendInterface):
 
     def get_instance_info(self):
         return self.engine.instance_info
+
+    def get_engine_context(self):
+        return InstanceContext(local_engine_id=self.engine_disagg_inst_id)

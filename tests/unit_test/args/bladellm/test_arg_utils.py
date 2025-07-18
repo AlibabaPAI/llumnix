@@ -18,9 +18,8 @@ from blade_llm.utils.load_model_options import LoadModelOptions
 
 from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
 from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgs, BladeLLMEngineArgsFactory
-from llumnix.instance_info import InstanceType
 from llumnix.internal_config import PDDConfig
-from llumnix.utils import BackendType
+from llumnix.utils import BackendType, InstanceType
 
 
 # pylint: disable=unused-argument

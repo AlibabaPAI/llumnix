@@ -26,8 +26,7 @@ from llumnix.ray_utils import (
     get_manager_name,
 )
 from llumnix.arg_utils import save_engine_args
-from llumnix.utils import random_uuid, BackendType, LaunchMode
-from llumnix.instance_info import InstanceType
+from llumnix.utils import random_uuid, BackendType, LaunchMode, InstanceType
 from llumnix.manager import Manager
 
 # pylint: disable=unused-import
@@ -155,7 +154,7 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     )
     pg = ray.util.get_placement_group(get_placement_group_name(instance_id))
     ray.get(pg.ready())
-    ray.get(scaler._init_server_and_instance.remote(instance_id, EntrypointsArgs(), InstanceArgs(), engine_args, pg))
+    ray.get(scaler._init_server_and_instance.remote(instance_id, EntrypointsArgs(), InstanceArgs(), engine_args, pg, InstanceType("neutral")))
 
     # wait for scale up
     await asyncio.sleep(5.0)
@@ -164,7 +163,7 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     await asyncio.sleep(5.0)
     server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
     ray.get(server.is_ready.remote())
-    num_instances = ray.get(scaler._scale_up.remote(instance_id, instance, InstanceType("neutral")))
+    num_instances = ray.get(scaler.scale_up.remote(instance_id, instance, InstanceType("neutral")))
     assert num_instances == 1
 
     pg_created, server_alive, instance_alive = ray.get(scaler._get_instance_deployment_states.remote(instance_id))
@@ -191,7 +190,7 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
     scaler, _, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
     await asyncio.sleep(60.0)
 
-    num_instances = ray.get(scaler._scale_up.remote([], [], []))
+    num_instances = ray.get(scaler.scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -204,7 +203,7 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
     ray.get(scaler._clear_instance_ray_resources.remote(instance_ids[1]))
     await asyncio.sleep(60.0)
 
-    num_instances = ray.get(scaler._scale_up.remote([], [], []))
+    num_instances = ray.get(scaler.scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -215,7 +214,7 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     scaler, _, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, max_instances=4)
     await asyncio.sleep(60.0)
 
-    num_instances = ray.get(scaler._scale_up.remote([], [], []))
+    num_instances = ray.get(scaler.scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -230,7 +229,7 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
     # Wait for check deployment states, scale down instance and auto scale up.
     await asyncio.sleep(90.0)
 
-    num_instances = ray.get(scaler._scale_up.remote([], [], []))
+    num_instances = ray.get(scaler.scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -251,20 +250,30 @@ def test_pd_disagg_gloal_launch_instance_type(ray_env):
     _ = DummyScaler.options(name=get_scaler_name()).remote()
     scaler = Scaler(EntrypointsArgs(), manager_args, InstanceArgs(), EngineArgs(), launch_args)
 
-    assert scaler._get_next_instance_type(0, 0, [1, 2]) == InstanceType.PREFILL
+    scaler.prefill_instance_id_set = set()
+    scaler.decode_instance_id_set = set()
+
+    assert scaler._get_next_instance_type() == InstanceType.PREFILL
     scaler.inflight_num_prefill_instances += 1
 
-    assert scaler._get_next_instance_type(0, 0, [1, 2]) == InstanceType.DECODE
+    assert scaler._get_next_instance_type() == InstanceType.DECODE
     scaler.inflight_num_decode_instances += 1
 
     scaler.inflight_num_prefill_instances = 0
     scaler.inflight_num_decode_instances = 0
-    assert scaler._get_next_instance_type(1, 1, [1, 2]) == InstanceType.DECODE
-    assert scaler._get_next_instance_type(1, 2, [1, 2]) == InstanceType.PREFILL
+    scaler.prefill_instance_id_set.add(random_uuid())
+    scaler.decode_instance_id_set.add(random_uuid())
+    assert scaler._get_next_instance_type() == InstanceType.DECODE
+    scaler.decode_instance_id_set.add(random_uuid())
+    assert scaler._get_next_instance_type() == InstanceType.PREFILL
 
-    assert scaler._get_next_instance_type(3, 5, [1, 2]) == InstanceType.DECODE
-    assert scaler._get_next_instance_type(3, 6, [1, 2]) == InstanceType.PREFILL
-    assert scaler._get_next_instance_type(3, 7, [1, 2]) == InstanceType.PREFILL
+    scaler.prefill_instance_id_set.update([random_uuid()] * 2)
+    scaler.decode_instance_id_set.update([random_uuid()] * 2)
+    assert scaler._get_next_instance_type() == InstanceType.DECODE
+    scaler.decode_instance_id_set.add(random_uuid())
+    assert scaler._get_next_instance_type() == InstanceType.PREFILL
+    scaler.decode_instance_id_set.add(random_uuid())
+    assert scaler._get_next_instance_type() == InstanceType.PREFILL
 
 @pytest.mark.parametrize("load_registered_service", [False, True])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
@@ -310,7 +319,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
     scaler, _, _, _, _, _ = init_scaler_with_launch_mode(
         LaunchMode.GLOBAL, max_instances=4, enable_pd_disagg=True, pd_ratio="1:1")
     await asyncio.sleep(60.0)
-    num_instances = ray.get(scaler._scale_up.remote([], [], []))
+    num_instances = ray.get(scaler.scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -342,7 +351,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
     await asyncio.sleep(90.0)
     alive_decode_instance_id = decode_instance_ids[0]
 
-    num_instances = ray.get(scaler._scale_up.remote([], [], []))
+    num_instances = ray.get(scaler.scale_up.remote([], [], []))
     assert num_instances == 4
     curr_pgs, curr_servers, curr_instances = ray.get(scaler._get_cluster_deployment_states.remote())
     assert len(curr_pgs) == 4 and len(curr_servers) == 4 and len(curr_instances) == 4
@@ -385,16 +394,16 @@ async def test_pd_disagg_deployment_states(ray_env):
     prefill_instance_ids, prefill_instances = init_instances(3)
     decode_instance_ids, decode_instances = init_instances(3)
 
-    ray.get(scaler._scale_up.remote(prefill_instance_ids, prefill_instances,
+    ray.get(scaler.scale_up.remote(prefill_instance_ids, prefill_instances,
                      [InstanceType("prefill")]*len(prefill_instance_ids)))
     assert ray.get(scaler._check_pd_deployment_states.remote()) in prefill_instance_ids
     ray.get(manager.scale_down.remote(prefill_instance_ids))
-    ray.get(scaler._scale_up.remote(decode_instance_ids, decode_instances,
+    ray.get(scaler.scale_up.remote(decode_instance_ids, decode_instances,
                      [InstanceType("decode")]*len(decode_instance_ids)))
     assert ray.get(scaler._check_pd_deployment_states.remote()) in decode_instance_ids
 
     prefill_instance_ids2, prefill_instances2 = init_instances(3)
-    ray.get(scaler._scale_up.remote(prefill_instance_ids2, prefill_instances2,
+    ray.get(scaler.scale_up.remote(prefill_instance_ids2, prefill_instances2,
                      [InstanceType("prefill")]*len(prefill_instance_ids2)))
     assert not ray.get(scaler._check_pd_deployment_states.remote())
 
@@ -403,7 +412,7 @@ async def test_pd_disagg_deployment_states(ray_env):
 async def test_auto_scale_up_loop_max_instances(ray_env):
     scaler, _, _, _, _, _ = init_scaler_with_launch_mode(LaunchMode.GLOBAL, "rayqueue", max_instances=2)
     await asyncio.sleep(60.0)
-    num_instances = ray.get(scaler._scale_up.remote([], [], []))
+    num_instances = ray.get(scaler.scale_up.remote([], [], []))
     assert num_instances == 2
 
 # 1. Resources cannot be specified in ray.init() when there is a existing ray cluster.

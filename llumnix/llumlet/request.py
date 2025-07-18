@@ -51,12 +51,22 @@ class RequestStatus(str, Enum):
 
 
 class LlumnixRequest:
-    def __init__(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, expected_steps: int = math.inf) -> None:
+    def __init__(
+        self,
+        request_id: RequestIDType,
+        request_processing_context: RequestProcessingContext,
+        expected_steps: int = math.inf,
+        num_hit_tokens: int = 0,
+        transfer_penalty: int = 1
+    ) -> None:
         self.request_id = request_id
         self.request_processing_context: RequestProcessingContext = request_processing_context
 
         # strict pre-migration args
         self.expected_steps = expected_steps
+
+        self.num_hit_tokens = num_hit_tokens
+        self.transfer_penalty = transfer_penalty
 
         # migration states
         self.last_preemption_time = None

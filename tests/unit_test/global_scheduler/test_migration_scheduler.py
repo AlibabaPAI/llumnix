@@ -22,6 +22,7 @@ from llumnix.instance_info import InstanceType
 from llumnix.global_scheduler.migration_filter import (MigrationFilterPipeline, MigrationFilterConfig,
                                                        MigrationFilterFactory, CustomFilter)
 from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, Balanced, MigrationPolicy
+from llumnix.internal_config import DispatchLoadMetricConfig
 
 MIGRATE_OUT_LOAD_THRESHOLD = -3.0
 INSTANCE_NUM = 15
@@ -42,6 +43,13 @@ def init_migration_scheduler(
         enable_engine_pd_disagg=enable_engine_pd_disagg,
         enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
         enable_adaptive_pd=enable_adaptive_pd,
+        dispatch_load_metric_config = DispatchLoadMetricConfig(
+            dispatch_load_metric='remaining_steps',
+            dispatch_prefill_load_metric='kv_blocks_ratio',
+            dispatch_decode_load_metric='remaining_steps',
+            dispatch_prefill_as_decode_load_metric='adaptive_decode',
+            dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
+        )
     )
     return migration_scheduler
 
@@ -239,13 +247,20 @@ class MockMigrationScheduler(MigrationScheduler):
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg",
                          [(True, False, False), (False, True, False), (False, False, True), (False, False, False)])
 def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg):
+    dispatch_load_metric_config = DispatchLoadMetricConfig(
+            dispatch_load_metric='remaining_steps',
+            dispatch_prefill_load_metric='kv_blocks_ratio',
+            dispatch_decode_load_metric='remaining_steps',
+            dispatch_prefill_as_decode_load_metric='adaptive_decode',
+            dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
+        )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 enable_engine_pd_disagg, enable_engine_semi_pd_disagg, False)
+                                                 enable_engine_pd_disagg, enable_engine_semi_pd_disagg, False, dispatch_load_metric_config)
     all_instance_infos: Dict[str, InstanceInfo] = {}
     if not migration_scheduler._enable_pd():
         for idx in range(INSTANCE_NUM):
             instance_info = InstanceInfo()
-            instance_info.instance_type = InstanceType.NO_CONSTRAINTS
+            instance_info.instance_type = InstanceType.NEUTRAL
             instance_info.instance_id = f"instance_id_{idx}"
             all_instance_infos[instance_info.instance_id] = instance_info
             instance_info.migration_load_metric = MIGRATE_OUT_LOAD_THRESHOLD + random.uniform(-6, 3)
@@ -293,8 +308,15 @@ def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_e
 
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_semi_pd_disagg", [(True, False), (False, True)])
 def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_disagg):
+    dispatch_load_metric_config = DispatchLoadMetricConfig(
+            dispatch_load_metric='remaining_steps',
+            dispatch_prefill_load_metric='kv_blocks_ratio',
+            dispatch_decode_load_metric='remaining_steps',
+            dispatch_prefill_as_decode_load_metric='adaptive_decode',
+            dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
+        )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 False, enable_engine_semi_pd_disagg, True)
+                                                 False, enable_engine_semi_pd_disagg, True, dispatch_load_metric_config)
     KvBlocksRatioLoad.BUSY_THRESHOLD = 5
     RemainingStepsLoad.BUSY_THRESHOLD = 5
     AdaptiveDecodeBatchLoad.DECODE_COMPUTE_BOUND_BATCH_SIZE = 5
@@ -305,7 +327,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
         instance_info.instance_type = InstanceType.PREFILL
         instance_info.instance_id = f"normal_prefill_instance_id_{idx}"
         normal_prefill_instance_infos[instance_info.instance_id] = instance_info
-        instance_info.dispatch_load_metric = KvBlocksRatioLoad(2)
+        instance_info.kv_blocks_ratio = KvBlocksRatioLoad(2)
         instance_info.migration_load_metric = RemainingStepsLoad(10)
         instance_info.num_running_requests = 10
         instance_info.decode_batch_size = 0
@@ -317,7 +339,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
         instance_info.instance_type = InstanceType.PREFILL
         instance_info.instance_id = f"dynamic_prefill_instance_id_{idx}"
         dynamic_prefill_instance_infos[instance_info.instance_id] = instance_info
-        instance_info.dispatch_load_metric = KvBlocksRatioLoad(idx)
+        instance_info.kv_blocks_ratio = KvBlocksRatioLoad(idx)
         instance_info.migration_load_metric = RemainingStepsLoad(10)
         instance_info.num_running_requests = 10
         instance_info.decode_batch_size = 1
@@ -329,7 +351,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
         instance_info.instance_type = InstanceType.DECODE
         instance_info.instance_id = f"normal_decode_instance_id_{idx}"
         normal_decode_instance_infos[instance_info.instance_id] = instance_info
-        instance_info.dispatch_load_metric = RemainingStepsLoad(20)
+        instance_info.remaining_steps = RemainingStepsLoad(20)
         instance_info.migration_load_metric = RemainingStepsLoad(10)
         instance_info.num_running_requests = 10
         instance_info.decode_batch_size = 1
@@ -340,7 +362,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
         instance_info.instance_type = InstanceType.DECODE
         instance_info.instance_id = f"busy_decode_instance_id_{idx}"
         busy_decode_instance_infos[instance_info.instance_id] = instance_info
-        instance_info.dispatch_load_metric = RemainingStepsLoad(1)
+        instance_info.remaining_steps = RemainingStepsLoad(1)
         instance_info.migration_load_metric = RemainingStepsLoad(10)
         instance_info.num_running_requests = 10
         instance_info.decode_batch_size = 1
@@ -359,7 +381,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
         migrate_in_instance = all_instance[migrate_in_instance_id]
         assert migrate_out_instance.decode_batch_size > 0 \
             and migrate_out_instance.instance_type == InstanceType.PREFILL
-        assert not migrate_in_instance.dispatch_load_metric.is_busy() \
+        assert not getattr(migrate_in_instance, migration_scheduler.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy() \
             and migrate_in_instance.instance_type == InstanceType.DECODE
     migration_scheduler.reset_store()
 
@@ -388,7 +410,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
         instance_info.instance_type = InstanceType.PREFILL
         instance_info.instance_id = f"free_prefill_instance_id_{idx}"
         free_prefill_instance_infos[instance_info.instance_id] = instance_info
-        instance_info.dispatch_load_metric = KvBlocksRatioLoad(0)
+        instance_info.kv_blocks_ratio = KvBlocksRatioLoad(0)
         instance_info.migration_load_metric = RemainingStepsLoad(10)
         instance_info.num_running_requests = 0
         instance_info.decode_batch_size = 0
@@ -405,7 +427,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
     for migrate_out_instance_id, migrate_in_instance_id in migration_scheduler.dp_migration_pairs:
         migrate_out_instance = all_instance[migrate_out_instance_id]
         migrate_in_instance = all_instance[migrate_in_instance_id]
-        assert migrate_out_instance.dispatch_load_metric.is_busy() \
+        assert getattr(migrate_out_instance, migration_scheduler.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy() \
             and migrate_out_instance.instance_type == InstanceType.DECODE
         assert migrate_in_instance.num_running_requests == 0 \
             and migrate_in_instance.instance_type == InstanceType.PREFILL

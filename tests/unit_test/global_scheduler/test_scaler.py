@@ -164,7 +164,7 @@ async def test_init_server_and_get_instance_deployment_states_and_instance_and_c
     await asyncio.sleep(5.0)
     server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
     ray.get(server.is_ready.remote())
-    num_instances = ray.get(scaler._scale_up.remote(instance_id, instance, InstanceType("no_constraints")))
+    num_instances = ray.get(scaler._scale_up.remote(instance_id, instance, InstanceType("neutral")))
     assert num_instances == 1
 
     pg_created, server_alive, instance_alive = ray.get(scaler._get_instance_deployment_states.remote(instance_id))
@@ -269,11 +269,11 @@ def test_pd_disagg_gloal_launch_instance_type(ray_env):
 @pytest.mark.parametrize("load_registered_service", [False, True])
 @pytest.mark.parametrize("enable_pd_disagg", [False, True])
 def test_load_registered_service(ray_env, load_registered_service, enable_pd_disagg):
-    engine_args = VLLMEngineArgs(engine_args=EngineArgs(model="no_constraints"))
+    engine_args = VLLMEngineArgs(engine_args=EngineArgs(model="neutral"))
     save_path = 'test'
     save_key = "test"
     load_registered_service_path = os.path.join(save_path, save_key)
-    instance_type_list = ['no_constraints']
+    instance_type_list = ['neutral']
     if load_registered_service:
         if enable_pd_disagg:
             instance_type_list = ['prefill', 'decode']
@@ -300,7 +300,7 @@ def test_load_registered_service(ray_env, load_registered_service, enable_pd_dis
         if load_registered_service:
             assert get_engine_args.load_engine_args().model == instance_type
         else:
-            assert get_engine_args.load_engine_args().model == 'no_constraints'
+            assert get_engine_args.load_engine_args().model == 'neutral'
     if load_registered_service:
         shutil.rmtree(load_registered_service_path)
 
@@ -429,7 +429,7 @@ async def test_auto_scale_up_loop_enable_pdd_node_affinity_scheduling():
 
     num_prefill_instances = 0
     num_decode_instances = 0
-    num_no_constraints_instances = 0
+    num_neutral_instances = 0
     for instance_id in curr_instances:
         instance_handle = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
         instance_type = ray.get(instance_handle.get_instance_type.remote())
@@ -438,9 +438,9 @@ async def test_auto_scale_up_loop_enable_pdd_node_affinity_scheduling():
         elif instance_type == InstanceType.DECODE:
             num_decode_instances += 1
         else:
-            num_no_constraints_instances += 1
+            num_neutral_instances += 1
 
-    assert num_prefill_instances == 2 and num_decode_instances == 2 and num_no_constraints_instances == 0
+    assert num_prefill_instances == 2 and num_decode_instances == 2 and num_neutral_instances == 0
 
     cleanup_ray_env_func()
     ray_start()

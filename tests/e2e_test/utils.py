@@ -70,7 +70,7 @@ def generate_vllm_launch_command(
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
     enable_adaptive_pd: bool = False,
-    instance_type: str = "no_constraints",
+    instance_type: str = "neutral",
     tensor_parallel_size: int = 1,
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",

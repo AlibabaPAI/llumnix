@@ -21,7 +21,7 @@ import pickle
 from typing import List, Tuple, Union, Dict
 from abc import ABC, abstractmethod
 
-from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig
+from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig, DispatchLoadMetricConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
 from llumnix.config.default import _C
 from llumnix.utils import BackendType, LaunchMode
@@ -119,7 +119,7 @@ class LlumnixEngineArgsFactory:
                 not self.pdd_config.enable_pd_disagg
                 and not self.pdd_config.enable_engine_pd_disagg
             ):
-                instance_type_list = ["no_constraints"]
+                instance_type_list = ["neutral"]
             else:
                 instance_type_list = ["prefill", "decode"]
             for instance_type in instance_type_list:
@@ -362,6 +362,16 @@ class ManagerArgs:
     enable_engine_pd_disagg: bool = None
     enable_engine_semi_pd_disagg: bool = None
 
+    # dispatch load metrics
+    dispatch_load_metric: str = None
+    dispatch_prefill_load_metric: str = None
+    dispatch_prefill_as_decode_load_metric: str = None
+    dispatch_decode_load_metric: str = None
+    dispatch_decode_as_prefill_load_metric: str = None
+
+    # The config file path for initializing CacheMetaClient under the cache-aware policy
+    cache_meta_client_config_path: str = None
+
     def __post_init__(self):
         ensure_args_default_none(self)
         init_from_default_args_config(self, _C.MANAGER)
@@ -419,6 +429,13 @@ class ManagerArgs:
 
     def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
         # Create the GlobalScheduler Configuration.
+        dispatch_load_metric_config = DispatchLoadMetricConfig(
+            self.dispatch_load_metric,
+            self.dispatch_prefill_load_metric,
+            self.dispatch_decode_load_metric,
+            self.dispatch_prefill_as_decode_load_metric,
+            self.dispatch_decode_as_prefill_load_metric
+        )
         global_scheduler_config = GlobalSchedulerConfig(self.initial_instances,
                                                         self.dispatch_policy,
                                                         self.topk_random_dispatch,
@@ -432,7 +449,9 @@ class ManagerArgs:
                                                         self.enable_engine_pd_disagg,
                                                         self.enable_engine_semi_pd_disagg,
                                                         self.enable_adaptive_pd,
-                                                        self.is_group_kind_migration_backend)
+                                                        self.is_group_kind_migration_backend,
+                                                        dispatch_load_metric_config,
+                                                        self.cache_meta_client_config_path)
         return global_scheduler_config
 
     def create_pdd_config(self) -> PDDConfig:
@@ -457,7 +476,7 @@ class ManagerArgs:
                             help='instance scaling load metric')
         parser.add_argument('--dispatch-policy',
                             type=str,
-                            choices=['balanced', 'load', 'queue', 'flood', 'rr'],
+                            choices=['balanced', 'load', 'queue', 'flood', 'rr', 'cacheaware'],
                             help='The request dispatch policy.\n\n'
                             '* "balanced" dispatch request to the instance with minimum requests dispatched.\n'
                             '* "load" dispatch request to the instance with lowest instance load.\n'
@@ -545,7 +564,7 @@ class ManagerArgs:
                             "and save-key aruguments of register_service.py. "
                             "You can specify the load path through this argument, and registered service (all the engine arguments "
                             "files) under this path will be loaded. The Llumnix will initialize instance based on "
-                            "the engine type (no_constraints, prefill, decode) and the corresponding engine arguments "
+                            "the engine type (neutral, prefill, decode) and the corresponding engine arguments "
                             "loaded from the path.")
         parser.add_argument('--enable-pdd-node-affinity-scheduling',
                             action='store_true',
@@ -553,6 +572,31 @@ class ManagerArgs:
                             "For PDD ray cluster, each node can be annotated with prefill/decode gpu resources. "
                             "When enabling PDD node affinity scheduling, Llumnix will schedule prefill/decode instance to "
                             "the node with correspoinding prefill/decode gpu resources.")
+        parser.add_argument('--dispatch-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='instance dispatch load metric.\n\n'
+                            '* "remaining_steps" refers to the number of steps the remaining KV cache can support for all '
+                            'running and some waiting requests to proceed.\n'
+                            '* "kv_blocks_ratio" refers to the total number of KV cache blocks required by all running '
+                            'and waiting requests.'
+                            )
+        parser.add_argument('--dispatch-prefill-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='prefill instance dispatch load metric')
+        parser.add_argument('--dispatch-prefill-as-decode-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio', 'adaptive_decode'],
+                            help='[Experimental] prefill instance dispatch load metric when decoding')
+        parser.add_argument('--dispatch-decode-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='decode instance dispatch load metric')
+        parser.add_argument('--dispatch-decode-as-prefill-load-metric',
+                            type=str,
+                            choices=['remaining_steps', 'kv_blocks_ratio'],
+                            help='[Experimental] decode instance dispatch load metric when prefilling')
         return parser
 
 
@@ -569,11 +613,6 @@ class InstanceArgs:
     simulator_mode: bool = None
     profiling_result_file_path: str = None
 
-    dispatch_load_metric: str = None
-    dispatch_prefill_load_metric: str = None
-    dispatch_prefill_as_decode_load_metric: str = None
-    dispatch_decode_load_metric: str = None
-    dispatch_decode_as_prefill_load_metric: str = None
     enable_defrag: bool = None
 
     max_migration_concurrency: int = None
@@ -658,9 +697,9 @@ class InstanceArgs:
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--instance-type',
                             type=str,
-                            choices=['prefill', 'decode', 'no_constraints'],
+                            choices=['prefill', 'decode', 'neutral'],
                             help="instance type of the engine.\n When not setting --enable-pd-disagg, set --instance-type "
-                            "to no_constraints.\n When setting --enable-pd-disagg, pd-disaggregation is fully "
+                            "to neutral.\n When setting --enable-pd-disagg, pd-disaggregation is fully "
                             "(launch instance + migrate kv cache) implemented via LLuminx (vLLM). In local launch mode, "
                             "set --instance-type as either prefill or decode. In global launch mode, do not set "
                             "--instance-type as manager will automatically determine the type and number of instance.\n "
@@ -676,31 +715,6 @@ class InstanceArgs:
         parser.add_argument('--simulator-mode',
                             action='store_true',
                             help='enable simulator mode')
-        parser.add_argument('--dispatch-load-metric',
-                            type=str,
-                            choices=['remaining_steps', 'kv_blocks_ratio'],
-                            help='instance dispatch load metric.\n\n'
-                            '* "remaining_steps" refers to the number of steps the remaining KV cache can support for all '
-                            'running and some waiting requests to proceed.\n'
-                            '* "kv_blocks_ratio" refers to the total number of KV cache blocks required by all running '
-                            'and waiting requests.'
-                            )
-        parser.add_argument('--dispatch-prefill-load-metric',
-                            type=str,
-                            choices=['remaining_steps', 'kv_blocks_ratio'],
-                            help='prefill instance dispatch load metric')
-        parser.add_argument('--dispatch-prefill-as-decode-load-metric',
-                            type=str,
-                            choices=['remaining_steps', 'kv_blocks_ratio', 'adaptive_decode'],
-                            help='[Experimental] prefill instance dispatch load metric when decoding')
-        parser.add_argument('--dispatch-decode-load-metric',
-                            type=str,
-                            choices=['remaining_steps', 'kv_blocks_ratio'],
-                            help='decode instance dispatch load metric')
-        parser.add_argument('--dispatch-decode-as-prefill-load-metric',
-                            type=str,
-                            choices=['remaining_steps', 'kv_blocks_ratio'],
-                            help='[Experimental] decode instance dispatch load metric when prefilling')
         parser.add_argument('--migration-load-metric',
                             type=str,
                             choices=['remaining_steps', 'kv_blocks_ratio'],
@@ -775,8 +789,8 @@ class RegisterServiceArgs:
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         parser.add_argument('--engine-type',
                             type=str,
-                            choices=['prefill', 'decode', 'no_constraints'],
-                            default='no_constraints',
+                            choices=['prefill', 'decode', 'neutral'],
+                            default='neutral',
                             help="Engine type of the engine arguments. The actual save filename is generated according to "
                             "the engine type, following the format f\"engine_args_{engine_type}.pkl\".")
         parser.add_argument('--save-key',
@@ -825,7 +839,7 @@ def post_init_llumnix_args(
 
 def load_registered_engine_args(manager_args: ManagerArgs):
     if not manager_args.enable_pd_disagg and not manager_args.enable_engine_pd_disagg:
-        instance_type_list = ['no_constraints']
+        instance_type_list = ['neutral']
     else:
         instance_type_list = ['prefill', 'decode']
     for instance_type in instance_type_list:

@@ -297,7 +297,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--instance-type`
 - Instance types for the engine.
-- Possible choices: prefill, decode, no_constraints
+- Possible choices: prefill, decode, neutral
 
 `--engine-disagg-inst-id-env-var`
 - Specify which environment variable to use as the engine instance id.

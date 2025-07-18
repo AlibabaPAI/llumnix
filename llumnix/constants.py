@@ -112,8 +112,13 @@ DEFAULT_EAS_EXPORTER_URL = "http://localhost:8080/api/builtin/realtime_metrics"
 BLOCKDEMANDFACTOR_BUSY_THRESHOLD: float = 1.0
 REMAININGSTEPS_BUSY_THRESHOLD: float = 10.0
 DECODE_COMPUTE_BOUND_BATCH_SIZE: float = 128
+MISSWAITINGTOKENS_BUSY_THRESHOLD: float = 1e6
 
 # trace mode
 LLUMNIX_TRACE_REQUEST = "llumnix_trace_request"
 REQUEST_TIMESTAMPS_ATTR_STR = 'request_timestamps'
 LLUMNIX_TRACE_HEADER = 'X-Llumnix-Trace'
+
+# llumnix/global_scheduler/dispatch_policy.py
+CACHE_TRANSFER_THRESHOLD: int = 1000
+CACHE_TRANSFER_PENALTY_FACTOR: float = 0.7

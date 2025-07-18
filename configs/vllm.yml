@@ -12,9 +12,13 @@ MANAGER:
   DISPATCH_POLICY: 'load'
   ENABLE_MIGRATION: False
   ENABLE_SCALING: False
+  DISPATCH_LOAD_METRIC: 'remaining_steps'
+  DISPATCH_PREFILL_LOAD_METRIC: 'kv_blocks_ratio'
+  DISPATCH_PREFILL_AS_DECODE_LOAD_METRIC: 'adaptive_decode'
+  DISPATCH_DECODE_LOAD_METRIC: 'remaining_steps'
+  DISPATCH_DECODE_AS_PREFILL_LOAD_METRIC: 'kv_blocks_ratio'
 
 INSTANCE:
-  DISPATCH_LOAD_METRIC: 'remaining_steps'
   MIGRATION_LOAD_METRIC: 'remaining_steps'
 
   ENABLE_DEFRAG: True

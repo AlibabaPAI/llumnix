@@ -193,7 +193,7 @@ class Scaler:
             else:
                 asyncio.create_task(
                     self._auto_scale_up_loop(
-                        service_name="no_constraints",
+                        service_name="neutral",
                         max_instances=self.max_instances,
                         interval=AUTO_SCALE_UP_INTERVAL,
                     )
@@ -1003,7 +1003,7 @@ class Scaler:
 
         if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg \
             and not self.pdd_config.enable_engine_semi_pd_disagg:
-            return InstanceType.NO_CONSTRAINTS
+            return InstanceType.NEUTRAL
 
         # There are no instances simultaneously in inflight_num_prefill_instances and cur_num_prefill_instances
         # as inflight_num will decrease before scaling up the instances. The same applies to num_decode.

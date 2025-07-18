@@ -14,10 +14,18 @@
 import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 from llumnix.logging.logger import init_logger
-from llumnix.load_computation import LoadCalculatorFactory, BaseLoad, DummyLoad
+from llumnix.load_computation import (
+    LoadCalculatorFactory,
+    BaseLoad,
+    DummyLoad,
+    KvBlocksRatioLoad,
+    AdaptiveDecodeBatchLoad,
+    RemainingStepsLoad,
+    MissWaitingTokensLoad,
+)
 from llumnix.llumlet.request import RequestInferenceType
 from llumnix.arg_utils import InstanceArgs
 
@@ -25,11 +33,19 @@ logger = init_logger(__name__)
 
 
 class InstanceType(str, Enum):
-    NO_CONSTRAINTS = "no_constraints"
+    NEUTRAL = "neutral"
     PREFILL = "prefill"
     DECODE = "decode"
     PREFILL_AS_DECODE = "prefill_as_decode"
     DECODE_AS_PREFILL = "decode_as_prefill"
+
+INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
+    InstanceType.NEUTRAL: 'dispatch_load_metric',
+    InstanceType.PREFILL: 'dispatch_prefill_load_metric',
+    InstanceType.DECODE: 'dispatch_decode_load_metric',
+    InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
+    InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
+}
 
 
 @dataclass
@@ -58,16 +74,20 @@ class InstanceInfo:
     waiting_time_first_waiting_request: int = 0
     num_blocks_all_waiting_requests: int = 0
     num_blocks_last_running_request: int = 0
+    num_miss_tokens_all_waiting_requests: int = 0
 
     # cache state
     num_cached_request_ids: int = 0
     num_wait_update_request_ids: int = 0
     num_trans_wrapper_cached_request: int = 0
 
+    # load metrics
+    kv_blocks_ratio: KvBlocksRatioLoad = KvBlocksRatioLoad()
+    remaining_steps: RemainingStepsLoad = RemainingStepsLoad()
+    adaptive_decode: AdaptiveDecodeBatchLoad = AdaptiveDecodeBatchLoad()
+    miss_waiting_tokens: MissWaitingTokensLoad = MissWaitingTokensLoad()
+
     # on-demand init infos
-    dispatch_load_metric: BaseLoad = DummyLoad()
-    dispatch_prefill_as_decode_load_metric: BaseLoad = DummyLoad() # used for adaptive pd
-    dispatch_decode_as_prefill_load_metric: BaseLoad = DummyLoad() # used for adaptive pd
     migration_load_metric: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_in: BaseLoad = DummyLoad()
     migration_load_metric_after_migrate_out: BaseLoad = DummyLoad()
@@ -105,24 +125,13 @@ def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
 
 class InstanceLoadCalculator:
     def __init__(self, instance_args: InstanceArgs) -> None:
-        dispach_load_metric = instance_args.dispatch_load_metric
-        if instance_args.instance_type == InstanceType.PREFILL:
-            dispach_load_metric = instance_args.dispatch_prefill_load_metric
-        elif instance_args.instance_type == InstanceType.DECODE:
-            dispach_load_metric = instance_args.dispatch_decode_load_metric
-
-        self.dispatch_load_calculator = LoadCalculatorFactory.get_load_calculator(dispach_load_metric)
         self.migration_load_calculator = LoadCalculatorFactory.get_load_calculator(instance_args.migration_load_metric)
-
-        self.enable_adaptive_pd = instance_args.enable_adaptive_pd
-        if self.enable_adaptive_pd:
-            self.dispatch_prefill_as_decode_load_calculator = \
-                LoadCalculatorFactory.get_load_calculator(instance_args.dispatch_prefill_as_decode_load_metric)
-            self.dispatch_decode_load_as_prefill_load_calculator = \
-                LoadCalculatorFactory.get_load_calculator(instance_args.dispatch_decode_as_prefill_load_metric)
+        self.adaptive_decode_calculator = LoadCalculatorFactory.get_load_calculator('adaptive_decode')
+        self.kv_blocks_ratio_calculator = LoadCalculatorFactory.get_load_calculator('kv_blocks_ratio')
+        self.remaining_steps_calculator = LoadCalculatorFactory.get_load_calculator('remaining_steps')
+        self.miss_waiting_tokens_calculator = LoadCalculatorFactory.get_load_calculator('miss_waiting_tokens')
 
     def compute_instance_load(self, instance_info: InstanceInfo):
-        instance_info.dispatch_load_metric = self.dispatch_load_calculator.compute_instance_load(instance_info)
         instance_info.migration_load_metric = self.migration_load_calculator.compute_instance_load(instance_info)
 
         instance_info.migration_load_metric_after_migrate_out = \
@@ -130,11 +139,10 @@ class InstanceLoadCalculator:
         instance_info.migration_load_metric_after_migrate_in = \
             self._compute_load_after_migrate(instance_info, is_migrate_in=True)
 
-        if self.enable_adaptive_pd:
-            instance_info.dispatch_prefill_as_decode_load_metric = \
-                self.dispatch_prefill_as_decode_load_calculator.compute_instance_load(instance_info)
-            instance_info.dispatch_decode_as_prefill_load_metric = \
-                self.dispatch_decode_load_as_prefill_load_calculator.compute_instance_load(instance_info)
+        instance_info.adaptive_decode = self.adaptive_decode_calculator.compute_instance_load(instance_info)
+        instance_info.kv_blocks_ratio = self.kv_blocks_ratio_calculator.compute_instance_load(instance_info)
+        instance_info.remaining_steps = self.remaining_steps_calculator.compute_instance_load(instance_info)
+        instance_info.miss_waiting_tokens = self.miss_waiting_tokens_calculator.compute_instance_load(instance_info)
 
     def _compute_load_after_migrate(self, instance_info: InstanceInfo, is_migrate_in: bool) -> BaseLoad:
         instance_info_after_migrate = copy.deepcopy(instance_info)

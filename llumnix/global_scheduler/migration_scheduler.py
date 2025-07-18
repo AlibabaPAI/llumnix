@@ -21,6 +21,7 @@ from llumnix.global_scheduler.migration_filter import (MigrationFilterPipeline, 
 from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, MigrationPolicy
 from llumnix.instance_info import InstanceType
 from llumnix.utils import MigrationType
+from llumnix.internal_config import DispatchLoadMetricConfig
 
 logger = init_logger(__name__)
 
@@ -33,12 +34,14 @@ class MigrationScheduler:
                  enable_pd_disagg: bool,
                  enable_engine_pd_disagg: bool,
                  enable_engine_semi_pd_disagg: bool,
-                 enable_adaptive_pd: bool) -> None:
+                 enable_adaptive_pd: bool,
+                 dispatch_load_metric_config: DispatchLoadMetricConfig) -> None:
         self.pair_migration_policy = pair_migration_policy
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_engine_pd_disagg = enable_engine_pd_disagg
         self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
+        self.dispatch_load_metric_config = dispatch_load_metric_config
 
         self.filter_config = MigrationFilterConfig(migrate_out_load_threshold=migrate_out_load_threshold)
         self.migration_base_filter = MigrationFilterPipeline(self.filter_config)
@@ -112,7 +115,7 @@ class MigrationScheduler:
                 src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
                     and instance_info.decode_batch_size > 0,
                 dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE \
-                    and not instance_info.dispatch_load_metric.is_busy()
+                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy()
             )
             self.dynamic_p2d_filter_pipeline = MigrationFilterPipeline(self.filter_config)
             self.dynamic_p2d_filter_pipeline.add_filter("dynamic_p_d_instance_filter", self.dynamic_p_free_d_filter)
@@ -121,11 +124,11 @@ class MigrationScheduler:
             self.dynamic_p_filter.set_filter_condtition(
                 src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
                     and instance_info.decode_batch_size > 0
-                    and not instance_info.dispatch_prefill_as_decode_load_metric.is_busy(),
+                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric).is_busy(),
                 dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
                     and instance_info.decode_batch_size > 0
-                    and not instance_info.dispatch_load_metric.is_busy()
-                    and not instance_info.dispatch_prefill_as_decode_load_metric.is_busy()
+                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_load_metric).is_busy()
+                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric).is_busy()
             )
             self.aggrate_dynamic_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
             self.aggrate_dynamic_p_filter_pipeline.add_filter("aggrate_dynamic_p_filter", self.dynamic_p_filter)
@@ -133,7 +136,7 @@ class MigrationScheduler:
             self.d_p_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
             self.d_p_filter.set_filter_condtition(
                 src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE \
-                    and instance_info.dispatch_load_metric.is_busy(),
+                    and getattr(instance_info, self.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy(),
                 dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
                     and instance_info.num_running_requests == 0
             )
@@ -178,7 +181,7 @@ class MigrationScheduler:
         if self.enable_adaptive_pd:
             exist_free_d = lambda instance_infos: any(
                 instance_info.instance_type == InstanceType.DECODE
-                and not instance_info.dispatch_load_metric.is_busy()
+                and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy()
                 for instance_info in instance_infos.values()
             )
             if exist_free_d(instance_info):

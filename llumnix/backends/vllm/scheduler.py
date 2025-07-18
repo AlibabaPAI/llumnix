@@ -208,19 +208,23 @@ class SchedulerLlumnix(Scheduler):
         if self.waiting:
             num_blocks_waiting_requests = []
             waiting_time_waiting_requests = []
+            num_miss_tokens_waiting_request = []
             for seq_group in self.waiting:
                 num_prompt_tokens = seq_group.get_seqs()[0].get_len()
                 num_blocks = num_prompt_tokens / self.cache_config.block_size
                 waiting_time = time.time() - seq_group.metrics.arrival_time
                 num_blocks_waiting_requests.append(num_blocks)
                 waiting_time_waiting_requests.append(waiting_time)
+                num_miss_tokens_waiting_request.append(num_prompt_tokens - seq_group.num_hit_tokens * seq_group.transfer_penalty)
             num_blocks_first_waiting_request = num_blocks_waiting_requests[0]
             waiting_time_first_waiting_request = waiting_time_waiting_requests[0]
             num_blocks_all_waiting_requests = sum(num_blocks_waiting_requests)
+            num_miss_tokens_all_waiting_requests = sum(num_miss_tokens_waiting_request)
         else:
             num_blocks_first_waiting_request = 0
             waiting_time_first_waiting_request = 0
             num_blocks_all_waiting_requests = 0
+            num_miss_tokens_all_waiting_requests = 0
         instance_info = InstanceInfo(
             num_total_gpu_blocks=num_total_gpu_blocks,
             num_watermark_blocks=self.block_manager.watermark_blocks,
@@ -233,6 +237,7 @@ class SchedulerLlumnix(Scheduler):
             num_blocks_first_waiting_request=num_blocks_first_waiting_request,
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
+            num_miss_tokens_all_waiting_requests=num_miss_tokens_all_waiting_requests,
         )
         for seq_group in scheduled_seq_groups:
             instance_info.running_seq_lens.extend([seq.get_len() for seq in seq_group.get_seqs()])

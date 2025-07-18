@@ -60,10 +60,16 @@ def create_dummy_prompt(
     seq = Sequence(int(request_id), token_inputs(prompt_tokens), block_size)
     request_processing_context = RequestProcessingContext(None, None, None, None, None)
     seq_group = SequenceGroupLlumnix(
-        request_id, request_processing_context, expected_steps, [seq],
-        time.time(),
-        SamplingParams(best_of=best_of),
-        lora_request)
+        request_id,                  # request_id
+        request_processing_context,  # request_processing_context
+        expected_steps,              # expected_steps
+        0,                           # num_hit_tokens
+        1,                           # transfer_penalty
+        [seq],                       # seqs
+        time.time(),                 # arrival_time
+        SamplingParams(best_of=best_of),  # sampling_params
+        lora_request                 # lora_request
+    )
 
     return seq, seq_group
 

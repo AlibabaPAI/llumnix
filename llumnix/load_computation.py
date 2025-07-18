@@ -78,6 +78,8 @@ class KvBlocksRatioLoad(BaseLoad):
     @classmethod
     def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "KvBlocksRatioLoad":
         all_wanted_blocks = instance_info.num_used_gpu_blocks + instance_info.num_blocks_all_waiting_requests
+        if instance_info.num_total_gpu_blocks == 0:
+            return KvBlocksRatioLoad(np.inf)
         demand_factor = all_wanted_blocks / instance_info.num_total_gpu_blocks
         return KvBlocksRatioLoad(demand_factor)
 
@@ -143,12 +145,33 @@ class AdaptiveDecodeBatchLoad(BaseLoad):
     def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "AdaptiveDecodeBatchLoad":
         return AdaptiveDecodeBatchLoad(instance_info.decode_batch_size)
 
+class MissWaitingTokensLoad(BaseLoad):
+    BUSY_THRESHOLD = float(llumnix_envs.MISSWAITINGTOKENS_BUSY_THRESHOLD)
+
+    def __init__(self, miss_waiting_tokens: float = 0.0) -> None:
+        self.miss_waiting_tokens = miss_waiting_tokens
+
+    def is_busy(self) -> bool:
+        return self.miss_waiting_tokens >= MissWaitingTokensLoad.BUSY_THRESHOLD
+
+    def __lt__(self, other: "MissWaitingTokensLoad") -> bool:
+        if isinstance(other, DummyLoad):
+            return False
+        return self.miss_waiting_tokens < other.miss_waiting_tokens
+
+    def __repr__(self) -> str:
+        return f"MissWaitingTokensLoad(miss_waiting_tokens={self.miss_waiting_tokens},is_busy={self.is_busy()})"
+
+    @classmethod
+    def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "MissWaitingTokensLoad":
+        return MissWaitingTokensLoad(instance_info.num_miss_tokens_all_waiting_requests)
 
 class LoadCalculatorFactory:
     _LOAD_REGISTRY = {
         'kv_blocks_ratio': KvBlocksRatioLoad,
         'remaining_steps': RemainingStepsLoad,
-        'adaptive_decode': AdaptiveDecodeBatchLoad
+        'adaptive_decode': AdaptiveDecodeBatchLoad,
+        'miss_waiting_tokens': MissWaitingTokensLoad
     }
 
     @classmethod

@@ -14,7 +14,7 @@
 import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from llumnix.logging.logger import init_logger
 from llumnix.load_computation import LoadCalculatorFactory, BaseLoad, DummyLoad
@@ -22,6 +22,16 @@ from llumnix.llumlet.request import RequestInferenceType
 from llumnix.arg_utils import InstanceArgs
 
 logger = init_logger(__name__)
+
+
+@dataclass
+class InstanceContext:
+    # used for blade_llm
+    local_engine_id: Optional[str] = None
+    
+    # used for vllm_v1 pd
+    kvt_engine_available_port: Optional[int] = None
+    engine_host: Optional[str] = None
 
 
 class InstanceType(str, Enum):

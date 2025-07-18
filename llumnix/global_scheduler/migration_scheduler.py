@@ -19,8 +19,7 @@ from llumnix.load_computation import DummyLoad
 from llumnix.global_scheduler.migration_filter import (MigrationFilterPipeline, MigrationFilterConfig,
                                                        CustomFilter, MigrationFilterFactory)
 from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, MigrationPolicy
-from llumnix.instance_info import InstanceType
-from llumnix.utils import MigrationType
+from llumnix.utils import MigrationType, InstanceType
 from llumnix.internal_config import DispatchLoadMetricConfig
 
 logger = init_logger(__name__)

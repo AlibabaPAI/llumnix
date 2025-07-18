@@ -48,8 +48,8 @@ class VLLMV1EngineArgsFactory(LlumnixEngineArgsFactory):
             instance_type = next_instance_args.instance_type
             current_engine_args = self.engine_args_dict[instance_type]
 
+        next_engine_args = copy.deepcopy(current_engine_args)
         if self.pdd_config.enable_engine_pd_disagg:
-            next_engine_args = copy.deepcopy(current_engine_args)
             next_engine_args.revised_args.kvt_inst_id = instance_id
             next_engine_args.revised_args.kv_port += port_offset
 

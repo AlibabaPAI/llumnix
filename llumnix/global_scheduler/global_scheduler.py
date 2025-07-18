@@ -17,12 +17,12 @@ import math
 
 from llumnix.logging.logger import init_logger
 from llumnix.internal_config import GlobalSchedulerConfig
-from llumnix.instance_info import InstanceInfo, InstanceType
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 from llumnix.metrics.global_scheduler_metrics import GlobalSchedulerMetrics
-from llumnix.utils import RequestIDType
+from llumnix.utils import RequestIDType, InstanceType
+from llumnix.instance_info import InstanceInfo
 
 logger = init_logger(__name__)
 

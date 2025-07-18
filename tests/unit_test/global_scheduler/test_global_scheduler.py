@@ -17,8 +17,8 @@ import pytest
 
 from llumnix.internal_config import GlobalSchedulerConfig
 from llumnix.global_scheduler.global_scheduler import GlobalScheduler
-from llumnix.instance_info import InstanceInfo, InstanceType
-from llumnix.utils import random_uuid
+from llumnix.instance_info import InstanceInfo
+from llumnix.utils import random_uuid, InstanceType
 from llumnix.load_computation import KvBlocksRatioLoad, RemainingStepsLoad
 from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
 

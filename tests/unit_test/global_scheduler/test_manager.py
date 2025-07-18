@@ -21,9 +21,9 @@ import numpy as np
 
 from llumnix.arg_utils import ManagerArgs, InstanceArgs, LaunchArgs
 from llumnix.manager import Manager
-from llumnix.instance_info import InstanceInfo, InstanceType
+from llumnix.instance_info import InstanceInfo
 from llumnix.request_processing_context import RequestProcessingContext
-from llumnix.utils import random_uuid, LaunchMode, BackendType
+from llumnix.utils import random_uuid, LaunchMode, BackendType, InstanceType
 from llumnix.ray_utils import (
     get_placement_group_name,
     get_instance_name,

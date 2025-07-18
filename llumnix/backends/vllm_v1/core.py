@@ -21,7 +21,6 @@ import ray
 from ray.util.placement_group import PlacementGroup
 import ray.actor
 
-import vllm.envs as vllm_envs
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.config import VllmConfig
 from vllm.utils import Counter

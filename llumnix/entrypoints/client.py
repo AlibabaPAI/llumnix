@@ -125,8 +125,8 @@ class LlumnixClient(ABC):
                 except Exception as e: # pylint: disable=broad-except
                     log_instance_exception(e, instance_id, "_abort", request_id)
         else:
-            logger.warning("Failed to abort request {} (instance_id: {}, instance: {}).".format(
-                request_id, instance_id, instance))
+            logger.warning("Failed to abort request {} (instance_ids: {}, instances: {}).".format(
+                request_id, instance_ids, instances))
 
     def _clear_client_request_states(self, request_id: RequestIDType):
         self.request_stream_last_completion_tokens.pop(request_id, None)

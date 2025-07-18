@@ -154,7 +154,7 @@ def check_instance_args(instance_args: InstanceArgs, engine_args: "AsyncEngineAr
     migration_config: MigrationConfig = instance_args.create_migration_config()
     engine_config: VllmConfig = engine_args.create_engine_config()
     parallel_config: ParallelConfig = engine_config.parallel_config
-    
+
     assert len(vllm_env.VLLM_HOST_IP) == 0, "For Llumnix, please set VLLM_HOST_IP to empty string."
 
     assert instance_args.migration_backend in ['rayrpc', 'gloo', 'nccl'], \

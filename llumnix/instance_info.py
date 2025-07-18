@@ -13,8 +13,7 @@
 
 import copy
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, Iterable, List, Tuple, Optional
+from typing import Dict, Iterable, List, Tuple
 
 from llumnix.logging.logger import init_logger
 from llumnix.load_computation import (
@@ -39,14 +38,6 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
     InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
     InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
 }
-
-
-class InstanceType(str, Enum):
-    NO_CONSTRAINTS = "no_constraints"
-    PREFILL = "prefill"
-    DECODE = "decode"
-    PREFILL_AS_DECODE = "prefill_as_decode"
-    DECODE_AS_PREFILL = "decode_as_prefill"
 
 
 @dataclass

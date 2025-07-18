@@ -30,7 +30,7 @@ from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.ray_utils import get_instance_name, log_actor_ray_info, remove_placement_group
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType, InstanceContext
+from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)

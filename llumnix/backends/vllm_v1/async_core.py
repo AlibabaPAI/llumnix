@@ -17,7 +17,6 @@ import signal
 import asyncio
 import queue
 
-import vllm.envs as vllm_envs
 from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc, _core_init
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.logging_utils.dump_input import dump_engine_exception
@@ -28,8 +27,6 @@ from vllm.logger import init_logger
 from vllm.config import ParallelConfig, VllmConfig
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.engine.dpcoord import Participant
-
-from llumnix.utils import get_ip_address
 
 logger = init_logger(__name__)
 

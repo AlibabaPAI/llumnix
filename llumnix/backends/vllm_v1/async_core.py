@@ -340,6 +340,51 @@ class AsyncDPEngineCoreProc(AsyncEngineCoreProc, DPEngineCoreProc):
         AsyncEngineCoreProc.__init__(self, vllm_config, on_head_node, handshake_address,
                                      executor_class, log_stats, dp_rank)
 
+    def _init_data_parallel(self, vllm_config: VllmConfig):
+        # Configure GPUs and stateless process group for data parallel.
+        dp_rank = vllm_config.parallel_config.data_parallel_rank
+        dp_size = vllm_config.parallel_config.data_parallel_size
+        local_dp_rank = vllm_config.parallel_config.data_parallel_rank_local
+
+        assert dp_size > 1
+        assert 0 <= local_dp_rank <= dp_rank < dp_size
+
+        self._dppart = Participant(vllm_config, self)
+
+        if vllm_config.kv_transfer_config is not None:
+            # modify the engine_id and append the local_dp_rank to it to ensure
+            # that the kv_transfer_config is unique for each DP rank.
+            vllm_config.kv_transfer_config.engine_id = (
+                f"{vllm_config.kv_transfer_config.engine_id}_dp{local_dp_rank}"
+            )
+
+            if not vllm_config.parallel_config.data_parallel_external_lb:
+                vllm_config.kv_transfer_config.engine_available_port += vllm_config.parallel_config.data_parallel_rank_local
+
+            logger.info("adjust kvt cfg: %s", vllm_config.kv_transfer_config)
+            logger.debug("Setting kv_transfer_config.engine_id to %s",
+                         vllm_config.kv_transfer_config.engine_id)
+
+        # NOTE(shejiarui): code below will not be used in Llumnix.
+        # from vllm.platforms import current_platform
+        # device_control_env_var = current_platform.device_control_env_var
+        # world_size = vllm_config.parallel_config.world_size
+        # # Set CUDA_VISIBLE_DEVICES or equivalent.
+        # try:
+        #     os.environ[device_control_env_var] = ",".join(
+        #         str(current_platform.device_id_to_physical_device_id(i))
+        #         for i in range(local_dp_rank *
+        #                        world_size, (local_dp_rank + 1) * world_size))
+        # except IndexError as e:
+        #     raise Exception(
+        #         f"Error setting {device_control_env_var}: "
+        #         f"local range: [{local_dp_rank * world_size}, "
+        #         f"{(local_dp_rank + 1) * world_size}) "
+        #         f"base value: \"{os.getenv(device_control_env_var)}\"") from e
+
+        self.dp_rank = dp_rank
+        self.dp_group = vllm_config.parallel_config.stateless_init_dp_group()
+
     async def _process_engine_step_async(self):
         forward_executed = await AsyncEngineCoreProc._process_engine_step_async(self)
         self._maybe_publish_request_counts()

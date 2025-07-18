@@ -170,7 +170,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             for engine_core_output in llumnix_request_outputs.engine_outputs.outputs:
                 set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
                 request_id = engine_core_output.request_id
-                self.request_instance[request_id] = llumnix_request_outputs.instance_id
+                self.request_instances[request_id] = llumnix_request_outputs.instance_id
                 processed_output = self._process_output_order(
                     request_id, engine_core_output,
                 )

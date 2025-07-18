@@ -64,23 +64,24 @@ class DPManager:
         instance_filter = [("class_name", "=", "Llumlet"), ("placement_group_id", "=", str(placement_group.id))]
         server_filter = [("class_name", "=", "APIServerActor"), ("placement_group_id", "=", str(placement_group.id))]
         try:
-            # Try to find instances and servers with class name and placement group
-            # in case that the dp_manager is restarted.
-            instance_actors = list_actors(filters=instance_filter)
-            server_actors = list_actors(filters=server_filter)
-            found_instances = len(instance_actors)
-            found_servers = len(server_actors)
+            # # Try to find instances and servers with class name and placement group
+            # # in case that the dp_manager is restarted.
+            # instance_actors = list_actors(filters=instance_filter)
+            # server_actors = list_actors(filters=server_filter)
+            # found_instances = len(instance_actors)
+            # found_servers = len(server_actors)
 
-            if found_instances == 0 and found_servers == 0:
-                # No instances or servers found, create them
-                self._init_instances_and_servers()
-            elif found_instances == self.dp_size and found_servers == self.dp_size:
-                self.instances.append(ray.get_actor(instance.actor_id) for instance in instance_actors)
-                self.servers.append(ray.get_actor(server.actor_id) for server in server_actors)
-            else:
-                raise(RuntimeError("DPManager restarted but found not exactly dp_size instances and servers. "
-                                   "Restart the whole DP group."))
+            # if found_instances == 0 and found_servers == 0:
+            #     # No instances or servers found, create them
+            #     self._init_instances_and_servers()
+            # elif found_instances == self.dp_size and found_servers == self.dp_size:
+            #     self.instances.append(ray.get_actor(instance.actor_id) for instance in instance_actors)
+            #     self.servers.append(ray.get_actor(server.actor_id) for server in server_actors)
+            # else:
+            #     raise(RuntimeError("DPManager restarted but found not exactly dp_size instances and servers. "
+            #                        "Restart the whole DP group."))
 
+            self._init_instances_and_servers()
             ray.get([server.is_ready.remote() for server in self.servers])
             ray.get([instance.is_ready.remote() for instance in self.instances])
             self.manager.scale_up.remote(self.instance_ids, self.instances, [None] * self.dp_size)

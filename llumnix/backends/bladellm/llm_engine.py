@@ -38,7 +38,7 @@ from blade_llm.utils.disagg_utils import InstanceRole
 from blade_llm.service.disagg_pd_engine import PrefillAsyncLLMEngine, DecodeAsyncLLMEngine
 from blade_llm.service.communications.engine_msg_server import EngineMsgServer
 from blade_llm.service.engine_args import CommunicationArgs
-from blade_llm.service.metric import init_metric
+from blade_llm.service.metric import init_metric, InMemExporter
 from blade_llm.module.parallel import setup_dist_environ, master_node_in_distributed_inference
 from blade_llm.utils.constants import NCCL_PORT
 from blade_llm.module.parallel import is_distributed_inference
@@ -556,6 +556,9 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             request_output_forwarding_mode,
         )
 
+    async def get_metrics(self) -> str:
+        return InMemExporter.METRICS_TXT
+
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
@@ -580,6 +583,9 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
             backend_type,
             request_output_forwarding_mode,
         )
+
+    async def get_metrics(self) -> str:
+        return InMemExporter.METRICS_TXT
 
 
 class BackendBladeLLM(BackendInterface):
@@ -886,8 +892,8 @@ class BackendBladeLLM(BackendInterface):
     def get_stats(self) -> Stats:
         return self.engine.get_stats()
 
-    def get_metrics(self) -> str:
-        return self.engine.get_metrics()
+    async def get_metrics(self) -> str:
+        return await self.engine.get_metrics()
 
     async def start_profiler(self):
         return await self.engine.start_profiler()

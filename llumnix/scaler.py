@@ -555,12 +555,12 @@ class Scaler:
         return placement_group
 
     def _init_server_and_instance(self,
-                                 instance_id: str,
-                                 entrypoints_args: EntrypointsArgs,
-                                 instance_args: InstanceArgs,
-                                 engine_args: LlumnixEngineArgs,
-                                 placement_group: PlacementGroup,
-                                 instance_type: InstanceType):
+                                  instance_id: str,
+                                  entrypoints_args: EntrypointsArgs,
+                                  instance_args: InstanceArgs,
+                                  engine_args: LlumnixEngineArgs,
+                                  placement_group: PlacementGroup,
+                                  instance_type: InstanceType):
         async def instance_ready_scale_up(
             instance_id: str,
             instance: Llumlet,

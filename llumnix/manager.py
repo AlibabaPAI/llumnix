@@ -294,7 +294,8 @@ class Manager:
     async def _get_engine_context(self, ins_id: str, instance_actor: Llumlet) -> InstanceContext:
         try:
             engine_context = await asyncio_wait_for_ray_remote_call_with_timeout(
-                instance_actor.get_engine_context)
+                instance_actor.get_engine_context
+            )
             self.instance_context[ins_id] = engine_context
             logger.info("Bind instance id {} with engine context {}.".format(ins_id, engine_context))
             return engine_context

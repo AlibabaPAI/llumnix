@@ -23,7 +23,7 @@ from llumnix.arg_utils import ManagerArgs, InstanceArgs, LaunchArgs
 from llumnix.manager import Manager
 from llumnix.instance_info import InstanceInfo
 from llumnix.request_processing_context import RequestProcessingContext
-from llumnix.utils import random_uuid, LaunchMode, BackendType, InstanceType
+from llumnix.utils import random_uuid, LaunchMode, BackendType, InstanceType, InstanceContext
 from llumnix.ray_utils import (
     get_placement_group_name,
     get_instance_name,
@@ -107,6 +107,9 @@ class MockLlumlet:
 
     def get_engine_disagg_inst_id(self) -> str:
         return self.engine_disagg_inst_id
+
+    def get_engine_context(self):
+        return InstanceContext()
 
 
 def init_manager(

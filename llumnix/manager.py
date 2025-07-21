@@ -311,7 +311,7 @@ class Manager:
                                 ) -> List[str]:
         available_instance_ids, available_instance_actors, available_instance_types = [], [], []
 
-        def self_assign_id_success_callback(fut,
+        def _get_engine_context_callback(fut,
                                             instance_idx: int,
                                             scale_up_info: List[List],
                                             available_scale_up_info: List[List]):
@@ -327,7 +327,7 @@ class Manager:
                 task = asyncio.gather(self._get_engine_context(ins_id, ins_actor), return_exceptions=True)
                 task.add_done_callback(
                     partial(
-                        self_assign_id_success_callback,
+                        _get_engine_context_callback,
                         instance_idx=ins_idx,
                         scale_up_info=[instance_ids, instance_actor_handles, instance_types],
                         available_scale_up_info=[available_instance_ids, available_instance_actors, available_instance_types])

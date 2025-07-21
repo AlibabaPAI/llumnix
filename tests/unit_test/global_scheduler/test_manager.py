@@ -105,11 +105,8 @@ class MockLlumlet:
     def get_num_migrate_in(self):
         return self.num_migrate_in
 
-    def get_engine_disagg_inst_id(self) -> str:
-        return self.engine_disagg_inst_id
-
     def get_engine_context(self):
-        return InstanceContext()
+        return InstanceContext(local_engine_id=self.instance_id)
 
 
 def init_manager(
@@ -316,9 +313,9 @@ def test_poll_instance_info_loop_and_migrate(ray_env, manager: Manager):
             assert num_migrate_in == 0 and num_migrate_out > 1
 
 @pytest.mark.asyncio
-async def test_get_instance_self_assigned_id(ray_env, manager: Manager):
+async def test_get_engine_context(ray_env, manager: Manager):
     instance_id = random_uuid()
     env_instance_id = random_uuid()
     llumlet_actor = MockLlumlet.remote(env_instance_id)
-    engine_self_assigned_id = await manager._get_engine_self_assigned_id.remote(instance_id, llumlet_actor)
-    assert engine_self_assigned_id == env_instance_id
+    engine_context = await manager._get_engine_context.remote(instance_id, llumlet_actor)
+    assert engine_context.local_engine_id == env_instance_id

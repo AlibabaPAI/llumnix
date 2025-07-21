@@ -220,7 +220,7 @@ def generate_vllm_v1_launch_command(
     request_migration_policy: str = 'SR',
     max_num_batched_tokens: int = 16000,
     enable_pd_disagg: bool = False,
-    instance_type: str = "no_constraints",
+    instance_type: str = "neutral",
     tensor_parallel_size: int = 1,
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
@@ -231,6 +231,7 @@ def generate_vllm_v1_launch_command(
     **kwargs
 ):
     return None
+
 def generate_vllm_v1_serve_command(
     result_filename: str = "",
     ip: str = get_ip_address(),

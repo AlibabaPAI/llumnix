@@ -20,11 +20,12 @@ import json
 import torch
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceType, INSTANCE_TYPE_TO_METRIC_FIELD, sort_instance_infos
+from llumnix.instance_info import InstanceInfo, INSTANCE_TYPE_TO_METRIC_FIELD, sort_instance_infos
 from llumnix.global_scheduler.query_client import build_meta_client_from_config, CacheMetaClient
 from llumnix.global_scheduler.dispatch_filter import MetricBasedFilter
 from llumnix.internal_config import DispatchLoadMetricConfig
 import llumnix.envs as llumnix_envs
+from llumnix.utils import InstanceType
 
 logger = init_logger(__name__)
 

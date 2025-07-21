@@ -14,6 +14,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Any
 import asyncio
+from collections import defaultdict
 
 import ray
 
@@ -55,7 +56,7 @@ class LlumnixClient(ABC):
         self.log_requests: bool = entrypoints_context.log_requests
 
         self.instance_requests: Dict[str, set[RequestIDType]] = {}
-        self.request_instances: Dict[RequestIDType, set[str]] = {}
+        self.request_instances: Dict[RequestIDType, set[str]] = defaultdict(set)
         # TODO(s5u13): Consider a better way to get instance handle without calling ray.
         self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
@@ -154,7 +155,7 @@ class LlumnixClient(ABC):
         while True:
             try:
                 curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
-                curr_instance_ids = [curr_instance_name.split("_")[-1] for curr_instance_name in curr_instance_names]
+                curr_instance_ids = [curr_instance_name[len(INSTANCE_NAME_PREFIX):] for curr_instance_name in curr_instance_names]
                 new_global_instances = {}
                 for instance_id in curr_instance_ids:
                     if instance_id in self.global_instances:

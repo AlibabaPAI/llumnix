@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import asyncio
-import copy
 import random
 from typing import List, Tuple, Union, Iterable, Dict
 from functools import partial
@@ -23,7 +22,6 @@ import ray.actor
 import ray.exceptions
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceType
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import (
@@ -44,6 +42,7 @@ from llumnix.utils import (
     log_instance_exception,
     BackendType,
     LaunchMode,
+    InstanceType,
 )
 from llumnix.ray_utils import (
     get_manager_name,
@@ -64,6 +63,7 @@ from llumnix.ray_utils import (
     actor_exists,
     get_instance_name,
     PLACEMENT_GROUP_NAME_PREFIX,
+    kill_dp_manager,
 )
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (
@@ -169,7 +169,6 @@ class Scaler:
                 if self.client_index == -1:
                     logger.error("Failed to get client_index from ray internal kv: {}".format(self.client_index))
 
-        # When manager starts, it automatically connects to all existing instances.
         run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
 
         if self.launch_mode == LaunchMode.GLOBAL:
@@ -199,7 +198,7 @@ class Scaler:
                     )
                 )
             asyncio.create_task(self._heartbeat_loop(HEARTBEAT_LOOP_INTERVAL))
-            asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
+            # asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
             if self.pdd_config.enable_pd_disagg:
                 asyncio.create_task(self._check_pd_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
 
@@ -295,51 +294,25 @@ class Scaler:
                     self.last_timeout_instance_id = new_instance_id
                     await asyncio.sleep(interval)
                     continue
-                if service_name in ["prefill", "decode"]:
-                    await self._init_server_and_instance(
+                instance_type = get_service_instance_type(service_name) if service_name in ["prefill", "decode"] else None
+                if self.engine_args.backend_type == BackendType.VLLM_V1:
+                    self._init_dp_manager_v1(
                         new_instance_id,
                         self.entrypoints_args,
                         self.instance_args,
                         self.engine_args,
                         new_pg,
-                        instance_type=get_service_instance_type(service_name),
+                        instance_type,
                     )
-                elif self.engine_args.backend_type == BackendType.VLLM_V1:
-                    # pylint: disable=import-outside-toplevel
-                    from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
-
-                    # Use DPManager to launch both normal instances and DP group.
-                    dp_size = self.engine_args.get_dp_size()
-
-                    # Assign dp_size ids/ports/client_indice for instances and servers.
-                    new_instance_ids = [random_uuid() for _ in range(dp_size)]
-                    new_port_offset = [self.port_offset+i for i in range(dp_size)]
-                    new_client_index = [self.client_index+i for i in range(dp_size)]
-
-                    # TODO(shejiarui): Add exception handler if DPManager failed.
-                    dp_manager = DPManager.from_args(new_instance_id, new_instance_ids, new_port_offset, new_client_index,
-                                                     self.entrypoints_args, self.instance_args, self.engine_args, new_pg)
-                    asyncio.create_task(
-                        asyncio_wait_for_ray_remote_call_with_timeout(
-                            dp_manager.is_ready, timeout=float(llumnix_envs.SERVER_READY_TIMEOUT)
-                        )
-                    )
-
-                    if self.enable_port_increment:
-                        self.port_offset += dp_size
-                        if self.enable_port_offset_store:
-                            put_data_to_ray_internal_kv("scaler.port_offset", self.port_offset)
-                    self.client_index += dp_size
-                    put_data_to_ray_internal_kv("scaler.client_index", self.client_index)
                 else:
-                    # If not prefill/decode service, we do not specify the instance type,
-                    # and the instance type is decided by _get_next_instance_type.
-                    await self._init_server_and_instance(
-                        new_instance_id, self.entrypoints_args, self.instance_args, self.engine_args, new_pg
+                    self._init_server_and_instance(
+                        new_instance_id,
+                        self.entrypoints_args,
+                        self.instance_args,
+                        self.engine_args,
+                        new_pg,
+                        instance_type,
                     )
-                logger.info(
-                    "Deploy server and instance to new placement group done, instance_id: {}.".format(new_instance_id)
-                )
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(
@@ -434,19 +407,19 @@ class Scaler:
                 # pylint: disable=unused-variable
                 curr_pgs, curr_servers, curr_instances = self._get_cluster_deployment_states()
                 update_api_servers(curr_servers)
-                # # TODO(shejiarui): fix it in DP
-                # assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
-                # tasks = []
-                # for instance_id in curr_pgs:
-                #     server_exists = instance_id in curr_servers
-                #     instance_exists = instance_id in curr_instances
-                #     if not server_exists or not instance_exists:
-                #         tasks.append(
-                #             asyncio.create_task(
-                #                 watch_instance_deployment_states(instance_id, server_exists, instance_exists)
-                #             )
-                #         )
-                # await asyncio.gather(*tasks, return_exceptions=True)
+                # TODO(shejiarui): fix it in DP
+                assert len(curr_pgs) >= max(len(curr_servers), len(curr_instances))
+                tasks = []
+                for instance_id in curr_pgs:
+                    server_exists = instance_id in curr_servers
+                    instance_exists = instance_id in curr_instances
+                    if not server_exists or not instance_exists:
+                        tasks.append(
+                            asyncio.create_task(
+                                watch_instance_deployment_states(instance_id, server_exists, instance_exists)
+                            )
+                        )
+                await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(
@@ -581,15 +554,14 @@ class Scaler:
 
         return placement_group
 
-    async def _init_server_and_instance(self,
-                                        instance_id: str,
-                                        entrypoints_args: EntrypointsArgs,
-                                        instance_args: InstanceArgs,
-                                        engine_args: LlumnixEngineArgs,
-                                        placement_group: PlacementGroup,
-                                        instance_type: InstanceType = None):
-
-        async def ready_scale_up(
+    def _init_server_and_instance(self,
+                                  instance_id: str,
+                                  entrypoints_args: EntrypointsArgs,
+                                  instance_args: InstanceArgs,
+                                  engine_args: LlumnixEngineArgs,
+                                  placement_group: PlacementGroup,
+                                  instance_type: InstanceType):
+        async def instance_ready_scale_up(
             instance_id: str,
             instance: Llumlet,
             next_entrypoints_args: EntrypointsArgs,
@@ -619,7 +591,7 @@ class Scaler:
                 )
                 instance_type = next_instance_args.instance_type
                 self.instance_id_api_server_dict[instance_id] = server
-                await self._scale_up(instance_id, instance, instance_type)
+                await self.scale_up(instance_id, instance, instance_type)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
@@ -638,7 +610,7 @@ class Scaler:
                             )
                         )
                 else:
-                    logger.exception("Error in scaler ready_scale_up (instance_id: {})".format(instance_id))
+                    logger.exception("Error in scaler instance_ready_scale_up (instance_id: {})".format(instance_id))
                 await self._clear_instance_ray_resources(instance_id)
             finally:
                 self.inflight_num_prefill_instances -= 1 if instance_type == InstanceType.PREFILL else 0
@@ -646,8 +618,9 @@ class Scaler:
 
         backend_type = engine_args.backend_type
         request_output_queue_type = QueueType(entrypoints_args.request_output_queue_type)
-        next_instance_args = await self._get_next_instance_args(instance_args, instance_type)
-        next_entrypoints_args = self._get_next_entrypoints_args(entrypoints_args)
+        next_instance_type = self._get_next_instance_type() if instance_type is None else instance_type
+        next_instance_args = InstanceArgs.get_next_instance_args(instance_args, next_instance_type)
+        next_entrypoints_args = EntrypointsArgs.get_next_entrypoints_args(entrypoints_args, self.enable_port_increment, self.port_offset)
         next_engine_args = self.llumnix_engine_args_factory.gen_next_engine_args(
             current_engine_args=engine_args,
             next_instance_args=next_instance_args,
@@ -671,13 +644,17 @@ class Scaler:
         self.inflight_num_prefill_instances += 1 if next_instance_args.instance_type == InstanceType.PREFILL else 0
         self.inflight_num_decode_instances += 1 if next_instance_args.instance_type == InstanceType.DECODE else 0
         asyncio.create_task(
-            ready_scale_up(
+            instance_ready_scale_up(
                 instance_id,
                 instance,
                 next_entrypoints_args,
                 next_instance_args,
                 next_engine_args,
             )
+        )
+
+        logger.info(
+            "Deploy server and instance to new placement group done, instance_id: {}.".format(instance_id)
         )
 
     def _init_server(self,
@@ -751,6 +728,88 @@ class Scaler:
 
         return instance
 
+    def _init_dp_manager_v1(self,
+                            instance_id: str,
+                            entrypoints_args: EntrypointsArgs,
+                            instance_args: InstanceArgs,
+                            engine_args: LlumnixEngineArgs,
+                            placement_group: PlacementGroup,
+                            instance_type: InstanceType) -> None:
+        # pylint: disable=import-outside-toplevel
+        from llumnix.entrypoints.vllm_v1.dp_manager import DPManager
+        async def dp_manager_ready_scale_up(instance_id: str, dp_manager: DPManager, dp_size: int, instance_type: InstanceType):
+            try:
+                await asyncio_wait_for_ray_remote_call_with_timeout(
+                    dp_manager.is_ready, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                )
+            except Exception as e: # pylint: disable=broad-except
+                if isinstance(e, ray.exceptions.RayActorError):
+                    logger.warning("Failed to scale up dp manager {}, dp manager is dead.".format(instance_id))
+                elif isinstance(e, asyncio.TimeoutError):
+                    logger.error(
+                        "Failed to scale up dp manager {}, dp manager is not ready in {} seconds.".format(
+                            instance_id, float(llumnix_envs.INSTANCE_READY_TIMEOUT)
+                        )
+                    )
+                else:
+                    logger.exception("Error in scaler dp_manager_ready_scale_up (instance_id: {})".format(instance_id))
+                await self._clear_dp_manager_ray_resources(instance_id)
+            finally:
+                self.inflight_num_prefill_instances -= dp_size if instance_type == InstanceType.PREFILL else 0
+                self.inflight_num_decode_instances -= dp_size if instance_type == InstanceType.DECODE else 0
+
+        dp_size = engine_args.get_dp_size()
+
+        next_instance_type = self._get_next_instance_type(dp_size) if instance_type is None else instance_type
+        instance_args.instance_type = next_instance_type
+        instance_args_list: List[InstanceArgs] = [instance_args] * dp_size
+        entrypoints_args_list: List[EntrypointsArgs] = []
+        instance_id_list: List[str] = []
+        engine_args_list: List[LlumnixEngineArgs] = []
+        for rank in range(dp_size):
+            port_offset = self.port_offset + rank
+            client_index = self.client_index + rank
+            entrypoints_args_list.append(
+                EntrypointsArgs.get_next_entrypoints_args(
+                    entrypoints_args, self.enable_port_increment, port_offset, client_index
+                )
+            )
+            instance_id_list.append("{}_{}".format(instance_id, random_uuid()))
+            engine_args_list.append(
+                self.llumnix_engine_args_factory.gen_next_engine_args(
+                    engine_args, instance_args_list[rank], port_offset, instance_id
+                )
+            )
+
+        dp_manager = DPManager.from_args(
+            instance_id,
+            next_instance_type,
+            dp_size,
+            instance_id_list,
+            entrypoints_args_list,
+            instance_args_list,
+            engine_args_list,
+            placement_group,
+            self.scaler,
+            self.manager,
+        )
+
+        self.inflight_num_prefill_instances += dp_size if next_instance_type == InstanceType.PREFILL else 0
+        self.inflight_num_decode_instances += dp_size if next_instance_type == InstanceType.DECODE else 0
+
+        if self.enable_port_increment:
+            self.port_offset += dp_size
+            if self.enable_port_offset_store:
+                put_data_to_ray_internal_kv("scaler.port_offset", self.port_offset)
+        self.client_index += dp_size
+        put_data_to_ray_internal_kv("scaler.client_index", self.client_index)
+
+        asyncio.create_task(dp_manager_ready_scale_up(instance_id, dp_manager, dp_size, next_instance_type))
+
+        logger.info(
+            "Deploy dp manager to new placement group done, instance_id: {}.".format(instance_id)
+        )
+
     async def init_instances(self,
                              request_output_queue_type: QueueType,
                              instance_args: InstanceArgs,
@@ -762,7 +821,7 @@ class Scaler:
                 await asyncio_wait_for_ray_remote_call_with_timeout(
                     instance.is_ready, timeout=float(llumnix_envs.INSTANCE_READY_TIMEOUT)
                 )
-                await self._scale_up(instance_id, instance, instance_type)
+                await self.scale_up(instance_id, instance, instance_type)
                 logger.info("Init server and instance done, instance_id: {}, instance_type: {}.".format(instance_id, instance_type))
             except Exception as e: # pylint: disable=broad-except
                 if isinstance(e, ray.exceptions.RayActorError):
@@ -825,10 +884,11 @@ class Scaler:
         return init_request_output_queue_server(ip, queue_type)
 
     # scale up: from scaler to manager
-    async def _scale_up(self,
-                        instance_id: Union[str, Iterable[str]],
-                        instance_actor_handle: Union[Llumlet, List[Llumlet]],
-                        instance_type: Union[InstanceType, List[InstanceType]]) -> None:
+    @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
+    async def scale_up(self,
+                       instance_id: Union[str, Iterable[str]],
+                       instance_actor_handle: Union[Llumlet, List[Llumlet]],
+                       instance_type: Union[InstanceType, List[InstanceType]]) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
             instance_actor_handle = [instance_actor_handle,]
@@ -896,6 +956,14 @@ class Scaler:
             await kill_instance(ins_id)
             remove_placement_group(ins_id)
 
+    async def _clear_dp_manager_ray_resources(self, instance_id: Union[str, Iterable[str]]):
+        if isinstance(instance_id, str):
+            instance_id = [instance_id,]
+        instance_ids = list(instance_id)
+        for ins_id in instance_ids:
+            await kill_dp_manager(ins_id)
+            remove_placement_group(ins_id)
+
     async def _connect_to_instances(self):
         def connect_to_instance_done_callback(instance_id: str, instance_actor_handle: ray.actor.ActorHandle, fut):
             ret = fut.result()[0]
@@ -945,7 +1013,7 @@ class Scaler:
             tasks.append(task)
         await asyncio.gather(*tasks)
 
-        await self._scale_up(instance_ids, instance_actor_handles, instance_types)
+        await self.scale_up(instance_ids, instance_actor_handles, instance_types)
 
     @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
     def get_instances(self):
@@ -959,54 +1027,20 @@ class Scaler:
 
         return instance_ids, instance_actor_handles, instance_types
 
-    async def _get_next_instance_args(self, instance_args: InstanceArgs, instance_type: InstanceType) -> InstanceArgs:
-        if (
-            not self.enable_port_increment
-            and not self.pdd_config.enable_pd_disagg
-            and not self.pdd_config.enable_engine_pd_disagg
-            and not self.pdd_config.enable_engine_semi_pd_disagg
-        ):
-            return instance_args
+    @property
+    def enable_pd(self):
+        return self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg
 
-        next_instance_args: InstanceArgs = copy.deepcopy(instance_args)
-
-        if self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg:
-            # Await can still ensure make sure _init_server_and_instance is atomic due to _auto_scale_up_loop.
-            cur_num_prefill_instances = len(self.prefill_instance_id_set)
-            cur_num_decode_instances = len(self.decode_instance_id_set)
-            next_instance_args.instance_type = self._get_next_instance_type(
-                cur_num_prefill_instances, cur_num_decode_instances, self.pdd_config.pd_ratio, instance_type,)
-
-        return next_instance_args
-
-    def _get_next_entrypoints_args(self, entrypoints_args: EntrypointsArgs) -> EntrypointsArgs:
-        if not self.enable_port_increment:
-            return entrypoints_args
-
-        next_entrypoints_args = copy.deepcopy(entrypoints_args)
-        next_entrypoints_args.port += self.port_offset
-
-        if hasattr(self, "backend_type") and self.backend_type == BackendType.VLLM_V1:
-            next_entrypoints_args.client_index = self.client_index
-            self.client_index += 1
-            put_data_to_ray_internal_kv("scaler.client_index", self.client_index)
-
-        return next_entrypoints_args
-
-    def _get_next_instance_type(self,
-                                cur_num_prefill_instances: int,
-                                cur_num_decode_instances: int,
-                                pd_ratio: List[int],
-                                instance_type: InstanceType = None) -> str:
-        if instance_type:
-            return instance_type
-
-        if not self.pdd_config.enable_pd_disagg and not self.pdd_config.enable_engine_pd_disagg \
-            and not self.pdd_config.enable_engine_semi_pd_disagg:
+    def _get_next_instance_type(self, instance_num: int = 1) -> str:
+        if not self.enable_pd:
             return InstanceType.NEUTRAL
+
+        pd_ratio = self.pdd_config.pd_ratio
 
         # There are no instances simultaneously in inflight_num_prefill_instances and cur_num_prefill_instances
         # as inflight_num will decrease before scaling up the instances. The same applies to num_decode.
+        cur_num_prefill_instances = len(self.prefill_instance_id_set)
+        cur_num_decode_instances = len(self.decode_instance_id_set)
         total_num_prefill_instances = self.inflight_num_prefill_instances + cur_num_prefill_instances
         total_num_decode_instances = self.inflight_num_decode_instances + cur_num_decode_instances
 
@@ -1025,8 +1059,8 @@ class Scaler:
             if total_num_prefill_instances + total_num_decode_instances == 0:
                 instance_type = InstanceType.PREFILL
             else:
-                distance_if_prefill = total_num_prefill_instances + 1 - total_num_decode_instances
-                distance_if_decode = total_num_prefill_instances - (total_num_decode_instances + 1)
+                distance_if_prefill = total_num_prefill_instances + instance_num - total_num_decode_instances
+                distance_if_decode = total_num_prefill_instances - (total_num_decode_instances + instance_num)
                 gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
                 gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
                 instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode else InstanceType.DECODE

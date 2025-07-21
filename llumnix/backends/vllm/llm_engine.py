@@ -46,7 +46,14 @@ from llumnix.backends.output_forwarder import RequestOutputForwardingMode, Outpu
 from llumnix.ray_utils import get_instance_name
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
-from llumnix.utils import make_async, BackendType, RequestIDType, MigrationResponse, asyncio_wait_for_ray_remote_call_with_timeout
+from llumnix.utils import (
+    make_async,
+    BackendType,
+    RequestIDType,
+    MigrationResponse,
+    asyncio_wait_for_ray_remote_call_with_timeout,
+    InstanceContext,
+)
 from llumnix.request_output import LlumnixRequestOuput
 
 logger = init_logger(__name__)
@@ -582,3 +589,6 @@ class BackendVLLM(BackendInterface):
 
     def get_instance_info(self):
         return self.engine.instance_info
+
+    def get_engine_context(self):
+        return InstanceContext(local_engine_id=self.instance_id)

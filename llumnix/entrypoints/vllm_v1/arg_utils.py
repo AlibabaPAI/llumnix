@@ -48,8 +48,8 @@ class VLLMV1EngineArgsFactory(LlumnixEngineArgsFactory):
             instance_type = next_instance_args.instance_type
             current_engine_args = self.engine_args_dict[instance_type]
 
+        next_engine_args = copy.deepcopy(current_engine_args)
         if self.pdd_config.enable_engine_pd_disagg:
-            next_engine_args = copy.deepcopy(current_engine_args)
             next_engine_args.revised_args.kvt_inst_id = instance_id
             next_engine_args.revised_args.kv_port += port_offset
 
@@ -149,10 +149,13 @@ def check_engine_args(engine_args: "AsyncEngineArgs") -> None:
 def check_instance_args(instance_args: InstanceArgs, engine_args: "AsyncEngineArgs") -> None:
     # pylint: disable=import-outside-toplevel
     from vllm.config import VllmConfig, ParallelConfig
+    import vllm.envs as vllm_env
 
     migration_config: MigrationConfig = instance_args.create_migration_config()
     engine_config: VllmConfig = engine_args.create_engine_config()
     parallel_config: ParallelConfig = engine_config.parallel_config
+
+    assert len(vllm_env.VLLM_HOST_IP) == 0, "For Llumnix, please set VLLM_HOST_IP to empty string."
 
     assert instance_args.migration_backend in ['rayrpc', 'gloo', 'nccl'], \
         "Only support rayrpc, gloo and nccl migration backend for vLLM."

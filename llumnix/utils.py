@@ -46,6 +46,23 @@ T = TypeVar("T")
 RequestIDType = Union[str, int]
 
 
+class InstanceType(str, Enum):
+    NEUTRAL = "neutral"
+    PREFILL = "prefill"
+    DECODE = "decode"
+    PREFILL_AS_DECODE = "prefill_as_decode"
+    DECODE_AS_PREFILL = "decode_as_prefill"
+
+
+@dataclass
+class InstanceContext:
+    # used for blade_llm
+    local_engine_id: Optional[str] = None
+    # used for vllm_v1 pd
+    kvt_engine_available_port: Optional[int] = None
+    engine_host: Optional[str] = None
+
+
 class BackendType(str, Enum):
     VLLM = "vLLM"
     VLLM_V1 = "vLLM v1"
@@ -154,9 +171,7 @@ def get_llumnix_env_vars():
 
     return llumnix_env_vars
 
-def get_service_instance_type(service_name: str) -> "InstanceType":
-    # pylint: disable=import-outside-toplevel
-    from llumnix.instance_info import InstanceType
+def get_service_instance_type(service_name: str) -> InstanceType:
     assert service_name in ["prefill", "decode"], \
         "Only specify instance type when the service is prefill or decode."
     if service_name == "prefill":

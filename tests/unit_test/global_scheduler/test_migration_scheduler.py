@@ -18,11 +18,11 @@ import pytest
 from llumnix.instance_info import InstanceInfo
 from llumnix.load_computation import KvBlocksRatioLoad, AdaptiveDecodeBatchLoad, RemainingStepsLoad
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
-from llumnix.instance_info import InstanceType
 from llumnix.global_scheduler.migration_filter import (MigrationFilterPipeline, MigrationFilterConfig,
                                                        MigrationFilterFactory, CustomFilter)
 from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, Balanced, MigrationPolicy
 from llumnix.internal_config import DispatchLoadMetricConfig
+from llumnix.utils import InstanceType
 
 MIGRATE_OUT_LOAD_THRESHOLD = -3.0
 INSTANCE_NUM = 15

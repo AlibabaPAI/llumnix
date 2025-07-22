@@ -434,10 +434,6 @@ class ManagerArgs:
         if args.enable_pd_disagg:
             assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
 
-        if args.enable_adaptive_pd:
-            assert args.enable_pd_disagg or args.enable_engine_semi_pd_disagg, \
-                "Adaptive prefill-decode disaggregation is only supported when roleless prefill-decode disaggregation."
-
         assert sum([bool(args.enable_engine_pd_disagg), bool(args.enable_pd_disagg), bool(args.enable_engine_semi_pd_disagg)]) <= 1, \
             f"Engine-based prefill-decode disaggregation (enable={args.enable_engine_pd_disagg})," \
             f"Semi-Engine-based prefill-decode disaggregation (enable={args.enable_engine_semi_pd_disagg}) and, " \

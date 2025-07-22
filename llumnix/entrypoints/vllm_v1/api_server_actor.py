@@ -72,7 +72,7 @@ class APIServerActorVLLMV1(APIServerActor):
             setattr(serve_args, field.name, getattr(entrypoints_args, field.name))
         # NOTE(shejiarui): `speculative_config` has been set somewhere,
         # set it to `None` here to avoid exceptions.
-        if hasattr(serve_args, "speculative_config"):
+        if hasattr(serve_args, "speculative_config") and serve_args.speculative_config == {}:
             serve_args.speculative_config = None
 
         # Set global variable in vLLM

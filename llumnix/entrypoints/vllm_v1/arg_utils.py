@@ -133,8 +133,9 @@ def detect_unsupported_engine_feature(engine_args: "EngineArgs") -> None:
         unsupported_feature = "automatic prefix caching"
     elif engine_args.enable_chunked_prefill:
         unsupported_feature = "chunked prefill"
-    elif engine_args.speculative_config:
-        unsupported_feature = "speculative decoding"
+    # NOTE(shejiarui): qwen3 test required speculative decoding.
+    # elif engine_args.speculative_config:
+    #     unsupported_feature = "speculative decoding"
     elif engine_args.pipeline_parallel_size > 1:
         unsupported_feature = "pipeline parallel"
     elif engine_args.num_scheduler_steps > 1:

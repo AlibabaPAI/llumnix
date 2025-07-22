@@ -12,6 +12,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from typing import Dict, List, Tuple, Any
 import asyncio
 from collections import defaultdict
@@ -55,8 +56,8 @@ class LlumnixClient(ABC):
         self.server_info: ServerInfo = entrypoints_context.server_info
         self.log_requests: bool = entrypoints_context.log_requests
 
-        self.instance_requests: Dict[str, set[RequestIDType]] = {}
-        self.request_instances: Dict[RequestIDType, set[str]] = defaultdict(set)
+        self.instance_requests: Dict[str, set[RequestIDType]] = defaultdict(set)
+        self.request_instances: Dict[RequestIDType, list[str]] = defaultdict(list)
         # TODO(s5u13): Consider a better way to get instance handle without calling ray.
         self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
@@ -132,13 +133,13 @@ class LlumnixClient(ABC):
     def _clear_client_request_states(self, request_id: RequestIDType):
         self.request_stream_last_completion_tokens.pop(request_id, None)
         self.request_generate_by_instance_dict.pop(request_id, None)
-        instance_ids = self.request_instances.pop(request_id, set())
+        instance_ids = self.request_instances.pop(request_id, [])
         for instance_id in instance_ids:
             if instance_id in self.instance_requests and request_id in self.instance_requests[instance_id]:
                 self.instance_requests[instance_id].remove(request_id)
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
-        instance_ids = list(self.request_instances.get(request_id, set()))
+        instance_ids = list(self.request_instances.get(request_id, []))
         instances = []
         for instance_id in instance_ids:
             instances.append(

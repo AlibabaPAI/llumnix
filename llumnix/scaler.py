@@ -759,6 +759,7 @@ class Scaler:
                 self.inflight_num_decode_instances -= dp_size if instance_type == InstanceType.DECODE else 0
 
         dp_size = engine_args.get_dp_size()
+        dp_size_local = engine_args.get_dp_size_local()
 
         next_instance_type = self._get_next_instance_type(dp_size) if instance_type is None else instance_type
         instance_args.instance_type = next_instance_type
@@ -785,6 +786,7 @@ class Scaler:
             instance_id,
             next_instance_type,
             dp_size,
+            dp_size_local,
             instance_id_list,
             entrypoints_args_list,
             instance_args_list,

@@ -61,7 +61,7 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
                  engine_args: "AsyncEngineArgs",
                  backend_type: BackendType = BackendType.VLLM_V1) -> None:
         self.world_size = self._get_world_size(engine_args)
-        self.dp_size = self._get_dp_size(engine_args)
+        self.dp_size, self.dp_size_local = self._get_dp_args(engine_args)
         super().__init__(
             engine_args=self._get_engine_args(engine_args),
             backend_type=backend_type
@@ -75,9 +75,10 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
         world_size = engine_args.pipeline_parallel_size * engine_args.tensor_parallel_size
         return world_size
 
-    def _get_dp_size(self, engine_args: "AsyncEngineArgs"):
+    def _get_dp_args(self, engine_args: "AsyncEngineArgs"):
         dp_size = engine_args.data_parallel_size
-        return dp_size
+        dp_size_local = engine_args.data_parallel_size_local
+        return dp_size, dp_size_local
 
     def _get_engine_args(self, engine_args: "AsyncEngineArgs"):
         return pickle.dumps(engine_args)
@@ -97,6 +98,9 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
 
     def get_dp_size(self):
         return self.dp_size
+
+    def get_dp_size_local(self):
+        return self.dp_size_local
 
 
 @dataclass

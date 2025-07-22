@@ -17,7 +17,6 @@ import random
 from typing import Dict, List, Tuple, Optional, Union
 
 import msgspec
-import ray
 
 from blade_llm.service.communications.engine_client import MultiProcessingLLMClient
 from blade_llm.service.communications.protocol_msgspec import Stats
@@ -324,8 +323,13 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
     async def get_metrics(self) -> str:
         instance = self.instances[list(self.instances.keys())[0]]
-        metrics = ray.get(instance.execute_engine_method.remote("get_metrics"))
-        return metrics
+        try:
+            return await asyncio_wait_for_ray_remote_call_with_timeout(
+                instance.execute_engine_method_async, "get_metrics"
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning("Failed to get metrics from engine: {}".format(e))
+        return ""
 
     def support_beam_search(self) -> Tuple[bool, str]:
         return False, "Llumnix does not support multiple sequences decoding."

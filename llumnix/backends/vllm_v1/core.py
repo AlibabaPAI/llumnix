@@ -25,7 +25,7 @@ from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.config import VllmConfig
 from vllm.utils import Counter
 from vllm import envs as vllm_envs
-from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreOutputs
+from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreOutputs, EngineCoreOutput
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
 from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
@@ -185,18 +185,27 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     ) -> Tuple[Dict[str, LlumnixRequestOutputs], Dict[str, ServerInfo]]:
         server_request_outputs = {}
         server_info_dict = {}
+
         for _, engine_core_outputs in engine_core_outputs_dict.items():
-            request_processing_context_dict={}
+            request_processing_context_dict: Dict[str, RequestProcessingContext] = {}
             server_id = None
             server_info = None
+
+            new_engine_core_outputs: List[EngineCoreOutput] = [] # used to filter prefill responce under pdd
             for engine_core_output in engine_core_outputs.outputs:
                 request_id = engine_core_output.request_id
-                if request_id in self.reqeust_processing_context_table:
-                    request_processing_context: RequestProcessingContext = self.reqeust_processing_context_table[request_id]
-                    request_processing_context_dict[request_id] = request_processing_context
-                    if server_id is None:
-                        server_id = request_processing_context.server_id
-                        server_info = request_processing_context.get_server_info()
+
+                if request_id not in self.reqeust_processing_context_table:
+                    continue
+
+                new_engine_core_outputs.append(engine_core_output)
+                request_processing_context: RequestProcessingContext = self.reqeust_processing_context_table[request_id]
+                request_processing_context_dict[request_id] = request_processing_context
+
+                if server_id is None:
+                    server_id = request_processing_context.server_id
+                    server_info = request_processing_context.get_server_info()
+            engine_core_outputs.outputs = new_engine_core_outputs
 
             if server_id is not None:
                 server_request_outputs[server_id] = LlumnixRequestOutputs(
@@ -207,7 +216,6 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 server_info_dict[server_id] = server_info
 
         return server_request_outputs, server_info_dict
-
     def _update_instance_info(self):
         """Update instance info from executor and scheduler after step"""
         instance_info: InstanceInfo = self.instance_info # type: ignore

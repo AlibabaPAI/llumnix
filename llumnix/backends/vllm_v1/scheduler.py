@@ -112,6 +112,7 @@ class SchedulerLlumnix(Scheduler):
             num_blocks_first_waiting_request = 0
             waiting_time_first_waiting_request = 0
             num_blocks_all_waiting_requests = 0
+
         instance_info = InstanceInfo(
             num_total_gpu_blocks=num_total_gpu_blocks, # type: ignore
             num_watermark_blocks=0, # NOTE(zhaozhiyu): there is no watermark_blocks in vllm v1
@@ -124,6 +125,7 @@ class SchedulerLlumnix(Scheduler):
             num_blocks_first_waiting_request=num_blocks_first_waiting_request,
             waiting_time_first_waiting_request=waiting_time_first_waiting_request,
             num_blocks_all_waiting_requests=num_blocks_all_waiting_requests,
+            decode_batch_size=sum([req.num_computed_tokens == 1 for req in self.running]),
         )
 
         if scheduler_output is not None:

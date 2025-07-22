@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import defaultdict
 import random
 from typing import Dict
 import asyncio
@@ -51,8 +52,8 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
         self.request_stream_last_completion_tokens: Dict[str, int] = {}
         self.request_output_queue = \
             init_request_output_queue_server(ip="127.0.0.1", queue_type="rayqueue")
-        self.request_instances = {}
-        self.instance_requests = {}
+        self.instance_requests = defaultdict(set)
+        self.request_instances = defaultdict(list)
         self.cached_cluster_instances = {}
         self.request_generate_by_instance_dict = {}
         if loop:
@@ -64,8 +65,8 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
         results_generator = AsyncStream(request_id, cancel=self.abort_request)
         self.request_stream[request_id] = results_generator
         if instance_id:
-            self.request_instances[request_id] = set([instance_id])
-            self.instance_requests.setdefault(instance_id, set()).add(request_id)
+            self.request_instances[request_id].append(instance_id)
+            self.instance_requests[instance_id].add(request_id)
 
 
 @ray.remote(num_cpus=0)
@@ -227,7 +228,7 @@ async def test_abort_and_abort_request(ray_env):
 
 
     # test no instance case
-    assert request_id in client.request_instances and client.request_instances[request_id] == set([instance_id])
+    assert request_id in client.request_instances and client.request_instances[request_id] == [instance_id]
     assert instance_id in client.instance_requests and request_id in client.instance_requests[instance_id]
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
     assert not instance_id_returned and not instance_returned

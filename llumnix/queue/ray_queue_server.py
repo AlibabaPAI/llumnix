@@ -54,6 +54,9 @@ class RayQueueServer(QueueServerBase):
                 obj.request_processing_context.add_trace_timeline('queue_server_receive_timestamp')
         return item
 
+    def put_nowait(self, item):
+        self.queue.actor.put_nowait(item,None)
+
     async def get_nowait_batch(self):
         qsize = await self.queue.actor.qsize.remote()
         items = await self.queue.actor.get_nowait_batch.remote(qsize)

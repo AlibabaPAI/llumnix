@@ -89,8 +89,13 @@ class BaseOutputForwarder(ABC):
                     logger.debug("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
                                                                                 server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
-                for req_output in req_outputs:
-                    aborted_request_ids.append(req_output.request_id)
+                if isinstance(req_outputs, LlumnixRequestOutputs):
+                    # for vllm_v1
+                    for request_id in req_outputs.request_processing_context_dict.keys():
+                        aborted_request_ids.append(request_id)
+                else:
+                    for req_output in req_outputs:
+                        aborted_request_ids.append(req_output.request_id)
 
         return aborted_request_ids
 

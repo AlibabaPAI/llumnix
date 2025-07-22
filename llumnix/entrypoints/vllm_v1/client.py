@@ -18,7 +18,7 @@ import asyncio
 
 import ray.actor
 
-from vllm.v1.engine import EngineCoreOutput
+from vllm.v1.engine import EngineCoreOutput, EngineCoreOutputs, FinishReason
 from vllm.v1.engine.core_client import AsyncMPClient, DPAsyncMPClient
 from vllm.v1.executor.abstract import Executor
 from vllm.engine.async_llm_engine import AsyncStream
@@ -60,6 +60,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         LlumnixClient.__init__(self, entrypoints_context, loop)
         AsyncMPClient.__init__(self, vllm_config, executor_class, log_stats, client_addresses, client_index, driver_tensor_queue_union)
         self.engine_core_output_stash: Dict[str, Tuple[List[EngineCoreOutput], int, int]] = {}
+        entrypoints_context.llumnix_client = self
 
     async def generate(self,
                        prompt: str,
@@ -78,7 +79,14 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
         # TODO(chenghao): Support self.request_instances update for vLLM v1.
         try:
-            await self._generate_by_manager(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
+            prefill_instance_id, decode_instance_id = await self._generate_by_manager(
+                request_id,
+                request_processing_context,
+                prompt,
+                sampling_params,
+                *args,
+                **kwargs
+            )
             self.manager_available = True
         # pylint: disable=broad-except
         except Exception as e:
@@ -86,7 +94,19 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             # Do not re-generate the request to avoid duplicate requests.
             if self.manager_available:
                 self.manager_available = False
-            await self._generate_by_instance(request_id, request_processing_context, prompt, sampling_params, *args, **kwargs)
+            prefill_instance_id, decode_instance_id = await self._generate_by_instance(
+                request_id,
+                request_processing_context,
+                prompt,
+                sampling_params,
+                *args,
+                **kwargs
+            )
+        self.request_instances[request_id].append(prefill_instance_id)
+        self.instance_requests[prefill_instance_id].add(request_id)
+        if decode_instance_id and decode_instance_id == prefill_instance_id:
+            self.request_instances[request_id].append(decode_instance_id)
+            self.instance_requests[decode_instance_id].add(request_id)
 
     # pylint: disable=arguments-differ
     async def _generate_by_manager(self,
@@ -95,9 +115,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                                    prompt: str,
                                    sampling_params: SamplingParams,
                                    *args,
-                                   **kwargs) -> AsyncStream:
+                                   **kwargs) -> Tuple[str, str]:
         request_processing_context.add_trace_timeline('api_server_generate_timestamp')
-        await asyncio_wait_for_ray_remote_call_with_timeout(
+        return await asyncio_wait_for_ray_remote_call_with_timeout(
             self.manager.generate, request_id, request_processing_context, prompt, sampling_params, *args, **kwargs
         )
 
@@ -120,6 +140,8 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 )
                 logger.warning("Manager is unavailable temporarily, "
                                "dispatch request {} to instance {}.".format(request_id, instance_id))
+                # return prefill instance id and decode instance id
+                return instance_id, instance_id
             else:
                 logger.error("Manager is unavailable temporarily, but there is no instance behind this api server, "
                     "sleep {}s, waiting for manager available".format(WAIT_MANAGER_INTERVAL))
@@ -170,7 +192,9 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             for engine_core_output in llumnix_request_outputs.engine_outputs.outputs:
                 set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
                 request_id = engine_core_output.request_id
-                self.request_instances[request_id].add(llumnix_request_outputs.instance_id)
+                # update the lastest instance_id for adapting migration scene
+                if self.request_instances.get(request_id, []):
+                    self.request_instances[request_id][-1] = llumnix_request_outputs.instance_id
                 processed_output = self._process_output_order(
                     request_id, engine_core_output,
                 )
@@ -232,8 +256,34 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         return await instance.call_engine_utility_async.remote(method, *args)
 
     def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
-        raise NotImplementedError
+        for dead_instance_id in dead_instance_ids:
+            request_ids = self.instance_requests.get(dead_instance_id, [])
+            logger.error("Cancel requests: {}".format(request_ids))
+            llumnix_request_outputs = LlumnixRequestOutputs(
+                instance_id=dead_instance_id,
+                engine_outputs=EngineCoreOutputs(),
+                request_processing_context_dict={},
+            )
+            for request_id in request_ids:
+                logger.error(
+                    "Request {} is cancelled because instance {} is dead".format(
+                        request_id, dead_instance_id
+                    )
+                )
 
+                llumnix_request_outputs.engine_outputs.outputs.append(
+                    EngineCoreOutput(
+                        request_id=request_id,
+                        new_token_ids=[],
+                        finish_reason=FinishReason.ABORT,
+                        stop_reason="Server internal error, please retry.",
+                    )
+                )
+                # request status will clear in get_request_outputs_loop()
+            if len(llumnix_request_outputs.engine_outputs.outputs)>0:
+                self.request_output_queue.put_nowait(llumnix_request_outputs)
+
+            self.instance_requests.pop(dead_instance_id, None)
 
 class LlumnixDPClientVLLMV1(LlumnixClientVLLMV1, DPAsyncMPClient):
     def __init__(self, *args, **kwargs):

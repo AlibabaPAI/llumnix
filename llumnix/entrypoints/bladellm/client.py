@@ -113,11 +113,11 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
 
                 prefill_instance_id, decode_instance_id =  await self._generate_by_instance(request_id, reuqest_processing_context, request)
 
-            self.request_instances[request_id].add(prefill_instance_id)
-            self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
-            if decode_instance_id:
-                self.request_instances[request_id].add(decode_instance_id)
-                self.instance_requests.setdefault(decode_instance_id, set()).add(request_id)
+            self.request_instances[request_id].append(prefill_instance_id)
+            self.instance_requests[prefill_instance_id].add(request_id)
+            if decode_instance_id and decode_instance_id != prefill_instance_id:
+                self.request_instances[request_id].append(decode_instance_id)
+                self.instance_requests[decode_instance_id].add(request_id)
             return LLMResponse(request_id, resp_queue=results_queue)
         except Exception as e: # pylint: disable=broad-except
             logger.error("Unexpected error in llumnix client generate.{}".format(e))
@@ -192,7 +192,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                     if request_id not in self.request_stream:
                         continue
                     instance_id = request_response.instance_id
-                    self.request_instances[request_id].add(instance_id)
+                    # update the lastest instance_id for adapting migration scene
+                    if self.request_instances.get(request_id, []):
+                        self.request_instances[request_id][-1] = instance_id
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue

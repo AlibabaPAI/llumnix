@@ -190,7 +190,8 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
     post_init_llumnix_args(engine_args, instance_args, manager_args, entrypoints_args, BackendType.VLLM_V1, launch_mode, parser)
 
     # backend related check args
-    check_engine_args(engine_args)
+    if manager_args.enable_migration:
+        check_engine_args(engine_args)
     check_instance_args(instance_args, engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))

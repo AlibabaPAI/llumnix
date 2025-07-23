@@ -123,8 +123,9 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         """Creates an EngineCoreProc from the engine arguments."""
         # FIXME(zhaozhiyu): This is a bug of pai-vllm, engine_args.speculative_config
         # must be set to None before calling engine_args.create_engine_config()
-        if hasattr(engine_args, "speculative_config") and engine_args.speculative_config == {}:
-            engine_args.speculative_config = None
+        if hasattr(engine_args, "speculative_config") and engine_args.speculative_config is not None:
+            if len(engine_args.speculative_config) == 0:
+                engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
         # Hack to pass placement_group for init workers.
@@ -332,8 +333,9 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         dp_rank_local: Optional[int] = None,
     ) -> "AsyncDPEngineCoreProcLlumnix":
         """Creates an DPEngineCoreProc from the engine arguments."""
-        if hasattr(engine_args, "speculative_config") and engine_args.speculative_config == {}:
-            engine_args.speculative_config = None
+        if hasattr(engine_args, "speculative_config") and engine_args.speculative_config is not None:
+            if len(engine_args.speculative_config) == 0:
+                engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
         engine_config.parallel_config.data_parallel_master_port = vllm_envs.VLLM_DP_MASTER_PORT

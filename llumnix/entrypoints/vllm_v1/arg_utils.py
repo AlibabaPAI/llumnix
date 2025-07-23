@@ -78,6 +78,8 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
     def _get_dp_args(self, engine_args: "AsyncEngineArgs"):
         dp_size = engine_args.data_parallel_size
         dp_size_local = engine_args.data_parallel_size_local
+        if dp_size_local is None:
+            dp_size_local = dp_size
         return dp_size, dp_size_local
 
     def _get_engine_args(self, engine_args: "AsyncEngineArgs"):

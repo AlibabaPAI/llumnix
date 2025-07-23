@@ -78,7 +78,8 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                  handshake_address: str,
                  executor_class: type[Executor],
                  log_stats: bool,
-                 engine_index: int = 0) -> None:
+                 engine_index: int = 0,
+                 dp_rank: int = 0) -> None:
 
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
@@ -94,6 +95,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             abort_request_callback,
             placement_group,
             backend_type,
+            dp_rank,
         )
 
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
@@ -367,6 +369,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
             handshake_address=None,
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
+            dp_rank=dp_rank,
         )
         return engine
 

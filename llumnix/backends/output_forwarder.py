@@ -210,6 +210,7 @@ class OutputForwarder:
                  abort_request_callback: Coroutine,
                  placement_group: PlacementGroup,
                  backend_type: BackendType,
+                 bundle_index: int = 0,
                  ):
         self.request_output_queue_type = request_output_queue_type
         self.request_output_forwarding_mode = request_output_forwarding_mode
@@ -218,7 +219,7 @@ class OutputForwarder:
             # Place the actor forwarder together with the instance.
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
-                placement_group_bundle_index=0,
+                placement_group_bundle_index=bundle_index,
                 placement_group_capture_child_tasks=True,
             )
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR if backend_type == BackendType.BLADELLM else 0

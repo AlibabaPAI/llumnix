@@ -163,6 +163,9 @@ def check_instance_args(instance_args: InstanceArgs) -> None:
     assert instance_args.enable_migration is False, \
         "Llumnix does not support migration for vLLM v1."
 
+    assert not instance_args.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR, \
+        "Llumnix does not support actor request output forwarding mode for vLLM v1 temporalily."
+
     assert not instance_args.simulator_mode, "Llumnix does not support simulator mode for vLLM v1."
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \

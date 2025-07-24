@@ -38,6 +38,7 @@ from llumnix.ray_utils import (
     LlumnixActor,
     update_cluster_actor_handles,
     check_actors_health,
+    check_instance_ready_to_die,
     get_llumnix_actor_name,
     get_llumnix_actor_id,
     get_llumnix_actor_handle,
@@ -55,6 +56,7 @@ from llumnix.utils import (
     asyncio_wait_for_ray_remote_call_with_timeout,
 )
 import llumnix.envs as llumnix_envs
+from llumnix.instance_info import UnitState
 
 logger = init_logger(__name__)
 
@@ -124,6 +126,8 @@ class DPManager:
         else: # DPGroupStatus.COMPLETE
             logger.info("Restart dp manager successfully, dp group is complete.")
 
+        # NOTE(shejiarui): block here otherwise heartbeat loop may get incorrect state
+        run_coroutine_in_new_thread(self._set_unit_state(UnitState.HEALTH), blocking=True)
         asyncio.create_task(self._heartbeat_loop(HEARTBEAT_LOOP_INTERVAL))
 
     def is_ready(self) -> bool:
@@ -416,10 +420,22 @@ class DPManager:
         while True:
             try:
                 await asyncio.sleep(interval)
-                dead_instance_ids = await check_actors_health(self.instances)
-                dead_instance_ids.extend(await check_actors_health(self.servers))
-                if len(dead_instance_ids) > 0:
-                    await self.stop()
+                # If the unit is health up to this point, continue checking the state of instances and servers.
+                if self.unit_state == UnitState.HEALTH:
+                    dead_instance_ids = await check_actors_health(self.instances)
+                    dead_instance_ids.extend(await check_actors_health(self.servers))
+                    if len(dead_instance_ids) > 0:
+                        await self._set_unit_state(UnitState.BROKEN)
+                # If the unit has been broken already, wait for instances to migrate requests.
+                else:
+                    instance_state = await check_instance_ready_to_die()
+                    remain_reqs = 0
+                    for _, req_num in instance_state:
+                        remain_reqs += req_num
+                        if remain_reqs > 0:
+                            break
+                    if remain_reqs == 0:
+                        await self.stop()
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(
@@ -493,3 +509,15 @@ class DPManager:
         self._scale_up(instance_ids, instances, servers)
 
         return DPGroupStatus.COMPLETE
+
+    async def _set_unit_state(self, state: UnitState) -> None:
+        """Set UnitState for self and all instances in the unit."""
+        self.unit_state = state
+        tasks = []
+        for instance in self.instances:
+            task = asyncio.gather(
+                asyncio_wait_for_ray_remote_call_with_timeout(instance.set_unit_state, state),
+                return_exceptions=True
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks)

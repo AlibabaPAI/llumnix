@@ -85,7 +85,9 @@ class LaunchMode(str, Enum):
 class MigrationType(str, Enum):
     PD_MIGRATION = "PD_MIGRATION"
 
-    NO_CONSTRAINTS_LOAD_BALANCE = "NO_CONSTRAINTS_LOAD_BALANCE"
+    FAILOVER_MIGRATION = "FAILOVER_MIGRATION"
+
+    NEUTRAL_LOAD_BALANCE = "NEUTRAL_LOAD_BALANCE"
     DD_LOAD_BALANCE = "DD_LOAD_BALANCE"
 
     DYNAMIC_P_TO_D = "DYNAMIC_P_TO_D"
@@ -96,10 +98,8 @@ class MigrationType(str, Enum):
 class UnitStatus(str, Enum):
     HEALTH = "HEALTH"
     BROKEN = "BROKEN"
-
-
-class FailoverMigrationStatus(str, Enum):
-    pass
+    FAILOVER_MIGRATING = "MIGRATING"
+    STOPPED = "STOPPED"
 
 
 @dataclass

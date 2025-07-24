@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 from typing import List, Tuple
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -104,11 +105,34 @@ class AggrateDynamicPrefill(MigrationPolicy):
 
         return migrate_instance_pairs
 
+
+class Failover(MigrationPolicy):
+    def pair_migration(self,
+                       src_instance_infos: List[InstanceInfo],
+                       dst_instance_infos: List[InstanceInfo],
+                       ) -> List[Tuple[str, str]]:
+        migrate_instance_pairs = []
+
+        if len(dst_instance_infos) > 0:
+            for src_instance_info in src_instance_infos:
+                dst_instance_id = random.choice(
+                    [
+                        dst_instance_info.instance_id
+                        for dst_instance_info in dst_instance_infos
+                        if src_instance_info.unit_id != dst_instance_info.unit_id
+                    ]
+                )
+                migrate_instance_pairs.append((src_instance_info.instance_id, dst_instance_id))
+
+        return migrate_instance_pairs
+
+
 class MigrationPolicyFactory:
     _POLICY_REGISTRY = {
         'balanced': Balanced,
         'defrag': Defrag,
         'aggrate_dynamic_prefill': AggrateDynamicPrefill,
+        'failover': Failover,
     }
 
     @classmethod

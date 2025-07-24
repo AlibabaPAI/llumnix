@@ -78,7 +78,8 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                  handshake_address: str,
                  executor_class: type[Executor],
                  log_stats: bool,
-                 engine_index: int = 0) -> None:
+                 engine_index: int = 0,
+                 dp_rank: int = 0) -> None:
 
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
@@ -94,6 +95,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             abort_request_callback,
             placement_group,
             backend_type,
+            dp_rank,
         )
 
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
@@ -121,8 +123,9 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         """Creates an EngineCoreProc from the engine arguments."""
         # FIXME(zhaozhiyu): This is a bug of pai-vllm, engine_args.speculative_config
         # must be set to None before calling engine_args.create_engine_config()
-        if hasattr(engine_args, "speculative_config"):
-            engine_args.speculative_config = None
+        if hasattr(engine_args, "speculative_config") and engine_args.speculative_config is not None:
+            if len(engine_args.speculative_config) == 0:
+                engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
         # Hack to pass placement_group for init workers.
@@ -330,7 +333,9 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         dp_rank_local: Optional[int] = None,
     ) -> "AsyncDPEngineCoreProcLlumnix":
         """Creates an DPEngineCoreProc from the engine arguments."""
-        engine_args.speculative_config = None
+        if hasattr(engine_args, "speculative_config") and engine_args.speculative_config is not None:
+            if len(engine_args.speculative_config) == 0:
+                engine_args.speculative_config = None
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
         engine_config.parallel_config.data_parallel_master_port = vllm_envs.VLLM_DP_MASTER_PORT
@@ -366,6 +371,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
             handshake_address=None,
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
+            dp_rank=dp_rank,
         )
         return engine
 
@@ -551,7 +557,10 @@ class BackendVLLMV1(BackendInterface):
         return self.engine.instance_info
 
     def get_engine_context(self):
-        kvt_engine_available_port = self.engine.vllm_config.kv_transfer_config.engine_available_port
+        kvt_engine_available_port = None
+        if self.engine.vllm_config.kv_transfer_config is not None:
+            kvt_engine_available_port = self.engine.vllm_config.kv_transfer_config.engine_available_port
+
         return InstanceContext(
             local_engine_id=self.instance_id,
             kvt_engine_available_port=kvt_engine_available_port,

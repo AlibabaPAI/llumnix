@@ -57,6 +57,7 @@ class DPManager:
         instance_id: str,
         instance_type: InstanceType,
         dp_size: int,
+        dp_size_local: int,
         instance_id_list: List[str],
         entrypoints_args_list: List[EntrypointsArgs],
         instance_args_list: List[InstanceArgs],
@@ -68,6 +69,7 @@ class DPManager:
         self.instance_id = instance_id
         self.instance_type = instance_type
         self.dp_size = dp_size
+        self.dp_size_local = dp_size_local
         self.placement_group = placement_group
         self.scaler = scaler
         self.manager = manager
@@ -83,6 +85,7 @@ class DPManager:
         elif dp_group_status == DPGroupStatus.EMPTY:
             instances, servers = self._init_instances_and_servers(
                 dp_size,
+                dp_size_local,
                 instance_id_list,
                 entrypoints_args_list,
                 instance_args_list,
@@ -105,6 +108,7 @@ class DPManager:
         instance_id: str,
         instance_type: InstanceType,
         dp_size: int,
+        dp_size_local: int,
         instance_id_list: List[str],
         entrypoints_args_list: List[EntrypointsArgs],
         instance_args_list: List[InstanceArgs],
@@ -129,6 +133,7 @@ class DPManager:
             instance_id,
             instance_type,
             dp_size,
+            dp_size_local,
             instance_id_list,
             entrypoints_args_list,
             instance_args_list,
@@ -142,6 +147,7 @@ class DPManager:
     def _init_instances_and_servers(
         self,
         dp_size: int,
+        dp_size_local: int,
         instance_id_list: List[str],
         entrypoints_args_list: List[EntrypointsArgs],
         instance_args_list: List[InstanceArgs],
@@ -169,6 +175,8 @@ class DPManager:
                 dp_rank=rank,
                 dp_rank_local=dp_rank_local,
             )
+            dp_rank_local += 1
+            dp_rank_local %= dp_size_local
 
             server = APIServerActorVLLMV1.from_args(
                 NUM_GPUS_VLLM_V1_GPU_ACTOR,

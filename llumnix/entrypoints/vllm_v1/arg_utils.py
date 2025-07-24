@@ -62,6 +62,7 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
                  backend_type: BackendType = BackendType.VLLM_V1) -> None:
         self.world_size = self._get_world_size(engine_args)
         self.dp_size = self._get_dp_size(engine_args)
+        self.dp_size_local = self._get_dp_size_local(engine_args)
         super().__init__(
             engine_args=self._get_engine_args(engine_args),
             backend_type=backend_type
@@ -78,6 +79,12 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
     def _get_dp_size(self, engine_args: "AsyncEngineArgs"):
         dp_size = engine_args.data_parallel_size
         return dp_size
+
+    def _get_dp_size_local(self, engine_args: "AsyncEngineArgs"):
+        dp_size_local = engine_args.data_parallel_size_local
+        if dp_size_local is None:
+            dp_size_local = engine_args.data_parallel_size
+        return dp_size_local
 
     def _get_engine_args(self, engine_args: "AsyncEngineArgs"):
         return pickle.dumps(engine_args)
@@ -97,6 +104,9 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
 
     def get_dp_size(self):
         return self.dp_size
+
+    def get_dp_size_local(self):
+        return self.dp_size_local
 
 
 @dataclass
@@ -133,8 +143,9 @@ def detect_unsupported_engine_feature(engine_args: "EngineArgs") -> None:
         unsupported_feature = "automatic prefix caching"
     elif engine_args.enable_chunked_prefill:
         unsupported_feature = "chunked prefill"
-    elif engine_args.speculative_config:
-        unsupported_feature = "speculative decoding"
+    # NOTE(shejiarui): qwen3 test required speculative decoding.
+    # elif engine_args.speculative_config:
+    #     unsupported_feature = "speculative decoding"
     elif engine_args.pipeline_parallel_size > 1:
         unsupported_feature = "pipeline parallel"
     elif engine_args.num_scheduler_steps > 1:
@@ -179,7 +190,8 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
     post_init_llumnix_args(engine_args, instance_args, manager_args, entrypoints_args, BackendType.VLLM_V1, launch_mode, parser)
 
     # backend related check args
-    check_engine_args(engine_args)
+    if manager_args.enable_migration:
+        check_engine_args(engine_args)
     check_instance_args(instance_args, engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))

@@ -94,7 +94,6 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
         world_size = self.parallel_config.world_size
         worker_metadata: list[RayWorkerMetaData] = []
         driver_ip = get_ip()
-        num_gpus = 1
 
         if self.parallel_config.data_parallel_size == 1:
             bundle_indices: list[int]
@@ -123,6 +122,7 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
                     placement_group_capture_child_tasks=True,
                     placement_group_bundle_index=bundle_id,
                 )
+                num_gpus = 1
                 if rank == 0:
                     num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
                 if current_platform.ray_device_key == "GPU":
@@ -152,6 +152,7 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
                     placement_group_capture_child_tasks=True,
                     placement_group_bundle_index=dp_rank,
                 )
+                num_gpus = 1
                 if rank == 0:
                     num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
                 if current_platform.ray_device_key == "GPU":

@@ -14,7 +14,6 @@
 import copy
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Tuple
-from enum import Enum
 
 from llumnix.logging.logger import init_logger
 from llumnix.load_computation import (

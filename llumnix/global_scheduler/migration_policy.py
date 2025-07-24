@@ -111,17 +111,14 @@ class Failover(MigrationPolicy):
                        src_instance_infos: List[InstanceInfo],
                        dst_instance_infos: List[InstanceInfo],
                        ) -> List[Tuple[str, str]]:
+        broken_unit_id = [src_instance_info.unit_id for src_instance_info in src_instance_infos if src_instance_info.is_unit_broken()]
+        available_dst_instance_ids = [dst_instance_info.instance_id for dst_instance_info in dst_instance_infos
+                                      if dst_instance_info.unit_id not in broken_unit_id]
         migrate_instance_pairs = []
 
         if len(dst_instance_infos) > 0:
             for src_instance_info in src_instance_infos:
-                dst_instance_id = random.choice(
-                    [
-                        dst_instance_info.instance_id
-                        for dst_instance_info in dst_instance_infos
-                        if src_instance_info.unit_id != dst_instance_info.unit_id
-                    ]
-                )
+                dst_instance_id = random.choice(available_dst_instance_ids)
                 migrate_instance_pairs.append((src_instance_info.instance_id, dst_instance_id))
 
         return migrate_instance_pairs

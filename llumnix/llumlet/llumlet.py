@@ -37,7 +37,7 @@ from llumnix.ray_utils import (
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL, RAY_RPC_TIMEOUT
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import (MigrationType, RequestIDType, BackendType, InstanceContext,
-                           InstanceType, UnitStatus, FailoverMigrationStatus)
+                           InstanceType, UnitStatus)
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)

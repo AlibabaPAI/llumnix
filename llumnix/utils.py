@@ -97,6 +97,10 @@ class UnitStatus(str, Enum):
     BROKEN = "BROKEN"
 
 
+class FailoverMigrationStatus(str, Enum):
+    pass
+
+
 @dataclass
 class MigrationResponse:
     success: bool = True

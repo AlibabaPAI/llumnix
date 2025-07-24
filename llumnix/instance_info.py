@@ -28,7 +28,7 @@ from llumnix.load_computation import (
 )
 from llumnix.llumlet.request import RequestInferenceType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import InstanceType
+from llumnix.utils import InstanceType, UnitStatus
 
 logger = init_logger(__name__)
 
@@ -39,11 +39,6 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
     InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
     InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
 }
-
-
-class UnitState(str, Enum):
-    HEALTH = "HEALTH"
-    BROKEN = "BROKEN"
 
 
 @dataclass
@@ -99,7 +94,7 @@ class InstanceInfo:
     enable_defrag: bool = False
 
     # unit level info for failover
-    unit_state: UnitState = UnitState.HEALTH
+    unit_status: UnitStatus = UnitStatus.HEALTH
 
     def __post_init__(self) -> None:
         self.num_available_gpu_blocks = self.num_total_gpu_blocks - self.num_used_gpu_blocks

@@ -14,6 +14,7 @@
 import copy
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Tuple
+from enum import Enum
 
 from llumnix.logging.logger import init_logger
 from llumnix.load_computation import (
@@ -38,6 +39,11 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
     InstanceType.PREFILL_AS_DECODE: 'dispatch_prefill_as_decode_load_metric',
     InstanceType.DECODE_AS_PREFILL: 'dispatch_decode_as_prefill_load_metric'
 }
+
+
+class UnitState(str, Enum):
+    HEALTH = "HEALTH"
+    BROKEN = "BROKEN"
 
 
 @dataclass
@@ -91,6 +97,9 @@ class InstanceInfo:
 
     # instance level info for load computation
     enable_defrag: bool = False
+
+    # unit level info for failover
+    unit_state: UnitState = UnitState.HEALTH
 
     def __post_init__(self) -> None:
         self.num_available_gpu_blocks = self.num_total_gpu_blocks - self.num_used_gpu_blocks

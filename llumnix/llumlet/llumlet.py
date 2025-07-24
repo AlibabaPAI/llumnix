@@ -20,7 +20,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
+from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, UnitState
 from llumnix.backends.backend_interface import BackendBaseInterface
 from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
@@ -166,6 +166,7 @@ class Llumlet:
         if self.enable_migration:
             instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
             instance_info.is_migrating = self.migration_coordinator.is_migrating()
+        instance_info.unit_state = self.unit_state
         return instance_info
 
     async def is_ready(self):
@@ -242,3 +243,15 @@ class Llumlet:
         if asyncio.iscoroutinefunction(executor):
             return await executor(*args)
         return executor(*args)
+
+# ================== apis called by DPManager ==================
+
+    def set_unit_state(self, state: UnitState) -> None:
+        self.unit_state = state
+
+    def get_remain_reqs(self):
+        assert self.unit_state == UnitState.BROKEN, "'get_remain_reqs' shoule only be called"
+        " when the unit is broken."
+        remain_reqs = len(self.backend_engine.get_running_queue()) + \
+                      len(self.backend_engine.get_waiting_queue())
+        return (self.unit_state, remain_reqs)

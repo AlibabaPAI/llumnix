@@ -43,7 +43,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.queue_type import QueueType
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
-from llumnix.ray_utils import get_instance_name
+from llumnix.ray_utils import LlumnixActor, get_llumnix_actor_handle
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.constants import NO_OUTPUTS_STEP_INTERVAL, RAY_RPC_TIMEOUT
 from llumnix.utils import (
@@ -372,7 +372,7 @@ class BackendVLLM(BackendInterface):
         self.instance_id = instance_id
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.parallel_config.world_size:
-            self.worker_handle_list.insert(0, ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix"))
+            self.worker_handle_list.insert(0, get_llumnix_actor_handle(LlumnixActor.INSTANCE, self.instance_id))
 
         if self.migration_config.enable_migration:
             self._run_workers("init_migration", instance_id=instance_id,

@@ -36,8 +36,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--max-migration-concurrency MAX_MIGRATION_CONCURRENCY]
             [--request-migration-policy {LCR,SR,LR,FCW,FCWSR}]
             [--enable-scaling]
-            [--min-instances MIN_INSTANCES]
-            [--max-instances MAX_INSTANCES]
+            [--min-units MIN_UNITS]
+            [--max-units MAX_UNITS]
             [--scaling-interval SCALING_INTERVAL]
             [--scaling-policy {max_load,avg_load}]
             [--scale-up-threshold SCALE_UP_THRESHOLD]
@@ -195,12 +195,12 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-scaling`
 - Enable auto scaling.
 
-`--min-instances`
-- Minimum number of instances.
+`--min-units`
+- Minimum number of units.
 - Default: 1
 
-`--max-instances`
-- Maximum number of instances.
+`--max-units`
+- Maximum number of units.
 - Default: 1
 
 `--scaling-interval`

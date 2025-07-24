@@ -26,8 +26,9 @@ from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import random_uuid, LaunchMode, BackendType, InstanceType, InstanceContext
 from llumnix.ray_utils import (
     get_placement_group_name,
-    get_instance_name,
-    get_manager_name,
+    LlumnixActor,
+    get_llumnix_actor_name,
+    get_llumnix_actor_handle,
     initialize_placement_group
 )
 from llumnix.scaler import Scaler
@@ -41,7 +42,7 @@ class MockLlumlet:
     def __init__(self, instance_id):
         self.instance_id = instance_id
         self.engine_disagg_inst_id = instance_id
-        self.actor_name = get_instance_name(instance_id)
+        self.actor_name = get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id)
         self.num_requests = 0
         self.request_id_set = set()
         self.instance_info = None
@@ -129,7 +130,7 @@ def init_manager(
         launch_args=LaunchArgs(launch_mode=LaunchMode.LOCAL, backend_type=backend_type),
     )
     ray.get(scaler.is_ready.remote())
-    manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
+    manager: Manager = get_llumnix_actor_handle(LlumnixActor.MANAGER)
     ray.get(manager.is_ready.remote())
     return manager
 
@@ -140,7 +141,7 @@ def init_instances(initial_instances):
         instance_id = random_uuid()
         # In order to make manager connect to instances sucessfully, we need to create placement group for each instance.
         initialize_placement_group(get_placement_group_name(instance_id), num_cpus=1, num_gpus=0)
-        llumlet = MockLlumlet.options(name=get_instance_name(instance_id),
+        llumlet = MockLlumlet.options(name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
                                       namespace='llumnix').remote(instance_id)
         instance_ids.append(instance_id)
         instances.append(llumlet)
@@ -155,7 +156,7 @@ def manager():
 
 def generate_llumlet() -> MockLlumlet:
     instance_id = random_uuid()
-    instance_name = get_instance_name(instance_id)
+    instance_name = get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id)
     llumlet = MockLlumlet.options(name=instance_name,
                                   namespace='llumnix').remote(instance_id)
     ray.get(llumlet.is_ready.remote())
@@ -167,7 +168,7 @@ def llumlet():
 
 def test_init_manager(ray_env, manager):
     assert manager is not None
-    manager_actor_handle = ray.get_actor(get_manager_name(), namespace='llumnix')
+    manager_actor_handle = get_llumnix_actor_handle(LlumnixActor.MANAGER, raise_exc=False)
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 

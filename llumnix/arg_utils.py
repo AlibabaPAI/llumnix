@@ -92,6 +92,14 @@ class LlumnixEngineArgs(ABC):
     def get_world_size(self):
         raise NotImplementedError
 
+    @abstractmethod
+    def get_dp_size(self):
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_dp_size_local(self):
+        raise NotImplementedError
+
     def update_arg(self, args_key: str, args_value):
         if self.revised_args and hasattr(self.revised_args, args_key):
             setattr(self.revised_args, args_key, args_value)
@@ -125,9 +133,24 @@ class LlumnixEngineArgsFactory:
                     instance_type, self.load_registered_service_path
                 )
 
-    @property
-    def enable_pd(self) -> bool:
-        return self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg
+    @staticmethod
+    def _get_engine_args_factory_cls(backend_type: BackendType) -> "LlumnixEngineArgsFactory":
+        engine_args_factory_cls = None
+
+        # pylint: disable=import-outside-toplevel
+        if backend_type == BackendType.VLLM:
+            from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgsFactory
+            engine_args_factory_cls = VLLMEngineArgsFactory
+        elif backend_type == BackendType.VLLM_V1:
+            from llumnix.entrypoints.vllm_v1.arg_utils import VLLMV1EngineArgsFactory
+            engine_args_factory_cls = VLLMV1EngineArgsFactory
+        elif backend_type == BackendType.BLADELLM:
+            from llumnix.entrypoints.bladellm.arg_utils import BladeLLMEngineArgsFactory
+            engine_args_factory_cls = BladeLLMEngineArgsFactory
+        else:
+            raise ValueError("Unsupported instance type: {}.".format(backend_type))
+
+        return engine_args_factory_cls
 
     @abstractmethod
     def gen_next_engine_args(
@@ -135,9 +158,13 @@ class LlumnixEngineArgsFactory:
         current_engine_args: LlumnixEngineArgs,
         next_instance_args: 'InstanceArgs',
         port_offset: int = 0,
-        instance_id: str = None,
+        unit_id: str = None,
     ) -> LlumnixEngineArgs:
         raise NotImplementedError
+
+    @property
+    def enable_pd(self) -> bool:
+        return self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg
 
 
 def ensure_args_default_none(args):
@@ -359,8 +386,8 @@ class ManagerArgs:
     migrate_out_threshold: float = None
 
     enable_scaling: bool = None
-    min_instances: int = None
-    max_instances: int = None
+    min_units: int = None
+    max_units: int = None
     scaling_interval: int = None
     scaling_policy: str = None
     scale_up_threshold: float = None
@@ -525,12 +552,12 @@ class ManagerArgs:
         parser.add_argument('--enable-scaling',
                             action='store_true',
                             help='enable auto scaling')
-        parser.add_argument('--min-instances',
+        parser.add_argument('--min-units',
                             type=int,
-                            help='minimum number of instances')
-        parser.add_argument('--max-instances',
+                            help='minimum number of units')
+        parser.add_argument('--max-units',
                             type=int,
-                            help='maximum number of instances')
+                            help='maximum number of units')
         parser.add_argument('--scaling-interval',
                             type=int,
                             help='interval time of check scaling')

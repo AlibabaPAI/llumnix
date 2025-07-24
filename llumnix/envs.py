@@ -25,7 +25,8 @@ from llumnix.constants import (
     DEFAULT_METRICS_EXPORT_INTERVAL_SEC,
     RAY_TASK_RETRY_DELAY_MS,
     CACHE_TRANSFER_THRESHOLD,
-    CACHE_TRANSFER_PENALTY_FACTOR
+    CACHE_TRANSFER_PENALTY_FACTOR,
+    UNIT_READY_TIMEOUT,
 )
 
 if TYPE_CHECKING:
@@ -97,6 +98,8 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("LLUMNIX_SERVER_READY_TIMEOUT", str(SERVER_READY_TIMEOUT)),
     "INSTANCE_READY_TIMEOUT":
     lambda: os.getenv("LLUMNIX_INSTANCE_READY_TIMEOUT", str(INSTANCE_READY_TIMEOUT)),
+    "UNIT_READY_TIMEOUT":
+    lambda: os.getenv("LLUMNIX_UNIT_READY_TIMEOUT", str(UNIT_READY_TIMEOUT)),
 
     # metrics envs
     "METRICS_OUTPUT_TARGET":

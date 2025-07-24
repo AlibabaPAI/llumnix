@@ -24,7 +24,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from llumnix.queue.queue_client_base import QueueClientBase
 from llumnix.server_info import ServerInfo
-from llumnix.ray_utils import get_instance_name, log_actor_ray_info
+from llumnix.ray_utils import LlumnixActor, log_actor_ray_info, get_llumnix_actor_handle
 from llumnix.request_output import LlumnixRequestOuput, LlumnixRequestOutputs
 from llumnix.queue.utils import init_request_output_queue_client
 from llumnix.utils import ray_get_with_timeout, exception_wrapper_async
@@ -52,9 +52,11 @@ class StopPutQueueSignal:
 
 class BaseOutputForwarder(ABC):
     @abstractmethod
-    async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, LlumnixRequestOutputsType],
-                                    server_info_dict: Dict[str, ServerInfo]) -> None:
+    async def put_nowait_to_servers(
+        self,
+        server_request_outputs: Dict[str, LlumnixRequestOutputsType],
+        server_info_dict: Dict[str, ServerInfo]
+    ) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -104,9 +106,11 @@ class BaseOutputForwarder(ABC):
 
 
 class ActorOutputForwarder(BaseOutputForwarder):
-    def __init__(self,
-                 instance_id: str,
-                 request_output_queue_type: QueueType):
+    def __init__(
+        self,
+        instance_id: str,
+        request_output_queue_type: QueueType
+    ):
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
         self.request_output_queue_type = request_output_queue_type
@@ -116,16 +120,18 @@ class ActorOutputForwarder(BaseOutputForwarder):
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
-    async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, LlumnixRequestOutputsType],
-                                    server_info_dict: Dict[str, ServerInfo]) -> None:
+    async def put_nowait_to_servers(
+        self,
+        server_request_outputs: Dict[str, LlumnixRequestOutputsType],
+        server_info_dict: Dict[str, ServerInfo]
+    ) -> None:
         # fake metric, for alignment
         for req_outputs in server_request_outputs.values():
             self.add_trace_timeline(req_outputs, trace_name="engine_thread_put_queue_timestamp")
         if self.engine_actor_handle is None:
             # The lifetime of ActorOutputForwarder is the same as the lifetime of the instance actor,
             # so we do not handling exception here.
-            self.engine_actor_handle = ray.get_actor(get_instance_name(self.instance_id), namespace="llumnix")
+            self.engine_actor_handle = get_llumnix_actor_handle(LlumnixActor.INSTANCE, self.instance_id)
         aborted_request_ids = await self.put_nowait_to_servers_func(
             self.request_output_queue_type, self.request_output_queue_client, server_request_outputs, server_info_dict
         )
@@ -138,10 +144,12 @@ class ActorOutputForwarder(BaseOutputForwarder):
 
 
 class ThreadOutputForwarder(BaseOutputForwarder):
-    def __init__(self,
-                 instance_id: str,
-                 request_output_queue_type: QueueType,
-                 abort_request_callback: Coroutine):
+    def __init__(
+        self,
+        instance_id: str,
+        request_output_queue_type: QueueType,
+        abort_request_callback: Coroutine
+    ):
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client = init_request_output_queue_client(self.request_output_queue_type)
         self.abort_request_callback = abort_request_callback
@@ -152,9 +160,11 @@ class ThreadOutputForwarder(BaseOutputForwarder):
         )
         self.put_queue_loop_thread.start()
 
-    async def put_nowait_to_servers(self,
-                                    server_request_outputs: Dict[str, LlumnixRequestOutputsType],
-                                    server_info_dict: Dict[str, ServerInfo]) -> None:
+    async def put_nowait_to_servers(
+        self,
+        server_request_outputs: Dict[str, LlumnixRequestOutputsType],
+        server_info_dict: Dict[str, ServerInfo]
+    ) -> None:
         for req_outputs in server_request_outputs.values():
             self.add_trace_timeline(req_outputs, trace_name="engine_thread_put_queue_timestamp")
         if self.put_queue_loop_thread.is_alive():
@@ -203,15 +213,16 @@ class ThreadOutputForwarder(BaseOutputForwarder):
 
 
 class OutputForwarder:
-    def __init__(self,
-                 instance_id: str,
-                 request_output_queue_type: QueueType,
-                 request_output_forwarding_mode: RequestOutputForwardingMode,
-                 abort_request_callback: Coroutine,
-                 placement_group: PlacementGroup,
-                 backend_type: BackendType,
-                 bundle_index: int = 0,
-                 ):
+    def __init__(
+        self,
+        instance_id: str,
+        request_output_queue_type: QueueType,
+        request_output_forwarding_mode: RequestOutputForwardingMode,
+        abort_request_callback: Coroutine,
+        placement_group: PlacementGroup,
+        backend_type: BackendType,
+        bundle_index: int = 0,
+    ):
         self.request_output_queue_type = request_output_queue_type
         self.request_output_forwarding_mode = request_output_forwarding_mode
         self.abort_request_callback = abort_request_callback

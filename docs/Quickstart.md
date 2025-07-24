@@ -79,7 +79,7 @@ python -m llumnix.entrypoints.vllm.serve \
     ...
 ```
 
-Centralized launch assumes that users have already launch a Ray cluter. Upon running the serve module, Llumnix will automatically connect to the existing Ray cluster, start the Llumnix components, and deploy multiple servers and instances to the Ray cluster according to the `--max-instances` arguments or until there is no more available gpus or cpus. The `serve` entrypoint is easy to submit through the Ray job. Users can submit the Llumnix launch job directly via the Ray job submission API using the serve entrypoint.
+Centralized launch assumes that users have already launch a Ray cluter. Upon running the serve module, Llumnix will automatically connect to the existing Ray cluster, start the Llumnix components, and deploy multiple servers and instances to the Ray cluster according to the `--max-units` arguments or until there is no more available gpus or cpus. The `serve` entrypoint is easy to submit through the Ray job. Users can submit the Llumnix launch job directly via the Ray job submission API using the serve entrypoint.
 
 Besides, centralized launch has no conficts with the existing cluster auto-scaling. New instance could be launched through api server entrypoint and will be automatically connected into the existing Llumnix cluster.
 

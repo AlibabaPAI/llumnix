@@ -13,7 +13,8 @@ from vllm.sampling_params import SamplingParams
 from llumnix import (
     Scaler,
     Manager,
-    get_manager_name,
+    get_llumnix_actor_handle,
+    LlumnixActor,
     launch_ray_cluster,
     connect_to_ray_cluster,
     init_scaler,
@@ -26,10 +27,10 @@ from llumnix import (
     EntrypointsArgs,
     LaunchMode,
     RayQueueServer,
-    LlumnixRequestOuputVLLM,
+    LlumnixRequestOuput,
+    RequestProcessingContext,
 )
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
-from llumnix.request_processing_context import RequestProcessingContext
 
 from tests.utils import try_convert_to_local_path
 from tests.conftest import cleanup_ray_env_func
@@ -67,7 +68,7 @@ vllm_engine_args = VLLMEngineArgs(engine_args=engine_args)
 # Create a manager. If the manager is created first, and then the instances are created.
 scaler: Scaler = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
 ray.get(scaler.is_ready.remote())
-manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
+manager: Manager = get_llumnix_actor_handle(LlumnixActor.MANAGER)
 
 # Create instances and register to manager.
 instance_ids: List[str] = None
@@ -90,7 +91,7 @@ request_processing_context = RequestProcessingContext(server_id, QueueType("rayq
 async def background_process_outputs(num_tasks):
     finish_task = 0
     while finish_task != num_tasks:
-        request_outputs_engine: List[LlumnixRequestOuputVLLM] = await request_output_queue.get()
+        request_outputs_engine: List[LlumnixRequestOuput] = await request_output_queue.get()
         for request_output_engine in request_outputs_engine:
             request_output: RequestOutput = request_output_engine.get_engine_output()
             if request_output.finished:

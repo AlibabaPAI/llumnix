@@ -174,7 +174,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
                                             enable_adaptive_pd=enable_adaptive_pd,
                                             request_output_queue_type=request_output_queue_type,
-                                            max_instances=num_instances)
+                                            max_units=num_instances)
     subprocess.run(serve_command, shell=True, check=True)
     # TODO(zhaozhiyu): remove this special judge in the future
     if engine =="vLLM_v1":

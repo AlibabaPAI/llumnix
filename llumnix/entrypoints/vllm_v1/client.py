@@ -231,7 +231,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         instance = list(self.instances.values())[0]
         return await instance.call_engine_utility_async.remote(method, *args)
 
-    def process_instances_dead(self, dead_instance_ids: List[str]) -> None:
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
         raise NotImplementedError
 
 

@@ -26,7 +26,7 @@ from blade_llm.protocol_msgspec import GenerateStreamResponse, Token, TokenUsage
 from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
 from llumnix.server_info import ServerInfo
 from llumnix.utils import random_uuid
-from llumnix.ray_utils import get_instance_name
+from llumnix.ray_utils import LlumnixActor, get_llumnix_actor_name
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.llumnix_client_metrics import LlumnixClientMetrics
 from llumnix.request_processing_context import RequestProcessingContext
@@ -58,7 +58,7 @@ class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
         self.entrypoint_req_id_to_llumnix_req_id = {}
         self.request_instances = {}
         self.instance_requests = {}
-        self.global_instances = {}
+        self.cached_cluster_instances = {}
         self.msg_encoder = msgspec.msgpack.Encoder()
         self.msg_decoder = msgspec.msgpack.Decoder()
         self.llumnix_client_metrics = LlumnixClientMetrics(server_id="server_id")
@@ -231,9 +231,9 @@ async def test_drop_request(ray_env):
     # test no instance case
     assert request_id in client.request_instances and client.request_instances[request_id] == set([instance_id])
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned == [instance_id] and instance_returned == [None]
+    assert instance_id_returned == [] and instance_returned == []
 
-    instance = MockLlumlet.options(name=get_instance_name(instance_id),
+    instance = MockLlumlet.options(name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
                                    namespace="llumnix").remote()
 
     # test correct case
@@ -241,7 +241,7 @@ async def test_drop_request(ray_env):
     assert instance_id_returned == [instance_id] and instance_returned == [instance]
     await client.drop_request(request_id)
     time.sleep(3.0)
-    assert client.global_instances[instance_id] == instance
+    assert client.cached_cluster_instances[instance_id] == instance
     num_aborts = ray.get(instance.get_num_aborts.remote())
     assert num_aborts == 1
 

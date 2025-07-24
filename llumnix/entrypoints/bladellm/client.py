@@ -240,7 +240,7 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
         self.request_stream_output_stash.pop(request_id, None)
         self.llumnix_client_metrics.remove_request(request_id=entrypoint_req_id)
 
-    def process_instances_dead(self, dead_instance_ids: List[str]) -> None:
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
         for dead_instance_id in dead_instance_ids:
             for request_id in self.instance_requests.get(dead_instance_id, []):
                 logger.error("Request {} is cancelled because instance {} is dead".format(request_id, dead_instance_id))

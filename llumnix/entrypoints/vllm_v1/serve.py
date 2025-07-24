@@ -35,7 +35,7 @@ if __name__ == "__main__":
     cli_args = parser.parse_args()
     llumnix_config = get_llumnix_config(cli_args.config_file, args=cli_args)
     entrypoints_args, manager_args, instance_args, engine_args = get_args(llumnix_config, LaunchMode.GLOBAL, parser, cli_args)
-    backend_type = BackendType.VLLM_V1 if not instance_args.simulator_mode else BackendType.SIM_VLLM
+    backend_type = BackendType.VLLM_V1
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=backend_type)
     vllm_engine_args = VLLMV1EngineArgs(engine_args, backend_type)
 

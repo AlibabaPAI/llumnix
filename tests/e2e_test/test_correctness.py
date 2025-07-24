@@ -380,7 +380,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
                                                request_output_forwarding_mode=request_output_forwarding_mode,
                                                tensor_parallel_size=tensor_parallel_size,
                                                enable_migration=enable_migration,
-                                               max_instances=instance_count))
+                                               max_units=instance_count))
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)
 

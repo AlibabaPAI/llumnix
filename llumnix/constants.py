@@ -20,7 +20,7 @@ RAY_RPC_TIMEOUT: float = 10.0
 # Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
 NUM_GPUS_VLLM_GPU_ACTOR = 0.5
 # llumnix/scaler.py, llumnix/llumlet.py, llumnix/backends/vllm_v1/executor.py
-# ServerActor, Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
+# APIServerActor, Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
 NUM_GPUS_VLLM_V1_GPU_ACTOR = 0.33
 # llumnix/llumlet.py, llumnix/scaler.py, llumnix/backends/bladellm/worker.py
 # Llumlet, ActorOutputForwarder, APIServerActor and Worker share the same 1 gpu in the first bundle of PlacementGroup.
@@ -36,12 +36,13 @@ WAIT_ALL_MIGRATIONS_DONE_INTERVAL: float = 0.1
 
 # llumnix/scaler.py
 AUTO_SCALE_UP_INTERVAL: float = 1.0
-HEARTBEAT_LOOP_INTERVAL: float = 10.0
+HEARTBEAT_LOOP_INTERVAL: float = 5.0
 WAIT_PLACEMENT_GROUP_TIMEOUT: float = 5.0
 CHECK_DEPLOYMENT_STATES_INTERVAL: float = 30.0
 WATCH_DEPLOYMENT_INTERVAL: float = 10.0
 INSTANCE_READY_TIMEOUT: float = 300.0
 SERVER_READY_TIMEOUT: float = 30.0
+UNIT_READY_TIMEOUT: float = 300.0
 
 # llumnix/global_scheduler/dispatch_scheduler.py
 DISPATCH_LOG_FREQUENCY: int = 100
@@ -53,8 +54,8 @@ SUBPROCESS_RUN_TIMEOUT: float = 60.0
 
 # llumnix/entrypoints/vllm/client.py, llumnix/entrypoints/bladellm/client.py
 WAIT_MANAGER_INTERVAL: float = 1.0
-INIT_GLOBAL_INSTANCES_INTERVAL: float = 600.0
-UPDATE_GLOBAL_INSTANCES_INTERVAL: float = 1800.0
+INIT_CACHED_CLUSTER_ACTORS_INTERVAL: float = 10.0
+UPDATE_CACHED_CLUSTER_ACTORS_INTERVAL: float = 60.0
 
 # llumnix/entrypoints/vllm/api_server.py
 SERVER_TIMEOUT_KEEP_ALIVE: float = 5.0

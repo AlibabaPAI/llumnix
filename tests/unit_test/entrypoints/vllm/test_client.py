@@ -26,7 +26,7 @@ from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
 from llumnix.queue.utils import init_request_output_queue_server
 from llumnix.utils import random_uuid
 from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
-from llumnix.ray_utils import get_instance_name
+from llumnix.ray_utils import LlumnixActor, get_llumnix_actor_name
 from llumnix.request_processing_context import RequestProcessingContext
 
 # pylint: disable=unused-import
@@ -53,7 +53,7 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
             init_request_output_queue_server(ip="127.0.0.1", queue_type="rayqueue")
         self.request_instances = {}
         self.instance_requests = {}
-        self.global_instances = {}
+        self.cached_cluster_instances = {}
         self.request_generate_by_instance_dict = {}
         if loop:
             loop.create_task(self.get_request_outputs_loop())
@@ -230,17 +230,17 @@ async def test_abort_and_abort_request(ray_env):
     assert request_id in client.request_instances and client.request_instances[request_id] == set([instance_id])
     assert instance_id in client.instance_requests and request_id in client.instance_requests[instance_id]
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
-    assert instance_id_returned == [instance_id] and instance_returned == [None]
+    assert not instance_id_returned and not instance_returned
 
     # why must set namespace?
-    instance = MockLlumlet.options(name=get_instance_name(instance_id),
+    instance = MockLlumlet.options(name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
                                    namespace="llumnix").remote()
 
     # test correct case
     instance_id_returned, instance_returned = client._get_instance_for_abort(request_id)
     assert instance_id_returned == [instance_id] and instance_returned == [instance]
     await client.abort(request_id)
-    assert client.global_instances[instance_id] == instance
+    assert client.cached_cluster_instances[instance_id] == instance
     num_aborts = ray.get(instance.get_num_aborts.remote())
     assert num_aborts == 1
 

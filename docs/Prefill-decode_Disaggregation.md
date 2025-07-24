@@ -62,7 +62,7 @@ In this deployment mode, `--instance-type` must be explicitly specified for ever
 Centralized launch assumes that users have already launched a Ray cluster. Llumnix will automatically connect to the Ray cluster and then deploy the prefill instances and decode instances according to the preset ratio. Users can submit the Llumnix launch job directly via the Ray job submission API in centralized launch mode. Below is an example of the centralized launch command:
 
 ```bash
-python -m llumnix.entrypoints.vllm.serve --host `hostname -i` --port $PORT --model $MODEL_PATH --trust-remote-code --worker-use-ray --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --pd-ratio 1:1 --max-instances 2
+python -m llumnix.entrypoints.vllm.serve --host `hostname -i` --port $PORT --model $MODEL_PATH --trust-remote-code --worker-use-ray --max-model-len 4096 --config-file configs/vllm.yml --enable-pd-disagg --pd-ratio 1:1 --max-units 2
 ```
 
-The `--pd-ratio` specifies the ratio of prefill instances to decode in cluster, defaulting to 1:1. `--max-instances` controls the total number of instances (including both prefill and decode). Llumnix will attempt to launch instances as closely as possible to the specified PD_RATIO of prefill and decode. And, llumnix currently provides a simple mechanism that ensures there is at least one prefill and one decode instance in the cluster.
+The `--pd-ratio` specifies the ratio of prefill units to decode units in cluster, defaulting to 1:1. `--max-units` controls the total number of units (including both prefill and decode). Llumnix will attempt to launch units as closely as possible to the specified PD_RATIO of prefill and decode. And, llumnix currently provides a simple mechanism that ensures there is at least one prefill and one decode units in the cluster.

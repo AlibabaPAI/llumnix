@@ -27,7 +27,12 @@ from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.queue.queue_type import QueueType
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
-from llumnix.ray_utils import get_instance_name, log_actor_ray_info, remove_placement_group
+from llumnix.ray_utils import (
+    LlumnixActor,
+    log_actor_ray_info,
+    get_llumnix_actor_handle,
+    get_llumnix_actor_name,
+)
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
@@ -51,7 +56,7 @@ class Llumlet:
             self.instance_id, llumnix_engine_args.backend_type, instance_args.instance_type))
         self.instance_args: InstanceArgs = instance_args
         self.placement_group = placement_group
-        self.actor_handle = ray.get_actor(name=get_instance_name(instance_id), namespace="llumnix")
+        self.actor_handle = get_llumnix_actor_handle(LlumnixActor.INSTANCE, instance_id)
 
         self.instance_load_calculator = InstanceLoadCalculator(instance_args=instance_args)
 
@@ -106,7 +111,7 @@ class Llumlet:
             num_gpus = 0
         llumlet_class = ray.remote(num_cpus=1,
                                     num_gpus=num_gpus,
-                                    name=get_instance_name(instance_id),
+                                    name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
                                     namespace='llumnix',
                                     lifetime="detached")(cls).options(
                                         scheduling_strategy=PlacementGroupSchedulingStrategy(
@@ -138,7 +143,6 @@ class Llumlet:
         if self.backend_engine.state == EngineState.RUNNING:
             self.backend_engine.stop()
         ray.kill(self.actor_handle)
-        remove_placement_group(self.placement_group)
 
     # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager
     def get_instance_info(self) -> InstanceInfo:

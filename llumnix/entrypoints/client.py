@@ -25,11 +25,11 @@ from llumnix.metrics.llumnix_client_metrics import LlumnixClientMetrics
 from llumnix.queue.queue_server_base import QueueServerBase
 from llumnix.entrypoints.api_server_actor import APIServerActor
 from llumnix.server_info import ServerInfo
-from llumnix.constants import INIT_GLOBAL_INSTANCES_INTERVAL, UPDATE_GLOBAL_INSTANCES_INTERVAL
+from llumnix.constants import INIT_CACHED_CLUSTER_ACTORS_INTERVAL, UPDATE_CACHED_CLUSTER_ACTORS_INTERVAL
 from llumnix.ray_utils import (
-    get_actor_names_by_name_prefix,
-    INSTANCE_NAME_PREFIX,
-    get_instance,
+    get_llumnix_actor_handle,
+    update_cluster_actor_handles,
+    LlumnixActor,
 )
 from llumnix.logging.logger import init_logger
 from llumnix.utils import (
@@ -58,7 +58,7 @@ class LlumnixClient(ABC):
         self.instance_requests: Dict[str, set[RequestIDType]] = {}
         self.request_instances: Dict[RequestIDType, set[str]] = defaultdict(set)
         # TODO(s5u13): Consider a better way to get instance handle without calling ray.
-        self.global_instances: Dict[str, Llumlet] = entrypoints_context.instances
+        self.cached_cluster_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():
             self.instance_num_requests[ins_id] = 0
@@ -71,7 +71,7 @@ class LlumnixClient(ABC):
         self.llumnix_client_metrics = LlumnixClientMetrics(server_id = self.server_info.server_id)
         loop.create_task(self.get_request_outputs_loop())
         loop.create_task(self.request_output_queue.run_server_loop())
-        loop.create_task(self._update_global_instances_loop())
+        loop.create_task(self._update_cached_cluster_instances_loop())
 
     @abstractmethod
     async def get_request_outputs_loop(self):
@@ -90,7 +90,7 @@ class LlumnixClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def process_instances_dead(self, dead_instance_ids: List[str]) -> None:
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
         raise NotImplementedError
 
     async def is_ready(self) -> bool:
@@ -99,25 +99,15 @@ class LlumnixClient(ABC):
     def cleanup(self):
         self.request_output_queue.cleanup()
         instance_ids = list(self.instances.keys())
-        try:
-            # Not call manager scale down to reduce manager overhead.
-            for instance in self.instances.values():
-                # Instance might die before.
-                try:
-                    ray.kill(instance)
-                # pylint: disable=bare-except
-                except:
-                    pass
-        # pylint: disable=broad-except
-        except Exception:
-            logger.exception("Server cleanup failed (instance_ids: {})".format(instance_ids))
         logger.info("Server stopped (instance_ids: {}).".format(instance_ids))
+        if self.server is not None:
+            ray.kill(self.server)
 
     async def _abort(self, request_id: RequestIDType) -> None:
         instance_ids, instances = self._get_instance_for_abort(request_id)
         if instances:
             for instance_id, instance in zip(instance_ids, instances):
-                self.global_instances[instance_id] = instance
+                self.cached_cluster_instances[instance_id] = instance
                 logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
                 try:
                     # instance should not throw error if aborting request id is not existed
@@ -139,37 +129,34 @@ class LlumnixClient(ABC):
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
         instance_ids = list(self.request_instances.get(request_id, set()))
-        instances = []
+        available_instances = []
+        available_instance_ids = []
         for instance_id in instance_ids:
-            instances.append(
-                self.global_instances[instance_id]
-                if instance_id in self.global_instances
-                else get_instance(instance_id)
-            )
+            if instance_id in self.cached_cluster_instances:
+                available_instances.append(self.cached_cluster_instances[instance_id])
+                available_instance_ids.append(instance_id)
+            else:
+                instance = get_llumnix_actor_handle(LlumnixActor.INSTANCE, instance_id, raise_exc=False)
+                if instance is not None:
+                    available_instances.append(instance)
+                    available_instance_ids.append(instance_id)
         # vllm and blade will check if request_id existed, it will not cause error if request_id is not existed.
         # Function drop_request in blade is not work correctly when enable semi-pd.
-        return instance_ids, instances
+        return available_instance_ids, available_instances
 
-    async def _update_global_instances_loop(self):
-        await asyncio.sleep(INIT_GLOBAL_INSTANCES_INTERVAL)
+    async def _update_cached_cluster_instances_loop(self):
+        await asyncio.sleep(INIT_CACHED_CLUSTER_ACTORS_INTERVAL)
         while True:
             try:
-                curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
-                curr_instance_ids = [curr_instance_name[len(INSTANCE_NAME_PREFIX):] for curr_instance_name in curr_instance_names]
-                new_global_instances = {}
-                for instance_id in curr_instance_ids:
-                    if instance_id in self.global_instances:
-                        new_global_instances[instance_id] = self.global_instances[instance_id]
-                    else:
-                        instance = get_instance(instance_id)
-                        if instance is not None:
-                            new_global_instances[instance_id] = instance
-                self.global_instances = new_global_instances
-                await asyncio.sleep(UPDATE_GLOBAL_INSTANCES_INTERVAL)
+                self.cached_cluster_instances = update_cluster_actor_handles(
+                    actor_type=LlumnixActor.INSTANCE,
+                    cached_cluster_actors=self.cached_cluster_instances,
+                )
+                await asyncio.sleep(UPDATE_CACHED_CLUSTER_ACTORS_INTERVAL)
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(
-                    "Client get error in _update_global_instances_loop, client keeps running, please check the cause!",
+                    "Client get error in _update_cached_cluster_instances_loop, client keeps running, please check the cause!",
                     exc_info=True, stack_info=True
                 )
 

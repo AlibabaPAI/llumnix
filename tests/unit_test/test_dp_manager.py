@@ -81,6 +81,7 @@ def init_dp_manager(unit_id, scaler = None):
         unit_id,
         InstanceType("neutral"),
         1,
+        1,
         [instance_id],
         [EntrypointsArgs(port=8000)],
         [InstanceArgs()],

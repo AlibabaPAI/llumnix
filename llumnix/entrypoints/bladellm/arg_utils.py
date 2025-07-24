@@ -56,7 +56,8 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
                  backend_type: BackendType = BackendType.BLADELLM):
         self.world_size = self._get_world_size(engine_args)
         self.instance_id = self._get_instance_id(engine_args)
-        self.dp_size = self._get_dp_size(engine_args)
+        self.dp_size = 1
+        self.dp_size_local = 1
         super().__init__(
             engine_args=self._get_engine_args(engine_args),
             backend_type=backend_type,
@@ -108,6 +109,9 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
 
     def get_dp_size(self):
         return self.dp_size
+
+    def get_dp_size_local(self):
+        return self.dp_size_local
 
 
 @dataclass

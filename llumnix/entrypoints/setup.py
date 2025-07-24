@@ -125,7 +125,7 @@ def init_scaler(
             engine_args=engine_args,
             launch_args=launch_args,
         )
-        logger.info("Init Scaler on current node.")
+        logger.info("Init Scaler.")
     except ValueError:
         scaler = get_llumnix_actor_handle(LlumnixActor.SCALER)
         logger.info("Get existing Scaler.")

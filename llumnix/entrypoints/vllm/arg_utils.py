@@ -49,6 +49,7 @@ class VLLMEngineArgs(LlumnixEngineArgs):
                  backend_type: BackendType = BackendType.VLLM) -> None:
         engine_args = self._get_engine_args(engine_args)
         self.dp_size = 1
+        self.dp_size_local = 1
         super().__init__(engine_args=engine_args, backend_type=backend_type)
 
     def _get_engine_args(self, engine_args: AsyncEngineArgs):
@@ -64,6 +65,9 @@ class VLLMEngineArgs(LlumnixEngineArgs):
     def get_dp_size(self):
         """ vLLM v0 v0.6.3.post does not support data parallel."""
         return self.dp_size
+
+    def get_dp_size_local(self):
+        return self.dp_size_local
 
 
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:

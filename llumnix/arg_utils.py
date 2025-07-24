@@ -96,6 +96,10 @@ class LlumnixEngineArgs(ABC):
     def get_dp_size(self):
         raise NotImplementedError
 
+    @abstractmethod
+    def get_dp_size_local(self):
+        raise NotImplementedError
+
     def update_arg(self, args_key: str, args_value):
         if self.revised_args and hasattr(self.revised_args, args_key):
             setattr(self.revised_args, args_key, args_value)

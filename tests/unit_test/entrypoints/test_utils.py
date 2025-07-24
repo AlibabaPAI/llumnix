@@ -21,7 +21,7 @@ from llumnix.arg_utils import ManagerArgs, InstanceArgs, EntrypointsArgs, Launch
 from llumnix.entrypoints.setup import launch_ray_cluster
 from llumnix.utils import get_ip_address, BackendType
 from llumnix.queue.utils import init_request_output_queue_server
-from llumnix.ray_utils import get_manager_name
+from llumnix.ray_utils import get_llumnix_actor_handle, LlumnixActor
 from llumnix.manager import Manager
 from llumnix.scaler import Scaler
 
@@ -36,7 +36,7 @@ def manager():
         EntrypointsArgs(), ManagerArgs(), InstanceArgs(), engine_args,
         LaunchArgs(backend_type=BackendType.VLLM, launch_mode=LaunchMode.LOCAL))
     ray.get(scaler.is_ready.remote())
-    manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
+    manager: Manager = get_llumnix_actor_handle(LlumnixActor.MANAGER)
     ray.get(manager.is_ready.remote())
     yield manager
 
@@ -49,7 +49,7 @@ def test_launch_ray_cluster():
 
 def test_init_manager(ray_env, manager):
     assert manager is not None
-    manager_actor_handle = ray.get_actor(get_manager_name(), namespace='llumnix')
+    manager_actor_handle = get_llumnix_actor_handle(LlumnixActor.MANAGER)
     assert manager_actor_handle is not None
     assert manager == manager_actor_handle
 

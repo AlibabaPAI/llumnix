@@ -64,6 +64,10 @@ class APIServerActorVLLM(APIServerActor):
         asyncio.set_event_loop(self.loop)
         try:
             self.loop.run_until_complete(self.server.serve())
+        # pylint: disable=broad-except
+        except Exception:
+            logger.exception("Error in _run_server.")
+            self.stop()
         finally:
             self.loop.close()
 
@@ -74,6 +78,6 @@ class APIServerActorVLLM(APIServerActor):
         if self.loop.is_running():
             self.loop.call_soon_threadsafe(stop_server)
 
-    def clear_dead_instances(self, dead_instance_ids: List[str]) -> None:
-        logger.info("Api server actor clear dead instances: {}".format(dead_instance_ids))
-        self.llumnix_client.process_instances_dead(dead_instance_ids)
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
+        logger.info("Server cancel dead instance requests, instance_ids: {}".format(dead_instance_ids))
+        self.llumnix_client.cancel_dead_instance_requests(dead_instance_ids)

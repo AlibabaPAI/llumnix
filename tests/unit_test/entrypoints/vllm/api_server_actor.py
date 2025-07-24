@@ -18,7 +18,7 @@ import ray
 from ray.util.queue import Queue as RayQueue
 
 from llumnix.queue.utils import init_request_output_queue_client, QueueType
-from llumnix.ray_utils import get_manager_name, get_instance_name
+from llumnix.ray_utils import get_llumnix_actor_name, LlumnixActor
 from llumnix.utils import random_uuid
 
 from tests.unit_test.entrypoints.vllm.api_server import (MockManager, setup_entrypoints_context,
@@ -46,7 +46,7 @@ class MockManagerServer(MockManager):
     @classmethod
     def from_args(cls, entrypoints_args, instance_id):
         manager_class = ray.remote(num_cpus=1,
-                                   name=get_manager_name(),
+                                   name=get_llumnix_actor_name(LlumnixActor.MANAGER),
                                    namespace='llumnix',
                                    lifetime='detached')(cls)
         manager = manager_class.remote(entrypoints_args, instance_id)
@@ -94,7 +94,7 @@ if __name__ == "__main__":
                                                    "name": "magic_ray_queue"})
 
     instance_id = random_uuid()
-    instance = MockLlumlet.options(name=get_instance_name(instance_id),
+    instance = MockLlumlet.options(name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
                                    namespace="llumnix").remote(instance_id)
 
     manager = MockManagerServer.from_args(entrypoints_args, instance_id)

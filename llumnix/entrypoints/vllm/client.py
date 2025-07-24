@@ -153,6 +153,7 @@ class LlumnixClientVLLM(LlumnixClient):
 
     def abort_request(self, request_id: str) -> None:
         instance_ids, instances = self._get_instance_for_abort(request_id)
+        print(f"Aborting request {request_id} on instances {instance_ids}")
         if instances:
             for instance_id, instance in zip(instance_ids, instances):
                 logger.info("Abort request {} (instance_id: {}).".format(request_id, instance_id))
@@ -169,7 +170,7 @@ class LlumnixClientVLLM(LlumnixClient):
         except Exception as e:
             log_instance_exception(e, instance_id, "_abort_request", request_id)
 
-    def process_instances_dead(self, dead_instance_ids: List[str]) -> None:
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
         for dead_instance_id in dead_instance_ids:
             for request_id in self.instance_requests.get(dead_instance_id, []):
                 logger.error("Request {} is cancelled because instance {} is dead".format(request_id, dead_instance_id))

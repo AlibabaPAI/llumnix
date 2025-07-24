@@ -11,10 +11,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Union, Dict, List
+from typing import Any, Union, Dict, List, Tuple, Optional
 import glob
 import os
 import pickle
+import asyncio
+from functools import partial
+from enum import Enum
 
 import ray
 import ray.actor
@@ -29,34 +32,117 @@ import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
+from llumnix.utils import log_instance_exception, asyncio_wait_for_ray_remote_call_with_timeout, InstanceType
 
 logger = init_logger(__name__)
+
+# ================== placement_group/actor naming api ==================
 
 MANAGER_NAME = "manager"
 SCALER_NAME = "scaler"
 PLACEMENT_GROUP_NAME_PREFIX = "pg_"
 SERVER_NAME_PREFIX = "server_"
 INSTANCE_NAME_PREFIX = "instance_"
-DPMANAGER_NAME_PREFIX = "dp_manager_"
+DP_MANAGER_NAME_PREFIX = "dp_manager_"
+
+def get_placement_group_name(unit_id: str) -> str:
+    return f"{PLACEMENT_GROUP_NAME_PREFIX}{unit_id}"
+
+def get_placement_group_unit_id(placement_group_name: str) -> str:
+    return placement_group_name[len(PLACEMENT_GROUP_NAME_PREFIX):]
 
 
-def get_manager_name() -> str:
-    return MANAGER_NAME
+_ACTOR_NAME_PREFIX_MAPPING: Dict[str, str] = {
+    "scaler": SCALER_NAME,
+    "manager": MANAGER_NAME,
+    "dp_manager": DP_MANAGER_NAME_PREFIX,
+    "instance": INSTANCE_NAME_PREFIX,
+    "server": SERVER_NAME_PREFIX,
+}
 
-def get_scaler_name() -> str:
-    return SCALER_NAME
+class LlumnixActor(str, Enum):
+    SCALER = "scaler"
+    MANAGER = "manager"
+    DP_MANAGER = "dp_manager"
+    INSTANCE = "instance"
+    SERVER = "server"
 
-def get_placement_group_name(instance_id: str) -> str:
-    return f"{PLACEMENT_GROUP_NAME_PREFIX}{instance_id}"
+    @property
+    def name_prefix(self) -> str:
+        return _ACTOR_NAME_PREFIX_MAPPING[self.value]
 
-def get_server_name(instance_id: str) -> str:
-    return f"{SERVER_NAME_PREFIX}{instance_id}"
+    def get_actor_name(self, actor_id: str = None) -> str:
+        return f"{self.name_prefix}{actor_id}" if actor_id is not None else self.name_prefix
 
-def get_instance_name(instance_id: str) -> str:
-    return f"{INSTANCE_NAME_PREFIX}{instance_id}"
+    def get_actor_id(self, actor_name: str):
+        assert self in [LlumnixActor.DP_MANAGER, LlumnixActor.INSTANCE, LlumnixActor.SERVER], \
+            "Only dp manager, instance and server actors have actor name in its actor name in Llumnix actor naming rules."
+        return actor_name[len(self.name_prefix):]
 
-def get_dp_manager_name(instance_id: str) -> str:
-    return f"{DPMANAGER_NAME_PREFIX}{instance_id}"
+def get_llumnix_actor_name(actor_type: LlumnixActor, actor_id: str = None) -> str:
+    return actor_type.get_actor_name(actor_id)
+
+def get_llumnix_actor_id(actor_type: LlumnixActor, actor_name: str) -> str:
+    assert actor_type in [LlumnixActor.DP_MANAGER, LlumnixActor.INSTANCE, LlumnixActor.SERVER], \
+        "Only dp manager, instance and server actors have actor id in its actor name in Llumnix actor naming rules."
+    return actor_type.get_actor_id(actor_name)
+
+def get_llumnix_actor_handle(
+    actor_type: LlumnixActor, actor_id: str = None, raise_exc: bool = True
+) -> Optional[ray.actor.ActorHandle]:
+    try:
+        return ray.get_actor(actor_type.get_actor_name(actor_id), namespace="llumnix")
+    except ValueError as e:
+        if raise_exc:
+            raise e
+        return None
+
+def actor_exists(name: str) -> bool:
+    try:
+        ray.get_actor(name, namespace="llumnix")
+        return True
+    except ValueError:
+        return False
+    except Exception: # pylint: disable=broad-except
+        logger.exception("Error in actor_exists (actor_name: {})".format(name))
+        return False
+
+def get_actor_handle(name: str) -> ray.actor.ActorHandle:
+    try:
+        return ray.get_actor(name, namespace="llumnix")
+    except ValueError:
+        return None
+
+# ================== list placement_group/actor api ==================
+
+def list_placement_group_infos_by_state(state: str = None) -> List[PlacementGroup]:
+    if state is None:
+        return ray.util.placement_group_table().values()
+    curr_pg_infos = []
+    for pg_info in ray.util.placement_group_table().values():
+        if pg_info["state"] == state:
+            curr_pg_infos.append(pg_info)
+    return curr_pg_infos
+
+def list_placement_group_infos_by_name(name: str) -> List[PlacementGroup]:
+    curr_pg_infos = []
+    for pg_info in ray.util.placement_group_table().values():
+        if pg_info["name"] == name:
+            curr_pg_infos.append(pg_info)
+    return curr_pg_infos
+
+def list_actor_names_by_name_prefix(name_prefix: str) -> List[str]:
+    actor_infos = ray.util.list_named_actors(True)
+    curr_actor_names = []
+    for actor_info in actor_infos:
+        if actor_info["name"].startswith(name_prefix):
+            curr_actor_names.append(actor_info["name"])
+    return curr_actor_names
+
+def list_actor_names_by_actor_type(actor_type: LlumnixActor) -> List[str]:
+    return list_actor_names_by_name_prefix(actor_type.name_prefix)
+
+# ================== creation/deletion placement_group/actor api ==================
 
 # pylint: disable=dangerous-default-value
 def initialize_placement_group(
@@ -144,40 +230,6 @@ def initialize_placement_group(
 
     return current_placement_group
 
-def get_placement_group_infos_by_state(state: str = None) -> List[PlacementGroup]:
-    if state is None:
-        return ray.util.placement_group_table().values()
-    target_placement_group_infos = []
-    for placement_group_info in ray.util.placement_group_table().values():
-        if placement_group_info["state"] == state:
-            target_placement_group_infos.append(placement_group_info)
-    return target_placement_group_infos
-
-def get_placement_group_infos_by_name(name: str) -> List[PlacementGroup]:
-    target_placement_group_infos = []
-    for placement_group_info in ray.util.placement_group_table().values():
-        if placement_group_info["name"] == name:
-            target_placement_group_infos.append(placement_group_info)
-    return target_placement_group_infos
-
-def actor_exists(name: str) -> bool:
-    try:
-        ray.get_actor(name, namespace="llumnix")
-        return True
-    except ValueError:
-        return False
-    except Exception: # pylint: disable=broad-except
-        logger.exception("Error in actor_exists (actor_name: {})".format(name))
-        return False
-
-def get_actor_names_by_name_prefix(name_prefix: str) -> List[str]:
-    actor_infos = ray.util.list_named_actors(True)
-    target_actor_names = []
-    for actor_info in actor_infos:
-        if actor_info["name"].startswith(name_prefix):
-            target_actor_names.append(actor_info["name"])
-    return target_actor_names
-
 def clear_gloo_backend_ray_resources():
     try:
         # clear gloo migrate backend intermediate state
@@ -188,24 +240,24 @@ def clear_gloo_backend_ray_resources():
     except Exception: # pylint: disable=broad-except
         logger.exception("Error in clear_gloo_backend_ray_resources")
 
-def remove_placement_group(instance_id: str, placement_group: PlacementGroup = None) -> bool:
+def remove_placement_group(unit_id: str, placement_group: PlacementGroup = None) -> bool:
     try:
         if not placement_group:
-            placement_group = ray.util.get_placement_group(get_placement_group_name(instance_id))
+            placement_group = ray.util.get_placement_group(get_placement_group_name(unit_id))
         # asynchronous api
         ray.util.remove_placement_group(placement_group)
-        logger.info("Remove placement group {}.".format(instance_id))
+        logger.info("Remove placement group {}.".format(unit_id))
     except ValueError:
         return False
     except Exception: # pylint: disable=broad-except
-        logger.exception("Error in remove_placement_group (instance_id: {})".format(instance_id))
+        logger.exception("Error in remove_placement_group (unit_id: {})".format(unit_id))
         return False
     return True
 
 async def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) -> bool:
     try:
         if not server:
-            server = ray.get_actor(get_server_name(instance_id), namespace="llumnix")
+            server = get_llumnix_actor_handle(LlumnixActor.SERVER, instance_id, raise_exc=True)
         try:
             await server.stop.remote()
         # pylint: disable=bare-except
@@ -223,7 +275,7 @@ async def kill_server(instance_id: str, server: ray.actor.ActorHandle = None) ->
 async def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None) -> bool:
     try:
         if not instance:
-            instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
+            instance = get_llumnix_actor_handle(LlumnixActor.INSTANCE, instance_id, raise_exc=True)
         try:
             await instance.stop.remote()
         # pylint: disable=bare-except
@@ -238,30 +290,25 @@ async def kill_instance(instance_id: str, instance: ray.actor.ActorHandle = None
         return False
     return True
 
-async def kill_dp_manager(instance_id: str, dp_manager: ray.actor.ActorHandle = None) -> bool:
+async def kill_dp_manager(unit_id: str, dp_manager: ray.actor.ActorHandle = None) -> bool:
     try:
         if not dp_manager:
-            dp_manager = ray.get_actor(get_dp_manager_name(instance_id), namespace="llumnix")
+            dp_manager = get_llumnix_actor_handle(LlumnixActor.DP_MANAGER, unit_id, raise_exc=True)
         try:
             await dp_manager.stop.remote()
         # pylint: disable=bare-except
         except:
             pass
         ray.kill(dp_manager)
-        logger.info("Kill dp manager {}.".format(instance_id))
+        logger.info("Kill dp manager {}.".format(unit_id))
     except ValueError:
         return False
     except Exception: # pylint: disable=broad-except
-        logger.exception("Error in kill_dp_manager (instance_id: {})".format(instance_id))
+        logger.exception("Error in kill_dp_manager (unit_id: {})".format(unit_id))
         return False
     return True
 
-def get_instance(instance_id: str) -> ray.actor.ActorHandle:
-    try:
-        instance = ray.get_actor(get_instance_name(instance_id), namespace="llumnix")
-        return instance
-    except ValueError:
-        return None
+# ================== ray internal kv api ==================
 
 def _make_key(actor_name: str):
     return actor_name.encode("ascii")
@@ -305,6 +352,8 @@ def put_data_to_ray_internal_kv(data_name: str, value: Any) -> None:
         logger.error("Ray internal key-value storage is not initilized, "
                      "failed to put the given data {}.".format(data_name))
 
+# ================== actor utility api ==================
+
 def log_actor_ray_info(actor_class_name: str) -> None:
     try:
         actor_name = ray.get_runtime_context().get_actor_name()
@@ -328,3 +377,106 @@ def log_actor_ray_info(actor_class_name: str) -> None:
     # pylint: disable=broad-except
     except Exception:
         logger.exception("Error in log_actor_ray_info (actor_class_name: {})".format(actor_class_name))
+
+async def connect_to_actors_with_instance_type(
+    actor_type: LlumnixActor
+) -> Tuple[List[str], List[ray.actor.ActorHandle], List[InstanceType]]:
+    def connect_to_actor_done_callback(actor_id: str, actor_handle: ray.actor.ActorHandle, fut):
+        ret = fut.result()[0]
+        if not isinstance(ret, Exception):
+            try:
+                actor_ids.append(actor_id)
+                actor_handles.append(actor_handle)
+                instance_types.append(ret)
+                logger.info("Connect to {} {}".format(actor_type, actor_id))
+            except Exception as e: # pylint: disable=broad-except
+                if isinstance(e, ValueError):
+                    logger.warning(
+                        "Failed to connect to {} {}, placement group not found.".format(
+                            actor_type, actor_id
+                        )
+                    )
+                else:
+                    logger.exception(
+                        "Error in _connect_to_actors get_placement_group (actor_type: {}, actor_id: {})".format(
+                            actor_type, actor_id
+                        )
+                    )
+        else:
+            log_instance_exception(ret, actor_id, "_connect_to_actors")
+
+    actor_names = list_actor_names_by_actor_type(actor_type)
+    available_actor_names = []
+    available_actor_handles: List[ray.actor.ActorHandle] = []
+    for actor_name in actor_names:
+        try:
+            actor_handle = ray.get_actor(actor_name, namespace='llumnix')
+            available_actor_names.append(actor_name)
+            available_actor_handles.append(actor_handle)
+        except Exception as e: # pylint: disable=broad-except
+            actor_id = get_llumnix_actor_id(actor_type, actor_name)
+            if isinstance(e, ValueError):
+                logger.warning(
+                    "Failed to connect to {} {}, actor not found.".format(
+                        actor_type, actor_id
+                    )
+                )
+            else:
+                logger.exception("Error in _connect_to_actors get_actor (actor_id: {})".format(actor_id))
+
+    actor_ids = []
+    actor_handles = []
+    instance_types = []
+    tasks = []
+    for actor_name, actor_handle in \
+        zip(available_actor_names, available_actor_handles):
+        actor_id = get_llumnix_actor_id(actor_type, actor_name)
+        task = asyncio.gather(
+            asyncio_wait_for_ray_remote_call_with_timeout(actor_handle.get_instance_type),
+            return_exceptions=True
+        )
+        task.add_done_callback(
+            partial(connect_to_actor_done_callback, actor_id, actor_handle)
+        )
+        tasks.append(task)
+    await asyncio.gather(*tasks)
+
+    return actor_ids, actor_handles, instance_types
+
+def update_cluster_actor_handles(
+    actor_type: LlumnixActor,
+    cached_cluster_actors: List[ray.actor.ActorHandle],
+) -> List[ray.actor.ActorHandle]:
+    curr_actor_names = list_actor_names_by_actor_type(actor_type)
+    curr_actor_ids = [get_llumnix_actor_id(actor_type, actor_name) for actor_name in curr_actor_names]
+    new_cluster_actors = {}
+    for actor_id in curr_actor_ids:
+        if actor_id in cached_cluster_actors:
+            new_cluster_actors[actor_id] = cached_cluster_actors[actor_id]
+        else:
+            actor = get_llumnix_actor_handle(actor_type, actor_id, raise_exc=False)
+            if actor is not None:
+                new_cluster_actors[actor_id] = actor
+    return new_cluster_actors
+
+async def check_actors_health(actors: Dict[str, ray.actor.ActorHandle]) -> List[str]:
+    def check_actor_health_done_callback(actor_id: str, fut):
+        ret = fut.result()[0]
+        if isinstance(ret, Exception):
+            log_instance_exception(ret, actor_id, "check_actor_health")
+            dead_actor_ids.append(actor_id)
+
+    tasks = []
+    dead_actor_ids = []
+    for actor_id, actor in actors.items():
+        task = asyncio.gather(
+            asyncio_wait_for_ray_remote_call_with_timeout(actor.is_ready),
+            return_exceptions=True
+        )
+        task.add_done_callback(
+            partial(check_actor_health_done_callback, actor_id)
+        )
+        tasks.append(task)
+    await asyncio.gather(*tasks)
+
+    return dead_actor_ids

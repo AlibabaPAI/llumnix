@@ -20,7 +20,7 @@ import ray
 import llumnix.entrypoints.vllm.api_server
 from llumnix.server_info import ServerInfo
 from llumnix.utils import random_uuid
-from llumnix.ray_utils import get_manager_name, get_instance_name, get_instance
+from llumnix.ray_utils import get_llumnix_actor_name, get_llumnix_actor_handle, LlumnixActor
 from llumnix.queue.utils import init_request_output_queue_server, init_request_output_queue_client, QueueType
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.entrypoints.vllm.client import LlumnixClientVLLM
@@ -57,7 +57,7 @@ class MockManager:
     @classmethod
     def from_args(cls, request_output_queue_type: QueueType, instance_id):
         manager_class = ray.remote(num_cpus=1,
-                                   name=get_manager_name(),
+                                   name=get_llumnix_actor_name(LlumnixActor.MANAGER),
                                    namespace='llumnix',
                                    lifetime='detached')(cls)
         manager = manager_class.remote(request_output_queue_type, instance_id)
@@ -71,9 +71,9 @@ class MockLlumnixClientVLLM(LlumnixClientVLLM):
 
 
 def setup_entrypoints_context(request_output_queue_type: QueueType, instance_id):
-    manager = ray.get_actor(get_manager_name(), namespace="llumnix")
+    manager = get_llumnix_actor_handle(LlumnixActor.MANAGER)
     tests.unit_test.entrypoints.vllm.api.manager = manager
-    instance = get_instance(instance_id)
+    instance = get_llumnix_actor_handle(LlumnixActor.INSTANCE, instance_id)
     tests.unit_test.entrypoints.vllm.api.instance = instance
     ip = '127.0.0.1'
     request_output_queue = init_request_output_queue_server(ip, request_output_queue_type)
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     entrypoints_args = parser.parse_args()
 
     instance_id = random_uuid()
-    instance = MockLlumlet.options(name=get_instance_name(instance_id),
+    instance = MockLlumlet.options(name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
                                    namespace="llumnix").remote(instance_id)
     tests.unit_test.entrypoints.vllm.api.instance = instance
 

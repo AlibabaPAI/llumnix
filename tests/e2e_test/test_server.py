@@ -30,7 +30,12 @@ from blade_llm.protocol import (
 
 from llumnix.utils import get_ip_address, wait_port_free
 from llumnix.logging.logger import init_logger
-from llumnix.ray_utils import get_actor_names_by_name_prefix, INSTANCE_NAME_PREFIX, get_instance
+from llumnix.ray_utils import (
+    list_actor_names_by_actor_type,
+    get_llumnix_actor_handle,
+    LlumnixActor,
+    get_llumnix_actor_id,
+)
 
 from tests.utils import try_convert_to_local_path
 from tests.e2e_test.bladellm_utils import LlumnixServerProc
@@ -52,7 +57,7 @@ def generate_bladellm_non_pd_serve_args(
     model: str = try_convert_to_local_path('Qwen/Qwen2.5-7B'),
     ip: str = get_ip_address(),
     port: int = 45000,
-    max_instances: int = 1,
+    max_units: int = 1,
 ) -> List[str]:
     # pylint: disable=f-string-without-interpolation
     args = [
@@ -63,7 +68,7 @@ def generate_bladellm_non_pd_serve_args(
         f"--disable_frontend_multiprocessing",
         f"--disable_signal_handler",
         f"--disable_cuda_graph",
-        f"--max-instances={max_instances}",
+        f"--max-units={max_units}",
         f"--enable-port-increment",
     ]
     return args
@@ -72,7 +77,7 @@ def generate_bladellm_pdd_serve_args(
     model: str = try_convert_to_local_path('Qwen/Qwen2.5-7B'),
     ip: str = get_ip_address(),
     port: int = 45000,
-    max_instances: int = 1,
+    max_units: int = 1,
 ) -> List[str]:
     # pylint: disable=f-string-without-interpolation
     args = [
@@ -89,7 +94,7 @@ def generate_bladellm_pdd_serve_args(
         f"--naming_url={NAMING_URL}",
         f"--enable-engine-pd-disagg",
         f"--pd-ratio=1:1",
-        f"--max-instances={max_instances}",
+        f"--max-units={max_units}",
         f"--enable-port-increment",
     ]
     return args
@@ -101,14 +106,14 @@ def server(request):
     ip = get_ip_address()
     if not request.param == "pd_server":
         base_port = 45000 + random.randint(0,49)
-        max_instances = 2
-        args = generate_bladellm_non_pd_serve_args(model, ip, base_port, max_instances)
+        max_units = 2
+        args = generate_bladellm_non_pd_serve_args(model, ip, base_port, max_units)
     else:
         base_port = 45050 + random.randint(0,49)
-        max_instances = 4
-        args = generate_bladellm_pdd_serve_args(model, ip, base_port, max_instances)
+        max_units = 4
+        args = generate_bladellm_pdd_serve_args(model, ip, base_port, max_units)
     ip_ports = []
-    for i in range(max_instances):
+    for i in range(max_units):
         port = base_port + i
         wait_port_free(port, force=True)
         ip_port = f"{ip}:{port}"
@@ -731,13 +736,10 @@ async def test_http_oai_completions_drop_request(server, is_chat: bool):
 
     ray.init(ignore_reinit_error=True, namespace="llumnix")
 
-    curr_instances = []
-    curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
-    for curr_instance_name in curr_instance_names:
-        instance_id = curr_instance_name.split("_")[-1]
-        curr_instances.append(instance_id)
-    for instance_id in curr_instances:
-        instance = get_instance(instance_id)
+    curr_instance_names = list_actor_names_by_actor_type(LlumnixActor.INSTANCE)
+    curr_instance_ids = [get_llumnix_actor_id(LlumnixActor.INSTANCE, instance_name) for instance_name in curr_instance_names]
+    for instance_id in curr_instance_ids:
+        instance = get_llumnix_actor_handle(LlumnixActor.INSTANCE, instance_id)
         running_request_ids = ray.get(instance.execute_engine_method.remote("get_running_queue"))
         waiting_request_ids = ray.get(instance.execute_engine_method.remote("get_waiting_queue"))
         # check that all requests are dropped

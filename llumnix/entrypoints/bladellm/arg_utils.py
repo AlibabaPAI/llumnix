@@ -33,7 +33,7 @@ class BladeLLMEngineArgsFactory(LlumnixEngineArgsFactory):
         current_engine_args: LlumnixEngineArgs,
         next_instance_args: InstanceArgs,
         port_offset: int = 0,
-        instance_id: str = None,
+        unit_id: str = None,
     ) -> LlumnixEngineArgs:
         instance_type = next_instance_args.instance_type
         if self.load_registered_service:
@@ -56,6 +56,7 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
                  backend_type: BackendType = BackendType.BLADELLM):
         self.world_size = self._get_world_size(engine_args)
         self.instance_id = self._get_instance_id(engine_args)
+        self.dp_size = self._get_dp_size(engine_args)
         super().__init__(
             engine_args=self._get_engine_args(engine_args),
             backend_type=backend_type,
@@ -73,6 +74,9 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
         if engine_args.disagg_options is not None:
             instance_id = engine_args.disagg_options.inst_id
         return instance_id
+
+    def _get_dp_size(self, engine_args: "ServingArgs"):
+        return engine_args.attention_dp_size
 
     def _get_engine_args(self, engine_args: "ServingArgs"):
         # Since importing the bladellm engine arguments requires available GPU,
@@ -101,6 +105,9 @@ class BladeLLMEngineArgs(LlumnixEngineArgs):
 
     def get_world_size(self):
         return self.world_size
+
+    def get_dp_size(self):
+        return self.dp_size
 
 
 @dataclass
@@ -156,18 +163,17 @@ def detect_unsupported_engine_feature(engine_args: "ServingArgs") -> None:
 def check_engine_args(engine_args: "ServingArgs") -> None:
     detect_unsupported_engine_feature(engine_args)
 
-    if not engine_args.serving_multi_processing_options.disable_frontend_multiprocessing:
-        logger.warning("In llumnix, the api server and engine are in different ray actors, "
-                       "just set disable_frontend_multiprocessing to True.")
-        engine_args.serving_multi_processing_options.disable_frontend_multiprocessing = True
+    assert engine_args.serving_multi_processing_options.disable_frontend_multiprocessing is True, \
+        "In Llumnix, api server and engine are in different ray actors, just set disable_frontend_multiprocessing to True."
 
-    if not engine_args.disable_signal_handler:
-        logger.warning("Disable the signal handler in BladeLLM, as the llumlet actor is not "
-                       "a process with a main function.")
-        engine_args.disable_signal_handler = True
+    assert engine_args.disable_signal_handler is True, \
+        "Disable the signal handler in BladeLLM, as the llumlet actor is not a process with a main function."
+
+    assert not engine_args.attention_dp_size > 1, "Llumnix does not support attention data parallel for BladeLLM temporarily."
 
 def check_instance_args(instance_args: InstanceArgs):
     assert not instance_args.simulator_mode, "Simulator mode is not supported for BladeLLM temporarily."
+
     if instance_args.enable_migration:
         assert 'W' not in instance_args.request_migration_policy, \
             "Migrating waiting request is not supported for BladeLLM temporarily."

@@ -15,6 +15,7 @@ import socket
 from dataclasses import fields
 
 import uvloop
+import ray.actor
 
 from llumnix.arg_utils import InstanceArgs, VLLMV1EntrypointsArgs
 from llumnix.entrypoints.utils import EntrypointsContext
@@ -32,9 +33,9 @@ class APIServerActorVLLMV1(APIServerActor):
                  entrypoints_args: VLLMV1EntrypointsArgs,
                  instance_args: InstanceArgs,
                  engine_args: VLLMV1EngineArgs,
-                 scaler: "ray.actor.ActorHandle",
-                 manager: "ray.actor.ActorHandle",
-                 instance: "ray.actor.ActorHandle"):
+                 scaler: ray.actor.ActorHandle,
+                 manager: ray.actor.ActorHandle,
+                 instance: ray.actor.ActorHandle):
         self.client_index = entrypoints_args.client_index
         super().__init__(instance_id, entrypoints_args, instance_args, engine_args,
                          scaler, manager, instance)
@@ -80,9 +81,17 @@ class APIServerActorVLLMV1(APIServerActor):
         import vllm.v1.engine.core_client # pylint: disable=import-outside-toplevel
         from vllm.entrypoints.openai.api_server import run_server_worker # pylint: disable=import-outside-toplevel
         vllm.v1.engine.core_client.entrypoints_context = self.entrypoints_context
-        uvloop.run(
-            run_server_worker(self.listen_address, self.sock,
-                              serve_args, client_config))
+
+        try:
+            uvloop.run(
+                run_server_worker(
+                    self.listen_address, self.sock, serve_args, client_config
+                )
+            )
+        # pylint: disable=broad-except
+        except Exception:
+            logger.exception("Error in _run_server.")
+            self.stop()
 
     def _stop_server(self):
         def stop_server():

@@ -135,7 +135,7 @@ def generate_vllm_serve_command(
     tensor_parallel_size: int = 1,
     enable_migration: bool = True,
     enforce_eager: bool = False,
-    max_instances: int = 4,
+    max_units: int = 4,
     request_output_forwarding_mode: str = "thread",
     **kwargs
 ):
@@ -162,7 +162,7 @@ def generate_vllm_serve_command(
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
-        f"--max-instances {max_instances} "
+        f"--max-units {max_units} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
@@ -253,7 +253,7 @@ def generate_vllm_v1_serve_command(
     tensor_parallel_size: int = 1,
     enable_migration: bool = True,
     enforce_eager: bool = False,
-    max_instances: int = 4,
+    max_units: int = 4,
     request_output_forwarding_mode: str = "thread",
     **kwargs
 ):
@@ -281,7 +281,7 @@ def generate_vllm_v1_serve_command(
         f"--max-num-batched-tokens {max_num_batched_tokens} "
         # f"--pd-ratio {pd_ratio} "
         f"--enable-port-increment "
-        f"--max-instances {max_instances} "
+        f"--max-units {max_units} "
         f"{'--enable-pd-disagg ' if enable_pd_disagg else ''}"
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"{'--simulator-mode ' if enable_simulator else ''}"
@@ -378,7 +378,7 @@ def generate_bladellm_serve_command(
     max_gpu_memory_utilization: float = 0.60, # TODO(s5u13b): Fix OOM in TP=2.
     migration_backend: str = "grpc",
     tensor_parallel_size: int = 1,
-    max_instances: int = 4,
+    max_units: int = 4,
     pd_ratio: str = "1:1",
     request_output_queue_type: str = "zmq",
     enforce_eager: bool = False,
@@ -418,7 +418,7 @@ def generate_bladellm_serve_command(
         f"--request-output-queue-type {request_output_queue_type} "
         f"--request-output-forwarding-mode {request_output_forwarding_mode} "
         f"--enable-port-increment "
-        f"--max-instances {max_instances} "
+        f"--max-units {max_units} "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )
     print(f"Going to run command: {command}")
@@ -612,7 +612,7 @@ def generate_vllm_serve_service_command_func(
     model: str = try_convert_to_local_path("facebook/opt-125m"),
     ip: str = get_ip_address(),
     port: int = 37000,
-    max_instances: int = 4,
+    max_units: int = 4,
     result_filename: str = ""
 ):
     command = (
@@ -625,7 +625,7 @@ def generate_vllm_serve_service_command_func(
         f"--enable-pd-disagg "
         f"--enable-migration "
         f"--pd-ratio 1:1 "
-        f"--max-instances {max_instances} "
+        f"--max-units {max_units} "
         f"--enable-port-increment "
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -667,7 +667,7 @@ def generate_vllm_v1_serve_service_command_func(
     model: str = try_convert_to_local_path("facebook/opt-125m"),
     ip: str = get_ip_address(),
     port: int = 37000,
-    max_instances: int = 4,
+    max_units: int = 4,
     result_filename: str = ""
 ):
     command = (
@@ -680,7 +680,7 @@ def generate_vllm_v1_serve_service_command_func(
         f"--port {port} "
         f"--enable-engine-pd-disagg "
         f"--pd-ratio 1:1 "
-        f"--max-instances {max_instances} "
+        f"--max-units {max_units} "
         f"--enable-port-increment "
         f"{'> instance_'+result_filename if len(result_filename)> 0 else ''} 2>&1 &"
     )
@@ -716,7 +716,7 @@ def generate_bladellm_serve_service_command_func(
     model: str = try_convert_to_local_path("facebook/opt-125m"),
     ip: str = get_ip_address(),
     port: int = 37000,
-    max_instances: int = 4,
+    max_units: int = 4,
     result_filename: str = ""
 ):
     command = (
@@ -729,7 +729,7 @@ def generate_bladellm_serve_service_command_func(
         f"--port {port} " # must set, for server
         f"--enable-engine-pd-disagg "
         f"--pd-ratio 1:1 "
-        f"--max-instances {max_instances} "
+        f"--max-units {max_units} "
         f"--enable-port-increment "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )

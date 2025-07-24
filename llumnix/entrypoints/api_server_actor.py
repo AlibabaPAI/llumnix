@@ -26,7 +26,7 @@ from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
 from llumnix.entrypoints.utils import EntrypointsContext
 from llumnix.queue.utils import init_request_output_queue_server, QueueType
 from llumnix.logging.logger import init_logger
-from llumnix.ray_utils import log_actor_ray_info, get_server_name
+from llumnix.ray_utils import log_actor_ray_info, LlumnixActor, get_llumnix_actor_name
 from llumnix.constants import SERVER_STOP_TIMEOUT, SERVER_START_TIMEOUT
 
 
@@ -55,10 +55,12 @@ class APIServerActor(ABC):
         self.port = entrypoints_args.port
         self.request_output_queue_type = QueueType(self.entrypoints_args.request_output_queue_type)
         self.request_output_queue = init_request_output_queue_server(
-            self.host, self.request_output_queue_type)
-        self.llumnix_client: "LlumnixClient" = None
+            self.host, self.request_output_queue_type
+        )
+        self.llumnix_client = None
 
         self._setup_entrypoints_context(self.scaler, self.manager, self.instance_id, self.instance)
+        self._wait_instance()
         self._start_server_thread()
         self._wait_server()
 
@@ -97,6 +99,9 @@ class APIServerActor(ABC):
                     engine_args,
                     entrypoints_context: EntrypointsContext):
         raise NotImplementedError
+
+    def _wait_instance(self):
+        ray.get(self.instance.is_ready.remote())
 
     def _wait_server(self):
         start_time = time.time()
@@ -139,7 +144,7 @@ class APIServerActor(ABC):
         api_server_class = ray.remote(
             num_cpus=1,
             num_gpus=num_gpus,
-            name=get_server_name(instance_id),
+            name=get_llumnix_actor_name(LlumnixActor.SERVER, instance_id),
             namespace="llumnix",
             lifetime="detached"
         )(cls).options(
@@ -157,5 +162,5 @@ class APIServerActor(ABC):
     def is_ready(self) -> bool:
         return True
 
-    def clear_dead_instances(self, dead_instance_ids: List[str]) -> None:
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
         pass

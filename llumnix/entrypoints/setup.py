@@ -18,13 +18,12 @@ import time
 from typing import Dict, Optional, List, Tuple
 
 import ray
-import ray.exceptions
 
 from llumnix.manager import Manager
 from llumnix.llumlet.llumlet import Llumlet
 from llumnix.logging.logger import init_logger
 from llumnix.utils import random_uuid, get_llumnix_env_vars
-from llumnix.ray_utils import get_manager_name, get_scaler_name
+from llumnix.ray_utils import get_llumnix_actor_handle, LlumnixActor
 from llumnix.arg_utils import ManagerArgs, EntrypointsArgs, LaunchArgs, InstanceArgs, LlumnixEngineArgs
 from llumnix.queue.queue_type import QueueType
 from llumnix.server_info import ServerInfo
@@ -128,7 +127,7 @@ def init_scaler(
         )
         logger.info("Init Scaler on current node.")
     except ValueError:
-        scaler = ray.get_actor(get_scaler_name(), namespace='llumnix')
+        scaler = get_llumnix_actor_handle(LlumnixActor.SCALER)
         logger.info("Get existing Scaler.")
     return scaler
 
@@ -140,7 +139,7 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
                             ) -> Tuple[Manager, List[str], List[Llumlet], QueueServerBase]:
     scaler: Scaler = init_scaler(manager_args, instance_args, entrypoints_args, engine_args, launch_args)
     ray.get(scaler.is_ready.remote())
-    manager: Manager = ray.get_actor(get_manager_name(), namespace='llumnix')
+    manager: Manager = get_llumnix_actor_handle(LlumnixActor.MANAGER)
 
     request_output_queue_type: QueueType = QueueType(entrypoints_args.request_output_queue_type)
     node_id = ray.get_runtime_context().get_node_id()

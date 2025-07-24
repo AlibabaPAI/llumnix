@@ -116,7 +116,7 @@ async def test_request_trace(
             enable_simulator=False,
             tensor_parallel_size=tensor_parallel_size,
             enable_migration=False,
-            max_instances=instance_count,
+            max_units=instance_count,
         )
     )
     for launch_command in launch_commands:

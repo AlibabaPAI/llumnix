@@ -43,33 +43,42 @@ from llumnix.utils import (
     LaunchMode,
     InstanceType,
     InstanceContext,
+    run_coroutine_in_new_thread,
 )
 from llumnix.ray_utils import (
-    get_manager_name,
+    get_llumnix_actor_handle,
     log_actor_ray_info,
-    get_scaler_name,
+    connect_to_actors_with_instance_type,
+    LlumnixActor,
+    get_llumnix_actor_name,
 )
 from llumnix.constants import (
     NO_INSTANCE_RETRY_GENERATE_INTERVAL,
     WAIT_ALL_MIGRATIONS_DONE_INTERVAL,
     MAX_ACTOR_METHOD_RETRIES,
 )
+from llumnix.ray_utils import clear_gloo_backend_ray_resources
 
 logger = init_logger(__name__)
 
 # TODO(s5u13b): Handle exception of ray operations.
 # TODO(s5u13b): Refactor manager to divide functions into different classes.
 
+@ray.remote
+def clear_gloo_backend_ray_resources_task():
+    clear_gloo_backend_ray_resources()
+
 
 class Manager:
-    def __init__(self,
-                 entrypoints_args: EntrypointsArgs,
-                 manager_args: ManagerArgs,
-                 instance_args: InstanceArgs,
-                 engine_args: LlumnixEngineArgs,
-                 launch_args: LaunchArgs,
-                 work_dir: str,
-                 ) -> None:
+    def __init__(
+        self,
+        entrypoints_args: EntrypointsArgs,
+        manager_args: ManagerArgs,
+        instance_args: InstanceArgs,
+        engine_args: LlumnixEngineArgs,
+        launch_args: LaunchArgs,
+        work_dir: str,
+    ) -> None:
         os.chdir(work_dir)
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.manager_args = manager_args
@@ -84,7 +93,7 @@ class Manager:
         # avoid circular import
         # pylint: disable=import-outside-toplevel
         from llumnix.scaler import Scaler
-        self.scaler: Scaler = ray.get_actor(get_scaler_name(), namespace="llumnix")
+        self.scaler: Scaler = get_llumnix_actor_handle(LlumnixActor.SCALER)
 
         # launch args
         self.launch_mode: LaunchMode = launch_args.launch_mode
@@ -123,9 +132,16 @@ class Manager:
         # metrics
         self.manager_metrics = ManagerMetrics()
 
+        run_coroutine_in_new_thread(self._connect_to_instances(), blocking=True)
+
         asyncio.create_task(self._poll_instance_info_loop(self.polling_interval))
 
-    async def generate(self, request_id: RequestIDType, request_processing_context: RequestProcessingContext, *args, **kwargs) -> Tuple[str, str]:
+    async def generate(
+        self,
+        request_id: RequestIDType,
+        request_processing_context: RequestProcessingContext,
+        *args, **kwargs
+    ) -> Tuple[str, str]:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
             if self.backend_type == BackendType.BLADELLM:
                 if self.manager_args.enable_engine_pd_disagg:
@@ -168,12 +184,14 @@ class Manager:
         )
         return prefill_instance_id, decode_instance_id
 
-    async def _generate_with_exception_handling(self,
-                                                request_id: RequestIDType,
-                                                request_processing_context: RequestProcessingContext,
-                                                request_expected_steps: int,
-                                                target_instance_id: str,
-                                                *args, **kwargs):
+    async def _generate_with_exception_handling(
+        self,
+        request_id: RequestIDType,
+        request_processing_context: RequestProcessingContext,
+        request_expected_steps: int,
+        target_instance_id: str,
+        *args, **kwargs
+    ) -> None:
         try:
             await asyncio_wait_for_ray_remote_call_with_timeout(
                 self.instances[target_instance_id].generate,
@@ -186,17 +204,18 @@ class Manager:
             await asyncio.create_task(self.generate(request_id, request_processing_context, *args, **kwargs))
 
     @classmethod
-    def from_args(cls,
-                  entrypoints_args: EntrypointsArgs,
-                  manager_args: ManagerArgs,
-                  instance_args: InstanceArgs,
-                  engine_args: LlumnixEngineArgs,
-                  launch_args: LaunchArgs,
-                  ) -> "Manager":
+    def from_args(
+        cls,
+        entrypoints_args: EntrypointsArgs,
+        manager_args: ManagerArgs,
+        instance_args: InstanceArgs,
+        engine_args: LlumnixEngineArgs,
+        launch_args: LaunchArgs,
+    ) -> "Manager":
         manager_class = ray.remote(
             num_cpus=1,
             max_restarts=-1,
-            name=get_manager_name(),
+            name=get_llumnix_actor_name(LlumnixActor.MANAGER),
             namespace="llumnix",
             lifetime="detached"
         )(cls)
@@ -211,15 +230,7 @@ class Manager:
         return manager
 
     async def is_ready(self) -> bool:
-        """Called by api server, return true when all the instances have been successfully created."""
-        tasks = [
-            asyncio_wait_for_ray_remote_call_with_timeout(instance.is_ready)
-            for instance in self.instances.values()
-        ]
-        # Note that llumnix run server and scale up instance in manager after instance is ready,
-        # so the waiting time here will not include the initialization time of instance.
-        is_ready_list = await asyncio.gather(*tasks, return_exceptions=True)
-        return all(is_ready_list)
+        return True
 
     async def _poll_instance_info_loop(self, interval: float) -> None:
         async def get_instance_info_done_callback(ret, instance_id: str):
@@ -304,17 +315,20 @@ class Manager:
             log_instance_exception(e, ins_id, "scale_up")
             raise e
 
-    async def _get_available_instances(self,
-                                instance_ids: List[str],
-                                instance_actor_handles: List[Llumlet],
-                                instance_types: List[InstanceType]
-                                ) -> List[str]:
+    async def _get_available_instances(
+        self,
+        instance_ids: List[str],
+        instance_actor_handles: List[Llumlet],
+        instance_types: List[InstanceType]
+    ) -> List[str]:
         available_instance_ids, available_instance_actors, available_instance_types = [], [], []
 
-        def _get_engine_context_callback(fut,
-                                            instance_idx: int,
-                                            scale_up_info: List[List],
-                                            available_scale_up_info: List[List]):
+        def _get_engine_context_callback(
+            fut,
+            instance_idx: int,
+            scale_up_info: List[List],
+            available_scale_up_info: List[List]
+        ) -> None:
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
                 for item_idx, scale_up_info_item in enumerate(scale_up_info):
@@ -338,10 +352,12 @@ class Manager:
         return available_instance_ids, available_instance_actors, available_instance_types
 
     @ray.method(max_task_retries=MAX_ACTOR_METHOD_RETRIES)
-    async def scale_up(self,
-                       instance_id: Union[str, Iterable[str]],
-                       instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
-                       instance_type: Union[InstanceType, Iterable[InstanceType]]) -> int:
+    async def scale_up(
+        self,
+        instance_id: Union[str, Iterable[str]],
+        instance_actor_handle: Union[ray.actor.ActorHandle, Iterable[ray.actor.ActorHandle]],
+        instance_type: Union[InstanceType, Iterable[InstanceType]]
+    ) -> int:
         if isinstance(instance_id, str):
             instance_id = [instance_id,]
             instance_actor_handle = [instance_actor_handle,]
@@ -408,19 +424,12 @@ class Manager:
             self.global_scheduler.scale_down(instance_ids)
             self.num_instances = len(self.instances)
 
-        asyncio.create_task(
-            asyncio_wait_for_ray_remote_call_with_timeout(
-                self.scaler.scale_down, instance_ids,
-                exc_handling=True,
-            )
-        )
-
         if self.enable_migration and self.is_group_kind_migration_backend:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
                 asyncio.create_task(
                     asyncio_wait_for_ray_remote_call_with_timeout(
-                        self.scaler.clear_gloo_backend_ray_resources,
+                        clear_gloo_backend_ray_resources_task,
                         exc_handling=True,
                     )
                 )
@@ -463,10 +472,10 @@ class Manager:
 
             if len(dead_instances) > 0:
                 self.scale_down(dead_instances, rebuild_migration_backend=False)
-                await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources)
+                await asyncio_wait_for_ray_remote_call_with_timeout(clear_gloo_backend_ray_resources_task)
             return dead_instances
 
-        await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.clear_gloo_backend_ray_resources)
+        await asyncio_wait_for_ray_remote_call_with_timeout(clear_gloo_backend_ray_resources_task)
         alive_instances = sorted(self.instances.keys())
         pending_task = self.pending_rebuild_migration_instances
         group_name = None
@@ -506,8 +515,9 @@ class Manager:
         self.enable_migration = origin_config
 
     async def _connect_to_instances(self):
-        instance_ids, instances, instance_types = \
-            await asyncio_wait_for_ray_remote_call_with_timeout(self.scaler.get_instances)
+        instance_ids, instances, instance_types = await connect_to_actors_with_instance_type(
+            actor_type=LlumnixActor.INSTANCE
+        )
         await self.scale_up(instance_ids, instances, instance_types)
 
     def _init_instance_info_csv(self, manager_args: ManagerArgs) -> None:

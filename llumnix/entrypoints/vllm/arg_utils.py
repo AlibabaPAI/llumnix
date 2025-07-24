@@ -35,7 +35,7 @@ class VLLMEngineArgsFactory(LlumnixEngineArgsFactory):
         current_engine_args: LlumnixEngineArgs,
         next_instance_args: InstanceArgs,
         port_offset: int = 0,
-        instance_id: str = None,
+        unit_id: str = None,
     ) -> LlumnixEngineArgs:
         if self.load_registered_service:
             instance_type = next_instance_args.instance_type
@@ -48,6 +48,7 @@ class VLLMEngineArgs(LlumnixEngineArgs):
                  engine_args: AsyncEngineArgs,
                  backend_type: BackendType = BackendType.VLLM) -> None:
         engine_args = self._get_engine_args(engine_args)
+        self.dp_size = 1
         super().__init__(engine_args=engine_args, backend_type=backend_type)
 
     def _get_engine_args(self, engine_args: AsyncEngineArgs):
@@ -59,6 +60,10 @@ class VLLMEngineArgs(LlumnixEngineArgs):
     def get_world_size(self):
         engine_config = self.engine_args.create_engine_config()
         return engine_config.parallel_config.world_size
+
+    def get_dp_size(self):
+        """ vLLM v0 v0.6.3.post does not support data parallel."""
+        return self.dp_size
 
 
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:

@@ -20,7 +20,7 @@ import torch
 import ray
 
 from llumnix.utils import get_ip_address, wait_port_free
-from llumnix.ray_utils import get_actor_names_by_name_prefix, INSTANCE_NAME_PREFIX
+from llumnix.ray_utils import list_actor_names_by_actor_type, LlumnixActor
 
 # pylint: disable=unused-import
 from tests.conftest import ray_env, cleanup_ray_env_func
@@ -47,7 +47,7 @@ from tests.utils import try_convert_to_local_path
 
 
 def check_pd_instance_count():
-    curr_instance_names = get_actor_names_by_name_prefix(name_prefix=INSTANCE_NAME_PREFIX)
+    curr_instance_names = list_actor_names_by_actor_type(LlumnixActor.INSTANCE)
     p_instance_count = 0
     d_instance_count = 0
     for curr_instance_name in curr_instance_names:
@@ -123,7 +123,7 @@ async def test_service(ray_env, shutdown_llumnix_service, check_log_exception, m
     )
     commands.append(
         genertate_serve_service_command_func(
-            model=model, ip=ip, port=base_port, max_instances=instance_count,
+            model=model, ip=ip, port=base_port, max_units=instance_count,
             result_filename=str(base_port)+".out"
         )
     )

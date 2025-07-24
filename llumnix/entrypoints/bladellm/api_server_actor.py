@@ -49,6 +49,7 @@ class APIServerActorBladeLLM(APIServerActor):
         from llumnix.entrypoints.bladellm.api_server import LlumnixEntrypoint
         from llumnix.entrypoints.bladellm.client import LlumnixClientBladeLLM
         from blade_llm.service.args import ServingArgs
+
         # bladellm engine_args is dumped by pickle
         engine_args: ServingArgs = engine_args.load_engine_args()
         engine_args.host = self.host
@@ -60,12 +61,17 @@ class APIServerActorBladeLLM(APIServerActor):
         self.llumnix_client = llumnix_client
         web_app = LlumnixEntrypoint(client=llumnix_client, args=engine_args).create_web_app()
         # Loop is setted and closed inside.
-        web.run_app(web_app, host=self.host, port=self.entrypoints_args.port, loop=self.loop, handle_signals=False)
+        try:
+            web.run_app(web_app, host=self.host, port=self.entrypoints_args.port, loop=self.loop, handle_signals=False)
+        # pylint: disable=broad-except
+        except Exception:
+            logger.exception("Error in _run_server.")
+            self.stop()
 
     def _stop_server(self):
         if self.loop.is_running():
             self.loop.call_soon_threadsafe(_raise_graceful_exit)
 
-    def clear_dead_instances(self, dead_instance_ids: List[str]) -> None:
-        logger.info("Api server actor clear dead instances: {}".format(dead_instance_ids))
-        self.llumnix_client.process_instances_dead(dead_instance_ids)
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
+        logger.info("Server cancel dead instance requests, instance_ids: {}".format(dead_instance_ids))
+        self.llumnix_client.cancel_dead_instance_requests(dead_instance_ids)

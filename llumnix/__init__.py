@@ -13,8 +13,7 @@
 
 from llumnix.scaler import Scaler
 from llumnix.manager import Manager
-from llumnix.ray_utils import get_manager_name
-from llumnix.server_info import ServerInfo
+from llumnix.ray_utils import get_llumnix_actor_handle, LlumnixActor
 from llumnix.entrypoints.setup import (
     launch_ray_cluster,
     connect_to_ray_cluster,
@@ -26,15 +25,16 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.utils import BackendType, LaunchMode
 from llumnix.queue.zmq_server import ZmqServer
 from llumnix.queue.ray_queue_server import RayQueueServer
-from llumnix.request_output import LlumnixRequestOuput as LlumnixRequestOuputVLLM
+from llumnix.request_output import LlumnixRequestOuput
+from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.version import __version__
 
 __all__ = [
     "__version__",
     "Scaler",
     "Manager",
-    "get_manager_name",
-    "ServerInfo",
+    "get_llumnix_actor_handle",
+    "LlumnixActor",
     "launch_ray_cluster",
     "connect_to_ray_cluster",
     "init_scaler",
@@ -48,5 +48,6 @@ __all__ = [
     "LaunchMode",
     "ZmqServer",
     "RayQueueServer",
-    "LlumnixRequestOuputVLLM"
+    "LlumnixRequestOuput",
+    "RequestProcessingContext",
 ]

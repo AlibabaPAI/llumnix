@@ -32,8 +32,8 @@ import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
-from llumnix.utils import log_instance_exception, asyncio_wait_for_ray_remote_call_with_timeout, InstanceType
-from llumnix.instance_info import UnitState
+from llumnix.utils import (log_instance_exception, InstanceType, UnitStatus,
+                           asyncio_wait_for_ray_remote_call_with_timeout)
 
 logger = init_logger(__name__)
 
@@ -471,16 +471,16 @@ async def check_actors_health(actors: Dict[str, ray.actor.ActorHandle]) -> List[
 
     return dead_actor_ids
 
-async def check_instance_ready_to_die(instances: Dict[str, ray.actor.ActorHandle]) -> List[Tuple[UnitState, int]]:
+async def check_instance_ready_to_die(instances: Dict[str, ray.actor.ActorHandle]) -> List[Tuple[UnitStatus, int]]:
     def check_instance_ready_to_die_done_callback(actor_id: str, fut):
         ret = fut.result()[0]
         if isinstance(ret, Exception):
             log_instance_exception(ret, actor_id, "check_instance_ready_to_die")
         else:
-            instance_state.append(ret)
+            instance_status.append(ret)
 
     tasks = []
-    instance_state = []
+    instance_status = []
     for instance_id, instance in instances.items():
         task = asyncio.gather(
             asyncio_wait_for_ray_remote_call_with_timeout(instance.get_remain_reqs),
@@ -492,4 +492,4 @@ async def check_instance_ready_to_die(instances: Dict[str, ray.actor.ActorHandle
         tasks.append(task)
     await asyncio.gather(*tasks)
 
-    return instance_state
+    return instance_status

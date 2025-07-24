@@ -93,6 +93,11 @@ class MigrationType(str, Enum):
     EASE_D_WITH_P_BUBBLE = "EASE_D_WITH_P_BUBBLE"
 
 
+class UnitStatus(str, Enum):
+    HEALTH = "HEALTH"
+    BROKEN = "BROKEN"
+
+
 @dataclass
 class MigrationResponse:
     success: bool = True

@@ -20,7 +20,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.logging.logger import init_logger
-from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator, UnitState
+from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
 from llumnix.backends.backend_interface import BackendBaseInterface
 from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
@@ -35,7 +35,7 @@ from llumnix.ray_utils import (
 )
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
+from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType, UnitStatus
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -86,6 +86,7 @@ class Llumlet:
             )
         self.llumlet_metrics = LlumletMetrics()
 
+        self.unit_status = UnitStatus.HEALTH
         asyncio.create_task(self._check_engine_state_loop())
 
     def __repr__(self):
@@ -166,7 +167,7 @@ class Llumlet:
         if self.enable_migration:
             instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
             instance_info.is_migrating = self.migration_coordinator.is_migrating()
-        instance_info.unit_state = self.unit_state
+        instance_info.unit_status = self.unit_status
         return instance_info
 
     async def is_ready(self):
@@ -246,12 +247,14 @@ class Llumlet:
 
 # ================== apis called by DPManager ==================
 
-    def set_unit_state(self, state: UnitState) -> None:
-        self.unit_state = state
+    def set_unit_status(self, status: UnitStatus) -> None:
+        self.unit_status = status
+        logger.info("Llumlet(instance_id={}, instance_type={}) unit_status set to {}.".format(
+            self.instance_id, self.instance_args.instance_type, self.unit_status))
 
     def get_remain_reqs(self):
-        assert self.unit_state == UnitState.BROKEN, "'get_remain_reqs' shoule only be called"
+        assert self.unit_status == UnitStatus.BROKEN, "'get_remain_reqs' shoule only be called"
         " when the unit is broken."
         remain_reqs = len(self.backend_engine.get_running_queue()) + \
                       len(self.backend_engine.get_waiting_queue())
-        return (self.unit_state, remain_reqs)
+        return (self.unit_status, remain_reqs)

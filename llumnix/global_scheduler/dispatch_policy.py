@@ -189,6 +189,7 @@ class RoundRobin(DispatchPolicy):
         self.prev_instance_type_idx[instance_type] = cur_idx
         return target_instance_id
 
+
 class CacheAware(DispatchPolicy):
 
     def __init__(self,
@@ -222,7 +223,6 @@ class CacheAware(DispatchPolicy):
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         instance_infos, instance_num_requests = self.filters[instance_type].filter(instance_infos, instance_num_requests)
         return instance_infos, instance_num_requests
-
 
     def _get_init_hash(self) -> str:
         return ""
@@ -269,7 +269,6 @@ class CacheAware(DispatchPolicy):
             prefix_hashes.append(prefix_hash)
         return prefix_hashes
 
-
     def _query_prefix_hash_hit_info(self, prefix_hashes):
         """
         Query the hit status of each prefix_hash.
@@ -306,8 +305,6 @@ class CacheAware(DispatchPolicy):
                 if instance_id not in hit_instance_ids:
                     instance_broken[instance_id] = True
         return instance_prefix_hit_count
-
-
 
     def select(self,
                  instance_type: InstanceType,
@@ -370,6 +367,7 @@ class CacheAware(DispatchPolicy):
         instance_id = instance_info_chosen.instance_id
         logger.info("dispatch request to {}, load: {}".format(instance_id, getattr(instance_info_chosen, dispatch_load_metric)))
         return instance_id
+
 
 class DispatchPolicyFactory:
     _POLICY_REGISTRY = {

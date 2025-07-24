@@ -17,6 +17,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.constants import DISPATCH_LOG_FREQUENCY
 from llumnix.global_scheduler.dispatch_policy import DispatchPolicyFactory, DispatchPolicy, DispatchLoadMetricConfig
+from llumnix.global_scheduler.dispatch_filter import DispatchFilter, BrokenUnitFilter
 from llumnix.metrics.metrics_types import Summary
 from llumnix.utils import InstanceType
 
@@ -44,7 +45,7 @@ class DispatchScheduler:
             topk_random_dispatch=topk_random_dispatch,
             dispatch_load_metric_config=dispatch_load_metric_config
         )
-
+        self.broken_unit_filter: DispatchFilter = BrokenUnitFilter()
         self.dispatch_latency_metric = dispatch_latency_metric
 
         # statistics
@@ -74,6 +75,9 @@ class DispatchScheduler:
                   secondary_instance_num_requests: Optional[Dict[str, int]],
                   dispatch_context: Dict,
                   ) -> str:
+        # Filter out broken primary instances
+        primary_instance_infos, primary_instance_num_requests = self.broken_unit_filter.filter(
+            primary_instance_infos, primary_instance_num_requests)
         # Filter primary instances based on dispatch policy
         candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
             instance_type, primary_instance_infos, primary_instance_num_requests)
@@ -85,6 +89,9 @@ class DispatchScheduler:
         # Adaptive PD fallback: try secondary instance type if primary unavailable
         if not candidate_instance_infos and self.enable_adaptive_pd:
             fallback_type = InstanceType.DECODE if instance_type == InstanceType.PREFILL else InstanceType.PREFILL
+            # Filter out broken secondary instances
+            secondary_instance_infos, secondary_instance_num_requests = self.broken_unit_filter.filter(
+                secondary_instance_infos, secondary_instance_num_requests)
             candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
                 fallback_type, secondary_instance_infos, secondary_instance_num_requests)
 

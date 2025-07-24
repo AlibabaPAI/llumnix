@@ -185,7 +185,7 @@ class Llumlet:
         logger.info("Llumlet(instance_id={}, instance_type={}) unit_status set to {}.".format(
             self.instance_id, self.instance_args.instance_type, self.unit_status))
 
-    def get_unit_status(self) -> FailoverMigrationStatus:
+    def get_unit_status(self) -> UnitStatus:
         return self.unit_status
 
     async def get_instance_type(self) -> InstanceType:

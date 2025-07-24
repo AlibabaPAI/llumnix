@@ -35,7 +35,8 @@ from llumnix.ray_utils import (
 )
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType, UnitStatus
+from llumnix.utils import (MigrationType, RequestIDType, BackendType, 
+                           InstanceType, UnitStatus, FailoverMigrationStatus)
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -252,9 +253,7 @@ class Llumlet:
         logger.info("Llumlet(instance_id={}, instance_type={}) unit_status set to {}.".format(
             self.instance_id, self.instance_args.instance_type, self.unit_status))
 
-    def get_remain_reqs(self):
-        assert self.unit_status == UnitStatus.BROKEN, "'get_remain_reqs' shoule only be called"
-        " when the unit is broken."
-        remain_reqs = len(self.backend_engine.get_running_queue()) + \
-                      len(self.backend_engine.get_waiting_queue())
-        return (self.unit_status, remain_reqs)
+    def get_failover_migration_status(self) -> FailoverMigrationStatus:
+        assert self.unit_status == UnitStatus.BROKEN, "'get_failover_migration_status' shoule "
+        "only be called when the unit is broken."
+        # TODO: return failover migration status here.

@@ -424,13 +424,11 @@ class DPManager:
                 # If the unit has been broken already, wait for instances to migrate requests.
                 else:
                     instance_status = await check_instance_ready_to_die()
-                    remain_reqs = 0
-                    # TODO(shejiarui): use MIGRATION_DONE_STATE
-                    for _, req_num in instance_status:
-                        remain_reqs += req_num
-                        if remain_reqs > 0:
-                            break
-                    if remain_reqs == 0:
+                    failover_migration_done = False
+                    for status in instance_status:
+                        # TODO: check `failover_migration_done` here.
+                        pass
+                    if failover_migration_done:
                         await self.stop()
             # pylint: disable=broad-except
             except Exception:

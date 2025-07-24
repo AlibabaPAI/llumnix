@@ -32,7 +32,8 @@ import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
-from llumnix.utils import (log_instance_exception, InstanceType, UnitStatus,
+from llumnix.utils import (InstanceType, UnitStatus,
+                           log_instance_exception, FailoverMigrationStatus,
                            asyncio_wait_for_ray_remote_call_with_timeout)
 
 logger = init_logger(__name__)
@@ -471,7 +472,7 @@ async def check_actors_health(actors: Dict[str, ray.actor.ActorHandle]) -> List[
 
     return dead_actor_ids
 
-async def check_instance_ready_to_die(instances: Dict[str, ray.actor.ActorHandle]) -> List[Tuple[UnitStatus, int]]:
+async def check_instance_ready_to_die(instances: Dict[str, ray.actor.ActorHandle]) -> List[FailoverMigrationStatus]:
     def check_instance_ready_to_die_done_callback(actor_id: str, fut):
         ret = fut.result()[0]
         if isinstance(ret, Exception):
@@ -483,7 +484,7 @@ async def check_instance_ready_to_die(instances: Dict[str, ray.actor.ActorHandle
     instance_status = []
     for instance_id, instance in instances.items():
         task = asyncio.gather(
-            asyncio_wait_for_ray_remote_call_with_timeout(instance.get_remain_reqs),
+            asyncio_wait_for_ray_remote_call_with_timeout(instance.get_failover_migration_status),
             return_exceptions=True
         )
         task.add_done_callback(

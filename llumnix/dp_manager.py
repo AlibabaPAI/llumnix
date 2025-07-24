@@ -423,7 +423,7 @@ class DPManager:
                         await self._set_unit_status(UnitStatus.BROKEN)
                 # If the unit has been broken already, wait for instances to migrate requests.
                 else:
-                    instance_status = await check_instance_ready_to_die()
+                    instance_status = await check_instance_ready_to_die(self.instances)
                     failover_migration_done = False
                     for status in instance_status:
                         # TODO: check `failover_migration_done` here.

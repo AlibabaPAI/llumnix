@@ -17,9 +17,10 @@ from typing import Dict
 
 import pytest
 from llumnix.instance_info import InstanceInfo
-from llumnix.utils import InstanceType
+from llumnix.utils import InstanceType, UnitStatus
 from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.dispatch_policy import DispatchLoadMetricConfig
+from llumnix.global_scheduler.dispatch_filter import BrokenUnitFilter
 from llumnix.load_computation import KvBlocksRatioLoad, RemainingStepsLoad, AdaptiveDecodeBatchLoad, MissWaitingTokensLoad
 
 
@@ -522,6 +523,34 @@ def test_dispatch_cacheaware():
             dispatch_context=dispatch_context
         )
         assert instance_id == target_instance_id
+
+def test_broken_unit_filter():
+    instance_num: int = 10
+    instance_info_dict, instance_num_requests = init_instances(instance_num)
+
+    # Randomly select 5 instances and set their unit_status to BROKEN
+    broken_instance_num: int = 5
+    broken_instance_ids = random.sample(list(instance_info_dict.keys()), broken_instance_num)
+    for instance_id in broken_instance_ids:
+        instance_info_dict[instance_id].unit_status = UnitStatus.BROKEN
+
+    broken_unit_filter = BrokenUnitFilter()
+    filtered_instance_infos, filtered_instance_num_requests = broken_unit_filter.filter(
+        instance_info_dict, instance_num_requests
+    )
+
+    # Check that all BROKEN instances are filtered out
+    for instance_id in broken_instance_ids:
+        assert instance_id not in filtered_instance_infos
+        assert instance_id not in filtered_instance_num_requests
+
+    # Check that all remaining instances are HEALTH
+    for instance_info in filtered_instance_infos.values():
+        assert instance_info.unit_status == UnitStatus.HEALTH
+
+    # Check that the number of remaining instances is correct
+    assert len(filtered_instance_infos) == instance_num - broken_instance_num
+    assert len(filtered_instance_num_requests) == instance_num - broken_instance_num
 
 @pytest.mark.parametrize("topk_random_dispatch", [1, 2, 3])
 def test_dispatch_topk_random_dispatch(topk_random_dispatch):

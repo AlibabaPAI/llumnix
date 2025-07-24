@@ -169,8 +169,6 @@ class GlobalScheduler:
         for ins_id, ins_type in zip(instance_ids, instance_types):
             if ins_id not in self.instance_id_set:
                 logger.info("Scale up instance {}.".format(ins_id))
-                new_intance_info = self._get_empty_instance_info()
-                new_intance_info.instance_id = ins_id
                 self._add_instance(ins_id, ins_type)
 
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
@@ -187,21 +185,24 @@ class GlobalScheduler:
         logger.info("num_instances: {}, instances: {}".format(self.num_instances, self.instance_id_set))
         return self.num_instances
 
-    def _add_instance(self, instance_id: str, instance_type: InstanceType) -> None:
-        new_intance_info = self._get_empty_instance_info()
-        new_intance_info.instance_id = instance_id
-        new_intance_info.instance_type = instance_type
-        self.instance_info[instance_id] = new_intance_info
+    def _add_instance(self,
+                      instance_id: str,
+                      instance_type: InstanceType) -> None:
+        if instance_info not in self.instance_info:
+            instance_info = self._get_empty_instance_info()
+            instance_info.instance_id = instance_id
+            instance_info.instance_type = instance_type
+            self.instance_info[instance_id] = instance_info
         self.instance_num_requests[instance_id] = 0
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
 
         if self._enable_pd():
             if instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
-                self.prefill_instance_info[instance_id] = new_intance_info
+                self.prefill_instance_info[instance_id] = instance_info
                 self.prefill_instance_num_requests[instance_id] = 0
             if instance_type in (InstanceType.DECODE, InstanceType.NEUTRAL):
-                self.decode_instance_info[instance_id] = new_intance_info
+                self.decode_instance_info[instance_id] = instance_info
                 self.decode_instance_num_requests[instance_id] = 0
 
     def _remove_instance(self, instance_id: str) -> None:

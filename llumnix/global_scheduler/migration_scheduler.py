@@ -19,7 +19,7 @@ from llumnix.load_computation import DummyLoad
 from llumnix.global_scheduler.migration_filter import (MigrationFilterPipeline, MigrationFilterConfig,
                                                        CustomFilter, MigrationFilterFactory)
 from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, MigrationPolicy
-from llumnix.utils import MigrationType, InstanceType
+from llumnix.utils import MigrationType, InstanceType, UnitStatus
 from llumnix.internal_config import DispatchLoadMetricConfig
 
 logger = init_logger(__name__)
@@ -80,6 +80,69 @@ class MigrationScheduler:
         )
         self.migration_base_filter.add_filter("has_migration_slot_filter", has_migration_slot_filter)
 
+    def _set_unit_failover_filter(self):
+        unit_broken_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        unit_broken_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.is_unit_broken(),
+            dst_filter=lambda instance_info: not instance_info.is_unit_broken(),
+        )
+
+        if not self._enable_pd():
+            self.unit_failover_pipeline = MigrationFilterPipeline(self.filter_config)
+            self.unit_failover_pipeline.add_filter("unit_broken_filter", unit_broken_filter)
+        else:
+            prefill_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+            prefill_filter.set_filter_condtition(
+                src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL,
+                dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL,
+            )
+            self.prefill_unit_failover_pipeline = MigrationFilterPipeline(self.filter_config)
+            self.prefill_unit_failover_pipeline.add_filter("prefill_filter", prefill_filter)
+            self.prefill_unit_failover_pipeline.add_filter("unit_broken_filter", unit_broken_filter)
+
+            decode_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+            decode_filter.set_filter_condtition(
+                src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
+                dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
+            )
+            self.decode_unit_failover_pipeline = MigrationFilterPipeline(self.filter_config)
+            self.decode_unit_failover_pipeline.add_filter("decode_filter", decode_filter)
+            self.decode_load_balance_filter_pipeline.add_filter("unit_broken_filter", unit_broken_filter)
+
+    def _set_adaptive_pd_filter(self):
+        dynamic_p_free_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        dynamic_p_free_d_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
+                and instance_info.decode_batch_size > 0,
+            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE \
+                and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy()
+        )
+        self.dynamic_p2d_filter_pipeline = MigrationFilterPipeline(self.filter_config)
+        self.dynamic_p2d_filter_pipeline.add_filter("dynamic_p_d_instance_filter", dynamic_p_free_d_filter)
+
+        dynamic_p_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        dynamic_p_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
+                and instance_info.decode_batch_size > 0
+                and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric).is_busy(),
+            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
+                and instance_info.decode_batch_size > 0
+                and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_load_metric).is_busy()
+                and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric).is_busy()
+        )
+        self.aggrate_dynamic_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
+        self.aggrate_dynamic_p_filter_pipeline.add_filter("aggrate_dynamic_p_filter", dynamic_p_filter)
+
+        d_p_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        d_p_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE \
+                and getattr(instance_info, self.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy(),
+            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
+                and instance_info.num_running_requests == 0
+        )
+        self.ease_d_with_empty_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
+        self.ease_d_with_empty_p_filter_pipeline.add_filter("busy_d_empty_p_filter", d_p_filter)
+
     def _set_migration_filter(self):
         self.load_filter = MigrationFilterFactory.get_filter("load")
 
@@ -109,38 +172,9 @@ class MigrationScheduler:
             self.decode_load_balance_filter_pipeline.add_filter("decode_load_balance_filter", self.load_filter)
 
         if self.enable_adaptive_pd:
-            self.dynamic_p_free_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
-            self.dynamic_p_free_d_filter.set_filter_condtition(
-                src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
-                    and instance_info.decode_batch_size > 0,
-                dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE \
-                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy()
-            )
-            self.dynamic_p2d_filter_pipeline = MigrationFilterPipeline(self.filter_config)
-            self.dynamic_p2d_filter_pipeline.add_filter("dynamic_p_d_instance_filter", self.dynamic_p_free_d_filter)
+            self._set_adaptive_pd_filter()
 
-            self.dynamic_p_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
-            self.dynamic_p_filter.set_filter_condtition(
-                src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
-                    and instance_info.decode_batch_size > 0
-                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric).is_busy(),
-                dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
-                    and instance_info.decode_batch_size > 0
-                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_load_metric).is_busy()
-                    and not getattr(instance_info, self.dispatch_load_metric_config.dispatch_prefill_as_decode_load_metric).is_busy()
-            )
-            self.aggrate_dynamic_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
-            self.aggrate_dynamic_p_filter_pipeline.add_filter("aggrate_dynamic_p_filter", self.dynamic_p_filter)
-
-            self.d_p_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
-            self.d_p_filter.set_filter_condtition(
-                src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE \
-                    and getattr(instance_info, self.dispatch_load_metric_config.dispatch_decode_load_metric).is_busy(),
-                dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL \
-                    and instance_info.num_running_requests == 0
-            )
-            self.ease_d_with_empty_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
-            self.ease_d_with_empty_p_filter_pipeline.add_filter("busy_d_empty_p_filter", self.d_p_filter)
+        self._set_unit_failover_filter()
 
     def _set_migration_policy(self):
         self.pair_migration_policy = MigrationPolicyFactory.get_policy(
@@ -155,6 +189,9 @@ class MigrationScheduler:
             self.aggrate_dynamic_p_policy = MigrationPolicyFactory.get_policy(
                 "aggrate_dynamic_prefill", migrate_out_load_threshold=self.filter_config.migrate_out_load_threshold)
 
+        self.unit_failover_policy = MigrationPolicyFactory.get_policy(
+            "failover", migrate_out_load_threshold=self.filter_config.migrate_out_load_threshold)
+
     def push_migrations(self, instance_info: Dict[str, InstanceInfo]) -> List[List[Tuple[str, str]]]:
         migration_tasks = []
 
@@ -166,7 +203,7 @@ class MigrationScheduler:
 
         if not self._enable_pd():
             migration_tasks.append((
-                MigrationType.NO_CONSTRAINTS_LOAD_BALANCE,
+                MigrationType.NEUTRAL_LOAD_BALANCE,
                 self._pair_migration(instance_info, self.no_constraints_load_balance_filter_pipeline,
                                      self.pair_migration_policy)
             ))
@@ -191,7 +228,8 @@ class MigrationScheduler:
             else:
                 migration_tasks.append((
                     MigrationType.AGGREGATE_DYNAMIC_P,
-                    self._pair_migration(instance_info, self.aggrate_dynamic_p_filter_pipeline, self.aggrate_dynamic_p_policy)
+                    self._pair_migration(instance_info, self.aggrate_dynamic_p_filter_pipeline,
+                                         self.aggrate_dynamic_p_policy)
                 ))
 
             migration_tasks.append((
@@ -199,14 +237,43 @@ class MigrationScheduler:
                 self._pair_migration(instance_info, self.ease_d_with_empty_p_filter_pipeline, self.defrag_policy)
             ))
 
+        if not self._enable_pd():
+            migration_tasks.append((
+                MigrationType.FAILOVER_MIGRATION,
+                self._pair_migration(instance_info, self.unit_failover_pipeline,
+                                     self.unit_failover_policy, skip_broken_unit=False)
+            ))
+        else:
+            migration_tasks.append((
+                MigrationType.FAILOVER_MIGRATION,
+                self._pair_migration(instance_info, self.prefill_unit_failover_pipeline,
+                                     self.unit_failover_policy, skip_broken_unit=False)
+            ))
+            migration_tasks.append((
+                MigrationType.FAILOVER_MIGRATION,
+                self._pair_migration(instance_info, self.decode_unit_failover_pipeline,
+                                     self.unit_failover_policy, skip_broken_unit=False)
+            ))
+
         return migration_tasks
 
-    # migration_filter must ensure that the specific instance_info does not appear in both src and dst simultaneously
+    # migration_policy must ensure that the specific instance_info does not appear in both src and dst simultaneously
     def _pair_migration(self,
                         instance_info: Dict[str, InstanceInfo],
                         migration_filter_pipeline: Optional[MigrationFilterPipeline],
-                        migration_policy: MigrationPolicy) -> List[Tuple[str, str]]:
-        src_instance_infos, dst_instance_infos = self.migration_base_filter.filter_instances(instance_info.values())
+                        migration_policy: MigrationPolicy,
+                        skip_broken_unit: bool = True) -> List[Tuple[str, str]]:
+        if not skip_broken_unit:
+            available_instance_infos = {}
+            for ins_id, ins_info in instance_info.items():
+                if ins_info.unit_status == UnitStatus.HEALTH:
+                    available_instance_infos[ins_id] = ins_info
+        else:
+            available_instance_infos = instance_info
+
+        src_instance_infos, dst_instance_infos = self.migration_base_filter.filter_instances(
+            available_instance_infos.values())
+
         if migration_filter_pipeline:
             src_instance_infos = migration_filter_pipeline.filter_src_instances(src_instance_infos)
             dst_instance_infos = migration_filter_pipeline.filter_dst_instances(dst_instance_infos)

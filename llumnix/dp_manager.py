@@ -11,7 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Dict, Union, Iterable
+from functools import partial
+from typing import List, Dict, Optional, Union, Iterable
 from enum import Enum
 import asyncio
 
@@ -38,10 +39,10 @@ from llumnix.ray_utils import (
     LlumnixActor,
     update_cluster_actor_handles,
     check_actors_health,
-    check_instance_ready_to_die,
     get_llumnix_actor_name,
     get_llumnix_actor_id,
     get_llumnix_actor_handle,
+    log_instance_exception
 )
 from llumnix.queue.queue_type import QueueType
 from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, HEARTBEAT_INTERVAL
@@ -390,10 +391,13 @@ class DPManager:
 
         return self.num_instances
 
-    async def _scale_down(self) -> None:
-        await self._clear_instance_ray_resources(list(self.instances.keys()))
-        self.servers.clear()
-        self.instances.clear()
+    async def _scale_down(self, instance_ids: Optional[List[str]] = None) -> None:
+        if instance_ids is None:
+            instance_ids = list(self.instances.keys())
+        await self._clear_instance_ray_resources(instance_ids)
+        for ins_id in instance_ids:
+            self.servers.pop(ins_id, None)
+            self.instances.pop(ins_id, None)
 
     async def _clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]] = None) -> None:
         if instance_id is not None:
@@ -423,12 +427,8 @@ class DPManager:
                         await self._set_unit_status(UnitStatus.BROKEN)
                 # If the unit has been broken already, wait for instances to migrate requests.
                 else:
-                    instance_status = await check_instance_ready_to_die(self.instances)
-                    failover_migration_done = False
-                    for status in instance_status:
-                        # TODO: check `failover_migration_done` here.
-                        pass
-                    if failover_migration_done:
+                    all_stopped = await self.check_instance_failover_state()
+                    if all_stopped:
                         await self.stop()
             # pylint: disable=broad-except
             except Exception:
@@ -505,14 +505,51 @@ class DPManager:
         return DPGroupStatus.COMPLETE
 
     async def _set_unit_status(self, status: UnitStatus) -> None:
-        """Set UnitStatus for self and all instances in the unit."""
-        self.unit_status = status
-        logger.info("dp manager {} unit_status set to {}.".format(self.unit_id, self.unit_status))
+        async def instance_set_unit_status_callback(fut, instance_id: str) -> None:
+            ret = fut.result()[0]
+            if isinstance(ret, Exception):
+                await self._broadcast_dead_instances_to_cluster_servers([instance_id])
+                self._scale_down([instance_id])
+
         tasks = []
-        for instance in self.instances:
+        for ins_id, ins_handle in self.instances.items():
             task = asyncio.gather(
-                asyncio_wait_for_ray_remote_call_with_timeout(instance.set_unit_status, status),
+                asyncio_wait_for_ray_remote_call_with_timeout(ins_handle.set_unit_status, status),
                 return_exceptions=True
             )
+            task.add_done_callback(
+                partial(
+                    instance_set_unit_status_callback, instance_id=ins_id
+                )
+            )
             tasks.append(task)
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        self.unit_status = status
+
+    async def check_instance_failover_state(self) -> bool:
+        async def check_instance_ready_to_die_done_callback(fut, instance_id: str):
+            ret = fut.result()[0]
+            if isinstance(ret, Exception):
+                log_instance_exception(ret, instance_id, "get_unit_status")
+                await self._broadcast_dead_instances_to_cluster_servers([instance_id])
+                self._scale_down([instance_id])
+            else:
+                if ret == UnitStatus.STOPPED:
+                    stopped_instances.append(ret)
+
+        tasks = []
+        stopped_instances = []
+        for instance_id, instance in self.instances.items():
+            task = asyncio.gather(
+                asyncio_wait_for_ray_remote_call_with_timeout(instance.get_unit_status),
+                return_exceptions=True
+            )
+            task.add_done_callback(
+                partial(check_instance_ready_to_die_done_callback, instance_id=instance_id)
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_stopped = len(self.instances) == 0 or len(self.instances) == len(stopped_instances)
+        return all_stopped

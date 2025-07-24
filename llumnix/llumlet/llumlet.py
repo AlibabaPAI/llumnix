@@ -12,7 +12,8 @@
 # limitations under the License.
 
 import asyncio
-from typing import List, Union, Iterable, Any, Optional
+import time
+from typing import List, Tuple, Union, Iterable, Any, Optional
 
 import ray
 import ray.actor
@@ -33,9 +34,9 @@ from llumnix.ray_utils import (
     get_llumnix_actor_handle,
     get_llumnix_actor_name,
 )
-from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
+from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL, RAY_RPC_TIMEOUT
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import (MigrationType, RequestIDType, BackendType,
+from llumnix.utils import (MigrationType, RequestIDType, BackendType, InstanceContext,
                            InstanceType, UnitStatus, FailoverMigrationStatus)
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
@@ -88,6 +89,8 @@ class Llumlet:
         self.llumlet_metrics = LlumletMetrics()
 
         self.unit_status = UnitStatus.HEALTH
+        self.failover_migration_start_time = None
+
         asyncio.create_task(self._check_engine_state_loop())
 
     def __repr__(self):
@@ -163,6 +166,8 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         instance_info: InstanceInfo = self.backend_engine.get_instance_info()
         instance_info.instance_type = self.instance_args.instance_type
+        instance_info.unit_status = self.unit_status
+        instance_info.unit_id = self.instance_id.split("_")[0]
         instance_info.enable_defrag = self.instance_args.enable_defrag
         self.instance_load_calculator.compute_instance_load(instance_info)
         if self.enable_migration:
@@ -175,13 +180,26 @@ class Llumlet:
         await self.backend_engine.is_ready()
         return True
 
+    def set_unit_status(self, status: UnitStatus) -> None:
+        self.unit_status = status
+        logger.info("Llumlet(instance_id={}, instance_type={}) unit_status set to {}.".format(
+            self.instance_id, self.instance_args.instance_type, self.unit_status))
+
+    def get_unit_status(self) -> FailoverMigrationStatus:
+        return self.unit_status
+
     async def get_instance_type(self) -> InstanceType:
         await self.backend_engine.is_ready()
         return self.instance_args.instance_type
 
-    async def get_engine_context(self) -> str:
+    async def get_engine_context(self) -> InstanceContext:
         await self.backend_engine.is_ready()
         return self.backend_engine.get_engine_context()
+
+    async def get_engine_context_and_instance_info(self) -> Tuple[InstanceContext, InstanceInfo]:
+        instance_context = await self.get_engine_context()
+        instance_info = self.backend_engine.get_instance_info()
+        return instance_context, instance_info
 
     async def generate(
         self,
@@ -211,9 +229,24 @@ class Llumlet:
         dst_instance_id: str,
         migration_type: Optional[MigrationType] = None
     ) -> List[RequestIDType]:
-        return await self.migration_coordinator.migrate_out(
-            dst_instance_actor, dst_instance_id, migration_type
-        )
+        if migration_type == MigrationType.FAILOVER_MIGRATION:
+            self.failover_migration_start_time = self.failover_migration_start_time or time.perf_counter()
+            if self.unit_status in [UnitStatus.BROKEN, UnitStatus.HEALTH]:
+                self.unit_status = UnitStatus.FAILOVER_MIGRATING
+
+        migrated_request_ids = await self.migration_coordinator.migrate_out(
+            dst_instance_actor, dst_instance_id, migration_type)
+
+        if migration_type == MigrationType.FAILOVER_MIGRATION:
+            inflight_dispatch_time = time.perf_counter() - self.failover_migration_start_time
+            if inflight_dispatch_time > RAY_RPC_TIMEOUT:
+                instance_info: InstanceInfo = self.backend_engine.get_instance_info()
+                num_running_requests = instance_info.num_running_requests
+                num_waiting_requests = instance_info.num_waiting_requests
+                if num_running_requests == 0 and num_waiting_requests == 0:
+                    self.unit_status = UnitStatus.STOPPED
+
+        return migrated_request_ids
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)
@@ -245,15 +278,3 @@ class Llumlet:
         if asyncio.iscoroutinefunction(executor):
             return await executor(*args)
         return executor(*args)
-
-# ================== apis called by DPManager ==================
-
-    def set_unit_status(self, status: UnitStatus) -> None:
-        self.unit_status = status
-        logger.info("Llumlet(instance_id={}, instance_type={}) unit_status set to {}.".format(
-            self.instance_id, self.instance_args.instance_type, self.unit_status))
-
-    def get_failover_migration_status(self) -> FailoverMigrationStatus:
-        assert self.unit_status == UnitStatus.BROKEN, \
-            "'get_failover_migration_status' shoule only be called when the unit is broken."
-        # TODO: return failover migration status here.

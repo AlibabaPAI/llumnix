@@ -43,7 +43,9 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
 @dataclass
 class InstanceInfo:
     instance_id: str = ""
+    unit_id: str = ""
     instance_type: InstanceType = None
+    unit_status: UnitStatus = None
 
     step_id: int = None
     timestamp: float = None
@@ -104,6 +106,10 @@ class InstanceInfo:
 
     def __repr__(self):
         return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type})"
+
+    def is_unit_broken(self):
+        return self.unit_status != UnitStatus.HEALTH
+
 
 def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
                         key_attr: str,

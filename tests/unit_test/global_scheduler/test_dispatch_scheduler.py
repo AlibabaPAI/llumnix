@@ -546,7 +546,7 @@ def test_broken_unit_filter():
 
     # Check that all remaining instances are HEALTH
     for instance_info in filtered_instance_infos.values():
-        assert instance_info.unit_status == UnitStatus.HEALTH
+        assert instance_info.unit_status == UnitStatus.HEALTHY
 
     # Check that the number of remaining instances is correct
     assert len(filtered_instance_infos) == instance_num - broken_instance_num

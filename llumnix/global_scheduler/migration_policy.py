@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import random
 from typing import List, Tuple
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -117,9 +116,11 @@ class Failover(MigrationPolicy):
         migrate_instance_pairs = []
 
         if len(dst_instance_infos) > 0:
+            cur_dst_idx = 0
             for src_instance_info in src_instance_infos:
-                dst_instance_id = random.choice(available_dst_instance_ids)
+                dst_instance_id = available_dst_instance_ids[cur_dst_idx]
                 migrate_instance_pairs.append((src_instance_info.instance_id, dst_instance_id))
+                cur_dst_idx = (cur_dst_idx + 1) % len(available_dst_instance_ids)
 
         return migrate_instance_pairs
 

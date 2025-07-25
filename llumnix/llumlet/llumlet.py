@@ -12,7 +12,6 @@
 # limitations under the License.
 
 import asyncio
-import time
 from typing import List, Tuple, Union, Iterable, Any, Optional
 
 import ray
@@ -34,7 +33,7 @@ from llumnix.ray_utils import (
     get_llumnix_actor_handle,
     get_llumnix_actor_name,
 )
-from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL, RAY_RPC_TIMEOUT
+from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import (MigrationType, RequestIDType, BackendType, InstanceContext,
                            InstanceType, UnitStatus)
@@ -87,9 +86,7 @@ class Llumlet:
                 instance_args.migration_max_stages,
             )
         self.llumlet_metrics = LlumletMetrics()
-
-        self.unit_status = UnitStatus.HEALTH
-        self.failover_migration_start_time = None
+        self.unit_status = UnitStatus.HEALTHY
 
         asyncio.create_task(self._check_engine_state_loop())
 
@@ -173,7 +170,6 @@ class Llumlet:
         if self.enable_migration:
             instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
             instance_info.is_migrating = self.migration_coordinator.is_migrating()
-        instance_info.unit_status = self.unit_status
         return instance_info
 
     async def is_ready(self):
@@ -230,21 +226,20 @@ class Llumlet:
         migration_type: Optional[MigrationType] = None
     ) -> List[RequestIDType]:
         if migration_type == MigrationType.FAILOVER_MIGRATION:
-            self.failover_migration_start_time = self.failover_migration_start_time or time.perf_counter()
-            if self.unit_status in [UnitStatus.BROKEN, UnitStatus.HEALTH]:
-                self.unit_status = UnitStatus.FAILOVER_MIGRATING
+            logger.info("Llumlet(instance_id={}, instance_type={}) begin to run {}.".format(
+                self.instance_id, self.instance_args.instance_type, migration_type))
 
         migrated_request_ids = await self.migration_coordinator.migrate_out(
             dst_instance_actor, dst_instance_id, migration_type)
 
         if migration_type == MigrationType.FAILOVER_MIGRATION:
-            inflight_dispatch_time = time.perf_counter() - self.failover_migration_start_time
-            if inflight_dispatch_time > RAY_RPC_TIMEOUT:
-                instance_info: InstanceInfo = self.backend_engine.get_instance_info()
-                num_running_requests = instance_info.num_running_requests
-                num_waiting_requests = instance_info.num_waiting_requests
-                if num_running_requests == 0 and num_waiting_requests == 0:
-                    self.unit_status = UnitStatus.STOPPED
+            instance_info: InstanceInfo = self.backend_engine.get_instance_info()
+            num_running_requests = instance_info.num_running_requests
+            num_waiting_requests = instance_info.num_waiting_requests
+            if num_running_requests == 0 and num_waiting_requests == 0:
+                self.unit_status = UnitStatus.STOPPED
+                logger.info("Llumlet(instance_id={}, instance_type={}) set unit_status to {}.".format(
+                    self.instance_id, self.instance_args.instance_type, self.unit_status))
 
         return migrated_request_ids
 

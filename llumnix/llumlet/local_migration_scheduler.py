@@ -16,6 +16,7 @@ import numpy as np
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
 from llumnix.backends.backend_interface import BackendBaseInterface
+from llumnix.utils import MigrationType
 
 
 class LocalMigrationScheduler:
@@ -23,9 +24,14 @@ class LocalMigrationScheduler:
         self.request_migration_policy = request_migration_policy
         self.backend_engine = backend_engine
 
-    def get_migrate_out_requests(self, min_request_len=0, max_request_len=np.inf) -> List[LlumnixRequest]:
+    def get_migrate_out_requests(
+        self,
+        migration_type: Optional[MigrationType] = None,
+        min_request_len: int = 0,
+        max_request_len: int = np.inf
+    ) -> List[LlumnixRequest]:
         # Requests meet the strict pre-migration always have higher prioirity than other migration policy.
-        migrate_out_requests: List[LlumnixRequest] = self.get_required_migration_request()
+        migrate_out_requests: List[LlumnixRequest] = self.get_required_migration_request(migration_type)
         if len(migrate_out_requests) == 0:
             if self.request_migration_policy == 'LCR':
                 migrate_out_requests = self._get_last_running_request(min_request_len, max_request_len)
@@ -39,17 +45,23 @@ class LocalMigrationScheduler:
                 migrate_out_requests = self._get_first_waiting_and_shortest_running_requests(min_request_len, max_request_len)
         return migrate_out_requests
 
-    # The function is used to retrieve requests on the backend that have already met the expected_steps.
-    # (xinyi): Currently, the function is only used for Prefill-decode disaggregation,
-    # and only selects request that migrates from the prefill instance to the decode instance.
-    def get_required_migration_request(self):
-        running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
+    def get_required_migration_request(self, migration_type: Optional[MigrationType] = None):
         required_migration_requests = []
-        for request in reversed(running):
-            if request.llumnix_status == RequestStatus.RUNNING \
-                and request.inference_type == RequestInferenceType.DECODE \
-                and request.output_len >= request.expected_steps:
-                required_migration_requests.append(request)
+        if migration_type == MigrationType.FAILOVER_MIGRATION:
+            running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
+            waiting: List[LlumnixRequest] = self.backend_engine.get_waiting_queue()
+            required_migration_requests.extend(running)
+            required_migration_requests.extend(waiting)
+        else:
+            # The function is used to retrieve requests on the backend that have already met the expected_steps.
+            # Currently, the code below is only used for Prefill-decode disaggregation, and only selects request
+            # that migrates from the prefill instance to the decode instance.
+            running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
+            for request in reversed(running):
+                if request.llumnix_status == RequestStatus.RUNNING \
+                    and request.inference_type == RequestInferenceType.DECODE \
+                    and request.output_len >= request.expected_steps:
+                    required_migration_requests.append(request)
         return required_migration_requests
 
     def _filter_running_queue(self, running, min_request_len, max_request_len):

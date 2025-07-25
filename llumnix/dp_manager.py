@@ -15,6 +15,7 @@ from functools import partial
 from typing import List, Dict, Optional, Union, Iterable
 from enum import Enum
 import asyncio
+import time
 
 import ray
 import ray.actor
@@ -123,7 +124,7 @@ class DPManager:
         else: # DPGroupStatus.COMPLETE
             logger.info("Restart dp manager successfully, dp group is complete.")
 
-        self.unit_status = UnitStatus.HEALTH
+        self.unit_status = UnitStatus.HEALTHY
         asyncio.create_task(self._heartbeat_loop(HEARTBEAT_INTERVAL))
 
     def is_ready(self) -> bool:
@@ -415,20 +416,24 @@ class DPManager:
 
     async def _heartbeat_loop(self, interval: float) -> None:
         """Watch cached instances and servers health."""
+        detected_unit_broken_time = None
+        unit_failover_timeout = float(llumnix_envs.UNIT_FAILOVER_TIMEOUT)
 
         while True:
             try:
                 await asyncio.sleep(interval)
                 # If the unit is health up to this point, continue checking the status of instances and servers.
-                if self.unit_status == UnitStatus.HEALTH:
+                if self.unit_status == UnitStatus.HEALTHY:
                     dead_instance_ids = await check_actors_health(self.instances)
                     dead_instance_ids.extend(await check_actors_health(self.servers))
                     if len(dead_instance_ids) > 0:
                         await self._set_unit_status(UnitStatus.BROKEN)
+                        detected_unit_broken_time = time.perf_counter()
                 # If the unit has been broken already, wait for instances to migrate requests.
                 else:
                     all_stopped = await self.check_instance_failover_state()
-                    if all_stopped:
+                    timeout_to_failover = time.perf_counter() - detected_unit_broken_time > unit_failover_timeout
+                    if all_stopped or timeout_to_failover:
                         await self.stop()
             # pylint: disable=broad-except
             except Exception:

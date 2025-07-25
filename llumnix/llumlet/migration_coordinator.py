@@ -256,7 +256,7 @@ class MigrationCoordinator:
             )
             return []
 
-        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests()
+        migrate_out_requests = self.migration_scheduler.get_migrate_out_requests(migration_type)
 
         if len(migrate_out_requests) == 0:
             return []
@@ -285,7 +285,7 @@ class MigrationCoordinator:
                                        migrate_out_request: LlumnixRequest,
                                        migration_type: Optional[MigrationType] = None) -> List[LlumnixRequest]:
         t0 = time.time()
-        logger.info("{}->{} begin migrate out".format(self.instance_id, dst_instance_id))
+        logger.info("{}->{} begin migrate out {}.".format(self.instance_id, dst_instance_id, migrate_out_request.request_id))
         migrated_request = []
 
         if migrate_out_request.llumnix_status == RequestStatus.RUNNING:

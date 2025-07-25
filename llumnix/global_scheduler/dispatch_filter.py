@@ -51,7 +51,7 @@ class BrokenUnitFilter(DispatchFilter):
                ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
         available_instance_infos, available_instance_num_requests = {}, {}
         for ins_info, ins_num_requests in zip(instance_infos.values(), instance_num_requests.values()):
-            if ins_info.unit_status == UnitStatus.HEALTH:
+            if ins_info.unit_status == UnitStatus.HEALTHY:
                 available_instance_infos[ins_info.instance_id] = ins_info
                 available_instance_num_requests[ins_info.instance_id] = ins_num_requests
         return available_instance_infos, available_instance_num_requests

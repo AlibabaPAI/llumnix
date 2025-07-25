@@ -192,24 +192,27 @@ class MigrationScheduler:
         self.unit_failover_policy = MigrationPolicyFactory.get_policy(
             "failover", migrate_out_load_threshold=self.filter_config.migrate_out_load_threshold)
 
-    def push_migrations(self, instance_info: Dict[str, InstanceInfo]) -> List[List[Tuple[str, str]]]:
-        migration_tasks = []
+    def push_migrations(
+        self,
+        instance_info: Dict[str, InstanceInfo]
+    ) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+        general_migration_tasks = []
 
         if self.enable_pd_disagg:
-            migration_tasks.append((
+            general_migration_tasks.append((
                 MigrationType.PD_MIGRATION,
                 self._pair_migration(instance_info, self.p2d_transfer_filter_pipeline, self.defrag_policy)
             ))
 
         if not self._enable_pd():
-            migration_tasks.append((
+            general_migration_tasks.append((
                 MigrationType.NEUTRAL_LOAD_BALANCE,
                 self._pair_migration(instance_info, self.no_constraints_load_balance_filter_pipeline,
                                      self.pair_migration_policy)
             ))
 
         elif not self.enable_engine_pd_disagg:
-            migration_tasks.append((
+            general_migration_tasks.append((
                 MigrationType.DD_LOAD_BALANCE,
                 self._pair_migration(instance_info, self.decode_load_balance_filter_pipeline, self.pair_migration_policy)
             ))
@@ -221,41 +224,42 @@ class MigrationScheduler:
                 for instance_info in instance_infos.values()
             )
             if exist_free_d(instance_info):
-                migration_tasks.append((
+                general_migration_tasks.append((
                     MigrationType.DYNAMIC_P_TO_D,
                     self._pair_migration(instance_info, self.dynamic_p2d_filter_pipeline, self.defrag_policy)
                 ))
             else:
-                migration_tasks.append((
+                general_migration_tasks.append((
                     MigrationType.AGGREGATE_DYNAMIC_P,
                     self._pair_migration(instance_info, self.aggrate_dynamic_p_filter_pipeline,
                                          self.aggrate_dynamic_p_policy)
                 ))
 
-            migration_tasks.append((
+            general_migration_tasks.append((
                 MigrationType.EASE_D_WITH_P_BUBBLE,
                 self._pair_migration(instance_info, self.ease_d_with_empty_p_filter_pipeline, self.defrag_policy)
             ))
 
+        failover_migration_tasks = []
         if not self._enable_pd():
-            migration_tasks.append((
+            failover_migration_tasks.append((
                 MigrationType.FAILOVER_MIGRATION,
                 self._pair_migration(instance_info, self.unit_failover_pipeline,
                                      self.unit_failover_policy, skip_broken_unit=False)
             ))
         else:
-            migration_tasks.append((
+            failover_migration_tasks.append((
                 MigrationType.FAILOVER_MIGRATION,
                 self._pair_migration(instance_info, self.prefill_unit_failover_pipeline,
                                      self.unit_failover_policy, skip_broken_unit=False)
             ))
-            migration_tasks.append((
+            failover_migration_tasks.append((
                 MigrationType.FAILOVER_MIGRATION,
                 self._pair_migration(instance_info, self.decode_unit_failover_pipeline,
                                      self.unit_failover_policy, skip_broken_unit=False)
             ))
 
-        return migration_tasks
+        return general_migration_tasks, failover_migration_tasks
 
     # migration_policy must ensure that the specific instance_info does not appear in both src and dst simultaneously
     def _pair_migration(self,
@@ -266,7 +270,7 @@ class MigrationScheduler:
         if not skip_broken_unit:
             available_instance_infos = {}
             for ins_id, ins_info in instance_info.items():
-                if ins_info.unit_status == UnitStatus.HEALTH:
+                if ins_info.unit_status == UnitStatus.HEALTHY:
                     available_instance_infos[ins_id] = ins_info
         else:
             available_instance_infos = instance_info

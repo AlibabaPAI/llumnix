@@ -72,7 +72,7 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
         self.revised_args = RevisedArgs()
         if engine_args.kv_transfer_config:
             self.revised_args.kv_port = engine_args.kv_transfer_config.kv_port
-            self.revised_args.rpc_port = engine_args.kv_transfer_config.kv_connector_extra_config["rpc_port"]
+            self.revised_args.rpc_port = engine_args.kv_transfer_config.kv_connector_extra_config.get("rpc_port", 30000)
 
     def _get_world_size(self, engine_args: "AsyncEngineArgs"):
         world_size = engine_args.pipeline_parallel_size * engine_args.tensor_parallel_size

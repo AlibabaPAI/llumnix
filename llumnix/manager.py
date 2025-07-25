@@ -283,11 +283,13 @@ class Manager:
         # If encounter error during migration, to make manager keep running, we do not raise exception.
         try:
             instance_infos = self.global_scheduler.instance_info
-            migrate_tasks = self.global_scheduler.push_migrations(instance_infos)
+            general_migration_tasks, failover_migration_tasks = self.global_scheduler.push_migrations(instance_infos)
 
-            for task in migrate_tasks:
+            exist_failover_migration_task = False
+            for task in failover_migration_tasks:
                 migration_type, migrate_pairs = task
                 for src_instance_id, dst_instance_id in migrate_pairs:
+                    exist_failover_migration_task = True
                     dst_instance_actor = self.instances[dst_instance_id]
                     asyncio.create_task(
                         asyncio_wait_for_ray_remote_call_with_timeout(
@@ -295,6 +297,19 @@ class Manager:
                             dst_instance_actor, dst_instance_id, migration_type
                         )
                     )
+
+            if not exist_failover_migration_task:
+                for task in general_migration_tasks:
+                    migration_type, migrate_pairs = task
+                    for src_instance_id, dst_instance_id in migrate_pairs:
+                        dst_instance_actor = self.instances[dst_instance_id]
+                        asyncio.create_task(
+                            asyncio_wait_for_ray_remote_call_with_timeout(
+                                self.instances[src_instance_id].migrate_out,
+                                dst_instance_actor, dst_instance_id, migration_type
+                            )
+                        )
+
         # pylint: disable=broad-except
         except Exception:
             logger.critical(
@@ -302,12 +317,17 @@ class Manager:
                 exc_info=True, stack_info=True
             )
 
-    async def _get_engine_context(self, ins_id: str, instance_actor: Llumlet) -> InstanceContext:
+    async def _get_engine_context_and_instance_info(
+        self,
+        ins_id: str,
+        instance_actor: Llumlet
+    ) -> InstanceContext:
         try:
-            engine_context = await asyncio_wait_for_ray_remote_call_with_timeout(
-                instance_actor.get_engine_context
+            engine_context, instance_info = await asyncio_wait_for_ray_remote_call_with_timeout(
+                instance_actor.get_engine_context_and_instance_info
             )
             self.instance_context[ins_id] = engine_context
+            self.global_scheduler.instance_info[ins_id] = instance_info
             logger.info("Bind instance id {} with engine context {}.".format(ins_id, engine_context))
             return engine_context
         # pylint: disable=broad-except
@@ -323,29 +343,31 @@ class Manager:
     ) -> List[str]:
         available_instance_ids, available_instance_actors, available_instance_types = [], [], []
 
-        def _get_engine_context_callback(
-            fut,
-            instance_idx: int,
-            scale_up_info: List[List],
-            available_scale_up_info: List[List]
+        def _get_engine_context_and_instance_info_callback(
+            instance_id: str,
+            instance_actor_handle: Llumlet,
+            instance_type: InstanceType,
+            fut
         ) -> None:
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
-                for item_idx, scale_up_info_item in enumerate(scale_up_info):
-                    available_scale_up_info[item_idx].append(scale_up_info_item[instance_idx])
+                available_instance_ids.append(instance_id)
+                available_instance_actors.append(instance_actor_handle)
+                available_instance_types.append(instance_type)
 
         tasks = []
-        for ins_idx, ins_info in enumerate(zip(instance_ids, instance_actor_handles)):
-            ins_id, ins_actor = ins_info
+        for ins_id, ins_actor, ins_type in zip(instance_ids, instance_actor_handles, instance_types):
             if ins_id not in self.instances:
-                task = asyncio.gather(self._get_engine_context(ins_id, ins_actor), return_exceptions=True)
+                task = asyncio.gather(self._get_engine_context_and_instance_info(ins_id, ins_actor),
+                                      return_exceptions=True)
                 task.add_done_callback(
                     partial(
-                        _get_engine_context_callback,
-                        instance_idx=ins_idx,
-                        scale_up_info=[instance_ids, instance_actor_handles, instance_types],
-                        available_scale_up_info=[available_instance_ids, available_instance_actors, available_instance_types])
+                        _get_engine_context_and_instance_info_callback,
+                        instance_id=ins_id,
+                        instance_actor=ins_actor,
+                        instance_type=ins_type,
                     )
+                )
                 tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
 

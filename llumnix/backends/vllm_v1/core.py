@@ -219,6 +219,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 server_info_dict[server_id] = server_info
 
         return server_request_outputs, server_info_dict
+
     def _update_instance_info(self):
         """Update instance info from executor and scheduler after step"""
         instance_info: InstanceInfo = self.instance_info # type: ignore

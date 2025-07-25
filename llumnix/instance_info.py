@@ -27,7 +27,7 @@ from llumnix.load_computation import (
 )
 from llumnix.llumlet.request import RequestInferenceType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import InstanceType
+from llumnix.utils import InstanceType, UnitStatus
 
 logger = init_logger(__name__)
 
@@ -43,7 +43,9 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
 @dataclass
 class InstanceInfo:
     instance_id: str = ""
+    unit_id: str = ""
     instance_type: InstanceType = None
+    unit_status: UnitStatus = None
 
     step_id: int = None
     timestamp: float = None
@@ -92,6 +94,9 @@ class InstanceInfo:
     # instance level info for load computation
     enable_defrag: bool = False
 
+    # unit level info for failover
+    unit_status: UnitStatus = UnitStatus.HEALTHY
+
     def __post_init__(self) -> None:
         self.num_available_gpu_blocks = self.num_total_gpu_blocks - self.num_used_gpu_blocks
         self.num_available_gpu_blocks_waiting = self.num_available_gpu_blocks - self.num_blocks_all_waiting_requests
@@ -101,6 +106,10 @@ class InstanceInfo:
 
     def __repr__(self):
         return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type})"
+
+    def is_unit_broken(self):
+        return self.unit_status != UnitStatus.HEALTHY
+
 
 def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
                         key_attr: str,

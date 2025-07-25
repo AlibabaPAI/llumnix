@@ -27,6 +27,7 @@ from llumnix.constants import (
     CACHE_TRANSFER_THRESHOLD,
     CACHE_TRANSFER_PENALTY_FACTOR,
     UNIT_READY_TIMEOUT,
+    UNIT_FAILOVER_TIMEOUT,
 )
 
 if TYPE_CHECKING:
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     MISSWAITINGTOKENS_BUSY_THRESHOLD: float = 0.0
     CACHE_TRANSFER_THRESHOLD: int = 0
     CACHE_TRANSFER_PENALTY_FACTOR: float = 0.0
+    UNIT_FAILOVER_TIMEOUT: float = 0.0
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -136,6 +138,10 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: os.getenv("CACHE_TRANSFER_THRESHOLD", str(CACHE_TRANSFER_THRESHOLD)),
     "CACHE_TRANSFER_PENALTY_FACTOR":
     lambda: os.getenv("CACHE_TRANSFER_PENALTY_FACTOR", str(CACHE_TRANSFER_PENALTY_FACTOR)),
+
+    # used in unit failover
+    "UNIT_FAILOVER_TIMEOUT":
+    lambda: os.getenv("UNIT_FAILOVER_TIMEOUT", str(UNIT_FAILOVER_TIMEOUT)),
 }
 
 

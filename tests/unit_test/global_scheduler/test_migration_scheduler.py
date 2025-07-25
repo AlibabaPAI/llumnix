@@ -20,9 +20,9 @@ from llumnix.load_computation import KvBlocksRatioLoad, AdaptiveDecodeBatchLoad,
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.migration_filter import (MigrationFilterPipeline, MigrationFilterConfig,
                                                        MigrationFilterFactory, CustomFilter)
-from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, Balanced, MigrationPolicy
+from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, Balanced, MigrationPolicy, Failover
 from llumnix.internal_config import DispatchLoadMetricConfig
-from llumnix.utils import InstanceType
+from llumnix.utils import InstanceType, UnitStatus
 
 MIGRATE_OUT_LOAD_THRESHOLD = -3.0
 INSTANCE_NUM = 15
@@ -199,6 +199,36 @@ def test_defrag_migration_policy():
         assert prev_dst_migration_load is None or prev_dst_migration_load < migrate_in_instance.migration_load_metric
         prev_dst_migration_load = migrate_in_instance.migration_load_metric
 
+def test_failover_migration_policy():
+    defrag_migration_policy: Failover = MigrationPolicyFactory.get_policy(
+        'failover', migrate_out_load_threshold=MIGRATE_OUT_LOAD_THRESHOLD)
+    all_instance_infos: Dict[str, InstanceInfo] = {}
+
+    src_instance_infos = []
+    for idx in range(INSTANCE_NUM//2):
+        instance_info = InstanceInfo()
+        instance_info.instance_id = f"src_instance_id_{idx}"
+        all_instance_infos[instance_info.instance_id] = instance_info
+        instance_info.unit_id = idx
+        instance_info.unit_status = UnitStatus.FAILOVER_MIGRATING
+        src_instance_infos.append(instance_info)
+
+    dst_instance_infos = []
+    for idx in range(INSTANCE_NUM):
+        instance_info = InstanceInfo()
+        instance_info.instance_id = f"dst_instance_id_{idx}"
+        all_instance_infos[instance_info.instance_id] = instance_info
+        instance_info.unit_id = idx
+        instance_info.unit_status = UnitStatus.HEALTHY
+        dst_instance_infos.append(instance_info)
+
+    migrate_instance_pairs = defrag_migration_policy.pair_migration(src_instance_infos, dst_instance_infos)
+    assert len(migrate_instance_pairs) == INSTANCE_NUM//2
+
+    for _, migrate_in_instance_id in migrate_instance_pairs:
+        assert all_instance_infos[migrate_in_instance_id].unit_id >= INSTANCE_NUM//2
+
+
 class MockMigrationScheduler(MigrationScheduler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -208,6 +238,9 @@ class MockMigrationScheduler(MigrationScheduler):
         self.dynamicp_d_migration_pairs = []
         self.dynamicp_dynamicp_migration_pairs = []
         self.dp_migration_pairs = []
+        self.unit_failover_migration_pairs = []
+        self.prefill_unit_failover_migration_pairs = []
+        self.decode_unit_failover_migration_pairs = []
 
     def reset_store(self):
         self.no_constraints_pairs = []
@@ -216,11 +249,15 @@ class MockMigrationScheduler(MigrationScheduler):
         self.dynamicp_d_migration_pairs = []
         self.dynamicp_dynamicp_migration_pairs = []
         self.dp_migration_pairs = []
+        self.unit_failover_migration_pairs = []
+        self.prefill_unit_failover_migration_pairs = []
+        self.decode_unit_failover_migration_pairs = []
 
     def _pair_migration(self,
                         instance_info: Dict[str, InstanceInfo],
                         migration_filter_pipeline: Optional[MigrationFilterPipeline],
-                        migration_policy: MigrationPolicy) -> List[Tuple[str, str]]:
+                        migration_policy: MigrationPolicy,
+                        skip_broken_unit: bool = True) -> List[Tuple[str, str]]:
         target_store = None
         if hasattr(self, 'p2d_transfer_filter_pipeline') \
             and migration_filter_pipeline == self.p2d_transfer_filter_pipeline:
@@ -240,8 +277,17 @@ class MockMigrationScheduler(MigrationScheduler):
         elif hasattr(self, 'ease_d_with_empty_p_filter_pipeline') \
             and migration_filter_pipeline == self.ease_d_with_empty_p_filter_pipeline:
             target_store = self.dp_migration_pairs
-
-        migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter_pipeline, migration_policy)
+        elif hasattr(self, 'unit_failover_pipeline') \
+            and migration_filter_pipeline == self.unit_failover_pipeline:
+            target_store = self.unit_failover_migration_pairs
+        elif hasattr(self, 'prefill_unit_failover_pipeline') \
+            and migration_filter_pipeline == self.prefill_unit_failover_pipeline:
+            target_store = self.prefill_unit_failover_migration_pairs
+        elif hasattr(self, 'decode_unit_failover_pipeline') \
+            and migration_filter_pipeline == self.decode_unit_failover_pipeline:
+            target_store = self.decode_unit_failover_migration_pairs
+        migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter_pipeline,
+                                                         migration_policy, skip_broken_unit)
         target_store.extend(migrate_instance_pairs)
 
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg",
@@ -431,3 +477,48 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
             and migrate_out_instance.instance_type == InstanceType.DECODE
         assert migrate_in_instance.num_running_requests == 0 \
             and migrate_in_instance.instance_type == InstanceType.PREFILL
+
+@pytest.mark.parametrize("enable_pd_disagg", [True, False])
+def test_unit_failover_migration_scheduler(enable_pd_disagg):
+    dispatch_load_metric_config = DispatchLoadMetricConfig(
+        dispatch_load_metric='remaining_steps',
+        dispatch_prefill_load_metric='kv_blocks_ratio',
+        dispatch_decode_load_metric='remaining_steps',
+        dispatch_prefill_as_decode_load_metric='adaptive_decode',
+        dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
+    )
+    migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
+                                                 False, False, False, dispatch_load_metric_config)
+    all_instance_infos: Dict[str, InstanceInfo] = {}
+    if not migration_scheduler._enable_pd():
+        for idx in range(INSTANCE_NUM):
+            instance_info = InstanceInfo()
+            instance_info.instance_type = InstanceType.NEUTRAL
+            instance_info.instance_id = f"instance_id_{idx}"
+            instance_info.unit_id = idx
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            all_instance_infos[instance_info.instance_id] = instance_info
+    else:
+        for idx in range(INSTANCE_NUM):
+            instance_info = InstanceInfo()
+            instance_info.instance_type = InstanceType.PREFILL
+            instance_info.instance_id = f"prefill_instance_id_{idx}"
+            instance_info.unit_id = idx
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            all_instance_infos[instance_info.instance_id] = instance_info
+
+        for idx in range(INSTANCE_NUM):
+            instance_info = InstanceInfo()
+            instance_info.instance_type = InstanceType.DECODE
+            instance_info.instance_id = f"decode_instance_id_{idx}"
+            instance_info.unit_id = idx
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            all_instance_infos[instance_info.instance_id] = instance_info
+
+    migration_scheduler.push_migrations(all_instance_infos)
+
+    if enable_pd_disagg:
+        assert len(migration_scheduler.unit_failover_migration_pairs) > 0
+    else:
+        assert len(migration_scheduler.prefill_unit_failover_migration_pairs) > 0
+        assert len(migration_scheduler.decode_unit_failover_migration_pairs) > 0

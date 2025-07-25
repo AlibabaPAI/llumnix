@@ -95,7 +95,7 @@ class InstanceInfo:
     enable_defrag: bool = False
 
     # unit level info for failover
-    unit_status: UnitStatus = UnitStatus.HEALTH
+    unit_status: UnitStatus = UnitStatus.HEALTHY
 
     def __post_init__(self) -> None:
         self.num_available_gpu_blocks = self.num_total_gpu_blocks - self.num_used_gpu_blocks
@@ -108,7 +108,7 @@ class InstanceInfo:
         return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type})"
 
     def is_unit_broken(self):
-        return self.unit_status != UnitStatus.HEALTH
+        return self.unit_status != UnitStatus.HEALTHY
 
 
 def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],

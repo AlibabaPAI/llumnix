@@ -219,7 +219,7 @@ def test_failover_migration_policy():
         instance_info.instance_id = f"dst_instance_id_{idx}"
         all_instance_infos[instance_info.instance_id] = instance_info
         instance_info.unit_id = idx
-        instance_info.unit_status = UnitStatus.HEALTH
+        instance_info.unit_status = UnitStatus.HEALTHY
         dst_instance_infos.append(instance_info)
 
     migrate_instance_pairs = defrag_migration_policy.pair_migration(src_instance_infos, dst_instance_infos)
@@ -496,7 +496,7 @@ def test_unit_failover_migration_scheduler(enable_pd_disagg):
             instance_info.instance_type = InstanceType.NEUTRAL
             instance_info.instance_id = f"instance_id_{idx}"
             instance_info.unit_id = idx
-            instance_info.unit_status = UnitStatus.HEALTH if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
             all_instance_infos[instance_info.instance_id] = instance_info
     else:
         for idx in range(INSTANCE_NUM):
@@ -504,7 +504,7 @@ def test_unit_failover_migration_scheduler(enable_pd_disagg):
             instance_info.instance_type = InstanceType.PREFILL
             instance_info.instance_id = f"prefill_instance_id_{idx}"
             instance_info.unit_id = idx
-            instance_info.unit_status = UnitStatus.HEALTH if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
             all_instance_infos[instance_info.instance_id] = instance_info
 
         for idx in range(INSTANCE_NUM):
@@ -512,7 +512,7 @@ def test_unit_failover_migration_scheduler(enable_pd_disagg):
             instance_info.instance_type = InstanceType.DECODE
             instance_info.instance_id = f"decode_instance_id_{idx}"
             instance_info.unit_id = idx
-            instance_info.unit_status = UnitStatus.HEALTH if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
             all_instance_infos[instance_info.instance_id] = instance_info
 
     migration_scheduler.push_migrations(all_instance_infos)

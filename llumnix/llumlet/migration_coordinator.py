@@ -261,20 +261,24 @@ class MigrationCoordinator:
         if len(migrate_out_requests) == 0:
             return []
 
-        for migrate_out_request in migrate_out_requests:
-            migrate_out_request.is_migrating = True
+        def migration_request_callback(dst_instance_id, migrate_out_request, fut):
+            ret = fut.result()[0]
+            migrated_request_list.extend(migrated_request)
+            if isinstance(ret, Exception):
+                log_instance_exception(ret, dst_instance_id, "migrate_out", migrate_out_request.request_id)
 
         migrated_request_list = []
         for migrate_out_request in migrate_out_requests:
-            try:
-                migrated_request = await self._migrate_out_one_request(
-                    dst_instance_actor, dst_instance_id, migrate_out_request, migration_type)
-            # pylint: disable=W0703
-            except Exception as e:
-                log_instance_exception(e, dst_instance_id, "migrate_out", migrate_out_request.request_id)
-            migrated_request_list.extend(migrated_request)
-            if len(migrated_request) == 0 and migrate_out_request.eom:
-                break
+            migration_tasks = []
+            while self.has_migration_slot():
+                self.migrating_out_request_id_set.add(migrate_out_request.request_id)
+                migrate_out_request.is_migrating = True
+                migration_task = asyncio.gather(self._migrate_out_one_request(dst_instance_actor, dst_instance_id,
+                    migrate_out_request, migration_type), return_exceptions=True)
+                migration_task.add_done_callback(
+                    partial(migration_request_callback, dst_instance_id, migrate_out_request))
+                migration_tasks.append(migration_task)
+            await asyncio.gather(*migration_tasks, return_exceptions=True)
 
         return migrated_request_list
 

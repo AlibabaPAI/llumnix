@@ -170,6 +170,9 @@ def get_llumnix_env_vars():
         if key in llumnix_env_vars_keys:
             llumnix_env_vars[key] = value
 
+    llumnix_env_vars["BLLM_KVTRANS_FSNAMING_KEEPALIVE_S"] = "36000"
+    llumnix_env_vars["BLLM_KVTRANS_FSNAMING_TOLERATE_S"] = "360000"
+
     return llumnix_env_vars
 
 def get_service_instance_type(service_name: str) -> InstanceType:

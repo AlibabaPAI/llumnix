@@ -123,6 +123,7 @@ class LlumnixEngineArgsFactory:
         self.engine_args_dict: Dict[str, LlumnixEngineArgs] = {}
         self.enable_port_increment: bool = enable_port_increment
 
+        # NOTE(shejiarui): engine_args_dict is never used
         if self.load_registered_service:
             if not self.enable_pd:
                 instance_type_list = ["neutral"]

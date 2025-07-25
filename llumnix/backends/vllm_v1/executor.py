@@ -26,6 +26,7 @@ from vllm.v1.executor.ray_distributed_executor import RayDistributedExecutor
 from vllm.executor.ray_utils import RayWorkerWrapper
 from vllm.utils import (get_distributed_init_method,
                         get_ip, get_open_port, envs)
+from vllm.ray.ray_env import get_env_vars_to_copy
 from vllm.platforms import current_platform
 from vllm.v1.outputs import ModelRunnerOutput
 from vllm.ray.ray_env import get_env_vars_to_copy

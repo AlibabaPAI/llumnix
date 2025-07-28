@@ -98,7 +98,6 @@ class MigrationType(str, Enum):
 class UnitStatus(str, Enum):
     HEALTHY = "HEALTHY"
     BROKEN = "BROKEN"
-    FAILOVER_MIGRATING = "MIGRATING"
     STOPPED = "STOPPED"
 
 

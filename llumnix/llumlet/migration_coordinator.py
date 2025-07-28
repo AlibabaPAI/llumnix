@@ -264,9 +264,10 @@ class MigrationCoordinator:
 
         def migration_request_callback(dst_instance_id, migrate_out_request, fut):
             ret = fut.result()[0]
-            migrated_request_list.extend(migrated_request) # TODO(shejiarui): fix this
             if isinstance(ret, Exception):
                 log_instance_exception(ret, dst_instance_id, "migrate_out", migrate_out_request.request_id)
+            else:
+                migrated_request_list.extend(migrate_out_request)
 
         migrated_request_list = []
         for migrate_out_request in migrate_out_requests:

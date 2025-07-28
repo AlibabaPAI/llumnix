@@ -61,8 +61,6 @@ from llumnix.ray_utils import clear_gloo_backend_ray_resources
 
 logger = init_logger(__name__)
 
-# TODO(s5u13b): Handle exception of ray operations.
-# TODO(s5u13b): Refactor manager to divide functions into different classes.
 
 @ray.remote
 def clear_gloo_backend_ray_resources_task():

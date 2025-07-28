@@ -139,7 +139,6 @@ class Scaler:
         if self.backend_type == BackendType.VLLM_V1:
             # Mantain a monotonically increasing `client_index` for vLLM V1 APIServer.
             # It will be passed to APIServerActor through EntrypointsArgs.
-            # TODO(shejiarui): Do not use ray interval kv.
             current_client_index = -1
             try:
                 value = int(get_data_from_ray_internal_kv("scaler.client_index")) + 1

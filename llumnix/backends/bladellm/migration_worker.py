@@ -135,7 +135,6 @@ class MigrationWorker(migration_worker_pb2_grpc.MigrationWorkerServicer):
         return resp
 
 
-# TODO(s5u13b): Adapt to RemoteWorker.
 class MigrationLocalWorker(LocalWorker, MigrationWorker):
     def __init__(self, rank: int, serving_args: ServingArgs, instance_id: str,
                  migration_config: MigrationConfig, worker_ray_name: str) -> None:

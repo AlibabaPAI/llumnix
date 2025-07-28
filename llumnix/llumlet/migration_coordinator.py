@@ -383,7 +383,6 @@ class MigrationCoordinator:
             return MigrationStatus.ABORTED_SRC
 
         pre_stage_num_blocks = sum(migrate_out_request.stage_num_blocks_list)
-        # TODO(s5u13b): Make migration codes of vLLM and BladeLLM uniform (some functions are not async).
         incremental_blocks, incremental_token_ids, is_last_stage = \
             await self.backend_engine.get_request_incremental_blocks(migrate_out_request, pre_stage_num_blocks)
 

@@ -51,7 +51,6 @@ class ScalingScheduler:
             scale_down_num = 1
         return scale_up_num, scale_down_num
 
-
     def get_empty_instance_info(self) -> InstanceInfo:
         dummy_intance_info = InstanceInfo()
         dummy_intance_info.instance_id = -1

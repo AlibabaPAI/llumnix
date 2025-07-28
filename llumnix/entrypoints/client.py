@@ -41,8 +41,6 @@ from llumnix.utils import (
 
 logger = init_logger(__name__)
 
-# TODO(s5u13b): Find way to abstract generate function.
-
 
 class LlumnixClient(ABC):
     def __init__(self,
@@ -57,7 +55,6 @@ class LlumnixClient(ABC):
 
         self.instance_requests: Dict[str, set[RequestIDType]] = {}
         self.request_instances: Dict[RequestIDType, set[str]] = defaultdict(set)
-        # TODO(s5u13): Consider a better way to get instance handle without calling ray.
         self.cached_cluster_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():

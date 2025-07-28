@@ -170,8 +170,6 @@ def detect_migration_unsupported_engine_feature(engine_args: "ServingArgs") -> N
         unsupported_feature = "multi-lora serving"
     elif engine_args.use_sps:
         unsupported_feature = "speculative decoding"
-    elif engine_args.expert_parallel_size:
-        unsupported_feature = "expert parallel"
     elif not engine_args.disable_prompt_cache:
         unsupported_feature = "prompt caching"
 

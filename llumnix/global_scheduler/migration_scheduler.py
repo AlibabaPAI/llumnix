@@ -83,8 +83,8 @@ class MigrationScheduler:
     def _set_unit_failover_filter(self):
         unit_broken_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
         unit_broken_filter.set_filter_condtition(
-            src_filter=lambda instance_info: instance_info.is_unit_broken(),
-            dst_filter=lambda instance_info: not instance_info.is_unit_broken(),
+            src_filter=lambda instance_info: instance_info.is_unit_unhealthy(),
+            dst_filter=lambda instance_info: not instance_info.is_unit_unhealthy(),
         )
 
         if not self._enable_pd():
@@ -196,23 +196,23 @@ class MigrationScheduler:
         self,
         instance_info: Dict[str, InstanceInfo]
     ) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
-        general_migration_tasks = []
+        normal_migration_tasks = []
 
         if self.enable_pd_disagg:
-            general_migration_tasks.append((
+            normal_migration_tasks.append((
                 MigrationType.PD_MIGRATION,
                 self._pair_migration(instance_info, self.p2d_transfer_filter_pipeline, self.defrag_policy)
             ))
 
         if not self._enable_pd():
-            general_migration_tasks.append((
+            normal_migration_tasks.append((
                 MigrationType.NEUTRAL_LOAD_BALANCE,
                 self._pair_migration(instance_info, self.no_constraints_load_balance_filter_pipeline,
                                      self.pair_migration_policy)
             ))
 
         elif not self.enable_engine_pd_disagg:
-            general_migration_tasks.append((
+            normal_migration_tasks.append((
                 MigrationType.DD_LOAD_BALANCE,
                 self._pair_migration(instance_info, self.decode_load_balance_filter_pipeline, self.pair_migration_policy)
             ))
@@ -224,18 +224,18 @@ class MigrationScheduler:
                 for instance_info in instance_infos.values()
             )
             if exist_free_d(instance_info):
-                general_migration_tasks.append((
+                normal_migration_tasks.append((
                     MigrationType.DYNAMIC_P_TO_D,
                     self._pair_migration(instance_info, self.dynamic_p2d_filter_pipeline, self.defrag_policy)
                 ))
             else:
-                general_migration_tasks.append((
+                normal_migration_tasks.append((
                     MigrationType.AGGREGATE_DYNAMIC_P,
                     self._pair_migration(instance_info, self.aggrate_dynamic_p_filter_pipeline,
                                          self.aggrate_dynamic_p_policy)
                 ))
 
-            general_migration_tasks.append((
+            normal_migration_tasks.append((
                 MigrationType.EASE_D_WITH_P_BUBBLE,
                 self._pair_migration(instance_info, self.ease_d_with_empty_p_filter_pipeline, self.defrag_policy)
             ))
@@ -259,7 +259,7 @@ class MigrationScheduler:
                                      self.unit_failover_policy, skip_broken_unit=False)
             ))
 
-        return general_migration_tasks, failover_migration_tasks
+        return normal_migration_tasks, failover_migration_tasks
 
     # migration_policy must ensure that the specific instance_info does not appear in both src and dst simultaneously
     def _pair_migration(self,

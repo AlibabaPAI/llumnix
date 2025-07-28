@@ -210,7 +210,7 @@ def test_failover_migration_policy():
         instance_info.instance_id = f"src_instance_id_{idx}"
         all_instance_infos[instance_info.instance_id] = instance_info
         instance_info.unit_id = idx
-        instance_info.unit_status = UnitStatus.FAILOVER_MIGRATING
+        instance_info.unit_status = UnitStatus.BROKEN
         src_instance_infos.append(instance_info)
 
     dst_instance_infos = []

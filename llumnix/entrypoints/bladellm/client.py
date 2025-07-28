@@ -126,9 +126,9 @@ class LlumnixClientBladeLLM(LlumnixClient, MultiProcessingLLMClient):
                                     err_msg="Error when llumnix client generate request.")
 
     def _check_genenrate_by_instance(self, instance_args: InstanceArgs) -> bool:
-        if instance_args.enable_engine_pd_disagg:
+        if instance_args.enable_bladellm_engine_pd_disagg:
             return instance_args.instance_type == InstanceType.PREFILL
-        if instance_args.enable_engine_semi_pd_disagg:
+        if instance_args.enable_bladellm_engine_semi_pd_disagg:
             return True
         return True
 

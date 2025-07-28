@@ -327,11 +327,11 @@ def generate_bladellm_launch_command(
     enforce_eager: bool = False,
     pd_ratio: str = "1:1",
     request_output_forwarding_mode: str = "thread",
-    enable_engine_semi_pd_disagg: bool = False,
+    enable_bladellm_engine_semi_pd_disagg: bool = False,
     semi_pd_ins_id: str = "test",
     **kwargs
 ):
-    enable_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id={semi_pd_ins_id} --semi_pd.transfer_type=rdma ' \
+    enable_bladellm_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id={semi_pd_ins_id} --semi_pd.transfer_type=rdma ' \
         f'--semi_pd.prefill_server_port={port+37}'
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -352,7 +352,7 @@ def generate_bladellm_launch_command(
         f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "
         f"{'--disable_cuda_graph' if enforce_eager else ''} "
         f"{'--enable_disagg' if enable_pd_disagg else ''} "
-        f"{enable_engine_semi_pd_disagg_option if enable_engine_semi_pd_disagg else ''} "
+        f"{enable_bladellm_engine_semi_pd_disagg_option if enable_bladellm_engine_semi_pd_disagg else ''} "
         f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
         f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role={instance_type} "
@@ -394,10 +394,10 @@ def generate_bladellm_serve_command(
     request_output_queue_type: str = "zmq",
     enforce_eager: bool = False,
     request_output_forwarding_mode: str = "thread",
-    enable_engine_semi_pd_disagg: bool = False,
+    enable_bladellm_engine_semi_pd_disagg: bool = False,
     **kwargs
 ):
-    enable_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id=test --semi_pd.transfer_type=rdma ' \
+    enable_bladellm_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id=test --semi_pd.transfer_type=rdma ' \
         f'--semi_pd.prefill_server_port={port+37}'
     command = (
         f"RAY_DEDUP_LOGS=0 "
@@ -421,7 +421,7 @@ def generate_bladellm_serve_command(
         f"--disagg_pd.inst_role {instance_type} "
         f"--naming_url {NAMING_URL} "
         f"{'--enable-engine-pd-disagg' if enable_pd_disagg else ''} "
-        f"{enable_engine_semi_pd_disagg_option if enable_engine_semi_pd_disagg else ''} "
+        f"{enable_bladellm_engine_semi_pd_disagg_option if enable_bladellm_engine_semi_pd_disagg else ''} "
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"--dispatch-policy {dispatch_policy} "
         f"--pd-ratio {pd_ratio} "

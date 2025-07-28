@@ -29,16 +29,17 @@ def init_dispatch_scheduler(
         topk_random_dispatch=1,
         enable_pd_disagg=False,
         enable_engine_pd_disagg=False,
-        enable_engine_semi_pd_disagg=False,
+        enable_bladellm_engine_semi_pd_disagg=False,
         enable_adaptive_pd=False,
         dispatch_load_metric_config=None,
         cache_meta_client_config_path=None):
+
     dispatch_scheduler = DispatchScheduler(
         dispatch_policy=policy,
         topk_random_dispatch=topk_random_dispatch,
         enable_pd_disagg=enable_pd_disagg,
-        enable_engine_pd_disagg=enable_engine_pd_disagg,
-        enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+        enable_bladellm_engine_pd_disagg=enable_engine_pd_disagg,
+        enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
         enable_adaptive_pd=enable_adaptive_pd,
         dispatch_load_metric_config=dispatch_load_metric_config,
         cache_meta_client_config_path=cache_meta_client_config_path,

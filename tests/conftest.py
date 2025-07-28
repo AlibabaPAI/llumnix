@@ -24,8 +24,7 @@ from ray._raylet import PlacementGroupID
 from ray._private.utils import hex_to_binary
 import pytest
 
-from llumnix.utils import random_uuid
-from llumnix.utils import get_ip_address
+from llumnix.utils import random_uuid, get_llumnix_env_vars, get_ip_address
 
 from tests.e2e_test.utils import shutdown_llumnix_service_func
 
@@ -111,7 +110,9 @@ SKIP_REASON: str = None
 def ray_env():
     global SKIP_REASON
     try:
-        ray.init(ignore_reinit_error=True, namespace="llumnix")
+        env_vars = get_llumnix_env_vars()
+        env_vars['VLLM_USE_V1'] = '1'
+        ray.init(ignore_reinit_error=True, namespace="llumnix", runtime_env={"env_vars": env_vars})
         SKIP_REASON = None
         yield
     finally:

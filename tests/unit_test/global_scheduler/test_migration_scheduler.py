@@ -32,7 +32,7 @@ def init_migration_scheduler(
         policy: str = 'balanced',
         enable_pd_disagg: bool = False,
         enable_engine_pd_disagg: bool = False,
-        enable_engine_semi_pd_disagg: bool = False,
+        enable_bladellm_engine_semi_pd_disagg: bool = False,
         enable_adaptive_pd: bool = False
     ):
     migration_scheduler = MigrationScheduler(
@@ -40,8 +40,9 @@ def init_migration_scheduler(
         migrate_out_load_threshold=MIGRATE_OUT_LOAD_THRESHOLD,
         is_group_kind_migration_backend=False,
         enable_pd_disagg=enable_pd_disagg,
-        enable_engine_pd_disagg=enable_engine_pd_disagg,
-        enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+        enable_bladellm_engine_pd_disagg=enable_engine_pd_disagg,
+        enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
+        enable_vllm_v1_engine_pd_disagg=False,
         enable_adaptive_pd=enable_adaptive_pd,
         dispatch_load_metric_config = DispatchLoadMetricConfig(
             dispatch_load_metric='remaining_steps',
@@ -291,9 +292,9 @@ class MockMigrationScheduler(MigrationScheduler):
         return migrate_instance_pairs
 
 
-@pytest.mark.parametrize("enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg",
+@pytest.mark.parametrize("enable_pd_disagg, enable_bladellm_engine_pd_disagg, enable_bladellm_engine_semi_pd_disagg",
                          [(True, False, False), (False, True, False), (False, False, True), (False, False, False)])
-def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg):
+def test_migration_scheduler(enable_pd_disagg, enable_bladellm_engine_pd_disagg, enable_bladellm_engine_semi_pd_disagg):
     dispatch_load_metric_config = DispatchLoadMetricConfig(
             dispatch_load_metric='remaining_steps',
             dispatch_prefill_load_metric='kv_blocks_ratio',
@@ -302,7 +303,7 @@ def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_e
             dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
         )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 enable_engine_pd_disagg, enable_engine_semi_pd_disagg,
+                                                 enable_bladellm_engine_pd_disagg, enable_bladellm_engine_semi_pd_disagg,
                                                  False, dispatch_load_metric_config, False)
     all_instance_infos: Dict[str, InstanceInfo] = {}
     if not migration_scheduler._enable_pd():
@@ -337,7 +338,7 @@ def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_e
             assert src_instance.instance_type == InstanceType.PREFILL
             assert dst_instance.instance_type == InstanceType.DECODE
 
-    if enable_pd_disagg or enable_engine_semi_pd_disagg:
+    if enable_pd_disagg or enable_bladellm_engine_semi_pd_disagg:
         assert len(migration_scheduler.dd_migration_pairs) > 0
         for src_instance_id, dst_instance_id in migration_scheduler.dd_migration_pairs:
             src_instance = all_instance_infos[src_instance_id]
@@ -354,8 +355,8 @@ def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_e
         assert len(migration_scheduler.pd_migration_pairs) == 0
         assert len(migration_scheduler.dd_migration_pairs) == 0
 
-@pytest.mark.parametrize("enable_pd_disagg, enable_engine_semi_pd_disagg", [(True, False), (False, True)])
-def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_disagg):
+@pytest.mark.parametrize("enable_pd_disagg, enable_bladellm_engine_semi_pd_disagg", [(True, False), (False, True)])
+def test_adaptive_migration_scheduler(enable_pd_disagg, enable_bladellm_engine_semi_pd_disagg):
     dispatch_load_metric_config = DispatchLoadMetricConfig(
             dispatch_load_metric='remaining_steps',
             dispatch_prefill_load_metric='kv_blocks_ratio',
@@ -364,7 +365,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
             dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
         )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 False, enable_engine_semi_pd_disagg,
+                                                 False, enable_bladellm_engine_semi_pd_disagg,
                                                  True, dispatch_load_metric_config, False)
     KvBlocksRatioLoad.BUSY_THRESHOLD = 5
     RemainingStepsLoad.BUSY_THRESHOLD = 5

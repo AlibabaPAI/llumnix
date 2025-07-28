@@ -25,6 +25,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendBaseInterface
 from llumnix.utils import (
+    InstanceContext,
     asyncio_wait_for_ray_remote_call_with_timeout,
     RequestIDType,
     MigrationResponse,
@@ -232,7 +233,8 @@ class MigrationCoordinator:
                  max_migration_concurrency: int,
                  request_migration_policy: str,
                  migration_last_stage_max_blocks: int,
-                 migration_max_stages: int) -> None:
+                 migration_max_stages: int,
+                 enable_engine_migration_interface: bool) -> None:
         self.instance_id = instance_id
         self.backend_engine = backend_engine
         self.backend_type = backend_type
@@ -243,12 +245,23 @@ class MigrationCoordinator:
         self.pending_migrate_in_request_time: Dict[str, float] = {}
         self.migrating_out_request_id_set = set()
         self.migrating_in_request_id_set = set()
+        self.enable_engine_migration_interface = enable_engine_migration_interface
         asyncio.create_task(self._watch_pending_migrate_in_requests_loop())
 
     async def migrate_out(self,
                           dst_instance_actor: ray.actor.ActorHandle,
-                          dst_instance_id: str,
+                          dst_instance_context: InstanceContext,
                           migration_type: Optional[MigrationType] = None) -> List[RequestIDType]:
+        if self.enable_engine_migration_interface:
+            try:
+                migrated_requests = await self.backend_engine.migrate_out(
+                    dst_instance_actor, dst_instance_context, migration_type)
+                return migrated_requests
+            # pylint: disable=broad-except
+            except Exception as e:
+                log_instance_exception(e, self.instance_id, "migrate_out")
+                return []
+
         if not self.has_migration_slot():
             logger.debug(
                 "Max migration concurrency ({}) reached, reject new migrate out request attempt.".format(
@@ -270,6 +283,7 @@ class MigrationCoordinator:
                 migrated_request_list.append(migrate_out_request)
 
         migrated_request_list = []
+        dst_instance_id = dst_instance_context.instance_id
         for migrate_out_request in migrate_out_requests:
             migration_tasks = []
             while self.has_migration_slot() and (not migrate_out_request.eom):

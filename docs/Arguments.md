@@ -29,6 +29,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--dispatch-policy {balanced,load,queue,rr}]
             [--topk-random-dispatch TOPK_RANDOM_DISPATCH]
             [--enable-routine-migration]
+            [--enable-engine-migration-interface]
             [--enable-defrag]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag}]
@@ -166,6 +167,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 
 `--enable-routine-migration`
 - Enable migrate requests between instances.
+
+`--enable-engine-migration-interface`
+- Enable engine migration interface.
 
 `--enable-defrag`
 - Enable defragmentation through migration based on virtual usage.

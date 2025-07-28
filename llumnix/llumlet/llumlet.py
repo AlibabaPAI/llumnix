@@ -85,6 +85,7 @@ class Llumlet:
                 instance_args.request_migration_policy,
                 instance_args.migration_last_stage_max_blocks,
                 instance_args.migration_max_stages,
+                instance_args.enable_engine_migration_interface,
             )
         self.llumlet_metrics = LlumletMetrics()
         self.unit_status = UnitStatus.HEALTHY
@@ -92,7 +93,7 @@ class Llumlet:
         asyncio.create_task(self._check_engine_state_loop())
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]}, instance_type={self.instance_type})"
 
     @classmethod
     def from_args(
@@ -226,22 +227,36 @@ class Llumlet:
     async def migrate_out(
         self,
         dst_instance_actor: ray.actor.ActorHandle,
-        dst_instance_id: str,
+        dst_instance_context: InstanceContext,
         migration_type: Optional[MigrationType] = None
-    ) -> List[RequestIDType]:
-        migrated_request_ids = await self.migration_coordinator.migrate_out(
-            dst_instance_actor, dst_instance_id, migration_type)
+    ) -> None:
+        async def _inner_migrate_out(
+            dst_instance_actor: ray.actor.ActorHandle,
+            dst_instance_context: InstanceContext,
+            migration_type: Optional[MigrationType] = None
+        ) -> List[RequestIDType]:
+            migrated_request_ids = await self.migration_coordinator.migrate_out(
+                dst_instance_actor, dst_instance_context, migration_type)
 
-        if migration_type == MigrationType.PRE_STOP_MIGRATION:
-            if self.unit_status != UnitStatus.MIGRATING:
-                self.set_unit_status(UnitStatus.MIGRATING)
-            instance_info: InstanceInfo = self.backend_engine.get_instance_info()
-            num_running_requests = instance_info.num_running_requests
-            num_waiting_requests = instance_info.num_waiting_requests
-            if num_running_requests == 0 and num_waiting_requests == 0:
-                self.set_unit_status(UnitStatus.STOPPED)
+            if migration_type == MigrationType.PRE_STOP_MIGRATION:
+                if self.unit_status not in [UnitStatus.MIGRATING, UnitStatus.STOPPED]:
+                    self.set_unit_status(UnitStatus.MIGRATING)
+                instance_info: InstanceInfo = self.backend_engine.get_instance_info()
+                num_running_requests = instance_info.num_running_requests
+                num_waiting_requests = instance_info.num_waiting_requests
 
-        return migrated_request_ids
+                if len(migrated_request_ids) > 0:
+                    logger.info("Llumlet(instance_id={}, instance_type={}) is doing {}, left ruuning requests: {}, " \
+                        "left waiting requests: {}.".format(self.instance_id, self.instance_args.instance_type,
+                        migration_type, num_running_requests, num_waiting_requests))
+                if num_running_requests == 0 and num_waiting_requests == 0:
+                    logger.info("Llumlet(instance_id={}, instance_type={}) is stopped.".format(
+                        self.instance_id, self.instance_args.instance_type))
+                    self.set_unit_status(UnitStatus.STOPPED)
+
+            return migrated_request_ids
+
+        asyncio.create_task(_inner_migrate_out(dst_instance_actor, dst_instance_context, migration_type))
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

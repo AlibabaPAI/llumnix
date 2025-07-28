@@ -136,7 +136,7 @@ _C.MANAGER.ENABLE_PD_DISAGG = False
 # Enable adaptive prefill-decode disaggregation
 _C.MANAGER.ENABLE_ADAPTIVE_PD = False
 # Enable engine-based prefill-decode disaggregation
-_C.MANAGER.ENABLE_ENGINE_PD_DISAGG = False
+_C.MANAGER.ENABLE_VLLM_V1_ENGINE_PD_DISAGG = False
 # The p:d ratio used in gloabl launch mode
 _C.MANAGER.PD_RATIO = "1:1"
 # Load engine arguments from storage
@@ -236,3 +236,5 @@ _C.INSTANCE.MIGRATION_BACKEND_INIT_TIMEOUT = 10.0
 _C.INSTANCE.KVTRANSFER_MIGRATION_BACKEND_TRANSFER_TYPE = "rdma"
 # URL of naming server for kvtransfer migration backend
 _C.INSTANCE.KVTRANSFER_MIGRATION_BACKEND_NAMING_URL = "file:/tmp/llumnix/naming/"
+# Enable engine migration interface
+_C.INSTANCE.ENABLE_ENGINE_MIGRATION_INTERFACE = False

@@ -87,6 +87,14 @@ def add_engine_cli_args(parser: "ArgumentParser") -> "Namespace":
 
 def detect_unsupported_engine_feature(engine_args: EngineArgs) -> None:
     unsupported_feature = None
+    if engine_args.pipeline_parallel_size > 1:
+        unsupported_feature = "pipeline parallel"
+
+    if unsupported_feature:
+        raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
+
+def detect_migration_unsupported_engine_feature(engine_args: EngineArgs) -> None:
+    unsupported_feature = None
     if engine_args.enable_lora:
         unsupported_feature = "multi-lora serving"
     elif engine_args.enable_prefix_caching:
@@ -95,16 +103,16 @@ def detect_unsupported_engine_feature(engine_args: EngineArgs) -> None:
         unsupported_feature = "chunked prefill"
     elif engine_args.speculative_model:
         unsupported_feature = "speculative decoding"
-    elif engine_args.pipeline_parallel_size > 1:
-        unsupported_feature = "pipeline parallel"
     elif engine_args.num_scheduler_steps > 1:
         unsupported_feature = "multi-step scheduling"
 
     if unsupported_feature:
-        raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
+        raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" when enabling migration currently.')
 
-def check_engine_args(engine_args: AsyncEngineArgs) -> None:
+def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs = None) -> None:
     detect_unsupported_engine_feature(engine_args)
+    if manager_args.enable_migration:
+        detect_migration_unsupported_engine_feature(engine_args)
 
     assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
 
@@ -116,17 +124,19 @@ def check_instance_args(instance_args: InstanceArgs, engine_args: AsyncEngineArg
     assert instance_args.migration_backend in ['rayrpc', 'gloo', 'nccl'], \
         "Only support rayrpc, gloo and nccl migration backend for vLLM."
 
-    assert not (parallel_config.world_size > 1 and migration_config.migration_backend == 'nccl'), \
+    assert not (migration_config.migration_backend == 'nccl' and parallel_config.world_size > 1), \
         "Llumnix does not support TP or PP when the migration backend is nccl, please change migration backend."
 
-    assert not (not engine_args.disable_async_output_proc and instance_args.simulator_mode), \
+    assert not (instance_args.simulator_mode and not engine_args.disable_async_output_proc), \
         "Llumnix does not support async output processing when enabling simualtor mode, please disable async output processing."
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
         -> Tuple[EntrypointsArgs, ManagerArgs, InstanceArgs, AsyncEngineArgs]:
     entrypoints_args, manager_args, instance_args = init_llumnix_args(llumnix_config)
     if manager_args.load_registered_service:
-        engine_args = load_registered_engine_args(manager_args)
+        engine_args_list = load_registered_engine_args(manager_args)
+        # NOTE(s5u13b): hack to post init llumnix args and check args.
+        engine_args = engine_args_list[0]
     else:
         engine_args = AsyncEngineArgs.from_cli_args(cli_args)
     post_init_llumnix_args(engine_args, instance_args, manager_args, entrypoints_args, BackendType.VLLM, launch_mode, parser)

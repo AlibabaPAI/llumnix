@@ -453,8 +453,9 @@ class ManagerArgs:
             "Only load registered service when enabling pd-disaggregation in global launch mode, " \
             "and the path of loading registered service is required to be specified when loading registered service from path."
 
+        enable_pd = args.enable_pd_disagg or args.enable_engine_pd_disagg or args.enable_engine_semi_pd_disagg
         if args.enable_pdd_node_affinity_scheduling:
-            assert (args.enable_pd_disagg or args.enable_engine_pd_disagg) and launch_mode == LaunchMode.GLOBAL, \
+            assert enable_pd and launch_mode == LaunchMode.GLOBAL, \
                 "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
                 "in global launch mode."
 
@@ -893,10 +894,11 @@ def load_registered_engine_args(manager_args: ManagerArgs):
         instance_type_list = ['neutral']
     else:
         instance_type_list = ['prefill', 'decode']
+    engine_args_list = []
     for instance_type in instance_type_list:
         engine_args_registered: LlumnixEngineArgs = load_engine_args(instance_type, manager_args.load_registered_service_path)
-        engine_args = engine_args_registered.load_engine_args()
-    return engine_args
+        engine_args_list.append(engine_args_registered.load_engine_args())
+    return engine_args_list
 
 def _get_engine_args_filename(engine_type: str) -> str:
     return f"engine_args_{engine_type}.pkl"

@@ -41,15 +41,12 @@ class SchedulerLlumnix(Scheduler):
     def get_waiting_queue(self) -> Deque[Request]:
         return self.waiting
 
-    # TODO(zhaozhiyu): adapt to vllm v1
     def get_request_incremental_blocks(self, backend_request: LlumnixRequest, pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
         raise NotImplementedError("get_request_incremental_blocks is not implemented in vllm v1")
 
-    # TODO(zhaozhiyu): adapt to vllm v1
     def remove_running_request(self, request_id: str) -> bool:
         raise NotImplementedError("remove_running_request is not implemented in vllm v1")
 
-    # TODO(zhaozhiyu): adapt to vllm v1
     def remove_waiting_request(self, request_id: str) -> bool:
         raise NotImplementedError("remove_waiting_request is not implemented in vllm v1")
 

@@ -79,8 +79,6 @@ vllm_unit_test: check_pytest_installed
 vllm_offline_test:
 	@python examples/offline_inference.py
 
-# TODO(KuilongCui): add bladellm offine inference example
-
 .PHONY: vllm_correctness_test
 vllm_correctness_test: check_pytest_installed
 	@pytest -v -x -s -k 'engine_vLLM and not _v1 or not engine_' --tb=long ./tests/e2e_test/test_correctness.py

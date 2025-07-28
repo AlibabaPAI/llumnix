@@ -205,7 +205,7 @@ class WorkerProcessesRay(WorkerProcesses):
         workers: List[WorkerProcessActor] = []
         worker_metadata: List[RayWorkerMetaData] = []
         driver_ip = get_ip_address()
-        # TODO(s5u13b): Not support pipeline parallelism currently.
+        # NOTE(s5u13b): Not support pipeline parallelism currently.
         # Suppose that all bundles are created for tp workers.
         for bundle_id in range(tp_size):
             bundle = placement_group.bundle_specs[bundle_id]

@@ -35,8 +35,6 @@ from llumnix.request_processing_context import RequestProcessingContext
 # pylint: disable=unused-import
 from tests.conftest import ray_env
 
-# TODO(KuilongCui): cannot pass test, fix it
-
 
 class MockLlumnixClientBladeLLM(LlumnixClientBladeLLM):
     def __init__(self, loop = None):  # pylint: disable=super-init-not-called

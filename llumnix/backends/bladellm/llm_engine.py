@@ -272,7 +272,6 @@ def setup_dist_options(serving_args: ServingArgs):
     # The IP of engine and worker 0 will be same due to our sorting of workers,
     # so directly set the dist_init_addr to IP of engine is correct.
     serving_args.dist_inference_options.dist_init_addr = f"{serving_args.host}:{master_port}"
-    # TODO(s5u13b): New BladeLLM will not use this environment variables, update it after rebase BladeLLM.
     os.environ["MASTER_ADDR"] = serving_args.host
 
 def setup_dist(serving_args: ServingArgs):
@@ -744,7 +743,6 @@ class BackendBladeLLM(BackendInterface):
                 server_request.kvt_meta_info['semi_p_inst_id'] = ""
 
         if self.engine_args.enable_semi_pd_mode:
-            # TODO(KuilongCui): add exception handle
             add_request_exception_wrapper = exception_wrapper_async(self.engine.add_request_wrapper)
             asyncio.create_task(add_request_exception_wrapper(request_processing_context, server_request))
         else:

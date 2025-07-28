@@ -27,15 +27,15 @@ class DispatchScheduler:
                  dispatch_policy: str,
                  topk_random_dispatch: int,
                  enable_pd_disagg: bool,
-                 enable_engine_pd_disagg: bool,
-                 enable_engine_semi_pd_disagg: bool,
+                 enable_bladellm_engine_pd_disagg: bool,
+                 enable_bladellm_engine_semi_pd_disagg: bool,
                  enable_adaptive_pd: bool,
                  dispatch_load_metric_config: DispatchLoadMetricConfig,
                  dispatch_latency_metric: Summary = Summary("dummy"),
                  cache_meta_client_config_path: str = None) -> None:
         self.enable_pd_disagg = enable_pd_disagg
-        self.enable_engine_pd_disagg = enable_engine_pd_disagg
-        self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
+        self.enable_bladellm_engine_pd_disagg = enable_bladellm_engine_pd_disagg
+        self.enable_bladellm_engine_semi_pd_disagg = enable_bladellm_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
 
         self.dispatch_policy: DispatchPolicy = DispatchPolicyFactory.get_policy(
@@ -77,8 +77,6 @@ class DispatchScheduler:
         # Filter primary instances based on dispatch policy
         candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
             instance_type, primary_instance_infos, primary_instance_num_requests)
-        if instance_type == InstanceType.DECODE:
-            print(f"candidate_instance_infos: {candidate_instance_infos}\n")
 
         is_fallback_to_secondary = False
 
@@ -127,8 +125,8 @@ class DispatchScheduler:
         return target_instance_id
 
     # For llumnix-based pd (enable_pd_disagg), the decode instance is not selected in the dispatch scheduler,
-    # but rather based on the pair-migration-policy. For engine-based pd (enable_engine_pd_disagg), the decode
-    # instance is selected in the dispatch scheduler.
+    # but rather based on the pair-migration-policy. For engine-based pd, the decode instance is selected in
+    # the dispatch scheduler.
     # pylint: disable=unused-argument
     def dispatch_pd(self,
                     instance_infos: Dict[str, InstanceInfo],
@@ -171,6 +169,8 @@ class DispatchScheduler:
                         prefill_instance_num_requests,
                         dispatch_context
                     )
+                    if decode_instance_id in prefill_instance_infos:
+                        decode_instance_id = prefill_instance_id
             instance_num_requests[decode_instance_id] += 1
             self._log_instance_dispatch_info(InstanceType.DECODE, decode_instance_num_requests)
 

@@ -82,6 +82,7 @@ class Llumlet:
                 instance_args.request_migration_policy,
                 instance_args.migration_last_stage_max_blocks,
                 instance_args.migration_max_stages,
+                instance_args.enable_engine_migration_interface,
             )
         self.llumlet_metrics = LlumletMetrics()
 

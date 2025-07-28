@@ -31,14 +31,16 @@ class MigrationScheduler:
                  migrate_out_load_threshold: float,
                  is_group_kind_migration_backend: bool,
                  enable_pd_disagg: bool,
-                 enable_engine_pd_disagg: bool,
-                 enable_engine_semi_pd_disagg: bool,
+                 enable_vllm_v1_engine_pd_disagg: bool,
+                 enable_bladellm_engine_pd_disagg: bool,
+                 enable_bladellm_engine_semi_pd_disagg: bool,
                  enable_adaptive_pd: bool,
                  dispatch_load_metric_config: DispatchLoadMetricConfig) -> None:
         self.pair_migration_policy = pair_migration_policy
         self.enable_pd_disagg = enable_pd_disagg
-        self.enable_engine_pd_disagg = enable_engine_pd_disagg
-        self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
+        self.enable_vllm_v1_engine_pd_disagg = enable_vllm_v1_engine_pd_disagg
+        self.enable_bladellm_engine_pd_disagg = enable_bladellm_engine_pd_disagg
+        self.enable_bladellm_engine_semi_pd_disagg = enable_bladellm_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
         self.dispatch_load_metric_config = dispatch_load_metric_config
 
@@ -50,9 +52,10 @@ class MigrationScheduler:
 
         self._set_migration_filter()
         self._set_migration_policy()
+        self._set_random_migration()
 
     def _enable_pd(self):
-        return self.enable_engine_pd_disagg or self.enable_engine_semi_pd_disagg or self.enable_pd_disagg
+        return self.enable_bladellm_engine_pd_disagg or self.enable_bladellm_engine_semi_pd_disagg or self.enable_pd_disagg or self.enable_vllm_v1_engine_pd_disagg
 
     def _register_migration_backend_init_filter(self, is_group_kind_migration_backend: bool) -> None:
         # some migration backends require init_process_group before passing the KV cache. Here, we add a filter
@@ -98,7 +101,8 @@ class MigrationScheduler:
             self.p2d_transfer_filter_pipeline = MigrationFilterPipeline(self.filter_config)
             self.p2d_transfer_filter_pipeline.add_filter("pd_instance_filter", self.p_d_filter)
 
-        if self._enable_pd() and not self.enable_engine_pd_disagg:
+        # migration for engine-based pd in BladeLLM is not supported temporarily
+        if self._enable_pd() and not self.enable_bladellm_engine_pd_disagg:
             self.d_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
             self.d_d_filter.set_filter_condtition(
                 src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
@@ -141,6 +145,42 @@ class MigrationScheduler:
             )
             self.ease_d_with_empty_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
             self.ease_d_with_empty_p_filter_pipeline.add_filter("busy_d_empty_p_filter", self.d_p_filter)
+        
+    def _set_random_migration(self):
+        d_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        d_d_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
+            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE
+        )
+        self.ddmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
+        self.ddmigraion_pipeline.add_filter("d_d_filter", d_d_filter)
+
+        pp_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        pp_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL,
+            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL
+        )
+        self.ppmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
+        self.ppmigraion_pipeline.add_filter("pp_filter", pp_filter)
+
+        pd_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        pd_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL,
+            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE
+        )
+        self.pdmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
+        self.pdmigraion_pipeline.add_filter("pd_filter", pd_filter)
+
+        dp_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
+        dp_filter.set_filter_condtition(
+            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
+            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL
+        )
+        self.dpmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
+        self.dpmigraion_pipeline.add_filter("pd_filter", dp_filter)
+
+        self.random_policy = MigrationPolicyFactory.get_policy(
+                "aggrate_dynamic_prefill", migrate_out_load_threshold=self.filter_config.migrate_out_load_threshold)
 
     def _set_migration_policy(self):
         self.pair_migration_policy = MigrationPolicyFactory.get_policy(
@@ -155,6 +195,7 @@ class MigrationScheduler:
             self.aggrate_dynamic_p_policy = MigrationPolicyFactory.get_policy(
                 "aggrate_dynamic_prefill", migrate_out_load_threshold=self.filter_config.migrate_out_load_threshold)
 
+    # TODO(KuilongCui): The migration rules can be defined in constructor
     def push_migrations(self, instance_info: Dict[str, InstanceInfo]) -> List[List[Tuple[str, str]]]:
         migration_tasks = []
 
@@ -171,7 +212,7 @@ class MigrationScheduler:
                                      self.pair_migration_policy)
             ))
 
-        elif not self.enable_engine_pd_disagg:
+        elif not self.enable_bladellm_engine_pd_disagg:
             migration_tasks.append((
                 MigrationType.DD_LOAD_BALANCE,
                 self._pair_migration(instance_info, self.decode_load_balance_filter_pipeline, self.pair_migration_policy)

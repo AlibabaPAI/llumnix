@@ -47,8 +47,8 @@ class GlobalScheduler:
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
                                                     global_scheduler_config.topk_random_dispatch,
                                                     global_scheduler_config.enable_pd_disagg,
-                                                    global_scheduler_config.enable_engine_pd_disagg,
-                                                    global_scheduler_config.enable_engine_semi_pd_disagg,
+                                                    global_scheduler_config.enable_bladellm_engine_pd_disagg,
+                                                    global_scheduler_config.enable_bladellm_engine_semi_pd_disagg,
                                                     global_scheduler_config.enable_adaptive_pd,
                                                     global_scheduler_config.dispatch_load_metric_config,
                                                     self.global_scheduler_metrics.dispatch_latency,
@@ -58,8 +58,9 @@ class GlobalScheduler:
                                                       global_scheduler_config.migrate_out_load_threshold,
                                                       global_scheduler_config.is_group_kind_migration_backend,
                                                       global_scheduler_config.enable_pd_disagg,
-                                                      global_scheduler_config.enable_engine_pd_disagg,
-                                                      global_scheduler_config.enable_engine_semi_pd_disagg,
+                                                      global_scheduler_config.enable_vllm_v1_engine_pd_disagg,
+                                                      global_scheduler_config.enable_bladellm_engine_pd_disagg,
+                                                      global_scheduler_config.enable_bladellm_engine_semi_pd_disagg,
                                                       global_scheduler_config.enable_adaptive_pd,
                                                       global_scheduler_config.dispatch_load_metric_config)
 
@@ -85,8 +86,9 @@ class GlobalScheduler:
 
     def _enable_pd(self):
         return self.global_scheduler_config.enable_pd_disagg \
-            or self.global_scheduler_config.enable_engine_pd_disagg \
-            or self.global_scheduler_config.enable_engine_semi_pd_disagg
+            or self.global_scheduler_config.enable_vllm_v1_engine_pd_disagg \
+            or self.global_scheduler_config.enable_bladellm_engine_pd_disagg \
+            or self.global_scheduler_config.enable_bladellm_engine_semi_pd_disagg
 
     def _log_request_dispatch_info(self,
                                    request_id: str,
@@ -95,15 +97,19 @@ class GlobalScheduler:
                                    expected_steps: int):
         if not self._enable_pd():
             # when enable_pd_disagg is False, prefill_instance_id and decode_instance_id are the same
-            logger.info("dispatch request {} to instance {}.".format(request_id, prefill_instance_id))
+            logger.info("dispatch request {} to instance {}.".format(request_id, self.instance_info[prefill_instance_id]))
         else:
             if self.global_scheduler_config.enable_pd_disagg:
                 logger.info("dispatch request {} to {} instance ({}), expected_steps: {}.".format(
                     request_id, self.instance_info[prefill_instance_id].instance_type, prefill_instance_id, expected_steps))
             else:
                 logger.info("dispatch request {} to {} instance ({}) for prefill, {} instance ({}) for decode.".format(
-                    request_id, self.instance_info[prefill_instance_id].instance_type, prefill_instance_id,
-                    self.instance_info[decode_instance_id].instance_type, decode_instance_id))
+                    request_id, self.instance_info[prefill_instance_id].instance_type, self.instance_info[prefill_instance_id],
+                    self.instance_info[decode_instance_id].instance_type, self.instance_info[decode_instance_id]))
+                
+                if self.instance_info[prefill_instance_id].instance_type != InstanceType.PREFILL or \
+                    self.instance_info[decode_instance_id].instance_type != InstanceType.DECODE:
+                    logger.info(f"adaptive pd dispatch: {request_id} 1. {prefill_instance_id} {self.instance_info[prefill_instance_id].instance_type} 2. {decode_instance_id} {self.instance_info[decode_instance_id].instance_type}")
 
     def dispatch(self, request_id: RequestIDType, dispatch_context: Dict) -> Tuple[str, str, int]:
         # instance_num_requests will be updated inplace in dispatch_scheduler.dispatch

@@ -142,13 +142,13 @@ class Manager:
     ) -> Tuple[str, str]:
         def choose_destination_instance(prefill_instance_id: str, decode_instance_id: str, dispatch_kwargs: Dict):
             if self.backend_type == BackendType.BLADELLM:
-                if self.manager_args.enable_engine_pd_disagg:
+                if self.manager_args.enable_bladellm_engine_pd_disagg:
                     dispatch_kwargs["decode_instance_id"] = self.instance_context[decode_instance_id].local_engine_id
-                elif self.manager_args.enable_engine_semi_pd_disagg:
+                elif self.manager_args.enable_bladellm_engine_semi_pd_disagg:
                     dispatch_kwargs["semi_p_inst_id"] = self.instance_context[prefill_instance_id].local_engine_id
                     dispatch_kwargs["semi_d_inst_id"] = self.instance_context[decode_instance_id].local_engine_id
 
-            if self.backend_type == BackendType.VLLM_V1 and self.manager_args.enable_engine_pd_disagg:
+            if self.backend_type == BackendType.VLLM_V1 and self.manager_args.enable_vllm_v1_engine_pd_disagg:
                 dispatch_kwargs["llumnix_scheduler"] = True
                 dispatch_kwargs["prefill_kvt_engine_available_port"] = \
                     self.instance_context[prefill_instance_id].kvt_engine_available_port
@@ -156,8 +156,8 @@ class Manager:
                 dispatch_kwargs["prefill_instance_id"] = prefill_instance_id
                 dispatch_kwargs["decode_instance_id"] = decode_instance_id
 
-            if (self.backend_type == BackendType.BLADELLM and self.manager_args.enable_engine_semi_pd_disagg) or \
-                (self.backend_type == BackendType.VLLM_V1 and self.manager_args.enable_engine_pd_disagg):
+            if self.manager_args.enable_bladellm_engine_semi_pd_disagg or \
+                self.manager_args.enable_vllm_v1_engine_pd_disagg:
                 target_instance_id = decode_instance_id
             else:
                 target_instance_id = prefill_instance_id

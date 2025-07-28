@@ -12,13 +12,13 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Iterable, List, Union, Deque, Tuple, Any
+from typing import Iterable, List, Union, Deque, Tuple, Any, Optional
 
 import ray.actor
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.request_processing_context import RequestProcessingContext
-from llumnix.utils import RequestIDType, MigrationResponse, InstanceContext
+from llumnix.utils import RequestIDType, MigrationResponse, InstanceContext, MigrationType
 from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.instance_info import InstanceInfo
 
@@ -82,6 +82,14 @@ class BackendBaseInterface(ABC):
         Get engine context from backend engine.
         """
         raise NotImplementedError
+    
+    async def migrate_out(
+        self,
+        dst_instance_actor: ray.actor.ActorHandle,
+        dst_instance_id: str,
+        migration_type: Optional[MigrationType] = None
+    ) -> List[LlumnixRequest]:
+        raise NotImplementedError
 
 
 class BackendMigrationInterface(ABC):
@@ -109,21 +117,18 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def get_running_queue(self) -> Deque[LlumnixRequest]:
         """
         Return the running queue of backend.
         """
         raise NotImplementedError
 
-    @abstractmethod
     def get_waiting_queue(self) -> Deque[LlumnixRequest]:
         """
         Return the waiting queue of backend.
         """
         raise NotImplementedError
 
-    @abstractmethod
     async def remove_running_request(self, request_id: RequestIDType) -> bool:
         """
         Remove a request from the running queue of backend.
@@ -140,7 +145,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def remove_waiting_request(self, request_id: RequestIDType) -> bool:
         """
         Remove a request from the waiting queue of backend.
@@ -156,7 +160,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def add_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         """
         Add a backend request to the dict of migrating out requests in last stage.
@@ -170,7 +173,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def pop_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
         """
         Pop a backend request from the dict of migrating out requests in last stage.
@@ -183,7 +185,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def pre_alloc_cache(self,
                         request_id: RequestIDType,
                         request_status: RequestStatus,
@@ -213,7 +214,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     async def add_running_request(self, backend_request: LlumnixRequest) -> None:
         """
         Add a backend request to the running queue of backend.
@@ -226,7 +226,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def add_waiting_request(self, backend_request: LlumnixRequest) -> None:
         """
         Add a backend request to the waiting queue of backend.
@@ -239,7 +238,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def free_pre_alloc_cache(self, request_id: RequestIDType) -> None:
         """
         Free pre-allocated blocks for a migrating request on the destination instance.
@@ -253,7 +251,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def free_src_request(self, backend_request: LlumnixRequest) -> None:
         """
         Free blocks associated with a migrating request on the source instance.
@@ -266,7 +263,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     async def send_cache(self,
                          dst_instance_actor: ray.actor.ActorHandle,
                          src_blocks: List[int],
@@ -296,7 +292,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     async def recv_cache(self,
                          request_id: RequestIDType,
                          src_worker_handle_list: List[Any],
@@ -325,7 +320,6 @@ class BackendMigrationInterface(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     async def commit_dst_request(self, request_id: RequestIDType, backend_request: LlumnixRequest) -> MigrationResponse:
         """
         Commit the migrating request to the destination instance.

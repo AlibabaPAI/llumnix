@@ -439,8 +439,8 @@ class DPManager:
                 # If the unit has been broken already, wait for instances to migrate requests.
                 else:
                     all_stopped = await self.check_instance_failover_state()
-                    timeout_to_failover = time.perf_counter() - detected_unit_broken_time > unit_failover_timeout
-                    if all_stopped or timeout_to_failover:
+                    failover_timeout = time.perf_counter() - detected_unit_broken_time > unit_failover_timeout
+                    if all_stopped or failover_timeout:
                         if self.unit_status == UnitStatus.BROKEN:
                             await self.stop()
                         elif self.unit_status == UnitStatus.TERMINATED:

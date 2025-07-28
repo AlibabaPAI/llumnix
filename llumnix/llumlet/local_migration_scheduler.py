@@ -47,12 +47,7 @@ class LocalMigrationScheduler:
 
     def get_required_migration_request(self, migration_type: Optional[MigrationType] = None):
         required_migration_requests = []
-        if migration_type == MigrationType.FAILOVER_MIGRATION:
-            running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
-            waiting: List[LlumnixRequest] = self.backend_engine.get_waiting_queue()
-            required_migration_requests.extend(running)
-            required_migration_requests.extend(waiting)
-        else:
+        if migration_type != MigrationType.FAILOVER_MIGRATION:
             # The function is used to retrieve requests on the backend that have already met the expected_steps.
             # Currently, the code below is only used for Prefill-decode disaggregation, and only selects request
             # that migrates from the prefill instance to the decode instance.
@@ -62,6 +57,11 @@ class LocalMigrationScheduler:
                     and request.inference_type == RequestInferenceType.DECODE \
                     and request.output_len >= request.expected_steps:
                     required_migration_requests.append(request)
+        else:
+            running: List[LlumnixRequest] = self.backend_engine.get_running_queue()
+            waiting: List[LlumnixRequest] = self.backend_engine.get_waiting_queue()
+            required_migration_requests.extend(running)
+            required_migration_requests.extend(waiting)
         return required_migration_requests
 
     def _filter_running_queue(self, running, min_request_len, max_request_len):

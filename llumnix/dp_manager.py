@@ -98,10 +98,13 @@ class DPManager:
         self.servers: Dict[str, ray.actor.ActorHandle] = {}
         self.cached_cluster_servers: Dict[str, ray.actor.ActorHandle] = {}
 
+        self.unit_status = UnitStatus.HEALTHY
         dp_group_status = self._connect_to_instances_and_servers()
         logger.info("DPManager starts, dp_group_status: {}".format(dp_group_status))
+        # Trigger heartbeat loop here so that 'self.stop' can be called when detected PARTIAL status.
+        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_LOOP_INTERVAL))
+
         if dp_group_status == DPGroupStatus.PARTIAL:
-            run_coroutine_in_new_thread(self._clear_instance_ray_resources(), blocking=True)
             run_coroutine_in_new_thread(self.stop(), blocking=True)
         elif dp_group_status == DPGroupStatus.EMPTY:
             instances, servers = self._init_instances_and_servers(
@@ -123,9 +126,6 @@ class DPManager:
                 run_coroutine_in_new_thread(self.stop(), blocking=True)
         else: # DPGroupStatus.COMPLETE
             logger.info("Restart dp manager successfully, dp group is complete.")
-
-        self.unit_status = UnitStatus.HEALTHY
-        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_INTERVAL))
 
     def is_ready(self) -> bool:
         return True
@@ -356,13 +356,20 @@ class DPManager:
                     )
             return False
 
-    async def stop(self):
+    async def _stop(self):
         logger.info("DPManager {} stops.".format(self.unit_id))
         await self._broadcast_dead_instances_to_cluster_servers(list(self.instances.keys()))
         await self._scale_down()
         # Detached actor will not be killed when the placement group is removed.
         remove_placement_group(self.unit_id)
         ray.kill(self.actor_handle)
+
+    async def stop(self):
+        self.terminated_event = asyncio.Event()
+        await self._set_unit_status(UnitStatus.TERMINATED)
+        await self.terminated_event.wait()
+        # Call 'self._stop' here instead of calling it in heartbear loop.
+        await self._stop()
 
     def _scale_up(
         self,
@@ -434,7 +441,11 @@ class DPManager:
                     all_stopped = await self.check_instance_failover_state()
                     timeout_to_failover = time.perf_counter() - detected_unit_broken_time > unit_failover_timeout
                     if all_stopped or timeout_to_failover:
-                        await self.stop()
+                        if self.unit_status == UnitStatus.BROKEN:
+                            await self.stop()
+                        elif self.unit_status == UnitStatus.TERMINATED:
+                            # 'self.stop' will wait on this event.
+                            self.terminated_event.set()
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(

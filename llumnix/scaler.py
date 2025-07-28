@@ -67,7 +67,7 @@ from llumnix.constants import (
     AUTO_SCALE_UP_INTERVAL,
     CHECK_DEPLOYMENT_STATES_INTERVAL,
     WATCH_DEPLOYMENT_INTERVAL,
-    HEARTBEAT_LOOP_INTERVAL,
+    HEARTBEAT_INTERVAL,
 )
 from llumnix import envs as llumnix_envs
 from llumnix.queue.utils import init_request_output_queue_server
@@ -192,7 +192,7 @@ class Scaler:
             asyncio.create_task(self._check_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
             if self.pdd_config.enable_pd_disagg:
                 asyncio.create_task(self._check_pd_deployment_states_loop(CHECK_DEPLOYMENT_STATES_INTERVAL))
-            asyncio.create_task(self._heartbeat_loop(HEARTBEAT_LOOP_INTERVAL))
+            asyncio.create_task(self._heartbeat_loop(HEARTBEAT_INTERVAL))
 
     def is_ready(self) -> bool:
         return True

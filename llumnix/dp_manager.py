@@ -46,7 +46,7 @@ from llumnix.queue.queue_type import QueueType
 from llumnix.constants import (
     NUM_GPUS_VLLM_V1_GPU_ACTOR,
     NUM_GPUS_BLADELLM_GPU_ACTOR,
-    HEARTBEAT_LOOP_INTERVAL,
+    HEARTBEAT_INTERVAL,
 )
 from llumnix.utils import (
     run_coroutine_in_new_thread,
@@ -124,7 +124,7 @@ class DPManager:
         else: # DPGroupStatus.COMPLETE
             logger.info("Restart dp manager successfully, dp group is complete.")
 
-        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_LOOP_INTERVAL))
+        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_INTERVAL))
 
     def is_ready(self) -> bool:
         return True

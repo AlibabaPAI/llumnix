@@ -111,7 +111,7 @@ def detect_migration_unsupported_engine_feature(engine_args: EngineArgs) -> None
 
 def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs = None) -> None:
     detect_unsupported_engine_feature(engine_args)
-    if manager_args.enable_migration:
+    if manager_args is not None and manager_args.enable_migration:
         detect_migration_unsupported_engine_feature(engine_args)
 
     assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."
@@ -142,7 +142,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
     post_init_llumnix_args(engine_args, instance_args, manager_args, entrypoints_args, BackendType.VLLM, launch_mode, parser)
 
     # backend related check args
-    check_engine_args(engine_args)
+    check_engine_args(engine_args, manager_args)
     check_instance_args(instance_args, engine_args)
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))

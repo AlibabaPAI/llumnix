@@ -181,7 +181,7 @@ def detect_migration_unsupported_engine_feature(engine_args: "ServingArgs") -> N
 def check_engine_args(engine_args: "ServingArgs", manager_args: ManagerArgs = None) -> None:
     detect_unsupported_engine_feature(engine_args)
 
-    if manager_args.enable_migration:
+    if manager_args is not None and manager_args.enable_migration:
         detect_migration_unsupported_engine_feature(engine_args)
 
     assert engine_args.serving_multi_processing_options.disable_frontend_multiprocessing is True, \
@@ -229,7 +229,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
         # pylint: disable=import-outside-toplevel
         from blade_llm.service.server import check_ports
         check_ports(engine_args)
-    check_engine_args(engine_args)
+    check_engine_args(engine_args, manager_args)
     check_instance_args(instance_args)
     check_manager_args(manager_args, engine_args)
 

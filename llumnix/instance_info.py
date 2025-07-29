@@ -107,8 +107,8 @@ class InstanceInfo:
     def __repr__(self):
         return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type}, unit_status={self.unit_status})"
 
-    def is_unit_unhealthy(self):
-        return self.unit_status != UnitStatus.HEALTHY
+    def is_unit_healthy(self):
+        return self.unit_status == UnitStatus.HEALTHY
 
 
 def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],

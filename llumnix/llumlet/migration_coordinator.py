@@ -267,12 +267,12 @@ class MigrationCoordinator:
             if isinstance(ret, Exception):
                 log_instance_exception(ret, dst_instance_id, "migrate_out", migrate_out_request.request_id)
             else:
-                migrated_request_list.extend(migrate_out_request)
+                migrated_request_list.append(migrate_out_request)
 
         migrated_request_list = []
         for migrate_out_request in migrate_out_requests:
             migration_tasks = []
-            while self.has_migration_slot():
+            while self.has_migration_slot() and (not migrate_out_request.eom):
                 self.migrating_out_request_id_set.add(migrate_out_request.request_id)
                 migrate_out_request.is_migrating = True
                 migration_task = asyncio.gather(self._migrate_out_one_request(dst_instance_actor, dst_instance_id,

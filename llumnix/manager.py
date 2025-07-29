@@ -342,10 +342,10 @@ class Manager:
         available_instance_ids, available_instance_actors, available_instance_types = [], [], []
 
         def _get_engine_context_and_instance_info_callback(
+            fut,
             instance_id: str,
             instance_actor_handle: Llumlet,
             instance_type: InstanceType,
-            fut
         ) -> None:
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
@@ -362,7 +362,7 @@ class Manager:
                     partial(
                         _get_engine_context_and_instance_info_callback,
                         instance_id=ins_id,
-                        instance_actor=ins_actor,
+                        instance_actor_handle=ins_actor,
                         instance_type=ins_type,
                     )
                 )

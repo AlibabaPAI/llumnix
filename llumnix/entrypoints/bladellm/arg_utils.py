@@ -150,13 +150,9 @@ def detect_unsupported_engine_feature(engine_args: "ServingArgs") -> None:
     assert isinstance(engine_args, ServingArgs)
 
     unsupported_feature = None
-    if engine_args.enable_lora:
-        unsupported_feature = "multi-lora serving"
-    elif engine_args.use_sps:
-        unsupported_feature = "speculative decoding"
-    elif engine_args.pipeline_parallel_size > 1:
+    if engine_args.pipeline_parallel_size > 1:
         unsupported_feature = "pipeline parallel"
-    elif engine_args.dp_attention:
+    elif engine_args.attention_dp_size > 1:
         unsupported_feature = "attention data parallel"
     elif engine_args.elastic_attn_cluster:
         unsupported_feature = "elastic attention"
@@ -164,8 +160,27 @@ def detect_unsupported_engine_feature(engine_args: "ServingArgs") -> None:
     if unsupported_feature:
         raise ValueError(f'Llumnix does not support "{unsupported_feature}" for BladeLLM currently.')
 
-def check_engine_args(engine_args: "ServingArgs") -> None:
+def detect_migration_unsupported_engine_feature(engine_args: "ServingArgs") -> None:
+    # pylint: disable=import-outside-toplevel
+    from blade_llm.service.args import ServingArgs
+    assert isinstance(engine_args, ServingArgs)
+
+    unsupported_feature = None
+    if engine_args.enable_lora:
+        unsupported_feature = "multi-lora serving"
+    elif engine_args.use_sps:
+        unsupported_feature = "speculative decoding"
+    elif not engine_args.disable_prompt_cache:
+        unsupported_feature = "prompt caching"
+
+    if unsupported_feature:
+        raise ValueError(f'Llumnix does not support "{unsupported_feature}" for BladeLLM when enabling migration currently.')
+
+def check_engine_args(engine_args: "ServingArgs", manager_args: ManagerArgs = None) -> None:
     detect_unsupported_engine_feature(engine_args)
+
+    if manager_args is not None and manager_args.enable_migration:
+        detect_migration_unsupported_engine_feature(engine_args)
 
     assert engine_args.serving_multi_processing_options.disable_frontend_multiprocessing is True, \
         "In Llumnix, api server and engine are in different ray actors, just set disable_frontend_multiprocessing to True."
@@ -173,26 +188,22 @@ def check_engine_args(engine_args: "ServingArgs") -> None:
     assert engine_args.disable_signal_handler is True, \
         "Disable the signal handler in BladeLLM, as the llumlet actor is not a process with a main function."
 
-    assert not engine_args.attention_dp_size > 1, "Llumnix does not support attention data parallel for BladeLLM temporarily."
-
 def check_instance_args(instance_args: InstanceArgs):
     assert not instance_args.simulator_mode, "Simulator mode is not supported for BladeLLM temporarily."
 
     if instance_args.enable_migration:
         assert 'W' not in instance_args.request_migration_policy, \
             "Migrating waiting request is not supported for BladeLLM temporarily."
+
         assert instance_args.migration_backend in ['grpc', 'kvtransfer'], \
             "Only support grpc and kvtransfer migration backend for BladeLLM."
 
 def check_manager_args(manager_args: ManagerArgs, engine_args: "ServingArgs") -> None:
-    assert not (engine_args.enable_disagg and manager_args.enable_pd_disagg), \
+    assert not (manager_args.enable_pd_disagg and engine_args.enable_disagg), \
         "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Llumnix."
 
     assert manager_args.enable_engine_pd_disagg == engine_args.enable_disagg, \
         "Engine-based pd-disaggregation of manager and engine should be enabled/disabled at the same time."
-
-    assert engine_args.pipeline_parallel_size == 1 or not manager_args.enable_migration,\
-        "Migration feature is temporarily unavailable for pipeline parallelism in BladeLLM."
 
     assert not (manager_args.enable_engine_pd_disagg and manager_args.enable_migration), \
         "Migration feature is temporarily unavailable for the engine based pd-disaggregation in BladeLLM."
@@ -201,7 +212,9 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
              cli_args: "Namespace" = None, engine_args = None):
     entrypoints_args, manager_args, instance_args = init_llumnix_args(llumnix_config)
     if manager_args.load_registered_service:
-        engine_args = load_registered_engine_args(manager_args)
+        engine_args_list = load_registered_engine_args(manager_args)
+        # NOTE(s5u13b): hack to post init llumnix args and check args.
+        engine_args = engine_args_list[0]
     else:
         if launch_mode == LaunchMode.GLOBAL:
             # pylint: disable=import-outside-toplevel
@@ -214,7 +227,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
         # pylint: disable=import-outside-toplevel
         from blade_llm.service.server import check_ports
         check_ports(engine_args)
-    check_engine_args(engine_args)
+    check_engine_args(engine_args, manager_args)
     check_instance_args(instance_args)
     check_manager_args(manager_args, engine_args)
 

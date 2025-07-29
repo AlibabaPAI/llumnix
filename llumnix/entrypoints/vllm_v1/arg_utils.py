@@ -137,16 +137,8 @@ def add_engine_cli_args(parser: "ArgumentParser") -> "Namespace":
 
 def detect_unsupported_engine_feature(engine_args: "EngineArgs") -> None:
     unsupported_feature = None
-    if engine_args.enable_lora:
-        unsupported_feature = "multi-lora serving"
-    elif engine_args.enable_prefix_caching:
-        unsupported_feature = "automatic prefix caching"
-    elif engine_args.enable_chunked_prefill:
-        unsupported_feature = "chunked prefill"
-    elif engine_args.pipeline_parallel_size > 1:
+    if engine_args.pipeline_parallel_size > 1:
         unsupported_feature = "pipeline parallel"
-    elif engine_args.num_scheduler_steps > 1:
-        unsupported_feature = "multi-step scheduling"
 
     if unsupported_feature:
         raise ValueError(f'Unsupported feature: Llumnix does not support "{unsupported_feature}" currently.')
@@ -155,18 +147,18 @@ def check_engine_args(engine_args: "AsyncEngineArgs") -> None:
     detect_unsupported_engine_feature(engine_args)
 
 def check_instance_args(instance_args: InstanceArgs) -> None:
-    # pylint: disable=import-outside-toplevel
-    import vllm.envs as vllm_env
-
-    assert len(vllm_env.VLLM_HOST_IP) == 0, "For Llumnix, please set VLLM_HOST_IP to empty string."
-
-    assert instance_args.enable_migration is False, \
-        "Llumnix does not support migration for vLLM v1."
+    assert instance_args.enable_migration is False, "Llumnix does not support migration for vLLM v1."
 
     assert not instance_args.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR, \
         "Llumnix does not support actor request output forwarding mode for vLLM v1 temporalily."
 
     assert not instance_args.simulator_mode, "Llumnix does not support simulator mode for vLLM v1."
+
+def check_envs():
+    # pylint: disable=import-outside-toplevel
+    import vllm.envs as vllm_env
+
+    assert len(vllm_env.VLLM_HOST_IP) == 0, "For Llumnix, please set VLLM_HOST_IP to empty string."
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser, cli_args: "Namespace") \
         -> Tuple[VLLMV1EntrypointsArgs, ManagerArgs, InstanceArgs, "AsyncEngineArgs"]:
@@ -175,7 +167,9 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
 
     entrypoints_args, manager_args, instance_args = init_llumnix_args_v1(llumnix_config)
     if manager_args.load_registered_service:
-        engine_args = load_registered_engine_args(manager_args)
+        engine_args_list = load_registered_engine_args(manager_args)
+        # NOTE(s5u13b): hack to post init llumnix args and check args.
+        engine_args = engine_args_list[0]
     else:
         engine_args = AsyncEngineArgs.from_cli_args(cli_args)
     post_init_llumnix_args(engine_args, instance_args, manager_args, entrypoints_args, BackendType.VLLM_V1, launch_mode, parser)
@@ -183,6 +177,7 @@ def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: Llu
     # backend related check args
     check_engine_args(engine_args)
     check_instance_args(instance_args)
+    check_envs()
 
     logger.info("entrypoints_args: {}".format(entrypoints_args))
     logger.info("manager_args: {}".format(manager_args))

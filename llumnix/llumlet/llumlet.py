@@ -226,8 +226,12 @@ class Llumlet:
         migration_type: Optional[MigrationType] = None
     ) -> List[RequestIDType]:
         if migration_type == MigrationType.FAILOVER_MIGRATION:
-            logger.info("Llumlet(instance_id={}, instance_type={}) begin to run {}.".format(
-                self.instance_id, self.instance_args.instance_type, migration_type))
+            if self.unit_status != UnitStatus.MIGRATING:
+                self.set_unit_status(UnitStatus.MIGRATING)
+                logger.info("Llumlet(instance_id={}, instance_type={}) begin to run {}.".format(
+                    self.instance_id, self.instance_args.instance_type, migration_type))
+            else:
+                return []
 
         migrated_request_ids = await self.migration_coordinator.migrate_out(
             dst_instance_actor, dst_instance_id, migration_type)
@@ -237,9 +241,9 @@ class Llumlet:
             num_running_requests = instance_info.num_running_requests
             num_waiting_requests = instance_info.num_waiting_requests
             if num_running_requests == 0 and num_waiting_requests == 0:
-                self.unit_status = UnitStatus.STOPPED
-                logger.info("Llumlet(instance_id={}, instance_type={}) set unit_status to {}.".format(
-                    self.instance_id, self.instance_args.instance_type, self.unit_status))
+                self.set_unit_status(UnitStatus.STOPPED)
+            else:
+                self.set_unit_status(UnitStatus.BROKEN)
 
         return migrated_request_ids
 

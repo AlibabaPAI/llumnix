@@ -83,8 +83,8 @@ class MigrationScheduler:
     def _set_unit_failover_filter(self):
         unit_broken_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
         unit_broken_filter.set_filter_condtition(
-            src_filter=lambda instance_info: instance_info.is_unit_unhealthy(),
-            dst_filter=lambda instance_info: not instance_info.is_unit_unhealthy(),
+            src_filter=lambda instance_info: not instance_info.is_unit_healthy(),
+            dst_filter=lambda instance_info: instance_info.is_unit_healthy(),
         )
 
         if not self._enable_pd():
@@ -195,9 +195,28 @@ class MigrationScheduler:
     def push_migrations(
         self,
         instance_info: Dict[str, InstanceInfo]
-    ) -> Tuple[List[Tuple[MigrationType, List[Tuple[str, str]]]], List[Tuple[MigrationType, List[Tuple[str, str]]]]]:
+    ) -> List[Tuple[MigrationType, List[Tuple[str, str]]]]:
+        failover_migration_tasks = []
+        if not self._enable_pd():
+            failover_migration_tasks.append((
+                MigrationType.FAILOVER_MIGRATION,
+                self._pair_migration(instance_info, self.unit_failover_pipeline, self.unit_failover_policy)
+            ))
+        else:
+            failover_migration_tasks.append((
+                MigrationType.FAILOVER_MIGRATION,
+                self._pair_migration(instance_info, self.prefill_unit_failover_pipeline, self.unit_failover_policy)
+            ))
+            failover_migration_tasks.append((
+                MigrationType.FAILOVER_MIGRATION,
+                self._pair_migration(instance_info, self.decode_unit_failover_pipeline, self.unit_failover_policy)
+            ))
+        
+        for task in failover_migration_tasks:
+            if (len(task[1]) > 0):
+                return failover_migration_tasks
+        
         normal_migration_tasks = []
-
         if self.enable_pd_disagg:
             normal_migration_tasks.append((
                 MigrationType.PD_MIGRATION,
@@ -240,43 +259,15 @@ class MigrationScheduler:
                 self._pair_migration(instance_info, self.ease_d_with_empty_p_filter_pipeline, self.defrag_policy)
             ))
 
-        failover_migration_tasks = []
-        if not self._enable_pd():
-            failover_migration_tasks.append((
-                MigrationType.FAILOVER_MIGRATION,
-                self._pair_migration(instance_info, self.unit_failover_pipeline,
-                                     self.unit_failover_policy, skip_broken_unit=False)
-            ))
-        else:
-            failover_migration_tasks.append((
-                MigrationType.FAILOVER_MIGRATION,
-                self._pair_migration(instance_info, self.prefill_unit_failover_pipeline,
-                                     self.unit_failover_policy, skip_broken_unit=False)
-            ))
-            failover_migration_tasks.append((
-                MigrationType.FAILOVER_MIGRATION,
-                self._pair_migration(instance_info, self.decode_unit_failover_pipeline,
-                                     self.unit_failover_policy, skip_broken_unit=False)
-            ))
-
-        return normal_migration_tasks, failover_migration_tasks
+        return normal_migration_tasks
 
     # migration_policy must ensure that the specific instance_info does not appear in both src and dst simultaneously
     def _pair_migration(self,
                         instance_info: Dict[str, InstanceInfo],
                         migration_filter_pipeline: Optional[MigrationFilterPipeline],
-                        migration_policy: MigrationPolicy,
-                        skip_broken_unit: bool = True) -> List[Tuple[str, str]]:
-        if skip_broken_unit:
-            available_instance_infos = {}
-            for ins_id, ins_info in instance_info.items():
-                if ins_info.unit_status == UnitStatus.HEALTHY:
-                    available_instance_infos[ins_id] = ins_info
-        else:
-            available_instance_infos = instance_info
-
+                        migration_policy: MigrationPolicy,) -> List[Tuple[str, str]]:
         src_instance_infos, dst_instance_infos = self.migration_base_filter.filter_instances(
-            available_instance_infos.values())
+            instance_info.values())
 
         if migration_filter_pipeline:
             src_instance_infos = migration_filter_pipeline.filter_src_instances(src_instance_infos)

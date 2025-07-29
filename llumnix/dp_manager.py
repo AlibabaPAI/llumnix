@@ -367,8 +367,9 @@ class DPManager:
     async def stop(self):
         self.terminating_event = asyncio.Event()
         await self._set_unit_status(UnitStatus.TERMINATING)
+        self.stop_time = time.perf_counter()
         await self.terminating_event.wait()
-        # Call 'self._stop' here instead of calling it in heartbear loop.
+        # Call 'self._stop' here instead of calling it implicitly in heartbear loop.
         await self._stop()
 
     def _scale_up(
@@ -423,7 +424,6 @@ class DPManager:
 
     async def _heartbeat_loop(self, interval: float) -> None:
         """Watch cached instances and servers health."""
-        detected_unit_broken_time = None
         unit_failover_timeout = float(llumnix_envs.UNIT_FAILOVER_TIMEOUT)
 
         while True:
@@ -435,11 +435,11 @@ class DPManager:
                     dead_instance_ids.extend(await check_actors_health(self.servers))
                     if len(dead_instance_ids) > 0:
                         await self._set_unit_status(UnitStatus.BROKEN)
-                        detected_unit_broken_time = time.perf_counter()
+                        self.stop_time = time.perf_counter()
                 # If the unit has been broken already, wait for instances to migrate requests.
                 else:
                     all_stopped = await self.check_instance_failover_state()
-                    failover_timeout = time.perf_counter() - detected_unit_broken_time > unit_failover_timeout
+                    failover_timeout = time.perf_counter() - self.stop_time > unit_failover_timeout
                     if all_stopped or failover_timeout:
                         if self.unit_status == UnitStatus.BROKEN:
                             await self._stop()

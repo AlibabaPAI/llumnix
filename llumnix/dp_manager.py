@@ -102,7 +102,7 @@ class DPManager:
         dp_group_status = self._connect_to_instances_and_servers()
         logger.info("DPManager starts, dp_group_status: {}".format(dp_group_status))
         # Trigger heartbeat loop here so that 'self.stop' can be called when detected PARTIAL status.
-        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_LOOP_INTERVAL))
+        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_INTERVAL))
 
         if dp_group_status == DPGroupStatus.PARTIAL:
             run_coroutine_in_new_thread(self.stop(), blocking=True)

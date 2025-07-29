@@ -143,8 +143,8 @@ def init_llumnix_components(entrypoints_args: EntrypointsArgs,
 
     request_output_queue_type: QueueType = QueueType(entrypoints_args.request_output_queue_type)
     node_id = ray.get_runtime_context().get_node_id()
-    instance_ids, instances = ray_get_with_timeout(
-        scaler.init_instances.remote(request_output_queue_type, instance_args, engine_args, node_id)
+    instance_ids, instances = ray.get(
+        scaler.init_instances.remote(request_output_queue_type, instance_args, engine_args, node_id), timeout=10.0,
     )
 
     available_instance_ids = []

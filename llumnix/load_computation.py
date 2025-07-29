@@ -17,6 +17,7 @@ import numpy as np
 
 import llumnix.envs as llumnix_envs
 
+
 class BaseLoad(ABC):
     @abstractmethod
     def is_busy(self) -> bool:
@@ -40,6 +41,7 @@ class BaseLoad(ABC):
         """
         raise NotImplementedError
 
+
 class DummyLoad(BaseLoad):
     def __init__(self, *args, **kwargs) -> None:
         pass
@@ -59,7 +61,7 @@ class DummyLoad(BaseLoad):
 
 
 class KvBlocksRatioLoad(BaseLoad):
-    BUSY_THRESHOLD = float(llumnix_envs.BLOCKDEMANDFACTOR_BUSY_THRESHOLD)
+    BUSY_THRESHOLD = float(llumnix_envs.KVBLOCKSRATIO_BUSY_THRESHOLD)
 
     def __init__(self, demand_factor: float = 0.0) -> None:
         self.demand_factor = demand_factor
@@ -117,6 +119,7 @@ class RemainingStepsLoad(BaseLoad):
             return RemainingStepsLoad(np.inf)
         return RemainingStepsLoad(num_available_gpu_blocks / num_requests)
 
+
 class AdaptiveDecodeBatchLoad(BaseLoad):
     DECODE_COMPUTE_BOUND_BATCH_SIZE = float(llumnix_envs.DECODE_COMPUTE_BOUND_BATCH_SIZE)
 
@@ -145,6 +148,7 @@ class AdaptiveDecodeBatchLoad(BaseLoad):
     def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "AdaptiveDecodeBatchLoad":
         return AdaptiveDecodeBatchLoad(instance_info.decode_batch_size)
 
+
 class MissWaitingTokensLoad(BaseLoad):
     BUSY_THRESHOLD = float(llumnix_envs.MISSWAITINGTOKENS_BUSY_THRESHOLD)
 
@@ -165,6 +169,7 @@ class MissWaitingTokensLoad(BaseLoad):
     @classmethod
     def compute_instance_load(cls, instance_info: 'InstanceInfo') -> "MissWaitingTokensLoad":
         return MissWaitingTokensLoad(instance_info.num_miss_tokens_all_waiting_requests)
+
 
 class LoadCalculatorFactory:
     _LOAD_REGISTRY = {

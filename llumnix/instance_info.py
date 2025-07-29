@@ -105,7 +105,7 @@ class InstanceInfo:
         return hash(self.instance_id)
 
     def __repr__(self):
-        return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type})"
+        return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type}, unit_status={self.unit_status})"
 
     def is_unit_unhealthy(self):
         return self.unit_status != UnitStatus.HEALTHY

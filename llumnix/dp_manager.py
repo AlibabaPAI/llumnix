@@ -365,9 +365,9 @@ class DPManager:
         ray.kill(self.actor_handle)
 
     async def stop(self):
-        self.terminated_event = asyncio.Event()
-        await self._set_unit_status(UnitStatus.TERMINATED)
-        await self.terminated_event.wait()
+        self.terminating_event = asyncio.Event()
+        await self._set_unit_status(UnitStatus.TERMINATING)
+        await self.terminating_event.wait()
         # Call 'self._stop' here instead of calling it in heartbear loop.
         await self._stop()
 
@@ -442,10 +442,10 @@ class DPManager:
                     failover_timeout = time.perf_counter() - detected_unit_broken_time > unit_failover_timeout
                     if all_stopped or failover_timeout:
                         if self.unit_status == UnitStatus.BROKEN:
-                            await self.stop()
-                        elif self.unit_status == UnitStatus.TERMINATED:
+                            await self._stop()
+                        elif self.unit_status == UnitStatus.TERMINATING:
                             # 'self.stop' will wait on this event.
-                            self.terminated_event.set()
+                            self.terminating_event.set()
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(
@@ -541,6 +541,8 @@ class DPManager:
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
 
+        logger.info("DPManager(unit_id={}) change unit_status {} -> {}".format(
+            self.unit_id, self.unit_status, status))
         self.unit_status = status
 
     async def check_instance_failover_state(self) -> bool:

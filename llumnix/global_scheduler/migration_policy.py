@@ -85,6 +85,7 @@ class Defrag(MigrationPolicy):
             migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
+
 class AggrateDynamicPrefill(MigrationPolicy):
     def pair_migration(self,
                        src_instance_infos: List[InstanceInfo],

@@ -177,9 +177,9 @@ class Llumlet:
         return True
 
     def set_unit_status(self, status: UnitStatus) -> None:
+        logger.info("Llumlet(instance_id={}, instance_type={}) change unit_status {} -> {}.".format(
+            self.instance_id, self.instance_args.instance_type, self.unit_status, status))
         self.unit_status = status
-        logger.info("Llumlet(instance_id={}, instance_type={}) unit_status set to {}.".format(
-            self.instance_id, self.instance_args.instance_type, self.unit_status))
 
     def get_unit_status(self) -> UnitStatus:
         return self.unit_status

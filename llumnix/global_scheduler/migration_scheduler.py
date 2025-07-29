@@ -107,7 +107,7 @@ class MigrationScheduler:
             )
             self.decode_unit_failover_pipeline = MigrationFilterPipeline(self.filter_config)
             self.decode_unit_failover_pipeline.add_filter("decode_filter", decode_filter)
-            self.decode_load_balance_filter_pipeline.add_filter("unit_broken_filter", unit_broken_filter)
+            self.decode_unit_failover_pipeline.add_filter("unit_broken_filter", unit_broken_filter)
 
     def _set_adaptive_pd_filter(self):
         dynamic_p_free_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
@@ -195,7 +195,7 @@ class MigrationScheduler:
     def push_migrations(
         self,
         instance_info: Dict[str, InstanceInfo]
-    ) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    ) -> Tuple[List[Tuple[MigrationType, List[Tuple[str, str]]]], List[Tuple[MigrationType, List[Tuple[str, str]]]]]:
         normal_migration_tasks = []
 
         if self.enable_pd_disagg:
@@ -267,7 +267,7 @@ class MigrationScheduler:
                         migration_filter_pipeline: Optional[MigrationFilterPipeline],
                         migration_policy: MigrationPolicy,
                         skip_broken_unit: bool = True) -> List[Tuple[str, str]]:
-        if not skip_broken_unit:
+        if skip_broken_unit:
             available_instance_infos = {}
             for ins_id, ins_info in instance_info.items():
                 if ins_info.unit_status == UnitStatus.HEALTHY:
@@ -284,7 +284,7 @@ class MigrationScheduler:
         pair_instance_ids = migration_policy.pair_migration(src_instance_infos, dst_instance_infos)
 
         for src_instance_id, dst_instance_id in pair_instance_ids:
-            assert src_instance_id != dst_instance_id, f"migration src and dst instance should not be the same, but got" \
+            assert src_instance_id != dst_instance_id, f"migration src and dst instance should not be the same, but got " \
                 f"{src_instance_id} and {dst_instance_id}."
 
         return pair_instance_ids

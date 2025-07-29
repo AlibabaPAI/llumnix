@@ -281,13 +281,11 @@ class Manager:
         # If encounter error during migration, to make manager keep running, we do not raise exception.
         try:
             instance_infos = self.global_scheduler.instance_info
-            general_migration_tasks, failover_migration_tasks = self.global_scheduler.push_migrations(instance_infos)
+            migration_tasks = self.global_scheduler.push_migrations(instance_infos)
 
-            exist_failover_migration_task = False
-            for task in failover_migration_tasks:
+            for task in migration_tasks:
                 migration_type, migrate_pairs = task
                 for src_instance_id, dst_instance_id in migrate_pairs:
-                    exist_failover_migration_task = True
                     dst_instance_actor = self.instances[dst_instance_id]
                     asyncio.create_task(
                         asyncio_wait_for_ray_remote_call_with_timeout(
@@ -295,19 +293,6 @@ class Manager:
                             dst_instance_actor, dst_instance_id, migration_type
                         )
                     )
-
-            if not exist_failover_migration_task:
-                for task in general_migration_tasks:
-                    migration_type, migrate_pairs = task
-                    for src_instance_id, dst_instance_id in migrate_pairs:
-                        dst_instance_actor = self.instances[dst_instance_id]
-                        asyncio.create_task(
-                            asyncio_wait_for_ray_remote_call_with_timeout(
-                                self.instances[src_instance_id].migrate_out,
-                                dst_instance_actor, dst_instance_id, migration_type
-                            )
-                        )
-
         # pylint: disable=broad-except
         except Exception:
             logger.critical(

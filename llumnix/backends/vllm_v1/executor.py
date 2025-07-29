@@ -29,7 +29,6 @@ from vllm.utils import (get_distributed_init_method,
 from vllm.ray.ray_env import get_env_vars_to_copy
 from vllm.platforms import current_platform
 from vllm.v1.outputs import ModelRunnerOutput
-from vllm.ray.ray_env import get_env_vars_to_copy
 
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger

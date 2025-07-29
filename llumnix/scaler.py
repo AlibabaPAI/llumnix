@@ -243,12 +243,12 @@ class Scaler:
         while True:
             try:
                 new_pg = None
-                service_engine_args = self.engine_args
                 instance_type = get_service_instance_type(service_name) if service_name in ["prefill", "decode"] else None
                 next_instance_type = self._get_next_instance_type() if instance_type is None else instance_type
+                engine_args = self.engine_args
                 if self.load_registered_service:
-                    service_engine_args = self.engine_args_dict[next_instance_type]
-                
+                    engine_args = self.engine_args_dict[next_instance_type]
+
                 if self.last_timeout_unit_id is not None:
                     last_timeout_pg_name = get_placement_group_name(self.last_timeout_unit_id)
                     last_timeout_pg_infos = list_placement_group_infos_by_name(name=last_timeout_pg_name)
@@ -283,7 +283,7 @@ class Scaler:
                     new_unit_id = random_uuid()
                     new_pg = self._init_placement_group(
                         get_placement_group_name(new_unit_id),
-                        service_engine_args,
+                        engine_args,
                         init_server=True,
                         block=False,
                         service_name=service_name,
@@ -301,7 +301,7 @@ class Scaler:
                     new_unit_id,
                     self.entrypoints_args,
                     self.instance_args,
-                    service_engine_args,
+                    engine_args,
                     new_pg,
                     next_instance_type,
                     self.backend_type,

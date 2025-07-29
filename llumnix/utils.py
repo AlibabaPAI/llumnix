@@ -33,6 +33,7 @@ import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix import envs as llumnix_envs
+from llumnix.backends import envs as backend_envs
 from llumnix.constants import RAY_RPC_TIMEOUT
 
 
@@ -160,6 +161,7 @@ def get_llumnix_env_vars():
     llumnix_env_vars = {}
     env_vars = dict(os.environ)
     llumnix_env_vars_keys = list(llumnix_envs.environment_variables.keys())
+    llumnix_env_vars_keys.extend(backend_envs.environment_variables.keys())
     try:
         # pylint: disable=import-outside-toplevel
         from vllm import envs as vllm_envs
@@ -169,9 +171,6 @@ def get_llumnix_env_vars():
     for key, value in env_vars.items():
         if key in llumnix_env_vars_keys:
             llumnix_env_vars[key] = value
-
-    llumnix_env_vars["BLLM_KVTRANS_FSNAMING_KEEPALIVE_S"] = "36000"
-    llumnix_env_vars["BLLM_KVTRANS_FSNAMING_TOLERATE_S"] = "360000"
 
     return llumnix_env_vars
 

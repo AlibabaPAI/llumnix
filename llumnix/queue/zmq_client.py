@@ -33,7 +33,7 @@ from llumnix.queue.zmq_utils import (
     get_open_zmq_ipc_path,
     get_zmq_socket_name,
 )
-from llumnix.constants import ZMQ_RPC_TIMEOUT, ZMQ_IO_THREADS
+from llumnix.constants import ZMQ_RPC_TIMEOUT_SECOND, ZMQ_IO_THREADS
 
 logger = init_logger(__name__)
 
@@ -99,9 +99,9 @@ class ZmqClient(QueueClientBase):
 
             await socket.send_multipart([cloudpickle.dumps(request)])
 
-            if await socket.poll(timeout=(ZMQ_RPC_TIMEOUT * 1000)) == 0:
+            if await socket.poll(timeout=(ZMQ_RPC_TIMEOUT_SECOND * 1000)) == 0:
                 raise TimeoutError(
-                    f"Server didn't reply within {ZMQ_RPC_TIMEOUT * 1000} ms"
+                    f"Server didn't reply within {ZMQ_RPC_TIMEOUT_SECOND * 1000} ms"
                 )
 
             return cloudpickle.loads(await socket.recv())

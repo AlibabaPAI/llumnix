@@ -256,8 +256,7 @@ class MockMigrationScheduler(MigrationScheduler):
     def _pair_migration(self,
                         instance_info: Dict[str, InstanceInfo],
                         migration_filter_pipeline: Optional[MigrationFilterPipeline],
-                        migration_policy: MigrationPolicy,
-                        skip_broken_unit: bool = True) -> List[Tuple[str, str]]:
+                        migration_policy: MigrationPolicy,) -> List[Tuple[str, str]]:
         target_store = None
         if hasattr(self, 'p2d_transfer_filter_pipeline') \
             and migration_filter_pipeline == self.p2d_transfer_filter_pipeline:
@@ -286,8 +285,7 @@ class MockMigrationScheduler(MigrationScheduler):
         elif hasattr(self, 'decode_unit_failover_pipeline') \
             and migration_filter_pipeline == self.decode_unit_failover_pipeline:
             target_store = self.decode_unit_failover_migration_pairs
-        migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter_pipeline,
-                                                         migration_policy, skip_broken_unit)
+        migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter_pipeline, migration_policy)
         target_store.extend(migrate_instance_pairs)
 
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg",

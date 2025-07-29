@@ -19,7 +19,7 @@ from llumnix.load_computation import DummyLoad
 from llumnix.global_scheduler.migration_filter import (MigrationFilterPipeline, MigrationFilterConfig,
                                                        CustomFilter, MigrationFilterFactory)
 from llumnix.global_scheduler.migration_policy import MigrationPolicyFactory, MigrationPolicy
-from llumnix.utils import MigrationType, InstanceType, UnitStatus
+from llumnix.utils import MigrationType, InstanceType
 from llumnix.internal_config import DispatchLoadMetricConfig
 
 logger = init_logger(__name__)
@@ -211,11 +211,11 @@ class MigrationScheduler:
                 MigrationType.FAILOVER_MIGRATION,
                 self._pair_migration(instance_info, self.decode_unit_failover_pipeline, self.unit_failover_policy)
             ))
-        
+
         for task in failover_migration_tasks:
-            if (len(task[1]) > 0):
+            if len(task[1]) > 0:
                 return failover_migration_tasks
-        
+
         normal_migration_tasks = []
         if self.enable_pd_disagg:
             normal_migration_tasks.append((

@@ -21,7 +21,7 @@ import ray
 import pytest
 
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface, BackendMigrationInterface
 from llumnix.llumlet.migration_coordinator import MigrationStatus
 from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
 from llumnix.utils import random_uuid, MigrationResponse, BackendType
@@ -135,7 +135,7 @@ def init_mock_migration_coordinator(backend_engine,
 @pytest.mark.asyncio
 async def test_migrate_out_onestage(ray_env):
     # Create mock objects
-    backend_engine = MagicMock(spec=BackendInterface)
+    backend_engine = MagicMock(spec=BackendMigrationInterface)
     dst_instance_actor = MagicMock()
     migrate_out_request = MagicMock()
     migration_coordinator = init_migration_coordinator(backend_engine)
@@ -218,7 +218,7 @@ async def test_migrate_out_onestage(ray_env):
 @pytest.mark.asyncio
 async def test_migrate_out_running_request(_, ray_env):
     # Create mock objects
-    backend_engine = MagicMock(spec=BackendInterface)
+    backend_engine = MagicMock(spec=BackendBaseInterface)
     dst_instance_actor = MagicMock()
     migrate_out_request = MockRequest("1", 1, math.inf)
     migration_max_stages = 3
@@ -246,7 +246,7 @@ async def test_migrate_out_running_request(_, ray_env):
 @pytest.mark.asyncio
 async def test_migrate_out_waiting_request():
     # Create mock objects
-    backend_engine = MagicMock(spec=BackendInterface)
+    backend_engine = MagicMock(spec=BackendMigrationInterface)
     dst_instance_actor = MagicMock()
     migrate_out_request = MagicMock()
     migration_coordinator = init_migration_coordinator(backend_engine)
@@ -267,7 +267,7 @@ async def test_migrate_out_waiting_request():
 @pytest.mark.asyncio
 async def test_migrate_out_one_request():
     # Create mock objects
-    backend_engine = MagicMock(spec=BackendInterface)
+    backend_engine = MagicMock(spec=BackendMigrationInterface)
     dst_instance_actor = MagicMock()
     migrate_out_request = MagicMock()
     request_id = random_uuid()
@@ -303,7 +303,7 @@ async def test_migrate_out_one_request():
 @pytest.mark.asyncio
 async def test_pending_migrate_in_timeout():
      # Create mock objects
-    backend_engine = MagicMock(spec=BackendInterface)
+    backend_engine = MagicMock(spec=BackendMigrationInterface)
     migrate_out_request = MagicMock()
     migration_coordinator = init_migration_coordinator(backend_engine)
     request_id = random_uuid()
@@ -355,7 +355,7 @@ async def test_pending_migrate_in_timeout():
     assert request_id not in migration_coordinator.pending_migrate_in_request_time
 
 async def test_migration_lock():
-    backend_engine = MagicMock(spec=BackendInterface)
+    backend_engine = MagicMock(spec=BackendBaseInterface)
     migration_coordinator = init_mock_migration_coordinator(backend_engine)
 
     # test migrate out lock

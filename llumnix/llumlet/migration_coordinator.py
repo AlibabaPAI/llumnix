@@ -22,7 +22,7 @@ import ray.actor
 
 from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface
 from llumnix.utils import (
     asyncio_wait_for_ray_remote_call_with_timeout,
     RequestIDType,
@@ -226,7 +226,7 @@ def update_migrating_in_request_id_set_decorator(func):
 class MigrationCoordinator:
     def __init__(self,
                  instance_id: str,
-                 backend_engine: BackendInterface,
+                 backend_engine: BackendBaseInterface,
                  backend_type: BackendType,
                  max_migration_concurrency: int,
                  request_migration_policy: str,

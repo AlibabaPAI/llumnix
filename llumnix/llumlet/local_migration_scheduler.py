@@ -15,11 +15,11 @@ from typing import Deque, List
 import numpy as np
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus, RequestInferenceType
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface
 
 
 class LocalMigrationScheduler:
-    def __init__(self, request_migration_policy: str, backend_engine: BackendInterface) -> None:
+    def __init__(self, request_migration_policy: str, backend_engine: BackendBaseInterface) -> None:
         self.request_migration_policy = request_migration_policy
         self.backend_engine = backend_engine
 

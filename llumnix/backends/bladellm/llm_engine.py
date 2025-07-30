@@ -73,7 +73,7 @@ from llumnix.request_output import LlumnixRequestOuput
 from llumnix.metrics.timestamps import RequestTimestamps
 from llumnix.arg_utils import LlumnixEngineArgs
 from llumnix.utils import RequestIDType, exception_wrapper_async
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface, BackendMigrationInterface
 
 logger = init_logger(__name__)
 
@@ -584,7 +584,7 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
         )
 
 
-class BackendBladeLLM(BackendInterface):
+class BackendBladeLLM(BackendBaseInterface, BackendMigrationInterface):
     def __init__(self,
                  instance_id: str,
                  placement_group: PlacementGroup,

@@ -23,7 +23,7 @@ from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.instance_info import InstanceInfo
 
 
-class BackendInterface(ABC):
+class BackendBaseInterface(ABC):
     @abstractmethod
     def stop(self):
         """ Stop backend engine."""
@@ -69,6 +69,22 @@ class BackendInterface(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def get_instance_info(self) -> InstanceInfo:
+        """
+        Get instance info from backend engine.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_engine_context(self) -> InstanceContext:
+        """
+        Get engine context from backend engine.
+        """
+        raise NotImplementedError
+
+
+class BackendMigrationInterface(ABC):
     # Methods for migration
     async def get_request_incremental_blocks(self,
                                              backend_request: LlumnixRequest,
@@ -332,19 +348,5 @@ class BackendInterface(ABC):
     async def _run_workers_async(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs) -> List[Any]:
         """
         Run all workers with the given method asynchronously.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_instance_info(self) -> InstanceInfo:
-        """
-        Get instance info from backend engine.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_engine_context(self) -> InstanceContext:
-        """
-        Get engine context from backend engine.
         """
         raise NotImplementedError

@@ -26,7 +26,7 @@ from llumnix.queue.zmq_utils import (RPC_SUCCESS_STR, RPCPutNoWaitQueueRequest,
                                      get_open_zmq_ipc_path)
 from llumnix.logging.logger import init_logger
 from llumnix.constants import (RPC_SOCKET_LIMIT_CUTOFF, RPC_ZMQ_HWM, RETRY_BIND_ADDRESS_INTERVAL,
-                               MAX_BIND_ADDRESS_RETRY_TIMES, ZMQ_IO_THREADS, ZMQ_RPC_TIMEOUT)
+                               MAX_BIND_ADDRESS_RETRY_TIMES, ZMQ_IO_THREADS, ZMQ_RPC_TIMEOUT_SECOND)
 from llumnix.request_output import LlumnixRequestOuput
 from llumnix.utils import get_ip_address, get_free_port
 
@@ -168,7 +168,7 @@ class ZmqServer(QueueServerBase):
                 self.socket.send_multipart(
                     [identity, cloudpickle.dumps(RPC_SUCCESS_STR)]
                 ),
-                timeout=ZMQ_RPC_TIMEOUT
+                timeout=ZMQ_RPC_TIMEOUT_SECOND
             )
         # pylint: disable=broad-except
         except Exception as e:
@@ -185,7 +185,7 @@ class ZmqServer(QueueServerBase):
                 self.socket.send_multipart(
                     [identity, cloudpickle.dumps(RPC_SUCCESS_STR)]
                 ),
-                timeout=ZMQ_RPC_TIMEOUT
+                timeout=ZMQ_RPC_TIMEOUT_SECOND
             )
         # pylint: disable=broad-except
         except Exception as e:
@@ -195,7 +195,7 @@ class ZmqServer(QueueServerBase):
                     self.socket.send_multipart(
                         [identity, cloudpickle.dumps(e)]
                     ),
-                    timeout=ZMQ_RPC_TIMEOUT
+                    timeout=ZMQ_RPC_TIMEOUT_SECOND
                 )
             # pylint: disable=broad-except
             except Exception as e:
@@ -209,7 +209,7 @@ class ZmqServer(QueueServerBase):
                 self.socket.send_multipart(
                     [identity, cloudpickle.dumps(RPC_SUCCESS_STR)]
                 ),
-                timeout=ZMQ_RPC_TIMEOUT
+                timeout=ZMQ_RPC_TIMEOUT_SECOND
             )
         # pylint: disable=broad-except
         except Exception as e:
@@ -219,7 +219,7 @@ class ZmqServer(QueueServerBase):
                     self.socket.send_multipart(
                         [identity, cloudpickle.dumps(e)]
                     ),
-                    timeout=ZMQ_RPC_TIMEOUT
+                    timeout=ZMQ_RPC_TIMEOUT_SECOND
                 )
             # pylint: disable=broad-except
             except Exception as e:

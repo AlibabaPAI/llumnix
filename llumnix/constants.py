@@ -70,7 +70,7 @@ NO_OUTPUTS_STEP_INTERVAL: float = 0.01
 RAY_QUEUE_RPC_TIMEOUT: int = 5000
 
 # llumnix/queue/zmq_client.py, llumnix/queue/zmq_server.py
-ZMQ_RPC_TIMEOUT: int = 5000
+ZMQ_RPC_TIMEOUT_SECOND: int = 5
 
 # llumnix/queue/zmq_server.py
 RPC_SOCKET_LIMIT_CUTOFF: int = 2000

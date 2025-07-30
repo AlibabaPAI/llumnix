@@ -502,6 +502,9 @@ class AsyncLLMEngineLlumnixMixin:
     def get_num_wait_update_request_ids(self) -> int:
         return self.request_barriers.qsize()
 
+    async def get_metrics(self) -> str:
+        return InMemExporter.METRICS_TXT
+
 
 class AsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, AsyncLLMEngine):
     def __init__(self,
@@ -555,9 +558,6 @@ class PrefillAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, PrefillAsyncLLMEn
             request_output_forwarding_mode,
         )
 
-    async def get_metrics(self) -> str:
-        return InMemExporter.METRICS_TXT
-
 
 class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngine):
     def __init__(self,
@@ -582,9 +582,6 @@ class DecodeAsyncLLMEngineLlumnix(AsyncLLMEngineLlumnixMixin, DecodeAsyncLLMEngi
             backend_type,
             request_output_forwarding_mode,
         )
-
-    async def get_metrics(self) -> str:
-        return InMemExporter.METRICS_TXT
 
 
 class BackendBladeLLM(BackendInterface):

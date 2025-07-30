@@ -204,7 +204,7 @@ class AsyncBackQueueWrapper:
 
             server_request_outputs, server_info_dict = self._gen_server_request_outputs(request_outputs, request_processing_context_outputs)
             if server_request_outputs:
-                await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
+                self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
     def _gen_server_request_outputs(self,
                                     request_outputs: List[GenerateStreamResponse],

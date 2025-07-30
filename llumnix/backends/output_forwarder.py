@@ -41,6 +41,7 @@ logger = init_logger(__name__)
 
 LlumnixRequestOutputsType = Union[List[LlumnixRequestOuput], LlumnixRequestOutputs]
 
+
 class RequestOutputForwardingMode(str, Enum):
     ACTOR = "actor"
     THREAD = "thread"
@@ -52,7 +53,7 @@ class StopPutQueueSignal:
 
 class BaseOutputForwarder(ABC):
     @abstractmethod
-    async def put_nowait_to_servers(
+    def put_nowait_to_servers(
         self,
         server_request_outputs: Dict[str, LlumnixRequestOutputsType],
         server_info_dict: Dict[str, ServerInfo]
@@ -120,6 +121,7 @@ class ActorOutputForwarder(BaseOutputForwarder):
     def __repr__(self):
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
+    # pylint: disable=invalid-overridden-method
     async def put_nowait_to_servers(
         self,
         server_request_outputs: Dict[str, LlumnixRequestOutputsType],
@@ -148,19 +150,25 @@ class ThreadOutputForwarder(BaseOutputForwarder):
         self,
         instance_id: str,
         request_output_queue_type: QueueType,
-        abort_request_callback: Coroutine
+        request_output_forwarding_mode: RequestOutputForwardingMode,
+        abort_request_callback: Coroutine,
+        actor_forwarder: ray.actor.ActorHandle = None,
     ):
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client = init_request_output_queue_client(self.request_output_queue_type)
+        self.request_output_forwarding_mode = request_output_forwarding_mode
+        if request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
+            self.actor_forwarder = actor_forwarder
+        else:
+            self.main_loop = asyncio.get_event_loop()
         self.abort_request_callback = abort_request_callback
         self.server_request_outputs_queue = queue.Queue()
-        self.main_loop = asyncio.get_event_loop()
         self.put_queue_loop_thread = threading.Thread(
             target=self._start_put_queue_loop, args=(), daemon=True, name=f"TheadOutputForwarder_{instance_id}"
         )
         self.put_queue_loop_thread.start()
 
-    async def put_nowait_to_servers(
+    def put_nowait_to_servers(
         self,
         server_request_outputs: Dict[str, LlumnixRequestOutputsType],
         server_info_dict: Dict[str, ServerInfo]
@@ -196,13 +204,18 @@ class ThreadOutputForwarder(BaseOutputForwarder):
         server_request_outputs: Dict[str, LlumnixRequestOutputsType],
         server_info_dict: Dict[str, ServerInfo],
     ) -> None:
-        aborted_request_ids = await self.put_nowait_to_servers_func(
-            self.request_output_queue_type, self.request_output_queue_client, server_request_outputs, server_info_dict
-        )
-        abort_request_callback = exception_wrapper_async(self.abort_request_callback)
-        if aborted_request_ids:
-            asyncio.run_coroutine_threadsafe(
-                abort_request_callback(aborted_request_ids), self.main_loop
+        if self.request_output_forwarding_mode == RequestOutputForwardingMode.THREAD:
+            aborted_request_ids = await self.put_nowait_to_servers_func(
+                self.request_output_queue_type, self.request_output_queue_client, server_request_outputs, server_info_dict
+            )
+            abort_request_callback = exception_wrapper_async(self.abort_request_callback)
+            if aborted_request_ids:
+                asyncio.run_coroutine_threadsafe(
+                    abort_request_callback(aborted_request_ids), self.main_loop
+                )
+        else:
+            await asyncio_wait_for_ray_remote_call_with_timeout(
+                self.actor_forwarder.put_nowait_to_servers, server_request_outputs, server_info_dict
             )
 
     def stop(self) -> None:
@@ -226,6 +239,7 @@ class OutputForwarder:
         self.request_output_queue_type = request_output_queue_type
         self.request_output_forwarding_mode = request_output_forwarding_mode
         self.abort_request_callback = abort_request_callback
+        self.actor_forwarder = None
         if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
             # Place the actor forwarder together with the instance.
             scheduling_strategy = PlacementGroupSchedulingStrategy(
@@ -240,24 +254,20 @@ class OutputForwarder:
                 scheduling_strategy=scheduling_strategy,
                 name=f"ActorOutputForwarder_{instance_id}"
             )(ActorOutputForwarder).remote(instance_id, request_output_queue_type)
-        else:
-            self.thread_forwarder: ThreadOutputForwarder = ThreadOutputForwarder(
-                instance_id,
-                request_output_queue_type,
-                abort_request_callback,
-            )
+        self.thread_forwarder: ThreadOutputForwarder = ThreadOutputForwarder(
+            instance_id,
+            request_output_queue_type,
+            request_output_forwarding_mode,
+            abort_request_callback,
+            self.actor_forwarder,
+        )
 
-    async def put_request_outputs_to_server(
+    def put_request_outputs_to_server(
         self,
         server_request_outputs: LlumnixRequestOutputsType,
         server_info_dict: List[ServerInfo]
     ) -> None:
-        if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
-            await asyncio_wait_for_ray_remote_call_with_timeout(
-                self.actor_forwarder.put_nowait_to_servers, server_request_outputs, server_info_dict
-            )
-        else:
-            await self.thread_forwarder.put_nowait_to_servers(server_request_outputs, server_info_dict)
+        self.thread_forwarder.put_nowait_to_servers(server_request_outputs, server_info_dict)
 
     def stop(self):
         if self.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:

@@ -66,7 +66,7 @@ class MockEngine(LLMEngineLlumnix):
 
 @ray.remote(num_cpus=0)
 class MockActorOutputForwarder:
-    async def put_nowait_to_servers(self, server_request_outputs, server_info_dict):
+    def put_nowait_to_servers(self, server_request_outputs, server_info_dict):
         self.server_request_outputs = server_request_outputs
         self.server_info_dict = server_info_dict
 
@@ -150,7 +150,7 @@ async def test_put_request_outputs_to_server(ray_env, request_output_forwarding_
     llm_engine: LLMEngineLlumnix = init_llm_engine(instance_id, request_output_forwarding_mode)
     if request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
         actor_forwarder = MockActorOutputForwarder.remote()
-        llm_engine.output_forwarder.actor_forwarder = actor_forwarder
+        llm_engine.output_forwarder.thread_forwarder.actor_forwarder = actor_forwarder
     else:
         request_output_queue_client = MockRequestOutputQueueClient()
         llm_engine.output_forwarder.thread_forwarder.request_output_queue_client = request_output_queue_client
@@ -160,8 +160,9 @@ async def test_put_request_outputs_to_server(ray_env, request_output_forwarding_
     server_id = random_uuid()
     request_processing_contexts = [RequestProcessingContext(server_id, None, None, None, None)]
     server_request_outputs, server_info_dict = llm_engine._gen_server_request_outputs(request_outputs, request_processing_contexts)
-    await llm_engine.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
+    llm_engine.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
     if request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR:
+        time.sleep(1.0)
         server_request_outputs, server_info_dict = ray.get(actor_forwarder.get.remote())
         request_outputs_engine = server_request_outputs[server_id]
         llumnix_response: LlumnixRequestOuputVLLM = request_outputs_engine[0]

@@ -323,12 +323,14 @@ class AsyncEngineCoreProc(EngineCoreProc, AsyncEngineCore):
 
 
 class AsyncDPEngineCoreProc(AsyncEngineCoreProc, DPEngineCoreProc):
-    def __init__(self,
-                 vllm_config: VllmConfig,
-                 on_head_node: bool,
-                 handshake_address: str,
-                 executor_class: type[Executor],
-                 log_stats: bool,):
+    def __init__(
+        self,
+        vllm_config: VllmConfig,
+        on_head_node: bool,
+        handshake_address: str,
+        executor_class: type[Executor],
+        log_stats: bool,
+    ):
         # Counts forward-passes of the model so that we can synchronize
         # finished with DP peers every N steps.
         self.counter = 0

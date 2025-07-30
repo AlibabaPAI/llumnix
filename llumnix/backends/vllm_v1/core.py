@@ -64,23 +64,24 @@ logger = init_logger(__name__)
 
 
 class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
-    def __init__(self,
-                 instance_id: str,
-                 instance_type: InstanceType,
-                 placement_group: PlacementGroup,
-                 request_output_queue_type: QueueType,
-                 disable_async_output_proc: bool,
-                 backend_type: BackendType,
-                 request_output_forwarding_mode: RequestOutputForwardingMode,
-                 abort_request_callback: Coroutine,
-                 vllm_config: VllmConfig,
-                 on_head_node: bool,
-                 handshake_address: str,
-                 executor_class: type[Executor],
-                 log_stats: bool,
-                 engine_index: int = 0,
-                 dp_rank: int = 0) -> None:
-
+    def __init__(
+        self,
+        instance_id: str,
+        instance_type: InstanceType,
+        placement_group: PlacementGroup,
+        request_output_queue_type: QueueType,
+        disable_async_output_proc: bool,
+        backend_type: BackendType,
+        request_output_forwarding_mode: RequestOutputForwardingMode,
+        abort_request_callback: Coroutine,
+        vllm_config: VllmConfig,
+        on_head_node: bool,
+        handshake_address: str,
+        executor_class: type[Executor],
+        log_stats: bool,
+        engine_index: int = 0,
+        dp_rank: int = 0
+    ) -> None:
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
         super().__init__(vllm_config, on_head_node, handshake_address, executor_class, log_stats, engine_index)
@@ -97,13 +98,9 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             backend_type,
             dp_rank,
         )
-
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         self.disable_async_output_proc = disable_async_output_proc
         self.reqeust_processing_context_table = {}
-
-        assert isinstance(self.scheduler, SchedulerLlumnix), \
-            "EngineCore.scheduler failed to set to SchedulerLlumnix"
 
     # pylint: disable=W0221
     @classmethod
@@ -162,7 +159,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
     async def _put_engine_core_outputs(
         self,
         outputs: Dict[int, EngineCoreOutputs]
-    ):
+    ) -> None:
         # collects engine_core_output from all clients
         engine_core_output_all = []
         for engine_core_outputs in outputs.values():
@@ -178,7 +175,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         if outputs:
             server_request_outputs, server_info_dict = self._gen_server_request_outputs(outputs)
             if server_request_outputs:
-                await self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
+                self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
         set_timestamp(engine_core_output_all, 'engine_step_postprocess_timestamp_end', time.time())
 
@@ -219,6 +216,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 server_info_dict[server_id] = server_info
 
         return server_request_outputs, server_info_dict
+
     def _update_instance_info(self):
         """Update instance info from executor and scheduler after step"""
         instance_info: InstanceInfo = self.instance_info # type: ignore
@@ -398,7 +396,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         llumnix_engine_args: LlumnixEngineArgs,
         dp_rank: int = 0,
         dp_rank_local: Optional[int] = None
-    ) -> None:
+    ):
         self.instance_id = instance_id
         self.host = get_ip_address()
         engine_args = self._load_and_reconfig_engine_args(llumnix_engine_args)
@@ -464,7 +462,14 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
     async def execute_driver_worker_method_async(self, method, *args, **kwargs):
         return await make_async(self.engine.model_executor.driver_worker.execute_method)(method, *args, **kwargs)
 
-    async def add_request(self, request_id: str, request_processing_context: RequestProcessingContext, expected_steps: int, *args, **kwargs) -> None:
+    async def add_request(
+        self,
+        request_id: str,
+        request_processing_context: RequestProcessingContext,
+        expected_steps: int,
+        *args,
+        **kwargs,
+    ) -> None:
         await self.engine.add_request_async(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
     async def commit_dst_request(self,
@@ -564,4 +569,5 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         return InstanceContext(
             local_engine_id=self.instance_id,
             kvt_engine_available_port=kvt_engine_available_port,
-            engine_host=self.host)
+            engine_host=self.host,
+        )

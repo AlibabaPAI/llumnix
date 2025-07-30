@@ -136,7 +136,6 @@ class Scaler:
                 instance_type_list = ["neutral"]
             else:
                 instance_type_list = ["prefill", "decode"]
-            assert len(instance_type_list) == 2
             for instance_type in instance_type_list:
                 self.engine_args_dict[instance_type] = load_engine_args(
                     instance_type, self.load_registered_service_path

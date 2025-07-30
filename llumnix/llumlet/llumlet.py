@@ -62,7 +62,7 @@ class Llumlet:
 
         self.instance_load_calculator = InstanceLoadCalculator(instance_args=instance_args)
 
-        self.backend_engine: BackendInterface = init_backend_engine(
+        self.backend_engine: BackendBaseInterface = init_backend_engine(
             instance_id,
             placement_group,
             request_output_queue_type,

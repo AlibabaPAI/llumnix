@@ -52,6 +52,7 @@ class VLLMV1EngineArgsFactory(LlumnixEngineArgsFactory):
         if self.pdd_config.enable_engine_pd_disagg:
             next_engine_args.revised_args.kvt_inst_id = unit_id
             next_engine_args.revised_args.kv_port += port_offset
+            next_engine_args.revised_args.rpc_port += port_offset
 
         return next_engine_args
 
@@ -71,6 +72,7 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
         self.revised_args = RevisedArgs()
         if engine_args.kv_transfer_config:
             self.revised_args.kv_port = engine_args.kv_transfer_config.kv_port
+            self.revised_args.rpc_port = engine_args.kv_transfer_config.kv_connector_extra_config.get("rpc_port", 30000)
 
     def _get_world_size(self, engine_args: "AsyncEngineArgs"):
         world_size = engine_args.pipeline_parallel_size * engine_args.tensor_parallel_size
@@ -97,6 +99,8 @@ class VLLMV1EngineArgs(LlumnixEngineArgs):
             engine_args.kv_transfer_config.kv_connector_extra_config["kvt_inst_id"] = self.revised_args.kvt_inst_id
         if self.revised_args.kv_port:
             engine_args.kv_transfer_config.kv_port = self.revised_args.kv_port
+        if self.revised_args.rpc_port:
+            engine_args.kv_transfer_config.kv_connector_extra_config["rpc_port"] = self.revised_args.rpc_port
         return engine_args
 
     def get_world_size(self):
@@ -114,6 +118,8 @@ class RevisedArgs:
     # bladellm engine args need to revised
     kvt_inst_id: str = field(default=None)
     kv_port: int = field(default=None)
+    rpc_port: int = field(default=None)
+
 
 
 def add_cli_args(parser: LlumnixArgumentParser) -> LlumnixArgumentParser:

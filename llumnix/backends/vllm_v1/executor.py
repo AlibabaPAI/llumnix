@@ -26,6 +26,7 @@ from vllm.v1.executor.ray_distributed_executor import RayDistributedExecutor
 from vllm.executor.ray_utils import RayWorkerWrapper
 from vllm.utils import (get_distributed_init_method,
                         get_ip, get_open_port, envs)
+from vllm.ray.ray_env import get_env_vars_to_copy
 from vllm.platforms import current_platform
 from vllm.v1.outputs import ModelRunnerOutput
 
@@ -282,13 +283,10 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
         } for (node_id, _) in worker_node_and_gpu_ids]
 
         # Environment variables to copy from driver to workers
-        env_vars_to_copy = [
-            v for v in envs.environment_variables
-            if v not in self.WORKER_SPECIFIC_ENV_VARS
-            and v not in self.non_carry_over_env_vars
-        ]
-
-        env_vars_to_copy.extend(current_platform.additional_env_vars)
+        env_vars_to_copy = get_env_vars_to_copy(
+            exclude_vars=self.WORKER_SPECIFIC_ENV_VARS,
+            additional_vars=set(current_platform.additional_env_vars),
+            destination="workers")
 
         # Copy existing env vars to each worker's args
         for args in all_args_to_update_environment_variables:
@@ -296,15 +294,6 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
             for name in env_vars_to_copy:
                 if name in os.environ:
                     args[name] = os.environ[name]
-
-        logger.info("non_carry_over_env_vars from config: %s",
-                    self.non_carry_over_env_vars)
-        logger.info(
-            "Copying the following environment variables to workers: %s",
-            [v for v in env_vars_to_copy if v in os.environ])
-        logger.info(
-            "If certain env vars should NOT be copied to workers, add them to "
-            "%s file", self.non_carry_over_env_vars_file)
 
         self._env_vars_for_all_workers = (
             all_args_to_update_environment_variables)

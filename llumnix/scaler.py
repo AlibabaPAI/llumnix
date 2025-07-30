@@ -30,6 +30,7 @@ from llumnix.arg_utils import (
     LaunchArgs,
     LlumnixEngineArgs,
     LlumnixEngineArgsFactory,
+    load_engine_args,
 )
 from llumnix.utils import (
     get_service_resouces,
@@ -129,6 +130,17 @@ class Scaler:
             load_registered_service_path=self.load_registered_service_path,
             pdd_config=self.pdd_config,
         )
+        if self.load_registered_service:
+            self.engine_args_dict: Dict[str, LlumnixEngineArgs] = {}
+            if not self.enable_pd:
+                instance_type_list = ["neutral"]
+            else:
+                instance_type_list = ["prefill", "decode"]
+            for instance_type in instance_type_list:
+                self.engine_args_dict[instance_type] = load_engine_args(
+                    instance_type, self.load_registered_service_path
+                )
+
         # scale up states
         self.port_offset = 0
         if self.enable_port_increment:
@@ -230,6 +242,12 @@ class Scaler:
         while True:
             try:
                 new_pg = None
+                instance_type = get_service_instance_type(service_name) if service_name in ["prefill", "decode"] else None
+                next_instance_type = self._get_next_instance_type() if instance_type is None else instance_type
+                engine_args = self.engine_args
+                if self.load_registered_service:
+                    engine_args = self.engine_args_dict[next_instance_type]
+
                 if self.last_timeout_unit_id is not None:
                     last_timeout_pg_name = get_placement_group_name(self.last_timeout_unit_id)
                     last_timeout_pg_infos = list_placement_group_infos_by_name(name=last_timeout_pg_name)
@@ -264,7 +282,7 @@ class Scaler:
                     new_unit_id = random_uuid()
                     new_pg = self._init_placement_group(
                         get_placement_group_name(new_unit_id),
-                        self.engine_args,
+                        engine_args,
                         init_server=True,
                         block=False,
                         service_name=service_name,
@@ -278,14 +296,13 @@ class Scaler:
                     self.last_timeout_unit_id = new_unit_id
                     await asyncio.sleep(interval)
                     continue
-                instance_type = get_service_instance_type(service_name) if service_name in ["prefill", "decode"] else None
                 self._init_dp_manager(
                     new_unit_id,
                     self.entrypoints_args,
                     self.instance_args,
-                    self.engine_args,
+                    engine_args,
                     new_pg,
-                    instance_type,
+                    next_instance_type,
                     self.backend_type,
                 )
             # pylint: disable=broad-except
@@ -352,7 +369,7 @@ class Scaler:
         instance_args: InstanceArgs,
         engine_args: LlumnixEngineArgs,
         placement_group: PlacementGroup,
-        instance_type: InstanceType,
+        next_instance_type: InstanceType,
         backend_type: BackendType,
     ) -> None:
         async def dp_manager_ready_scale_up(unit_id: str, dp_manager: DPManager, instance_type: InstanceType):
@@ -380,7 +397,6 @@ class Scaler:
         dp_size = engine_args.get_dp_size()
         dp_size_local = engine_args.get_dp_size_local()
 
-        next_instance_type = self._get_next_instance_type(dp_size) if instance_type is None else instance_type
         entrypoints_args_list: List[EntrypointsArgs] = []
         instance_id_list: List[str] = []
         instance_args_list: List[InstanceArgs] = []
@@ -754,7 +770,7 @@ class Scaler:
     def enable_pd(self):
         return self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg
 
-    def _get_next_instance_type(self, instance_num: int = 1) -> str:
+    def _get_next_instance_type(self) -> str:
         if not self.enable_pd:
             return InstanceType.NEUTRAL
 
@@ -782,8 +798,8 @@ class Scaler:
             if total_num_prefill_units + total_num_decode_units == 0:
                 instance_type = InstanceType.PREFILL
             else:
-                distance_if_prefill = total_num_prefill_units + instance_num - total_num_decode_units
-                distance_if_decode = total_num_prefill_units - (total_num_decode_units + instance_num)
+                distance_if_prefill = total_num_prefill_units + 1 - total_num_decode_units
+                distance_if_decode = total_num_prefill_units - (total_num_decode_units + 1)
                 gap_to_normal_if_prefill = abs(distance_if_prefill - normal_distance)
                 gap_to_normal_if_decode = abs(distance_if_decode - normal_distance)
                 instance_type = InstanceType.PREFILL if gap_to_normal_if_prefill <= gap_to_normal_if_decode else InstanceType.DECODE

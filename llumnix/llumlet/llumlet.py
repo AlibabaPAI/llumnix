@@ -21,7 +21,7 @@ from ray.util.placement_group import PlacementGroup
 
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo, InstanceLoadCalculator
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface
 from llumnix.backends.utils import init_backend_engine, EngineState
 from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.request_processing_context import RequestProcessingContext
@@ -60,7 +60,7 @@ class Llumlet:
 
         self.instance_load_calculator = InstanceLoadCalculator(instance_args=instance_args)
 
-        self.backend_engine: BackendInterface = init_backend_engine(instance_id,
+        self.backend_engine: BackendBaseInterface = init_backend_engine(instance_id,
                                                                     placement_group,
                                                                     request_output_queue_type,
                                                                     instance_args,

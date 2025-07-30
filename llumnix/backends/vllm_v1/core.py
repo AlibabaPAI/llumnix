@@ -33,7 +33,7 @@ from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface, BackendMigrationInterface
 from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc,
                                                  AsyncDPEngineCoreProc)
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
@@ -388,7 +388,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         return
 
 
-class BackendVLLMV1(BackendInterface):
+class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
     def __init__(
         self,
         instance_id: str,

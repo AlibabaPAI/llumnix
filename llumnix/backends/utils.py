@@ -19,7 +19,7 @@ import ray
 from ray.util.placement_group import PlacementGroup
 
 from llumnix.arg_utils import LlumnixEngineArgs, InstanceArgs
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface
 from llumnix.queue.queue_type import QueueType
 from llumnix.logging.logger import init_logger
 from llumnix.utils import (BackendType, ray_get_with_timeout)
@@ -62,7 +62,7 @@ def init_backend_engine(instance_id: str,
                         instance_args: InstanceArgs,
                         llumnix_engine_args: LlumnixEngineArgs,
                         dp_rank: int = 0,
-                        dp_rank_local: Optional[int] = None) -> BackendInterface:
+                        dp_rank_local: Optional[int] = None) -> BackendBaseInterface:
     backend_type = llumnix_engine_args.backend_type
     if backend_type == BackendType.VLLM:
         # pylint: disable=import-outside-toplevel

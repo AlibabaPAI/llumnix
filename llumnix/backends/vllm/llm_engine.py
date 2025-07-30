@@ -34,7 +34,7 @@ from vllm import envs as vllm_envs
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
-from llumnix.backends.backend_interface import BackendInterface
+from llumnix.backends.backend_interface import BackendBaseInterface, BackendMigrationInterface
 from llumnix.backends.vllm.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm.sequence import SequenceGroupLlumnix, RequestStatus
 from llumnix.backends.profiling import LatencyMemData
@@ -334,7 +334,8 @@ class LLMEngineLlumnix(_AsyncLLMEngine):
         if request_id in self.request_ids:
             self.request_ids.remove(request_id)
 
-class BackendVLLM(BackendInterface):
+
+class BackendVLLM(BackendBaseInterface, BackendMigrationInterface):
     def __init__(
         self,
         instance_id: str,

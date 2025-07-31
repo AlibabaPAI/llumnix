@@ -42,14 +42,16 @@ logger = init_logger(__name__)
 
 
 class Llumlet:
-    def __init__(self,
-                 instance_id: str,
-                 instance_args: InstanceArgs,
-                 placement_group: PlacementGroup,
-                 request_output_queue_type: QueueType,
-                 llumnix_engine_args: LlumnixEngineArgs,
-                 dp_rank: int = 0,
-                 dp_rank_local: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        instance_id: str,
+        instance_args: InstanceArgs,
+        placement_group: PlacementGroup,
+        request_output_queue_type: QueueType,
+        llumnix_engine_args: LlumnixEngineArgs,
+        dp_rank: int = 0,
+        dp_rank_local: Optional[int] = None
+    ) -> None:
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
         logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
@@ -60,12 +62,15 @@ class Llumlet:
 
         self.instance_load_calculator = InstanceLoadCalculator(instance_args=instance_args)
 
-        self.backend_engine: BackendBaseInterface = init_backend_engine(instance_id,
-                                                                    placement_group,
-                                                                    request_output_queue_type,
-                                                                    instance_args,
-                                                                    llumnix_engine_args,
-                                                                    dp_rank, dp_rank_local)
+        self.backend_engine: BackendBaseInterface = init_backend_engine(
+            instance_id,
+            placement_group,
+            request_output_queue_type,
+            instance_args,
+            llumnix_engine_args,
+            dp_rank,
+            dp_rank_local,
+        )
 
         self.enable_migration = instance_args.enable_migration
         if self.enable_migration:
@@ -86,14 +91,16 @@ class Llumlet:
         return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     @classmethod
-    def from_args(cls,
-                  instance_id: str,
-                  instance_args: InstanceArgs,
-                  placement_group: PlacementGroup,
-                  request_output_queue_type: QueueType,
-                  engine_args: LlumnixEngineArgs,
-                  dp_rank: int = 0,
-                  dp_rank_local: Optional[int] = None):
+    def from_args(
+        cls,
+        instance_id: str,
+        instance_args: InstanceArgs,
+        placement_group: PlacementGroup,
+        request_output_queue_type: QueueType,
+        engine_args: LlumnixEngineArgs,
+        dp_rank: int = 0,
+        dp_rank_local: Optional[int] = None
+    ) -> ray.actor.ActorHandle:
         backend_type = engine_args.backend_type
         assert backend_type in [BackendType.VLLM, BackendType.BLADELLM, BackendType.VLLM_V1, BackendType.SIM_VLLM], \
             f'unimplemented backend {BackendType}'
@@ -109,23 +116,28 @@ class Llumlet:
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR
         else: # backend_type == BackendType.SIM_VLLM
             num_gpus = 0
-        llumlet_class = ray.remote(num_cpus=1,
-                                    num_gpus=num_gpus,
-                                    name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
-                                    namespace='llumnix',
-                                    lifetime="detached")(cls).options(
-                                        scheduling_strategy=PlacementGroupSchedulingStrategy(
-                                            placement_group=placement_group,
-                                            placement_group_bundle_index=bundle_index,
-                                            placement_group_capture_child_tasks=True
-                                        )
-                                    )
-        llumlet = llumlet_class.remote(instance_id,
-                                       instance_args,
-                                       placement_group,
-                                       request_output_queue_type,
-                                       engine_args,
-                                       dp_rank, dp_rank_local)
+        llumlet_class = ray.remote(
+            num_cpus=1,
+            num_gpus=num_gpus,
+            name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
+            namespace='llumnix',
+            lifetime="detached"
+        )(cls).options(
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=placement_group,
+                placement_group_bundle_index=bundle_index,
+                placement_group_capture_child_tasks=True
+            )
+        )
+        llumlet = llumlet_class.remote(
+            instance_id,
+            instance_args,
+            placement_group,
+            request_output_queue_type,
+            engine_args,
+            dp_rank,
+            dp_rank_local
+        )
 
         return llumlet
 
@@ -189,12 +201,15 @@ class Llumlet:
         request_ids = set(request_id)
         await self.backend_engine.abort_request(request_ids)
 
-    async def migrate_out(self,
-                          dst_instance_actor: ray.actor.ActorHandle,
-                          dst_instance_id: str,
-                          migration_type: Optional[MigrationType] = None) -> List[RequestIDType]:
+    async def migrate_out(
+        self,
+        dst_instance_actor: ray.actor.ActorHandle,
+        dst_instance_id: str,
+        migration_type: Optional[MigrationType] = None
+    ) -> List[RequestIDType]:
         return await self.migration_coordinator.migrate_out(
-            dst_instance_actor, dst_instance_id, migration_type)
+            dst_instance_actor, dst_instance_id, migration_type
+        )
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

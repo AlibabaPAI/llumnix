@@ -691,7 +691,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         if len(self.worker_handle_list) + 1 == self.engine.vllm_config.parallel_config.world_size:
             self.worker_handle_list.insert(0, get_llumnix_actor_handle(LlumnixActor.INSTANCE, self.instance_id))
 
-        if self.migration_config.enable_migration:
+        if self.migration_config.enable_routine_migration:
             self._run_workers("init_migration", instance_id=instance_id,
                                                 migration_config=self.migration_config,
                                                 src_worker_handle_list=self.worker_handle_list,

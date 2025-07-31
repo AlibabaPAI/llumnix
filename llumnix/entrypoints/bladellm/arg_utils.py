@@ -179,7 +179,7 @@ def detect_migration_unsupported_engine_feature(engine_args: "ServingArgs") -> N
 def check_engine_args(engine_args: "ServingArgs", manager_args: ManagerArgs = None) -> None:
     detect_unsupported_engine_feature(engine_args)
 
-    if manager_args is not None and manager_args.enable_migration:
+    if manager_args is not None and manager_args.enable_routine_migration:
         detect_migration_unsupported_engine_feature(engine_args)
 
     assert engine_args.serving_multi_processing_options.disable_frontend_multiprocessing is True, \
@@ -191,7 +191,7 @@ def check_engine_args(engine_args: "ServingArgs", manager_args: ManagerArgs = No
 def check_instance_args(instance_args: InstanceArgs):
     assert not instance_args.simulator_mode, "Simulator mode is not supported for BladeLLM temporarily."
 
-    if instance_args.enable_migration:
+    if instance_args.enable_routine_migration:
         assert 'W' not in instance_args.request_migration_policy, \
             "Migrating waiting request is not supported for BladeLLM temporarily."
 
@@ -205,7 +205,7 @@ def check_manager_args(manager_args: ManagerArgs, engine_args: "ServingArgs") ->
     assert manager_args.enable_engine_pd_disagg == engine_args.enable_disagg, \
         "Engine-based pd-disaggregation of manager and engine should be enabled/disabled at the same time."
 
-    assert not (manager_args.enable_engine_pd_disagg and manager_args.enable_migration), \
+    assert not (manager_args.enable_engine_pd_disagg and manager_args.enable_routine_migration), \
         "Migration feature is temporarily unavailable for the engine based pd-disaggregation in BladeLLM."
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser,

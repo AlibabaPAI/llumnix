@@ -99,7 +99,7 @@ class Manager:
         logger.info("Launch mode: {}, backend type: {}".format(self.launch_mode, self.backend_type))
 
         # migration args
-        self.enable_migration = manager_args.enable_migration
+        self.enable_routine_migration = manager_args.enable_routine_migration
         self.pair_migration_frequency = manager_args.pair_migration_frequency
         self.is_group_kind_migration_backend = manager_args.is_group_kind_migration_backend
 
@@ -265,7 +265,7 @@ class Manager:
                     logger.debug("Polling instance infos of {} instances ends.".format(self.num_instances))
                 self.num_instance_info_updates += 1
                 # Push migrate when the instance_info have updated a certain number of times.
-                if self.enable_migration and self.num_instance_info_updates != 0 \
+                if self.enable_routine_migration and self.num_instance_info_updates != 0 \
                     and self.num_instance_info_updates % self.pair_migration_frequency == 0:
                     asyncio.create_task(self._migrate())
                 if self.log_instance_info:
@@ -395,7 +395,7 @@ class Manager:
         # a coroutine is already handling the changes in the number of instances in the cluster and it will account for the changes
         # caused by this scale-up (see rebuild_migration_backend for details). Therefore, we simply return in this case.
         # Specifically, for not group kind migration backend, there is no need to rebuild the group.
-        if self.enable_migration and self.is_group_kind_migration_backend \
+        if self.enable_routine_migration and self.is_group_kind_migration_backend \
             and indeed_update and no_pending_instance and not self.instance_args.simulator_mode:
             asyncio.create_task(self._rebuild_migration_backend())
 
@@ -429,7 +429,7 @@ class Manager:
             self.global_scheduler.scale_down(instance_ids)
             self.num_instances = len(self.instances)
 
-        if self.enable_migration and self.is_group_kind_migration_backend:
+        if self.enable_routine_migration and self.is_group_kind_migration_backend:
             if len(self.instances) == 0:
                 self.pending_rebuild_migration_instances = 0
                 asyncio.create_task(
@@ -445,8 +445,8 @@ class Manager:
 
     async def _rebuild_migration_backend(self) -> None:
         # During rebuilding migration backend, disable migration.
-        origin_config = self.enable_migration
-        self.enable_migration = False
+        origin_config = self.enable_routine_migration
+        self.enable_routine_migration = False
 
         # Wait for all instances to finish migration
         while not self.global_scheduler.all_instances_not_migrating():
@@ -517,7 +517,7 @@ class Manager:
         )
 
         # Restore migrate config
-        self.enable_migration = origin_config
+        self.enable_routine_migration = origin_config
 
     async def _connect_to_instances(self):
         instance_ids, instances, instance_types = await connect_to_actors_with_instance_type(

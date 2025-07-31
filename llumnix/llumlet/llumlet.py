@@ -74,8 +74,8 @@ class Llumlet:
             dp_rank_local,
         )
 
-        self.enable_migration = instance_args.enable_migration
-        if self.enable_migration:
+        self.enable_routine_migration = instance_args.enable_routine_migration
+        if self.enable_routine_migration:
             self.migration_coordinator = MigrationCoordinator(
                 self.instance_id,
                 self.backend_engine,
@@ -167,7 +167,7 @@ class Llumlet:
         instance_info.unit_id = self.instance_id.split("_")[0]
         instance_info.enable_defrag = self.instance_args.enable_defrag
         self.instance_load_calculator.compute_instance_load(instance_info)
-        if self.enable_migration:
+        if self.enable_routine_migration:
             instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
             instance_info.is_migrating = self.migration_coordinator.is_migrating()
         return instance_info

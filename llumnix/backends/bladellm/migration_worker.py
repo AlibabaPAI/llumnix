@@ -139,8 +139,8 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
     def __init__(self, rank: int, serving_args: ServingArgs, instance_id: str,
                  migration_config: MigrationConfig, worker_ray_name: str) -> None:
         LocalWorker.__init__(self, rank, serving_args)
-        self.enable_migration = migration_config.enable_migration
-        if self.enable_migration:
+        self.enable_routine_migration = migration_config.enable_routine_migration
+        if self.enable_routine_migration:
             self.worker_ray_name = worker_ray_name
             migration_config.grpc_migration_server_port = get_free_port()
             logger.info("MigrationLocalWorker is going to use port {} for grpc migration service.".format(
@@ -161,7 +161,7 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
 
     # used for wait_worker_ready
     async def info(self, req: empty_pb2.Empty) -> str:
-        if self.enable_migration:
+        if self.enable_routine_migration:
             async with grpc.aio.insecure_channel(self.migration_grpc_ip_addr) as channel:
                 stub = migration_worker_pb2_grpc.MigrationWorkerStub(channel)
                 await stub.is_ready(empty_pb2.Empty())
@@ -177,10 +177,10 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
             resp = await self.barrier(request.step.decode)
             self.send_response(resp)
         else:
-            if self.enable_migration:
+            if self.enable_routine_migration:
                 self.request_sync_group.update_migrated_in_request()
             rpc_response = await super().handle_rpc_call(request)
-            if self.enable_migration and method == "step":
+            if self.enable_routine_migration and method == "step":
                 self.request_sync_group.remove_backup_request_group(
                     [finish_info.request_id for finish_info in request.step.latest_finished_ids])
             return rpc_response

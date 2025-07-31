@@ -153,7 +153,7 @@ def check_engine_args(engine_args: "AsyncEngineArgs") -> None:
     detect_unsupported_engine_feature(engine_args)
 
 def check_instance_args(instance_args: InstanceArgs) -> None:
-    assert instance_args.enable_migration is False, "Llumnix does not support migration for vLLM v1."
+    assert instance_args.enable_routine_migration is False, "Llumnix does not support migration for vLLM v1."
 
     assert not instance_args.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR, \
         "Llumnix does not support actor request output forwarding mode for vLLM v1 temporalily."

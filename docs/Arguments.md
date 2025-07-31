@@ -28,7 +28,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--polling-interval POLLING_INTERVAL]
             [--dispatch-policy {balanced,load,queue,rr}]
             [--topk-random-dispatch TOPK_RANDOM_DISPATCH]
-            [--enable-migration]
+            [--enable-routine-migration]
             [--enable-defrag]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag}]
@@ -164,7 +164,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 - Number of candidate random dispatch instances for dispatch policy.
 - Default: 1
 
-`--enable-migration`
+`--enable-routine-migration`
 - Enable migrate requests between instances.
 
 `--enable-defrag`

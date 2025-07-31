@@ -166,7 +166,7 @@ _C.MANAGER.CACHE_META_CLIENT_CONFIG_PATH = "llumnix/config/mock_query_client_con
 
 # -------------------------- MIGRATION CONFIGURATION --------------------------
 # Enable migrate requests between instances
-_C.MANAGER.ENABLE_MIGRATION = False
+_C.MANAGER.ENABLE_ROUTINE_MIGRATION = False
 # Pair migration frequency
 _C.MANAGER.PAIR_MIGRATION_FREQUENCY = 1
 # Pair migration policy

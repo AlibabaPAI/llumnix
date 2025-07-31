@@ -96,7 +96,7 @@ async def test_backend(ray_env):
     # (currently BackendSimVLLM is just a wrapper of BackendVLLM)
     engine_args = EngineArgs(model=try_convert_to_local_path("facebook/opt-125m"), download_dir="/mnt/model", worker_use_ray=True,
                              enforce_eager=True, disable_async_output_proc=True)
-    instance_args = InstanceArgs(enable_migration=True, request_migration_policy="SR", migration_backend="gloo",
+    instance_args = InstanceArgs(enable_routine_migration=True, request_migration_policy="SR", migration_backend="gloo",
                                  migration_buffer_blocks=16, migration_num_layers=1, migration_last_stage_max_blocks=4,
                                  migration_max_stages=5, migration_backend_init_timeout=20)
     request_output_queue_type = QueueType.RAYQUEUE

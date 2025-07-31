@@ -438,7 +438,7 @@ class DPManager:
                         self.stop_time = time.perf_counter()
                 # If the unit has been broken already, wait for instances to migrate requests.
                 else:
-                    all_stopped = await self.check_instance_failover_state()
+                    all_stopped = await self.check_instance_failover_status()
                     failover_timeout = time.perf_counter() - self.stop_time > unit_failover_timeout
                     if all_stopped or failover_timeout:
                         if self.unit_status == UnitStatus.BROKEN:
@@ -520,12 +520,19 @@ class DPManager:
 
         return DPGroupStatus.COMPLETE
 
+    async def _partial_scale_down(self, ret: Exception, instance_id: str, method_name: str):
+        log_instance_exception(ret, instance_id, method_name)
+        await self._broadcast_dead_instances_to_cluster_servers([instance_id])
+        await self._scale_down([instance_id])
+
     async def _set_unit_status(self, status: UnitStatus) -> None:
-        async def instance_set_unit_status_callback(fut, instance_id: str) -> None:
-            ret = fut.result()[0]
-            if isinstance(ret, Exception):
-                await self._broadcast_dead_instances_to_cluster_servers([instance_id])
-                self._scale_down([instance_id])
+        def instance_set_unit_status_callback(fut, instance_id: str) -> None:
+            try:
+                ret = fut.result()[0]
+                if isinstance(ret, Exception):
+                    asyncio.create_task(self._partial_scale_down(ret, instance_id, "set_unit_status"))
+            except Exception as e:
+                logger.exception(e)
 
         tasks = []
         for ins_id, ins_handle in self.instances.items():
@@ -545,16 +552,18 @@ class DPManager:
             self.unit_id, self.unit_status, status))
         self.unit_status = status
 
-    async def check_instance_failover_state(self) -> bool:
-        async def check_instance_ready_to_die_done_callback(fut, instance_id: str):
-            ret = fut.result()[0]
-            if isinstance(ret, Exception):
-                log_instance_exception(ret, instance_id, "get_unit_status")
-                await self._broadcast_dead_instances_to_cluster_servers([instance_id])
-                self._scale_down([instance_id])
-            else:
-                if ret == UnitStatus.STOPPED:
-                    stopped_instances.append(ret)
+    async def check_instance_failover_status(self) -> bool:
+        def check_instance_failover_status_callback(fut, instance_id: str):
+            try:
+                ret = fut.result()[0]
+                if isinstance(ret, Exception):
+                    asyncio.create_task(self._partial_scale_down(ret, instance_id, "get_unit_status"))
+                else:
+                    if ret == UnitStatus.STOPPED:
+                        stopped_instances.append(ret)
+            except Exception as e:
+                # TODO(shejiarui): may need more robust error handling
+                logger.exception(e)
 
         tasks = []
         stopped_instances = []
@@ -564,7 +573,7 @@ class DPManager:
                 return_exceptions=True
             )
             task.add_done_callback(
-                partial(check_instance_ready_to_die_done_callback, instance_id=instance_id)
+                partial(check_instance_failover_status_callback, instance_id=instance_id)
             )
             tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)

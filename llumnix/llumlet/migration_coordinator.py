@@ -24,6 +24,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.backends.backend_interface import BackendBaseInterface
 from llumnix.utils import (
+    InstanceContext,
     asyncio_wait_for_ray_remote_call_with_timeout,
     RequestIDType,
     MigrationResponse,
@@ -248,16 +249,16 @@ class MigrationCoordinator:
 
     async def migrate_out(self,
                           dst_instance_actor: ray.actor.ActorHandle,
-                          dst_instance_id: str,
+                          dst_instance_context: InstanceContext,
                           migration_type: Optional[MigrationType] = None) -> List[RequestIDType]:
         if self.enable_engine_migration_interface:
             try:
                 migrated_requests = await self.backend_engine.migrate_out(
-                    dst_instance_actor, dst_instance_id, migration_type)
+                    dst_instance_actor, dst_instance_context, migration_type)
                 return migrated_requests
             # pylint: disable=broad-except
             except Exception as e:
-                log_instance_exception(e, dst_instance_id, "migrate_out")
+                log_instance_exception(e, self.instance_id, "migrate_out")
                 return []
 
         if not self.has_migration_slot():
@@ -277,6 +278,7 @@ class MigrationCoordinator:
             migrate_out_request.is_migrating = True
 
         migrated_request_list = []
+        dst_instance_id = dst_instance_context.instance_id
         for migrate_out_request in migrate_out_requests:
             try:
                 migrated_request = await self._migrate_out_one_request(

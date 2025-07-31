@@ -1,6 +1,18 @@
+# Copyright (c) 2024, Alibaba Group;
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import asyncio
 import struct
-from dataclasses import dataclass
 from typing import Optional
 from vllm.v1.hybrid_connector.engine_proxy import (EngineCoreRequest,
                             PlaceholderModule, MsgpackEncoder,
@@ -19,17 +31,10 @@ from llumnix.logging.logger import init_logger
 logger = init_logger(__name__)
 
 
-@dataclass
-class ReqState:
-    req: EngineCoreRequest
-    engines: list[str]
-    engtokens: list[list[int]]
-
-
 class MigrationFrontend:
-    def __init__(self, vllm_config: VllmConfig, migration_instance_id: str):
+    def __init__(self, vllm_config: VllmConfig, naming_instance_id: str):
         self._cfg = vllm_config
-        self.migration_instance_id = migration_instance_id
+        self.naming_instance_id = naming_instance_id
         self._loop = asyncio.get_running_loop()
         self._inst_id = get_inst_id(vllm_config)
         self._naming_url = vllm_config.kv_transfer_config.get_from_extra_config(
@@ -39,35 +44,26 @@ class MigrationFrontend:
         self._pmgr.start(self._loop)
         self._enc = MsgpackEncoder()
 
-    async def _do_migrate(self, msgbuf, retry: int, dst_migration_instance_id: Optional[str] = None) -> str:
-        if dst_migration_instance_id is None:
-            dst_migration_instance_id = self._pmgr.get_peer(exclude=self.migration_instance_id)
-        if dst_migration_instance_id is None:
-            raise RuntimeError("no instance")
-        await self._rpc(dst_migration_instance_id, msgbuf, MIGRATE_TO_RESP, retry)
-        logger.info(f"Migrate to {dst_migration_instance_id}")
-        return dst_migration_instance_id
+    async def _do_migrate(self, msgbuf, retry: int, dst_naming_instance_id: str) -> None:
+        dst_naming_instance_id = self._pmgr.get_peer(exclude=self.naming_instance_id)
+        await self._rpc(dst_naming_instance_id, msgbuf, MIGRATE_TO_RESP, retry)
 
-    async def migrate(self, req: ReqState, dst_migration_instance_id: Optional[str] = None):
-        core_update_params(req.req, {SRC_INFO: self.migration_instance_id})
+    async def migrate(self, req: EngineCoreRequest, dst_naming_instance_id: str):
+        core_update_params(req.req, {SRC_INFO: self.naming_instance_id})
         msgbuf = bytearray.fromhex("00 00 00 00 00 00 00 00")
         struct.pack_into("=II", msgbuf, 0, MIGRATE_TO_REQ, 0)
-        reqbufs = self._enc.encode_into(req.req, msgbuf, 8)
+        reqbufs = self._enc.encode_into(req, msgbuf, 8)
         assert len(reqbufs) == 1  # Need Support MsgpackEncoder.aux_buffers
         struct.pack_into("=I", msgbuf, 4, len(msgbuf) - 8)
-        reqid = req.req.request_id
-        peerid: Optional[str] = None
+        reqid = req.request_id
         for idx in range(2):
             try:
-                peerid = await self._do_migrate(msgbuf, idx, dst_migration_instance_id=dst_migration_instance_id)
+                await self._do_migrate(msgbuf, idx, dst_naming_instance_id=dst_naming_instance_id)
                 break
             # pylint: disable=broad-except
             except Exception:
-                logger.exception("migrate failed:reqid=%s try=%s", reqid, idx)
+                logger.exception("migration failed: reqid=%s try=%s", reqid, idx)
             await asyncio.sleep(0)
-        if not peerid:
-            logger.warning("migrate failed to finf any available peer")
-            return
         return
 
     async def _rpc(self, peerid: str, msgbuf, resp: int, retry: int):

@@ -86,7 +86,7 @@ class BackendBaseInterface(ABC):
     async def migrate_out(
         self,
         dst_instance_actor: ray.actor.ActorHandle,
-        dst_instance_id: str,
+        dst_instance_context: InstanceContext,
         migration_type: Optional[MigrationType] = None
     ) -> List[LlumnixRequest]:
         raise NotImplementedError

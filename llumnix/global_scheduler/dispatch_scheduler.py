@@ -169,6 +169,7 @@ class DispatchScheduler:
                         prefill_instance_num_requests,
                         dispatch_context
                     )
+                    # For vLLM-V1, pddisagg in prefil pool is not supported
                     if decode_instance_id in prefill_instance_infos:
                         decode_instance_id = prefill_instance_id
             instance_num_requests[decode_instance_id] += 1

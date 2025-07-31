@@ -35,7 +35,7 @@ from llumnix.ray_utils import (
 )
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
+from llumnix.utils import InstanceContext, MigrationType, RequestIDType, BackendType, InstanceType
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -205,11 +205,11 @@ class Llumlet:
     async def migrate_out(
         self,
         dst_instance_actor: ray.actor.ActorHandle,
-        dst_instance_id: str,
+        dst_instance_context: InstanceContext,
         migration_type: Optional[MigrationType] = None
     ) -> List[RequestIDType]:
         return await self.migration_coordinator.migrate_out(
-            dst_instance_actor, dst_instance_id, migration_type
+            dst_instance_actor, dst_instance_context, migration_type
         )
 
     def execute_engine_method(self, method, *args, **kwargs):

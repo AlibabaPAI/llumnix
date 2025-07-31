@@ -52,7 +52,6 @@ class MigrationScheduler:
 
         self._set_migration_filter()
         self._set_migration_policy()
-        self._set_random_migration()
 
     def _enable_pd(self):
         return self.enable_bladellm_engine_pd_disagg or self.enable_bladellm_engine_semi_pd_disagg or self.enable_pd_disagg or self.enable_vllm_v1_engine_pd_disagg
@@ -145,42 +144,6 @@ class MigrationScheduler:
             )
             self.ease_d_with_empty_p_filter_pipeline = MigrationFilterPipeline(self.filter_config)
             self.ease_d_with_empty_p_filter_pipeline.add_filter("busy_d_empty_p_filter", self.d_p_filter)
-        
-    def _set_random_migration(self):
-        d_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
-        d_d_filter.set_filter_condtition(
-            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
-            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE
-        )
-        self.ddmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
-        self.ddmigraion_pipeline.add_filter("d_d_filter", d_d_filter)
-
-        pp_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
-        pp_filter.set_filter_condtition(
-            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL,
-            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL
-        )
-        self.ppmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
-        self.ppmigraion_pipeline.add_filter("pp_filter", pp_filter)
-
-        pd_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
-        pd_filter.set_filter_condtition(
-            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL,
-            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE
-        )
-        self.pdmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
-        self.pdmigraion_pipeline.add_filter("pd_filter", pd_filter)
-
-        dp_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
-        dp_filter.set_filter_condtition(
-            src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
-            dst_filter=lambda instance_info: instance_info.instance_type == InstanceType.PREFILL
-        )
-        self.dpmigraion_pipeline = MigrationFilterPipeline(self.filter_config)
-        self.dpmigraion_pipeline.add_filter("pd_filter", dp_filter)
-
-        self.random_policy = MigrationPolicyFactory.get_policy(
-                "aggrate_dynamic_prefill", migrate_out_load_threshold=self.filter_config.migrate_out_load_threshold)
 
     def _set_migration_policy(self):
         self.pair_migration_policy = MigrationPolicyFactory.get_policy(

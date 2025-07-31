@@ -900,7 +900,7 @@ class BackendBladeLLM(BackendBaseInterface, BackendMigrationInterface):
         return self.engine.instance_info
 
     def get_engine_context(self):
-        return InstanceContext(local_engine_id=self.engine_disagg_inst_id)
+        return InstanceContext(instance_id=self.instance_id, local_engine_id=self.engine_disagg_inst_id)
 
     async def migrate_out(
         self,

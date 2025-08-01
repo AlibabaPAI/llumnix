@@ -49,7 +49,8 @@ def init_migration_scheduler(
             dispatch_decode_load_metric='remaining_steps',
             dispatch_prefill_as_decode_load_metric='adaptive_decode',
             dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
-        )
+        ),
+        enable_pre_step_migration=False
     )
     return migration_scheduler
 

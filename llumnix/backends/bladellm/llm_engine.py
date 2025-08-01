@@ -332,7 +332,7 @@ class AsyncLLMEngineLlumnixMixin:
             self.metrics_queue,
             self.backend_type,
             self.request_output_forwarding_mode,
-            self.drop_request,
+            self.drop_requests,
         )
         self._scheduler.trans_wrapper = self.trans_wrapper
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
@@ -470,6 +470,11 @@ class AsyncLLMEngineLlumnixMixin:
         if self.trans_wrapper.add_request(server_request.id, request_processing_context):
             # pylint: disable=protected-access
             await self._client._add_request(server_request, self.resp_queue)
+
+    async def drop_requests(self, req_ids: List[int]):
+        logger.debug("Engine {} drop requests {}.".format(self.instance_id, req_ids))
+        for req_id in req_ids:
+            await self._client.drop_request(req_id)
 
     async def drop_request(self, req_id: int):
         logger.debug("Engine {} drop request {}.".format(self.instance_id, req_id))

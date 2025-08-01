@@ -99,7 +99,8 @@ class Manager:
         logger.info("Launch mode: {}, backend type: {}".format(self.launch_mode, self.backend_type))
 
         # migration args
-        self.enable_migration = manager_args.enable_migration
+        self.enable_routine_migration = manager_args.enable_routine_migration
+        self.enable_pre_stop_migration = manager_args.enable_pre_stop_migration
         self.pair_migration_frequency = manager_args.pair_migration_frequency
         self.is_group_kind_migration_backend = manager_args.is_group_kind_migration_backend
 
@@ -281,9 +282,9 @@ class Manager:
         # If encounter error during migration, to make manager keep running, we do not raise exception.
         try:
             instance_infos = self.global_scheduler.instance_info
-            migrate_tasks = self.global_scheduler.push_migrations(instance_infos)
+            migration_tasks = self.global_scheduler.push_migrations(instance_infos)
 
-            for task in migrate_tasks:
+            for task in migration_tasks:
                 migration_type, migrate_pairs = task
                 for src_instance_id, dst_instance_id in migrate_pairs:
                     dst_instance_actor = self.instances[dst_instance_id]
@@ -300,12 +301,17 @@ class Manager:
                 exc_info=True, stack_info=True
             )
 
-    async def _get_engine_context(self, ins_id: str, instance_actor: Llumlet) -> InstanceContext:
+    async def _get_engine_context_and_instance_info(
+        self,
+        ins_id: str,
+        instance_actor: Llumlet
+    ) -> InstanceContext:
         try:
-            engine_context = await asyncio_wait_for_ray_remote_call_with_timeout(
-                instance_actor.get_engine_context
+            engine_context, instance_info = await asyncio_wait_for_ray_remote_call_with_timeout(
+                instance_actor.get_engine_context_and_instance_info
             )
             self.instance_context[ins_id] = engine_context
+            self.global_scheduler.instance_info[ins_id] = instance_info
             logger.info("Bind instance id {} with engine context {}.".format(ins_id, engine_context))
             return engine_context
         # pylint: disable=broad-except
@@ -321,29 +327,31 @@ class Manager:
     ) -> List[str]:
         available_instance_ids, available_instance_actors, available_instance_types = [], [], []
 
-        def _get_engine_context_callback(
+        def _get_engine_context_and_instance_info_callback(
             fut,
-            instance_idx: int,
-            scale_up_info: List[List],
-            available_scale_up_info: List[List]
+            instance_id: str,
+            instance_actor_handle: Llumlet,
+            instance_type: InstanceType,
         ) -> None:
             ret = fut.result()[0]
             if not isinstance(ret, Exception):
-                for item_idx, scale_up_info_item in enumerate(scale_up_info):
-                    available_scale_up_info[item_idx].append(scale_up_info_item[instance_idx])
+                available_instance_ids.append(instance_id)
+                available_instance_actors.append(instance_actor_handle)
+                available_instance_types.append(instance_type)
 
         tasks = []
-        for ins_idx, ins_info in enumerate(zip(instance_ids, instance_actor_handles)):
-            ins_id, ins_actor = ins_info
+        for ins_id, ins_actor, ins_type in zip(instance_ids, instance_actor_handles, instance_types):
             if ins_id not in self.instances:
-                task = asyncio.gather(self._get_engine_context(ins_id, ins_actor), return_exceptions=True)
+                task = asyncio.gather(self._get_engine_context_and_instance_info(ins_id, ins_actor),
+                                      return_exceptions=True)
                 task.add_done_callback(
                     partial(
-                        _get_engine_context_callback,
-                        instance_idx=ins_idx,
-                        scale_up_info=[instance_ids, instance_actor_handles, instance_types],
-                        available_scale_up_info=[available_instance_ids, available_instance_actors, available_instance_types])
+                        _get_engine_context_and_instance_info_callback,
+                        instance_id=ins_id,
+                        instance_actor_handle=ins_actor,
+                        instance_type=ins_type,
                     )
+                )
                 tasks.append(task)
         await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -438,8 +446,10 @@ class Manager:
 
     async def _rebuild_migration_backend(self) -> None:
         # During rebuilding migration backend, disable migration.
-        origin_config = self.enable_migration
-        self.enable_migration = False
+        origin_routine_config = self.enable_routine_migration
+        origin_pre_stop_config = self.enable_pre_stop_migration
+        self.enable_routine_migration = False
+        self.enable_pre_stop_migration = False
 
         # Wait for all instances to finish migration
         while not self.global_scheduler.all_instances_not_migrating():
@@ -510,7 +520,8 @@ class Manager:
         )
 
         # Restore migrate config
-        self.enable_migration = origin_config
+        self.enable_routine_migration = origin_routine_config
+        self.enable_pre_stop_migration = origin_pre_stop_config
 
     async def _connect_to_instances(self):
         instance_ids, instances, instance_types = await connect_to_actors_with_instance_type(
@@ -581,3 +592,7 @@ class Manager:
                     instance_info.miss_waiting_tokens,
                 ])
         self.instance_info_file.flush()
+
+    @property
+    def enable_migration(self):
+        return self.enable_routine_migration or self.enable_pre_stop_migration

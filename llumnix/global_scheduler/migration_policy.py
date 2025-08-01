@@ -85,6 +85,7 @@ class Defrag(MigrationPolicy):
             migrate_instance_pairs.append((sorted_src_instance_infos[i].instance_id, sorted_dst_instance_infos[i].instance_id))
         return migrate_instance_pairs
 
+
 class AggrateDynamicPrefill(MigrationPolicy):
     def pair_migration(self,
                        src_instance_infos: List[InstanceInfo],
@@ -104,11 +105,33 @@ class AggrateDynamicPrefill(MigrationPolicy):
 
         return migrate_instance_pairs
 
+
+class Failover(MigrationPolicy):
+    def pair_migration(self,
+                       src_instance_infos: List[InstanceInfo],
+                       dst_instance_infos: List[InstanceInfo],
+                       ) -> List[Tuple[str, str]]:
+        broken_unit_id = [src_instance_info.unit_id for src_instance_info in src_instance_infos if not src_instance_info.is_unit_healthy()]
+        available_dst_instance_ids = [dst_instance_info.instance_id for dst_instance_info in dst_instance_infos
+                                      if dst_instance_info.unit_id not in broken_unit_id]
+        migrate_instance_pairs = []
+
+        if len(dst_instance_infos) > 0:
+            cur_dst_idx = 0
+            for src_instance_info in src_instance_infos:
+                dst_instance_id = available_dst_instance_ids[cur_dst_idx]
+                migrate_instance_pairs.append((src_instance_info.instance_id, dst_instance_id))
+                cur_dst_idx = (cur_dst_idx + 1) % len(available_dst_instance_ids)
+
+        return migrate_instance_pairs
+
+
 class MigrationPolicyFactory:
     _POLICY_REGISTRY = {
         'balanced': Balanced,
         'defrag': Defrag,
         'aggrate_dynamic_prefill': AggrateDynamicPrefill,
+        'failover': Failover,
     }
 
     @classmethod

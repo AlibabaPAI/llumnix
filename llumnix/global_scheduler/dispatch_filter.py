@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Tuple
 
 from llumnix.instance_info import InstanceInfo
+from llumnix.utils import UnitStatus
 
 
 class DispatchFilter(ABC):
@@ -40,3 +41,19 @@ class MetricBasedFilter(DispatchFilter):
                 available_instance_infos[ins_info.instance_id] = ins_info
                 available_instance_num_requests[ins_info.instance_id] = ins_num_requests
         return available_instance_infos, available_instance_num_requests
+
+
+class UnhealthyUnitFilter(DispatchFilter):
+    """Filter out instances whose unit is broken"""
+    def filter(self,
+               instance_infos: Dict[str, InstanceInfo],
+               instance_num_requests: Dict[str, int],
+               ) -> None:
+        instances_to_remove = []
+        for ins_id, ins_info in instance_infos.items():
+            if ins_info.unit_status != UnitStatus.HEALTHY:
+                instances_to_remove.append(ins_id)
+
+        for ins_id in instances_to_remove:
+            instance_infos.pop(ins_id, None)
+            instance_num_requests.pop(ins_id, None)

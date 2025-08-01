@@ -32,7 +32,8 @@ import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
-from llumnix.utils import log_instance_exception, asyncio_wait_for_ray_remote_call_with_timeout, InstanceType
+from llumnix.utils import (InstanceType, log_instance_exception,
+                           asyncio_wait_for_ray_remote_call_with_timeout)
 
 logger = init_logger(__name__)
 

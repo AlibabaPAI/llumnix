@@ -11,9 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Dict, Union, Iterable
+from functools import partial
+from typing import List, Dict, Optional, Union, Iterable
 from enum import Enum
 import asyncio
+import time
 
 import ray
 import ray.actor
@@ -41,6 +43,7 @@ from llumnix.ray_utils import (
     get_llumnix_actor_name,
     get_llumnix_actor_id,
     get_llumnix_actor_handle,
+    log_instance_exception
 )
 from llumnix.queue.queue_type import QueueType
 from llumnix.constants import (
@@ -52,6 +55,7 @@ from llumnix.utils import (
     run_coroutine_in_new_thread,
     InstanceType,
     BackendType,
+    UnitStatus,
     asyncio_wait_for_ray_remote_call_with_timeout,
 )
 import llumnix.envs as llumnix_envs
@@ -98,10 +102,13 @@ class DPManager:
         self.servers: Dict[str, ray.actor.ActorHandle] = {}
         self.cached_cluster_servers: Dict[str, ray.actor.ActorHandle] = {}
 
+        self.unit_status = UnitStatus.HEALTHY
         dp_group_status = self._connect_to_instances_and_servers()
         logger.info("DPManager starts, dp_group_status: {}".format(dp_group_status))
+        # Trigger heartbeat loop here so that 'self.stop' can be called when detected PARTIAL status.
+        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_INTERVAL))
+
         if dp_group_status == DPGroupStatus.PARTIAL:
-            run_coroutine_in_new_thread(self._clear_instance_ray_resources(), blocking=True)
             run_coroutine_in_new_thread(self.stop(), blocking=True)
         elif dp_group_status == DPGroupStatus.EMPTY:
             instances, servers = self._init_instances_and_servers(
@@ -123,8 +130,6 @@ class DPManager:
                 run_coroutine_in_new_thread(self.stop(), blocking=True)
         else: # DPGroupStatus.COMPLETE
             logger.info("Restart dp manager successfully, dp group is complete.")
-
-        asyncio.create_task(self._heartbeat_loop(HEARTBEAT_INTERVAL))
 
     def is_ready(self) -> bool:
         return True
@@ -355,13 +360,21 @@ class DPManager:
                     )
             return False
 
-    async def stop(self):
+    async def _stop(self):
         logger.info("DPManager {} stops.".format(self.unit_id))
         await self._broadcast_dead_instances_to_cluster_servers(list(self.instances.keys()))
         await self._scale_down()
         # Detached actor will not be killed when the placement group is removed.
         remove_placement_group(self.unit_id)
         ray.kill(self.actor_handle)
+
+    async def stop(self):
+        self.terminating_event = asyncio.Event()
+        await self._set_unit_status(UnitStatus.TERMINATING)
+        self.stop_time = time.perf_counter()
+        await self.terminating_event.wait()
+        # Call 'self._stop' here instead of calling it implicitly in heartbear loop.
+        await self._stop()
 
     def _scale_up(
         self,
@@ -391,10 +404,13 @@ class DPManager:
 
         return self.num_instances
 
-    async def _scale_down(self) -> None:
-        await self._clear_instance_ray_resources(list(self.instances.keys()))
-        self.servers.clear()
-        self.instances.clear()
+    async def _scale_down(self, instance_ids: Optional[List[str]] = None) -> None:
+        if instance_ids is None:
+            instance_ids = list(self.instances.keys())
+        await self._clear_instance_ray_resources(instance_ids)
+        for ins_id in instance_ids:
+            self.servers.pop(ins_id, None)
+            self.instances.pop(ins_id, None)
 
     async def _clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]] = None) -> None:
         if instance_id is not None:
@@ -412,14 +428,28 @@ class DPManager:
 
     async def _heartbeat_loop(self, interval: float) -> None:
         """Watch cached instances and servers health."""
+        unit_failover_timeout = float(llumnix_envs.UNIT_FAILOVER_TIMEOUT)
 
         while True:
             try:
                 await asyncio.sleep(interval)
-                dead_instance_ids = await check_actors_health(self.instances)
-                dead_instance_ids.extend(await check_actors_health(self.servers))
-                if len(dead_instance_ids) > 0:
-                    await self.stop()
+                # If the unit is health up to this point, continue checking the status of instances and servers.
+                if self.unit_status == UnitStatus.HEALTHY:
+                    dead_instance_ids = await check_actors_health(self.instances)
+                    dead_instance_ids.extend(await check_actors_health(self.servers))
+                    if len(dead_instance_ids) > 0:
+                        await self._set_unit_status(UnitStatus.BROKEN)
+                        self.stop_time = time.perf_counter()
+                # If the unit has been unhealthy already, wait for instances to be stopped..
+                else:
+                    all_stopped = await self.check_instance_failover_status()
+                    failover_timeout = time.perf_counter() - self.stop_time > unit_failover_timeout
+                    if all_stopped or failover_timeout:
+                        if self.unit_status == UnitStatus.BROKEN:
+                            await self._stop()
+                        elif self.unit_status == UnitStatus.TERMINATING:
+                            # 'self.stop' will wait on this event.
+                            self.terminating_event.set()
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(
@@ -493,3 +523,58 @@ class DPManager:
         self._scale_up(instance_ids, instances, servers)
 
         return DPGroupStatus.COMPLETE
+
+    async def _partial_scale_down(self, instance_id: str):
+        await self._broadcast_dead_instances_to_cluster_servers([instance_id])
+        await self._scale_down([instance_id])
+
+    async def _set_unit_status(self, status: UnitStatus) -> None:
+        def instance_set_unit_status_callback(fut, instance_id: str) -> None:
+            ret = fut.result()[0]
+            if isinstance(ret, Exception):
+                log_instance_exception(ret, instance_id, "set_unit_status")
+                asyncio.create_task(self._partial_scale_down(instance_id))
+
+        tasks = []
+        for ins_id, ins_handle in self.instances.items():
+            task = asyncio.gather(
+                asyncio_wait_for_ray_remote_call_with_timeout(ins_handle.set_unit_status, status),
+                return_exceptions=True
+            )
+            task.add_done_callback(
+                partial(
+                    instance_set_unit_status_callback, instance_id=ins_id
+                )
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        logger.info("DPManager(unit_id={}) change unit_status {} -> {}".format(
+            self.unit_id, self.unit_status, status))
+        self.unit_status = status
+
+    async def check_instance_failover_status(self) -> bool:
+        def check_instance_failover_status_callback(fut, instance_id: str):
+            ret = fut.result()[0]
+            if isinstance(ret, Exception):
+                log_instance_exception(ret, instance_id, "get_unit_status")
+                asyncio.create_task(self._partial_scale_down(instance_id))
+            else:
+                if ret == UnitStatus.STOPPED:
+                    stopped_instances.append(ret)
+
+        tasks = []
+        stopped_instances = []
+        for instance_id, instance in self.instances.items():
+            task = asyncio.gather(
+                asyncio_wait_for_ray_remote_call_with_timeout(instance.get_unit_status),
+                return_exceptions=True
+            )
+            task.add_done_callback(
+                partial(check_instance_failover_status_callback, instance_id=instance_id)
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_stopped = len(self.instances) == 0 or len(self.instances) == len(stopped_instances)
+        return all_stopped

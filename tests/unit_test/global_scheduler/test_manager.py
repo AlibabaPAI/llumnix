@@ -48,6 +48,7 @@ class MockLlumlet:
         self.instance_info = None
         self.num_migrate_out = 0
         self.num_migrate_in = 0
+        self.instance_context = InstanceContext(local_engine_id=self.instance_id)
 
     def get_instance_id(self) -> str:
         return self.instance_id
@@ -106,8 +107,8 @@ class MockLlumlet:
     def get_num_migrate_in(self):
         return self.num_migrate_in
 
-    def get_engine_context(self):
-        return InstanceContext(local_engine_id=self.instance_id)
+    def get_engine_context_and_instance_info(self):
+        return self.instance_context, self.instance_info
 
 
 def init_manager(
@@ -115,7 +116,8 @@ def init_manager(
         enable_engine_pd_disagg: bool = False,
         enable_engine_semi_pd_disagg: bool = False):
     manager_args = ManagerArgs(
-        enable_migration=True,
+        enable_routine_migration=True,
+        enable_pre_stop_migration=False,
         enable_pd_disagg=enable_pd_disagg,
         enable_engine_pd_disagg=enable_engine_pd_disagg,
         enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg)
@@ -211,6 +213,16 @@ def test_connect_to_instances(ray_env):
 
 def test_generate(ray_env, manager: Manager, llumlet):
     instance_id = ray.get(llumlet.get_instance_id.remote())
+    instance_info = InstanceInfo(
+        instance_id=instance_id,
+        instance_type=InstanceType.NEUTRAL,
+        num_free_gpu_blocks=40,
+        num_running_requests=0,
+        num_blocks_first_waiting_request=20,
+        migration_load_metric=-5
+    )
+    ray.get(llumlet.set_instance_info.remote(instance_info))
+
     ray.get(manager.scale_up.remote(instance_id, llumlet, InstanceType("neutral")))
     request_id = random_uuid()
     num_requests = ray.get(llumlet.get_num_requests.remote())
@@ -225,9 +237,28 @@ def test_generate_pdd(ray_env):
     manager = init_manager(enable_engine_pd_disagg=True)
     prefill_llumlet: MockLlumlet = generate_llumlet()
     prefill_instance_id = ray.get(prefill_llumlet.get_instance_id.remote())
+    prefill_instance_info = InstanceInfo(
+        instance_id=prefill_instance_id,
+        instance_type=InstanceType.PREFILL,
+        num_free_gpu_blocks=40,
+        num_running_requests=0,
+        num_blocks_first_waiting_request=20,
+        migration_load_metric=-5
+    )
+    ray.get(prefill_llumlet.set_instance_info.remote(prefill_instance_info))
     ray.get(manager.scale_up.remote(prefill_instance_id, prefill_llumlet, InstanceType("prefill")))
+
     decode_llumlet: MockLlumlet = generate_llumlet()
     decode_instance_id = ray.get(decode_llumlet.get_instance_id.remote())
+    decode_instance_info = InstanceInfo(
+        instance_id=decode_instance_id,
+        instance_type=InstanceType.DECODE,
+        num_free_gpu_blocks=40,
+        num_running_requests=0,
+        num_blocks_first_waiting_request=20,
+        migration_load_metric=-5
+    )
+    ray.get(decode_llumlet.set_instance_info.remote(decode_instance_info))
     ray.get(manager.scale_up.remote(decode_instance_id, decode_llumlet, InstanceType("decode")))
 
     request_id = random_uuid()
@@ -244,9 +275,28 @@ def test_generate_semi_pdd(ray_env):
     manager = init_manager(enable_engine_semi_pd_disagg=True)
     prefill_llumlet: MockLlumlet = generate_llumlet()
     instance_id = ray.get(prefill_llumlet.get_instance_id.remote())
+    prefill_instance_info = InstanceInfo(
+        instance_id=instance_id,
+        instance_type=InstanceType.PREFILL,
+        num_free_gpu_blocks=40,
+        num_running_requests=0,
+        num_blocks_first_waiting_request=20,
+        migration_load_metric=-5
+    )
+    ray.get(prefill_llumlet.set_instance_info.remote(prefill_instance_info))
     ray.get(manager.scale_up.remote(instance_id, prefill_llumlet, InstanceType("prefill")))
+
     decode_llumlet: MockLlumlet = generate_llumlet()
     instance_id = ray.get(decode_llumlet.get_instance_id.remote())
+    decode_instance_info = InstanceInfo(
+        instance_id=instance_id,
+        instance_type=InstanceType.DECODE,
+        num_free_gpu_blocks=40,
+        num_running_requests=0,
+        num_blocks_first_waiting_request=20,
+        migration_load_metric=-5
+    )
+    ray.get(decode_llumlet.set_instance_info.remote(decode_instance_info))
     ray.get(manager.scale_up.remote(instance_id, decode_llumlet, InstanceType("decode")))
 
     request_id = random_uuid()
@@ -318,5 +368,5 @@ async def test_get_engine_context(ray_env, manager: Manager):
     instance_id = random_uuid()
     env_instance_id = random_uuid()
     llumlet_actor = MockLlumlet.remote(env_instance_id)
-    engine_context = await manager._get_engine_context.remote(instance_id, llumlet_actor)
+    engine_context = await manager._get_engine_context_and_instance_info.remote(instance_id, llumlet_actor)
     assert engine_context.local_engine_id == env_instance_id

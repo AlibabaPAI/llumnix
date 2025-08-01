@@ -28,7 +28,9 @@ from vllm import envs as vllm_envs
 from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreOutputs, EngineCoreOutput
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
-from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
+from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG, get_inst_id
+from vllm.v1.hybrid_connector.migration.frontend import ReqState
+from vllm.v1.hybrid_connector.engine_proxy import req2corereq
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
@@ -37,7 +39,7 @@ from llumnix.backends.backend_interface import BackendBaseInterface, BackendMigr
 from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc,
                                                  AsyncDPEngineCoreProc)
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
-from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
+from llumnix.backends.vllm_v1.migration_frontend import MigrationFrontend
 from llumnix.backends.profiling import LatencyMemData
 from llumnix.server_info import ServerInfo
 from llumnix.request_processing_context import RequestProcessingContext
@@ -45,7 +47,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
-from llumnix.utils import get_ip_address, make_async
+from llumnix.utils import get_ip_address, log_instance_exception, make_async, asyncio_wait_for_ray_remote_call_with_timeout
 from llumnix.ray_utils import LlumnixActor, get_llumnix_actor_handle
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
@@ -57,6 +59,7 @@ from llumnix.utils import (
     get_free_port,
     InstanceContext,
     InstanceType,
+    MigrationType,
 )
 from llumnix.request_output import LlumnixRequestOutputs
 
@@ -80,7 +83,8 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         executor_class: type[Executor],
         log_stats: bool,
         engine_index: int = 0,
-        dp_rank: int = 0
+        dp_rank: int = 0,
+        enable_pd_disagg: bool = False,
     ) -> None:
         # Change EngineCore.scheduler to SchedulerLlumnix
         vllm_config.scheduler_config.scheduler_cls = SchedulerLlumnix
@@ -89,6 +93,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         self.instance_type = instance_type
         self.step_counter = Counter()
         self.instance_info = None
+        self.enable_pd_disagg = enable_pd_disagg
         self.output_forwarder = OutputForwarder(
             instance_id,
             request_output_queue_type,
@@ -98,9 +103,18 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             backend_type,
             dp_rank,
         )
+        assert isinstance(self.scheduler, SchedulerLlumnix), \
+            "EngineCore.scheduler failed to set to SchedulerLlumnix"
         self.scheduler.add_update_instance_info_callback(self.update_instance_info)
         self.disable_async_output_proc = disable_async_output_proc
-        self.reqeust_processing_context_table = {}
+
+        self.reqeust_processing_context_table: Dict[str, RequestProcessingContext] = {}
+
+        self.naming_instance_id = ""
+        if vllm_config.kv_transfer_config is not None:
+            tp_size = vllm_config.parallel_config.tensor_parallel_size
+            kvt_id = get_inst_id(vllm_config)
+            self.naming_instance_id = f"{kvt_id}|{dp_rank}|{tp_size}"
 
     # pylint: disable=W0221
     @classmethod
@@ -116,6 +130,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         request_output_forwarding_mode: RequestOutputForwardingMode,
         abort_request_callback: Coroutine,
         latency_mem: Optional[LatencyMemData] = None,
+        enable_pd_disagg: bool = False,
     ) -> "AsyncEngineCoreProcLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
         # FIXME(zhaozhiyu): This is a bug of pai-vllm, engine_args.speculative_config
@@ -153,6 +168,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             handshake_address=None, # handshake is removed in llumnix
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
+            enable_pd_disagg=enable_pd_disagg,
         )
         return engine
 
@@ -179,6 +195,16 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
 
         set_timestamp(engine_core_output_all, 'engine_step_postprocess_timestamp_end', time.time())
 
+    def add_request(self, request: EngineCoreRequest):
+        self.reqeust_processing_context_table[request.request_id] = \
+            request.sampling_params.extra_args.get('llumnix_request_context', None)
+        super().add_request(request)
+
+    def abort_requests(self, request_ids: list[str]):
+        for request_id in request_ids:
+            self.reqeust_processing_context_table.pop(request_id, None)
+        super().abort_requests(request_ids)
+
     def _gen_server_request_outputs(
         self,
         engine_core_outputs_dict: Dict[int, EngineCoreOutputs]
@@ -194,13 +220,18 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             new_engine_core_outputs: List[EngineCoreOutput] = [] # used to filter prefill responce under pdd
             for engine_core_output in engine_core_outputs.outputs:
                 request_id = engine_core_output.request_id
+                request_processing_context: RequestProcessingContext = \
+                    self.reqeust_processing_context_table.get(request_id, None)
 
-                if request_id not in self.reqeust_processing_context_table:
+                if request_processing_context is None or "hybridsched" in request_id:
+                    if "hybridsched" not in request_id:
+                        logger.warning("Request {} is not found in request_processing_context_table".format(request_id))
                     continue
 
                 new_engine_core_outputs.append(engine_core_output)
-                request_processing_context: RequestProcessingContext = self.reqeust_processing_context_table[request_id]
                 request_processing_context_dict[request_id] = request_processing_context
+                if engine_core_output.finished:
+                    self.reqeust_processing_context_table.pop(request_id, None)
 
                 if server_id is None:
                     server_id = request_processing_context.server_id
@@ -223,10 +254,6 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         instance_info.instance_id = self.instance_id
         instance_info.step_id = next(self.step_counter)
         instance_info.timestamp = time.time()
-        instance_info.profiling_data=(instance_info.inference_type.value if instance_info.inference_type else "",
-                                      instance_info.num_seqs,
-                                      sum(instance_info.running_seq_lens),
-                                      self.model_executor.last_inference_latency)
         reqs: List[Request] = self.scheduler.running
         if reqs:
             tot_blocks = defaultdict(list)
@@ -283,9 +310,10 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         expected_steps: int,
         *args, **kwargs,
     ):
-        # TODO(zhaozhiyu): remove mapping, create a new request type to carry server_info
         request_type = EngineCoreRequestType.ADD
         request: EngineCoreRequest = kwargs["engine_core_request"]
+        if request.sampling_params.extra_args is None:
+            request.sampling_params.extra_args = {}
 
         if "llumnix_scheduler" in kwargs:
             prefill_instance_id = kwargs["prefill_instance_id"]
@@ -293,8 +321,6 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             assert decode_instance_id == self.instance_id
 
             kv_transfer_params = {}
-            if request.sampling_params.extra_args is None:
-                request.sampling_params.extra_args = {}
             request.sampling_params.extra_args['kv_transfer_params'] = kv_transfer_params
 
             if prefill_instance_id == decode_instance_id:
@@ -304,7 +330,14 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 kv_transfer_params["remote_host"] = kwargs["prefill_engine_host"]
                 kv_transfer_params["remote_port"] = kwargs["prefill_kvt_engine_available_port"]
 
-        self.reqeust_processing_context_table[request.request_id] = request_processing_context
+        request.sampling_params.extra_args['llumnix_request_context'] = request_processing_context
+
+        if not self.enable_pd_disagg:
+            kv_transfer_params = request.sampling_params.extra_args.get('kv_transfer_params', None)
+            if kv_transfer_params is None:
+                request.sampling_params.extra_args['kv_transfer_params'] = {}
+            request.sampling_params.extra_args['kv_transfer_params'][D_DISAGG] = False
+
         await self.input_queue.put((request_type, request))
 
 
@@ -329,6 +362,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         latency_mem: Optional[LatencyMemData] = None,
         dp_rank: int = 0,
         dp_rank_local: Optional[int] = None,
+        enable_pd_disagg: bool = False,
     ) -> "AsyncDPEngineCoreProcLlumnix":
         """Creates an DPEngineCoreProc from the engine arguments."""
         if hasattr(engine_args, "speculative_config") and engine_args.speculative_config is not None:
@@ -370,6 +404,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
             dp_rank=dp_rank,
+            enable_pd_disagg=enable_pd_disagg,
         )
         return engine
 
@@ -386,7 +421,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         return
 
 
-class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
+class BackendVLLMV1(BackendBaseInterface):
     def __init__(
         self,
         instance_id: str,
@@ -398,6 +433,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         dp_rank_local: Optional[int] = None
     ):
         self.instance_id = instance_id
+        self.migrated_requests = set()
         self.host = get_ip_address()
         engine_args = self._load_and_reconfig_engine_args(llumnix_engine_args)
         self.migration_config = instance_args.create_migration_config()
@@ -413,10 +449,10 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
                 request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
                 abort_request_callback=self.abort_request,
                 dp_rank=dp_rank,
-                dp_rank_local=dp_rank_local
+                dp_rank_local=dp_rank_local,
+                enable_pd_disagg=instance_args.enable_vllm_v1_engine_pd_disagg,
             )
         else:
-            # FIXME(zhaozhiyu): check args
             self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
                 instance_id=instance_id,
                 instance_type=instance_args.instance_type,
@@ -427,20 +463,15 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
                 backend_type=BackendType.VLLM_V1,
                 request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
                 abort_request_callback=self.abort_request,
+                enable_pd_disagg=instance_args.enable_vllm_v1_engine_pd_disagg,
             )
+
+        self.migration_frontend = MigrationFrontend(self.engine.vllm_config, self.engine.naming_instance_id)
         asyncio.create_task(self.engine.run_busy_loop_async())
 
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.vllm_config.parallel_config.world_size:
             self.worker_handle_list.insert(0, get_llumnix_actor_handle(LlumnixActor.INSTANCE, self.instance_id))
-
-        if self.migration_config.enable_migration:
-            self._run_workers("init_migration", instance_id=instance_id,
-                                                migration_config=self.migration_config,
-                                                src_worker_handle_list=self.worker_handle_list,
-                                                placement_group=placement_group)
-        else:
-            logger.info("Migration is disabled, skip migration initialization.")
 
         self.state = EngineState.INIT
         logger.info("engine {} current state: {}".format(self.instance_id, self.state))
@@ -448,6 +479,9 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         self._step_done_event_queue = queue.Queue()
         self._remove_running_request_ret: Dict[str] = {}
         self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
+
+        # used to control migration concurrency
+        self.is_migrating = False
 
     def _load_and_reconfig_engine_args(self, llumnix_engine_args: LlumnixEngineArgs):
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args()
@@ -472,36 +506,6 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
     ) -> None:
         await self.engine.add_request_async(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
-    async def commit_dst_request(self,
-                                 request_id: RequestIDType,
-                                 backend_request) -> MigrationResponse:
-        raise NotImplementedError("commit_dst_request not implemented in vllm v1")
-
-    async def send_cache(self,
-                         dst_instance_actor: ray.actor.ActorHandle,
-                         src_blocks: List[int],
-                         dst_blocks: List[int],
-                         request_id: str,
-                         is_last_stage: bool) -> MigrationResponse:
-        raise NotImplementedError("send_cache not implemented in vllm v1")
-
-    async def recv_cache(self,
-                         request_id: RequestIDType,
-                         src_worker_handle_list: List[ray.actor.ActorHandle],
-                         src_blocks: List[int],
-                         dst_blocks: List[int],
-                         is_last_stage: bool) -> MigrationResponse:
-        raise NotImplementedError("recv_cache is not implemented in vllm v1.")
-
-
-    def _run_workers(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
-        # pylint: disable=protected-access
-        return self.engine.model_executor._run_workers(*args, timeout=timeout, **kwargs)
-
-    async def _run_workers_async(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs) -> List[Any]:
-        # pylint: disable=protected-access
-        return await make_async(self.engine.model_executor._run_workers)(*args, timeout=timeout, **kwargs)
-
     async def is_ready(self):
         return True
 
@@ -510,53 +514,6 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
             request_id = (request_id,)
         request_ids: List[str] = list(request_id)
         return self.engine.abort_requests(request_ids)
-
-    def get_running_queue(self) -> List[LlumnixRequestVLLMV1]:
-        return self.engine.scheduler.running
-
-    def get_waiting_queue(self) -> Deque[LlumnixRequestVLLMV1]:
-        return self.engine.scheduler.waiting
-
-    async def get_request_incremental_blocks(self,
-                                             backend_request: LlumnixRequestVLLMV1,
-                                             pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:
-        raise NotImplementedError("Migration not supported in VLLM V1 yet")
-
-    async def remove_running_request(self, request_id: str) -> bool:
-        raise NotImplementedError("Migration not supported in VLLM V1 yet")
-
-    def _remove_running_request(self, request_id: str) -> bool:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def remove_waiting_request(self, *args, **kwargs) -> bool:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def add_migrating_out_request_last_stage(self, *args, **kwargs) -> None:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def pop_migrating_out_request_last_stage(self, backend_request: LlumnixRequest) -> None:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def pre_alloc_cache(self, *args, **kwargs) -> MigrationResponse:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def should_abort_migration(self, *args, **kwargs) -> bool:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    async def add_running_request(self, backend_request: LlumnixRequest) -> None:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def add_waiting_request(self, *args, **kwargs) -> None:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def is_request_running(self, *args, **kwargs) -> bool:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def free_pre_alloc_cache(self, request_id: str) -> None:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
-
-    def free_src_request(self, backend_request) -> None:
-        raise NotImplementedError("Migraiton is not supported in vLLM v1 yet.")
 
     def get_instance_info(self):
         return self.engine.instance_info
@@ -567,7 +524,61 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
             kvt_engine_available_port = self.engine.vllm_config.kv_transfer_config.engine_available_port
 
         return InstanceContext(
+            instance_id=self.instance_id,
             local_engine_id=self.instance_id,
             kvt_engine_available_port=kvt_engine_available_port,
             engine_host=self.host,
-        )
+            naming_instance_id=self.engine.naming_instance_id)
+
+    # pylint: disable=unused-argument
+    async def migrate_out(
+        self,
+        dst_instance_actor: ray.actor.ActorHandle,
+        dst_instance_context: InstanceContext,
+        migration_type: Optional[MigrationType] = None
+    ) -> List[LlumnixRequest]:
+        if self.is_migrating:
+            return []
+
+        self.is_migrating = True
+
+        # select request for migration
+        def is_migrating(req: Request) -> bool:
+            if req.sampling_params.extra_args is None:
+                return False
+            if req.sampling_params.extra_args.get("kv_transfer_params", None) is None:
+                return False
+            return req.sampling_params.extra_args['kv_transfer_params'].get('is_migrating', False)
+
+        migrate_out_request = None
+        for req in self.engine.scheduler.running:
+            if "hybridsched" not in req.request_id and not is_migrating(req) and len(req.output_token_ids) > 0:
+                migrate_out_request = req
+                if req.sampling_params.extra_args is None:
+                    req.sampling_params.extra_args = dict()
+                if req.sampling_params.extra_args.get("kv_transfer_params", None) is None:
+                    req.sampling_params.extra_args["kv_transfer_params"] = dict()
+                req.sampling_params.extra_args['kv_transfer_params']['is_migrating'] = True
+                break
+
+        if migrate_out_request is None:
+            self.is_migrating = False
+            return []
+
+        logger.info("Migrating out request {} to {}, migration_type: {}.".format(
+            migrate_out_request.request_id, dst_instance_context.local_engine_id, migration_type
+        ))
+
+        target_request: Request = req2corereq(migrate_out_request)
+        if target_request.sampling_params.extra_args is None:
+            target_request.sampling_params.extra_args = {}
+
+        target_request.sampling_params.extra_args['llumnix_request_processing_context'] = \
+            self.engine.reqeust_processing_context_table[migrate_out_request.request_id]
+        try:
+            await self.migration_frontend.migrate(target_request, dst_instance_context.naming_instance_id)
+        except Exception as e:
+            log_instance_exception(e, self.instance_id, "migrate_out", target_request.request_id)
+        self.is_migrating = False
+
+        return [migrate_out_request.request_id]

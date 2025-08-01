@@ -58,11 +58,13 @@ class InstanceType(str, Enum):
 
 @dataclass
 class InstanceContext:
+    instance_id: str
     # used for blade_llm
     local_engine_id: Optional[str] = None
     # used for vllm_v1 pd
     kvt_engine_available_port: Optional[int] = None
     engine_host: Optional[str] = None
+    naming_instance_id: Optional[str] = None
 
 
 class BackendType(str, Enum):

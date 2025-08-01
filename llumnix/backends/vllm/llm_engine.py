@@ -592,4 +592,13 @@ class BackendVLLM(BackendBaseInterface, BackendMigrationInterface):
         return self.engine.instance_info
 
     def get_engine_context(self):
-        return InstanceContext(local_engine_id=self.instance_id)
+        return InstanceContext(instance_id=self.instance_id, local_engine_id=self.instance_id)
+
+    async def migrate_out(
+        self,
+        dst_instance_actor: ray.actor.ActorHandle,
+        dst_instance_id: str,
+        migrate_out_request: LlumnixRequest,
+        migration_type: Optional[MigrationType] = None
+    ) -> List[LlumnixRequest]:
+        raise NotImplementedError()

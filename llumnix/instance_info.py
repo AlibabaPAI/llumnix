@@ -100,7 +100,7 @@ class InstanceInfo:
         return hash(self.instance_id)
 
     def __repr__(self):
-        return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type})"
+        return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type}, kv_blocks_ratio={self.kv_blocks_ratio}, remaining_steps={self.remaining_steps})"
 
 def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
                         key_attr: str,

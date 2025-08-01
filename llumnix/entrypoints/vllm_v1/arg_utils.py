@@ -49,10 +49,9 @@ class VLLMV1EngineArgsFactory(LlumnixEngineArgsFactory):
             current_engine_args = self.engine_args_dict[instance_type]
 
         next_engine_args = copy.deepcopy(current_engine_args)
-        if self.pdd_config.enable_engine_pd_disagg:
-            next_engine_args.revised_args.kvt_inst_id = unit_id
-            next_engine_args.revised_args.kv_port += port_offset
-            next_engine_args.revised_args.rpc_port += port_offset
+        next_engine_args.revised_args.kvt_inst_id = unit_id
+        next_engine_args.revised_args.kv_port += port_offset
+        next_engine_args.revised_args.rpc_port += port_offset
 
         return next_engine_args
 
@@ -153,7 +152,10 @@ def check_engine_args(engine_args: "AsyncEngineArgs") -> None:
     detect_unsupported_engine_feature(engine_args)
 
 def check_instance_args(instance_args: InstanceArgs) -> None:
-    assert instance_args.enable_migration is False, "Llumnix does not support migration for vLLM v1."
+    # pylint: disable=import-outside-toplevel
+    import vllm.envs as vllm_env
+
+    assert len(vllm_env.VLLM_HOST_IP) == 0, "For Llumnix, please set VLLM_HOST_IP to empty string."
 
     assert not instance_args.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR, \
         "Llumnix does not support actor request output forwarding mode for vLLM v1 temporalily."

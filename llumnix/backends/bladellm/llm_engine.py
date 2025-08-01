@@ -628,9 +628,9 @@ class BackendBladeLLM(BackendBaseInterface, BackendMigrationInterface):
             if self.instance_args.engine_disagg_inst_id_env_var
             else self.instance_id
         )
-        if self.instance_args.enable_engine_pd_disagg:
+        if self.instance_args.enable_bladellm_engine_pd_disagg:
             self.llumnix_engine_args.update_arg("engine_disagg_inst_id", self.engine_disagg_inst_id)
-        elif self.instance_args.enable_engine_semi_pd_disagg:
+        elif self.instance_args.enable_bladellm_engine_semi_pd_disagg:
             self.llumnix_engine_args.update_arg("semi_pd_inst_id", self.engine_disagg_inst_id)
 
         self.engine_args: ServingArgs = self.llumnix_engine_args.load_engine_args()
@@ -905,4 +905,13 @@ class BackendBladeLLM(BackendBaseInterface, BackendMigrationInterface):
         return self.engine.instance_info
 
     def get_engine_context(self):
-        return InstanceContext(local_engine_id=self.engine_disagg_inst_id)
+        return InstanceContext(instance_id=self.instance_id, local_engine_id=self.engine_disagg_inst_id)
+
+    async def migrate_out(
+        self,
+        dst_instance_actor: ray.actor.ActorHandle,
+        dst_instance_id: str,
+        migrate_out_request: LlumnixRequest,
+        migration_type: Optional[MigrationType] = None
+    ) -> List[LlumnixRequest]:
+        raise NotImplementedError()

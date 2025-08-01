@@ -40,12 +40,12 @@ class BladeLLMEngineArgsFactory(LlumnixEngineArgsFactory):
             current_engine_args = self.engine_args_dict[instance_type]
 
         next_engine_args = copy.deepcopy(current_engine_args)
-        if self.pdd_config.enable_engine_pd_disagg and not self.load_registered_service:
+        if self.pdd_config.enable_bladellm_engine_pd_disagg and not self.load_registered_service:
             next_engine_args.revised_args.disagg_options_inst_role = (
                 instance_type.value if isinstance(instance_type, InstanceType)
                 else instance_type
             )
-        if self.pdd_config.enable_engine_semi_pd_disagg:
+        if self.pdd_config.enable_bladellm_engine_semi_pd_disagg:
             next_engine_args.revised_args.semi_pd_prefill_server_port += port_offset
         return next_engine_args
 
@@ -202,10 +202,10 @@ def check_manager_args(manager_args: ManagerArgs, engine_args: "ServingArgs") ->
     assert not (manager_args.enable_pd_disagg and engine_args.enable_disagg), \
         "Cannot enable both pd-disaggregation inside the LLM engine and pd-disaggregation from Llumnix."
 
-    assert manager_args.enable_engine_pd_disagg == engine_args.enable_disagg, \
+    assert manager_args.enable_bladellm_engine_pd_disagg == engine_args.enable_disagg, \
         "Engine-based pd-disaggregation of manager and engine should be enabled/disabled at the same time."
 
-    assert not (manager_args.enable_engine_pd_disagg and manager_args.enable_migration), \
+    assert not (manager_args.enable_bladellm_engine_pd_disagg and manager_args.enable_migration), \
         "Migration feature is temporarily unavailable for the engine based pd-disaggregation in BladeLLM."
 
 def get_args(llumnix_config: LlumnixConfig, launch_mode: LaunchMode, parser: LlumnixArgumentParser,

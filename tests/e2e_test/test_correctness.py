@@ -184,7 +184,7 @@ generate_special_correctness_test_config = partial(generate_special_test_config,
 
 
 def generate_correctness_test_config():
-    vllm_base_config = ["engine_vLLM", "gloo", 1, True, False, False, "global", "thread", False, False]
+    vllm_base_config = ["engine_vLLM", "gloo", 1, True, False, False, False, "global", "thread", False, False]
 
     vllm_config = [
         vllm_base_config,
@@ -219,7 +219,7 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("enable_pd_disagg", True), ("enable_adaptive_pd", True)], vllm_base_config),
     ]
 
-    vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, "global", "thread", False, False]
+    vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, False, "global", "thread", False, False]
 
     vllm_v1_config = [
         vllm_v1_base_config,
@@ -228,7 +228,7 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("tensor_parallel_size", 2)], vllm_v1_base_config),
     ]
 
-    bladellm_base_config = ["engine_BladeLLM", "grpc", 1, True, False, False, "global", "thread", False, False]
+    bladellm_base_config = ["engine_BladeLLM", "grpc", 1, True, False, False, False, "global", "thread", False, False]
 
     bladellm_config = [
         bladellm_base_config,

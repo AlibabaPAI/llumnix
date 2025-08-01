@@ -81,7 +81,7 @@ class RayRpcMigrationBackend(MigrationBackendBase):
         self.worker_handle_list = worker_handle_list
         self.proxy_actor = ProxyActor.options(
             scheduling_strategy=scheduling_strategy,
-            name=f"ProxyActor_{self.instance_id}_{random_uuid()}").remote(
+            name=f"proxy_actor_{self.instance_id}_{random_uuid()}").remote(
                 is_driver_worker, use_ray_spmd_worker
             )
 
@@ -248,7 +248,7 @@ class RayColMigrationBackend(MigrationBackendBase):
         self.local_rank = local_rank
         self.proxy_actor = ProxyActor.options(
             scheduling_strategy=scheduling_strategy,
-            name=f"ProxyActor_{self.instance_id}_{random_uuid()}").remote(
+            name=f"proxy_actor_{self.instance_id}_{random_uuid()}").remote(
                 is_driver_worker, use_ray_spmd_worker
             )
         self.gpu_cache = gpu_cache

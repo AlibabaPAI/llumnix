@@ -37,10 +37,11 @@ from llumnix.constants import NUM_GPUS_VLLM_V1_GPU_ACTOR
 logger = init_logger(__name__)
 
 
+# NOTE(s5u13b): Deprecated, llumnix now only support mp distributed executor backend for vLLM v1.
 class LlumnixRayDistributedExecutor(RayDistributedExecutor):
     instance_id: str = None
     migration_config: MigrationConfig = None
-    last_inference_latency: int = 0
+    last_inference_latency: float = 0.0
 
     async def execute_model_async(
         self,

@@ -33,7 +33,7 @@ class SimGPUExecutor(RayGPUExecutor):
     latency_mem: LatencyMemData = None
     def __init__(self, *args, **kwargs) -> None:
         RayGPUExecutor.__init__(self, *args, **kwargs)
-        self.last_inference_latency = 0
+        self.last_inference_latency = 0.0
         self.migration_bandwidth = self.latency_mem.migration_bandwidth
         # TODO(ZeldaHuang): add swap bandwidth
 

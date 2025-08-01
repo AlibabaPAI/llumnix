@@ -22,8 +22,8 @@ UPDATE_CACHED_CLUSTER_ACTORS_INTERVAL: float = 60.0
 # Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
 NUM_GPUS_VLLM_GPU_ACTOR = 0.5
 # llumnix/scaler.py, llumnix/llumlet.py, llumnix/backends/vllm_v1/executor.py
-# APIServerActor, Llumlet and Worker share the same 1 gpu in the first bundle of PlacementGroup.
-NUM_GPUS_VLLM_V1_GPU_ACTOR = 0.33
+# APIServerActor and Llumlet share the same 1 gpu in the bundle of dp instance.
+NUM_GPUS_VLLM_V1_GPU_ACTOR = 0.5
 # llumnix/llumlet.py, llumnix/scaler.py, llumnix/backends/bladellm/worker.py
 # Llumlet, ActorOutputForwarder, APIServerActor and Worker share the same 1 gpu in the first bundle of PlacementGroup.
 NUM_GPUS_BLADELLM_GPU_ACTOR = 0.25

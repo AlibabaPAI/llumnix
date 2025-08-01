@@ -14,8 +14,8 @@
 import time
 from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any, Coroutine
 from collections import defaultdict
-import asyncio
 import queue
+import threading
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -29,13 +29,13 @@ from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreO
 from vllm.v1.executor.abstract import Executor
 from vllm.v1.request import Request, RequestStatus
 from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
+from vllm.v1.engine.dpcoord import Participant
+from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc, _core_init
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger
 from llumnix.instance_info import InstanceInfo
 from llumnix.backends.backend_interface import BackendBaseInterface, BackendMigrationInterface
-from llumnix.backends.vllm_v1.async_core import (AsyncEngineCoreProc,
-                                                 AsyncDPEngineCoreProc)
 from llumnix.backends.vllm_v1.scheduler import SchedulerLlumnix
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.backends.profiling import LatencyMemData
@@ -63,7 +63,206 @@ from llumnix.request_output import LlumnixRequestOutputs
 logger = init_logger(__name__)
 
 
-class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
+class EngineCoreProcLlumnix(EngineCoreProc, EngineCore):
+    """ZMQ-wrapper for running EngineCore in background process."""
+
+    ENGINE_CORE_DEAD = b'ENGINE_CORE_DEAD'
+
+    def __init__(
+        self,
+        vllm_config: VllmConfig,
+        local_client: bool, # pylint: disable=unused-argument
+        handshake_address: str, # pylint: disable=unused-argument
+        executor_class: type[Executor],
+        log_stats: bool,
+        client_handshake_address: Optional[str] = None, # pylint: disable=unused-argument
+        engine_index: int = 0,
+        driver_tensor_queue_union: Union[None, Any] = None,
+    ):
+        # pylint: disable=line-too-long
+        """
+        The original codes of vLLM (commit id: 6ffc9896eb3c9e2ecdaa779c5d54ac16b1c93f62):
+
+        self.input_queue = queue.Queue[tuple[EngineCoreRequestType, Any]]()
+        self.output_queue = queue.Queue[Union[tuple[int, EngineCoreOutputs],
+                                              bytes]]()
+        executor_fail_callback = lambda: self.input_queue.put_nowait(
+            (EngineCoreRequestType.EXECUTOR_FAILED, b''))
+
+        self.engine_index = engine_index
+        identity = self.engine_index.to_bytes(length=2, byteorder="little")
+
+        with self._perform_handshakes(handshake_address, identity,
+                                      local_client, vllm_config,
+                                      client_handshake_address) as addresses:
+            self.client_count = len(addresses.outputs)
+
+            # Set up data parallel environment.
+            self.has_coordinator = addresses.coordinator_output is not None
+            self.frontend_stats_publish_address = (
+                addresses.frontend_stats_publish_address)
+            # Only publish request queue stats to coordinator for "internal"
+            # LB mode.
+            self.publish_dp_lb_stats = (
+                self.has_coordinator
+                and not vllm_config.parallel_config.data_parallel_external_lb)
+
+            self._init_data_parallel(vllm_config)
+            _core_init(self, vllm_config)
+
+            super().__init__(vllm_config, executor_class, log_stats,
+                             executor_fail_callback, driver_tensor_queue_union)
+
+        self.step_fn = (self.step if self.batch_queue is None else
+                        self.step_with_batch_queue)
+
+        # Background Threads and Queues for IO. These enable us to
+        # overlap ZMQ socket IO with GPU since they release the GIL,
+        # and to overlap some serialization/deserialization with the
+        # model forward pass.
+        # Threads handle Socket <-> Queues and core_busy_loop uses Queue.
+        threading.Thread(target=self.process_input_sockets,
+                         args=(addresses.inputs, addresses.coordinator_input,
+                               identity),
+                         daemon=True).start()
+        self.output_thread = threading.Thread(
+            target=self.process_output_sockets,
+            args=(addresses.outputs, addresses.coordinator_output,
+                  self.engine_index),
+            daemon=True)
+        self.output_thread.start()
+
+        # In batch mode, start a background heartbeat thread to maintain upstream connections by sending heartbeats every heartbeat_interval for requests in scheduler_proxy and the waiting queue.
+        if self.vllm_config.scheduler_config.policy == "batch":
+            threading.Thread(
+                target=self._heartbeat_loop,
+                args=(self.vllm_config.scheduler_config.heartbeat_interval, ),
+                daemon=True,
+            ).start()
+        """
+
+        self.input_queue = queue.Queue[tuple[EngineCoreRequestType, Any]]()
+        self.output_queue = queue.Queue[Union[tuple[int, EngineCoreOutputs],
+                                              bytes]]()
+        executor_fail_callback = lambda: self.input_queue.put_nowait(
+            (EngineCoreRequestType.EXECUTOR_FAILED, b''))
+
+        self.engine_index = engine_index
+
+        # NOTE(shejiarui): we don't launch vLLM's DPCoordinator
+        self.has_coordinator = False
+        self.publish_dp_lb_stats = (
+                self.has_coordinator
+                and not vllm_config.parallel_config.data_parallel_external_lb)
+
+        self._init_data_parallel(vllm_config)
+        _core_init(self, vllm_config)
+
+        EngineCore.__init__(self, vllm_config, executor_class, log_stats,
+                            executor_fail_callback, driver_tensor_queue_union)
+
+        self.step_fn = (self.step if self.batch_queue is None else
+                        self.step_with_batch_queue)
+
+
+class DPEngineCoreProcLlumnix(EngineCoreProcLlumnix, DPEngineCoreProc):
+    def __init__(
+        self,
+        vllm_config: VllmConfig,
+        on_head_node: bool,
+        handshake_address: str,
+        executor_class: type[Executor],
+        log_stats: bool,
+    ):
+        self._decorate_logs()
+
+        # Counts forward-passes of the model so that we can synchronize
+        # finished with DP peers every N steps.
+        self.counter = 0
+        self.current_wave = 0
+        self.last_counts = (0, 0)
+
+        # Initialize the engine.
+        dp_rank = vllm_config.parallel_config.data_parallel_rank
+        EngineCoreProcLlumnix.__init__(self, vllm_config, on_head_node, handshake_address,
+                                       executor_class, log_stats, dp_rank)
+
+    def _init_data_parallel(self, vllm_config: VllmConfig):
+        """
+        The original codes of vLLM (commit id: 6ffc9896eb3c9e2ecdaa779c5d54ac16b1c93f62):
+
+        # Configure GPUs and stateless process group for data parallel.
+        dp_rank = vllm_config.parallel_config.data_parallel_rank
+        dp_size = vllm_config.parallel_config.data_parallel_size
+        local_dp_rank = vllm_config.parallel_config.data_parallel_rank_local
+
+        assert dp_size > 1
+        assert 0 <= local_dp_rank <= dp_rank < dp_size
+
+        self._dppart = Participant(vllm_config, self)
+        if vllm_config.kv_transfer_config is not None:
+            # modify the engine_id and append the local_dp_rank to it to ensure
+            # that the kv_transfer_config is unique for each DP rank.
+            vllm_config.kv_transfer_config.engine_id = (
+                f"{vllm_config.kv_transfer_config.engine_id}_dp{local_dp_rank}"
+            )
+
+            if not vllm_config.parallel_config.data_parallel_external_lb:
+                vllm_config.kv_transfer_config.engine_available_port += vllm_config.parallel_config.data_parallel_rank_local
+
+            logger.info("adjust kvt cfg: %s", vllm_config.kv_transfer_config)
+            logger.debug("Setting kv_transfer_config.engine_id to %s",
+                         vllm_config.kv_transfer_config.engine_id)
+
+        from vllm.platforms import current_platform
+        device_control_env_var = current_platform.device_control_env_var
+        world_size = vllm_config.parallel_config.world_size
+        # Set CUDA_VISIBLE_DEVICES or equivalent.
+        try:
+            os.environ[device_control_env_var] = ",".join(
+                str(current_platform.device_id_to_physical_device_id(i))
+                for i in range(local_dp_rank *
+                               world_size, (local_dp_rank + 1) * world_size))
+        except IndexError as e:
+            raise Exception(
+                f"Error setting {device_control_env_var}: "
+                f"local range: [{local_dp_rank * world_size}, "
+                f"{(local_dp_rank + 1) * world_size}) "
+                f"base value: \"{os.getenv(device_control_env_var)}\"") from e
+
+        self.dp_rank = dp_rank
+        self.dp_group = vllm_config.parallel_config.stateless_init_dp_group()
+        """
+        # Configure GPUs and stateless process group for data parallel.
+        dp_rank = vllm_config.parallel_config.data_parallel_rank
+        dp_size = vllm_config.parallel_config.data_parallel_size
+        local_dp_rank = vllm_config.parallel_config.data_parallel_rank_local
+
+        assert dp_size > 1
+        assert 0 <= local_dp_rank <= dp_rank < dp_size
+
+        self._dppart = Participant(vllm_config, self)
+
+        if vllm_config.kv_transfer_config is not None:
+            # modify the engine_id and append the local_dp_rank to it to ensure
+            # that the kv_transfer_config is unique for each DP rank.
+            vllm_config.kv_transfer_config.engine_id = (
+                f"{vllm_config.kv_transfer_config.engine_id}_dp{local_dp_rank}"
+            )
+
+            if not vllm_config.parallel_config.data_parallel_external_lb:
+                vllm_config.kv_transfer_config.engine_available_port += vllm_config.parallel_config.data_parallel_rank_local
+
+            logger.info("adjust kvt cfg: %s", vllm_config.kv_transfer_config)
+            logger.debug("Setting kv_transfer_config.engine_id to %s",
+                         vllm_config.kv_transfer_config.engine_id)
+
+        self.dp_rank = dp_rank
+        self.dp_group = vllm_config.parallel_config.stateless_init_dp_group()
+
+
+
+class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
     def __init__(
         self,
         instance_id: str,
@@ -116,7 +315,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         request_output_forwarding_mode: RequestOutputForwardingMode,
         abort_request_callback: Coroutine,
         latency_mem: Optional[LatencyMemData] = None,
-    ) -> "AsyncEngineCoreProcLlumnix":
+    ) -> "EngineCoreProcWrapperLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
         # FIXME(zhaozhiyu): This is a bug of pai-vllm, engine_args.speculative_config
         # must be set to None before calling engine_args.create_engine_config()
@@ -137,7 +336,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
             executor_class.migration_config = migration_config
             executor_class.instance_id = instance_id
         else:
-            raise ValueError('Unsupported executor backend')
+            executor_class = Executor.get_class(engine_config)
 
         engine = cls(
             instance_id=instance_id,
@@ -156,7 +355,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         )
         return engine
 
-    async def _put_engine_core_outputs(
+    def _put_engine_core_outputs(
         self,
         outputs: Dict[int, EngineCoreOutputs]
     ) -> None:
@@ -226,7 +425,7 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         instance_info.profiling_data=(instance_info.inference_type.value if instance_info.inference_type else "",
                                       instance_info.num_seqs,
                                       sum(instance_info.running_seq_lens),
-                                      self.model_executor.last_inference_latency)
+                                      0.0)
         reqs: List[Request] = self.scheduler.running
         if reqs:
             tot_blocks = defaultdict(list)
@@ -247,17 +446,17 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
 
         self.instance_info = instance_info
 
-    async def _process_engine_step_async(self) -> bool:
-        """Overloading super()._process_engine_step_async() to update instance info"""
+    def _process_engine_step(self) -> bool:
+        """Overloading super()._process_engine_step() to update instance info and forward outputs."""
 
         # Step the engine core.
         self.step_begin_time = time.time()
-        outputs, model_executed = await self.step_fn_async()
+        outputs, model_executed = self.step_fn()
         self.step_end_time = time.time()
         # Update instance info after step
         self._update_instance_info()
         # Put EngineCoreOutputs into output_mediator
-        await self._put_engine_core_outputs(outputs)
+        self._put_engine_core_outputs(outputs)
         return model_executed
 
     def stop(self) -> None:
@@ -276,13 +475,14 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
         self.instance_info = instance_info
 
     # pylint: disable=invalid-overridden-method,unused-argument
+    # NOTE(s5u13b): fake async function to avoid overwriting the add_request function in engine core.
     async def add_request_async(
         self,
         request_id: str,
         request_processing_context: RequestProcessingContext,
         expected_steps: int,
         *args, **kwargs,
-    ):
+    ) -> None:
         # TODO(zhaozhiyu): remove mapping, create a new request type to carry server_info
         request_type = EngineCoreRequestType.ADD
         request: EngineCoreRequest = kwargs["engine_core_request"]
@@ -305,13 +505,13 @@ class AsyncEngineCoreProcLlumnix(AsyncEngineCoreProc):
                 kv_transfer_params["remote_port"] = kwargs["prefill_kvt_engine_available_port"]
 
         self.reqeust_processing_context_table[request.request_id] = request_processing_context
-        await self.input_queue.put((request_type, request))
+        self.input_queue.put_nowait((request_type, request))
 
 
-class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlumnix):
+class DPEngineCoreProcWrapperLlumnix(DPEngineCoreProcLlumnix, EngineCoreProcWrapperLlumnix):
     def __init__(self, *args, **kwargs):
         # pylint: disable=super-init-not-called
-        AsyncEngineCoreProcLlumnix.__init__(self, *args, **kwargs)
+        EngineCoreProcWrapperLlumnix.__init__(self, *args, **kwargs)
 
     # pylint: disable=arguments-differ
     @classmethod
@@ -329,7 +529,7 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         latency_mem: Optional[LatencyMemData] = None,
         dp_rank: int = 0,
         dp_rank_local: Optional[int] = None,
-    ) -> "AsyncDPEngineCoreProcLlumnix":
+    ) -> "DPEngineCoreProcWrapperLlumnix":
         """Creates an DPEngineCoreProc from the engine arguments."""
         if hasattr(engine_args, "speculative_config") and engine_args.speculative_config is not None:
             if len(engine_args.speculative_config) == 0:
@@ -351,9 +551,8 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
             executor_class = LlumnixRayDistributedExecutor
             executor_class.migration_config = migration_config
             executor_class.instance_id = instance_id
-            logger.debug("executor_class set to LlumnixRayDistributedExecutor")
         else:
-            raise ValueError('Unsupported executor backend')
+            executor_class = Executor.get_class(engine_config)
 
         engine = cls(
             instance_id=instance_id,
@@ -373,18 +572,6 @@ class AsyncDPEngineCoreProcLlumnix(AsyncDPEngineCoreProc, AsyncEngineCoreProcLlu
         )
         return engine
 
-    async def _process_engine_step_async(self) -> bool:
-        """Overloading super()._process_engine_step_async() to update instance info"""
-        forward_executed = await AsyncEngineCoreProcLlumnix._process_engine_step_async(self)
-        self._maybe_publish_request_counts()
-        if forward_executed:
-            return
-
-        if self.engines_running:
-            self._dppart.new_step()
-            self.execute_dummy_batch()
-        return
-
 
 class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
     def __init__(
@@ -402,7 +589,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         engine_args = self._load_and_reconfig_engine_args(llumnix_engine_args)
         self.migration_config = instance_args.create_migration_config()
         if engine_args.data_parallel_size > 1:
-            self.engine: AsyncDPEngineCoreProcLlumnix = AsyncDPEngineCoreProcLlumnix.from_engine_args(
+            self.engine: DPEngineCoreProcWrapperLlumnix = DPEngineCoreProcWrapperLlumnix.from_engine_args(
                 instance_id=instance_id,
                 instance_type=instance_args.instance_type,
                 placement_group=placement_group,
@@ -417,7 +604,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
             )
         else:
             # FIXME(zhaozhiyu): check args
-            self.engine: AsyncEngineCoreProcLlumnix = AsyncEngineCoreProcLlumnix.from_engine_args(
+            self.engine: EngineCoreProcWrapperLlumnix = EngineCoreProcWrapperLlumnix.from_engine_args(
                 instance_id=instance_id,
                 instance_type=instance_args.instance_type,
                 placement_group=placement_group,
@@ -428,7 +615,10 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
                 request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
                 abort_request_callback=self.abort_request,
             )
-        asyncio.create_task(self.engine.run_busy_loop_async())
+        self.run_busy_loop_thread = threading.Thread(
+            target=self.engine.run_busy_loop, args=(), daemon=True, name="run_busy_loop_thread"
+        )
+        self.run_busy_loop_thread.start()
 
         self.worker_handle_list = self.engine.model_executor.workers.copy()
         if len(self.worker_handle_list) + 1 == self.engine.vllm_config.parallel_config.world_size:
@@ -457,6 +647,9 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
 
     def stop(self):
         self.engine.stop()
+        self.run_busy_loop_thread.join(timeout=5.0)
+        if self.run_busy_loop_thread.is_alive():
+            logger.exception("Failed to shutdown engine run_busy_loop thread.")
         logger.info("Engine stops, instance_id: {}".format(self.instance_id))
 
     async def execute_driver_worker_method_async(self, method, *args, **kwargs):
@@ -492,7 +685,6 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
                          dst_blocks: List[int],
                          is_last_stage: bool) -> MigrationResponse:
         raise NotImplementedError("recv_cache is not implemented in vllm v1.")
-
 
     def _run_workers(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
         # pylint: disable=protected-access

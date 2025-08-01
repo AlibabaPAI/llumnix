@@ -39,7 +39,7 @@ logger = init_logger(__name__)
 class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
     instance_id: str = None
     migration_config: MigrationConfig = None
-    last_inference_latency: int = 0
+    last_inference_latency: float = 0.0
 
     def _init_workers_ray(self, placement_group: PlacementGroup,
                           **ray_remote_kwargs):

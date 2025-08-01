@@ -81,7 +81,7 @@ class APIServerActor(ABC):
     def _start_server_thread(self):
         self.run_server_thread = threading.Thread(
             target=self._run_server, args=(self.entrypoints_args, self.engine_args, self.entrypoints_context),
-            daemon=True, name="run_server"
+            daemon=True, name="run_server_thread"
         )
         self.run_server_thread.start()
 

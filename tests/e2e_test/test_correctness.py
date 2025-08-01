@@ -27,15 +27,28 @@ from llumnix.utils import get_ip_address, wait_port_free
 # pylint: disable=unused-import
 from tests import conftest
 from tests.conftest import ray_env, cleanup_ray_env_func
-from tests.e2e_test.utils import (generate_vllm_launch_command, generate_vllm_serve_command,
-                                  generate_vllm_request, process_vllm_api_server_output,
-                                  generate_vllm_v1_launch_command, generate_vllm_v1_serve_command, generate_raw_vllm_v1_serve_command,
-                                  generate_vllm_v1_request, process_vllm_v1_api_server_output,
-                                  generate_bladellm_launch_command, generate_bladellm_serve_command,
-                                  generate_bladellm_request, process_bladellm_api_server_output,
-                                  wait_for_llumnix_service_ready, wait_for_llumnix_service_ready_vllm_v1,
-                                  shutdown_llumnix_service, shutdown_llumnix_service_func, check_log_exception, get_llumnix_response,
-                                  generate_special_test_config, parse_launch_command)
+from tests.e2e_test.utils import (
+    generate_vllm_launch_command,
+    generate_vllm_serve_command,
+    generate_vllm_request,
+    process_vllm_api_server_output,
+    generate_vllm_v1_launch_command,
+    generate_vllm_v1_serve_command,
+    generate_raw_vllm_v1_serve_command,
+    generate_vllm_v1_request,
+    process_vllm_v1_api_server_output,
+    generate_bladellm_launch_command,
+    generate_bladellm_serve_command,
+    generate_bladellm_request,
+    process_bladellm_api_server_output,
+    wait_for_llumnix_service_ready,
+    wait_for_llumnix_service_ready_vllm_v1,
+    shutdown_llumnix_service,
+    shutdown_llumnix_service_func,
+    check_log_exception,
+    get_llumnix_response,
+    generate_special_test_config,
+)
 from tests.utils import try_convert_to_local_path
 
 
@@ -248,11 +261,26 @@ def generate_correctness_test_config():
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required for correctness test")
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize(config_schema, generate_correctness_test_config())
-async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exception, model,
-                           engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator,
-                           enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_engine_semi_pd_disagg,
-                           enable_adaptive_pd):
+async def test_correctness(
+    ray_env,
+    shutdown_llumnix_service,
+    check_log_exception,
+    model,
+    engine,
+    migration_backend,
+    tensor_parallel_size,
+    enable_migration,
+    enable_simulator,
+    enable_pd_disagg,
+    launch_mode,
+    request_output_forwarding_mode,
+    enable_engine_semi_pd_disagg,
+    enable_adaptive_pd,
+):
     engine = "_".join(engine.split("_")[1:])
+
+    if engine == "vLLM_v1":
+        model = "/mnt/data/models/Qwen2.5-1.5B-Instruct"
 
     global test_times
 
@@ -317,70 +345,86 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
             prefill_port = base_port
             wait_port_free(prefill_port, force=True)
             ip_ports.append(f"{ip}:{prefill_port}")
-            launch_commands.append(generate_launch_command_func(result_filename=str(prefill_port)+".out",
-                                                    model=model,
-                                                    ip=ip,
-                                                    port=prefill_port,
-                                                    enforce_eager=True,
-                                                    migration_backend=migration_backend,
-                                                    enable_pd_disagg=enable_pd_disagg,
-                                                    enable_adaptive_pd=enable_adaptive_pd,
-                                                    enable_simulator=enable_simulator,
-                                                    request_output_forwarding_mode=request_output_forwarding_mode,
-                                                    instance_type="prefill",
-                                                    enable_migration=enable_migration,
-                                                    tensor_parallel_size=tensor_parallel_size))
+            launch_commands.append(
+                generate_launch_command_func(
+                    result_filename=str(prefill_port)+".out",
+                    model=model,
+                    ip=ip,
+                    port=prefill_port,
+                    enforce_eager=True,
+                    migration_backend=migration_backend,
+                    enable_pd_disagg=enable_pd_disagg,
+                    enable_adaptive_pd=enable_adaptive_pd,
+                    enable_simulator=enable_simulator,
+                    request_output_forwarding_mode=request_output_forwarding_mode,
+                    instance_type="prefill",
+                    enable_migration=enable_migration,
+                    tensor_parallel_size=tensor_parallel_size,
+                )
+            )
 
             decode_port = base_port + 50
             wait_port_free(decode_port, force=True)
             ip_ports.append(f"{ip}:{decode_port}")
-            launch_commands.append(generate_launch_command_func(result_filename=str(decode_port)+".out",
-                                                    launch_ray_cluster=False,
-                                                    model=model,
-                                                    ip=ip,
-                                                    port=decode_port,
-                                                    migration_backend=migration_backend,
-                                                    enforce_eager=True,
-                                                    enable_simulator=enable_simulator,
-                                                    enable_adaptive_pd=enable_adaptive_pd,
-                                                    request_output_forwarding_mode=request_output_forwarding_mode,
-                                                    enable_pd_disagg=enable_pd_disagg,
-                                                    instance_type="decode",
-                                                    enable_migration=enable_migration,
-                                                    tensor_parallel_size=tensor_parallel_size))
+            launch_commands.append(
+                generate_launch_command_func(
+                    result_filename=str(decode_port)+".out",
+                    launch_ray_cluster=False,
+                    model=model,
+                    ip=ip,
+                    port=decode_port,
+                    migration_backend=migration_backend,
+                    enforce_eager=True,
+                    enable_simulator=enable_simulator,
+                    enable_adaptive_pd=enable_adaptive_pd,
+                    request_output_forwarding_mode=request_output_forwarding_mode,
+                    enable_pd_disagg=enable_pd_disagg,
+                    instance_type="decode",
+                    enable_migration=enable_migration,
+                    tensor_parallel_size=tensor_parallel_size,
+                )
+            )
         else:
             wait_port_free(base_port, force=True)
             ip_ports.append(f"{ip}:{base_port}")
-            launch_commands.append(generate_launch_command_func(result_filename=str(base_port)+".out",
-                                                    model=model,
-                                                    ip=ip,
-                                                    port=base_port,
-                                                    migration_backend=migration_backend,
-                                                    enable_pd_disagg=enable_pd_disagg,
-                                                    enable_adaptive_pd=enable_adaptive_pd,
-                                                    enforce_eager=True,
-                                                    enable_simulator=enable_simulator,
-                                                    request_output_forwarding_mode=request_output_forwarding_mode,
-                                                    enable_migration=enable_migration,
-                                                    tensor_parallel_size=tensor_parallel_size))
+            launch_commands.append(
+                generate_launch_command_func(
+                    result_filename=str(base_port)+".out",
+                    model=model,
+                    ip=ip,
+                    port=base_port,
+                    migration_backend=migration_backend,
+                    enable_pd_disagg=enable_pd_disagg,
+                    enable_adaptive_pd=enable_adaptive_pd,
+                    enforce_eager=True,
+                    enable_simulator=enable_simulator,
+                    request_output_forwarding_mode=request_output_forwarding_mode,
+                    enable_migration=enable_migration,
+                    tensor_parallel_size=tensor_parallel_size,
+                )
+            )
     else:
         for i in range(instance_count):
             wait_port_free(base_port + i, force=True)
             ip_ports.append(f"{ip}:{base_port + i}")
-        launch_commands.append(generate_serve_command_func(result_filename=str(base_port)+".out",
-                                               ip=ip,
-                                               port=base_port,
-                                               model=model,
-                                               enforce_eager=True,
-                                               migration_backend=migration_backend,
-                                               enable_pd_disagg=enable_pd_disagg,
-                                               enable_adaptive_pd=enable_adaptive_pd,
-                                               enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
-                                               enable_simulator=enable_simulator,
-                                               request_output_forwarding_mode=request_output_forwarding_mode,
-                                               tensor_parallel_size=tensor_parallel_size,
-                                               enable_migration=enable_migration,
-                                               max_units=instance_count))
+        launch_commands.append(
+            generate_serve_command_func(
+                result_filename=str(base_port)+".out",
+                ip=ip,
+                port=base_port,
+                model=model,
+                enforce_eager=True,
+                migration_backend=migration_backend,
+                enable_pd_disagg=enable_pd_disagg,
+                enable_adaptive_pd=enable_adaptive_pd,
+                enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+                enable_simulator=enable_simulator,
+                request_output_forwarding_mode=request_output_forwarding_mode,
+                tensor_parallel_size=tensor_parallel_size,
+                enable_migration=enable_migration,
+                max_units=instance_count,
+                )
+        )
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)
 
@@ -389,7 +433,7 @@ async def test_correctness(ray_env, shutdown_llumnix_service, check_log_exceptio
     # TODO(zhaozhiyu): remove this special judge in the future
     if engine =="vLLM_v1":
         # special wait_for_llumnix_service_ready for vllm v1
-        wait_for_llumnix_service_ready_vllm_v1(ip_ports)
+        wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=300)
     else:
         wait_for_llumnix_service_ready(ip_ports)
 

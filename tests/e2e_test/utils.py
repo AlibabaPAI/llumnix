@@ -268,7 +268,7 @@ def generate_vllm_v1_serve_command(
         f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
         f"{'--enable-migration' if enable_migration else ''} "
         f"--model {model} "
-        f"--distributed-executor-backend ray "
+        f"--distributed-executor-backend mp "
         f"{'--enforce-eager' if enforce_eager else ''} "
         f"--max-model-len {max_model_len} "
         f"--dispatch-policy {dispatch_policy} "
@@ -454,12 +454,12 @@ def generate_vllm_v1_request(prompt):
                 "content": prompt
             }
         ],
-        "temperature": 0.0,
-        "top_k": 1,
         "stream": "false",
-        "ignore_eos": "false",
         "presence_penalty": 1.1,
-        "repetition_penalty": 1.1,
+        "max_tokens": 20,
+        "temperature": 0.0,
+        "top_p": 0.5,
+        "top_k": 10
     }
     return request
 
@@ -531,19 +531,7 @@ def wait_for_llumnix_service_ready_vllm_v1(ip_ports, timeout=120):
         all_ready = False
         for ip_port in ip_ports:
             try:
-                request = {
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are a helpful assistant."
-                        },
-                        {
-                            "role": "user",
-                            "content": "hello"
-                        }
-                    ],
-                    "max_tokens": 1,
-                }
+                request = generate_vllm_v1_request("hello")
                 response = requests.post(f"http://{ip_port}/v1/chat/completions", json=request, timeout=5)
                 if response.status_code == 200:
                     all_ready = True
@@ -658,7 +646,7 @@ def generate_vllm_v1_register_service_command_func(
         f"--save-key vllm_v1 "
         f"--model {model} "
         f"--max-model-len 4096 "
-        f"--distributed-executor-backend ray "
+        f"--distributed-executor-backend mp "
         f"--enforce-eager "
         f"--trust-remote-code "
         f"{kvt_config_prefill if engine_type == 'prefill' else kvt_config_decode if engine_type == 'decode' else ''}"

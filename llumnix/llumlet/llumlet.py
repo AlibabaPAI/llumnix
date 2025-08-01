@@ -54,8 +54,9 @@ class Llumlet:
     ) -> None:
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
+        self.instance_type = instance_args.instance_type
         logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
-            self.instance_id, llumnix_engine_args.backend_type, instance_args.instance_type))
+            self.instance_id, llumnix_engine_args.backend_type, self.instance_type))
         self.instance_args: InstanceArgs = instance_args
         self.placement_group = placement_group
         self.actor_handle = get_llumnix_actor_handle(LlumnixActor.INSTANCE, instance_id)
@@ -88,7 +89,7 @@ class Llumlet:
         asyncio.create_task(self._check_engine_state_loop())
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]},type={self.instance_type.value})"
 
     @classmethod
     def from_args(
@@ -109,7 +110,7 @@ class Llumlet:
         if backend_type == BackendType.VLLM:
             num_gpus = NUM_GPUS_VLLM_GPU_ACTOR
         elif backend_type == BackendType.VLLM_V1:
-            num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
+            num_gpus = engine_args.get_world_size() - NUM_GPUS_VLLM_V1_GPU_ACTOR
             if dp_rank > 0:
                 bundle_index = dp_rank
         elif backend_type == BackendType.BLADELLM:
@@ -228,8 +229,8 @@ class Llumlet:
         return await executor(*args, **kwargs)
 
     async def call_engine_utility_async(self, method: str, *args) -> Any:
-        # As per the hint, the target object containing utility functions
-        # is self.backend_engine.engine.
+        """Call engine utility function for backend vLLM v1."""
+        # As per the hint, the target object containing utility functions is self.backend_engine.engine.
         target_engine = self.backend_engine.engine
 
         try:

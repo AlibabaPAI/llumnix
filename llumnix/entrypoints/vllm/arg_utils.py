@@ -111,7 +111,7 @@ def detect_migration_unsupported_engine_feature(engine_args: EngineArgs) -> None
 
 def check_engine_args(engine_args: AsyncEngineArgs, manager_args: ManagerArgs = None) -> None:
     detect_unsupported_engine_feature(engine_args)
-    if manager_args is not None and manager_args.enable_routine_migration:
+    if manager_args is not None and manager_args.enable_migration:
         detect_migration_unsupported_engine_feature(engine_args)
 
     assert engine_args.worker_use_ray, "In Llumnix, engine and worker must be ray actor."

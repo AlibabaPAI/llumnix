@@ -212,7 +212,7 @@ class LlumnixRayGPUExecutor(RayGPUExecutorAsync):
         self._run_workers("load_model",
                           max_concurrent_workers=self.parallel_config.
                           max_parallel_loading_workers)
-        if self.migration_config and self.migration_config.enable_routine_migration:
+        if self.migration_config and self.migration_config.enable_migration:
             self._run_workers("reserve_memory_for_migration",
                               migration_config=self.migration_config,
                               model_config=self.model_config,

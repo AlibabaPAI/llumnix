@@ -116,6 +116,7 @@ def init_manager(
         enable_engine_semi_pd_disagg: bool = False):
     manager_args = ManagerArgs(
         enable_routine_migration=True,
+        enable_pre_stop_migration=False,
         enable_pd_disagg=enable_pd_disagg,
         enable_engine_pd_disagg=enable_engine_pd_disagg,
         enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg)

@@ -337,7 +337,7 @@ class AsyncLLMEngineLlumnixMixin:
         self._scheduler.trans_wrapper = self.trans_wrapper
         self._scheduler.llumnix_metrics.engine_init_metrics(self)
 
-        if self.migration_config.enable_routine_migration:
+        if self.migration_config.enable_migration:
             migration_worker_port = self._worker_processes.get_all_workers_grpc_migration_server_port()
             ip = get_ip_address()
             self.src_workers_migration_ip_addr_list = [ip + ":" + str(port) for port in migration_worker_port]
@@ -429,7 +429,7 @@ class AsyncLLMEngineLlumnixMixin:
             logger.info("Engine {} change state: {} -> {}.".format(self.instance_id, EngineState.RUNNING, self.state))
 
     def stop(self, *args, **kwargs):
-        if self.migration_config.enable_routine_migration:
+        if self.migration_config.enable_migration:
             run_coroutine_in_new_thread(self.close_migration(), blocking=True)
         self.trans_wrapper.stop()
         super().stop(*args, **kwargs)
@@ -680,7 +680,7 @@ class BackendBladeLLM(BackendBaseInterface, BackendMigrationInterface):
                                          enable_disagg_pd=True)
         await self.engine.async_start(asyncio.get_event_loop())
 
-        if self.migration_config.enable_routine_migration:
+        if self.migration_config.enable_migration:
             self.worker_infos = []
             self.kv_transfer_instance_id = self.instance_id
             if self.engine_args.enable_disagg and self.engine_args.disagg_options is not None:

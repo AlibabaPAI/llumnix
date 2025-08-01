@@ -75,7 +75,8 @@ class Llumlet:
         )
 
         self.enable_routine_migration = instance_args.enable_routine_migration
-        if self.enable_routine_migration:
+        self.enable_pre_stop_migration = instance_args.enable_pre_stop_migration
+        if self.enable_routine_migration or self.enable_pre_stop_migration:
             self.migration_coordinator = MigrationCoordinator(
                 self.instance_id,
                 self.backend_engine,
@@ -167,7 +168,7 @@ class Llumlet:
         instance_info.unit_id = self.instance_id.split("_")[0]
         instance_info.enable_defrag = self.instance_args.enable_defrag
         self.instance_load_calculator.compute_instance_load(instance_info)
-        if self.enable_routine_migration:
+        if self.enable_routine_migration or self.enable_pre_stop_migration:
             instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
             instance_info.is_migrating = self.migration_coordinator.is_migrating()
         return instance_info
@@ -225,7 +226,7 @@ class Llumlet:
         dst_instance_id: str,
         migration_type: Optional[MigrationType] = None
     ) -> List[RequestIDType]:
-        if migration_type == MigrationType.FAILOVER_MIGRATION:
+        if migration_type == MigrationType.PRE_STOP_MIGRATION:
             if self.unit_status != UnitStatus.MIGRATING:
                 self.set_unit_status(UnitStatus.MIGRATING)
                 logger.info("Llumlet(instance_id={}, instance_type={}) begin to run {}.".format(
@@ -236,7 +237,7 @@ class Llumlet:
         migrated_request_ids = await self.migration_coordinator.migrate_out(
             dst_instance_actor, dst_instance_id, migration_type)
 
-        if migration_type == MigrationType.FAILOVER_MIGRATION:
+        if migration_type == MigrationType.PRE_STOP_MIGRATION:
             instance_info: InstanceInfo = self.backend_engine.get_instance_info()
             num_running_requests = instance_info.num_running_requests
             num_waiting_requests = instance_info.num_waiting_requests

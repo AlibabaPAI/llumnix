@@ -216,7 +216,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
     elif migration_request_status == 'waiting':
         request_migration_policy = "FCW"
 
-    instance_args = InstanceArgs(enable_routine_migration=True)
+    instance_args = InstanceArgs(enable_routine_migration=True, enable_pre_stop_migration=False)
     instance_args.request_migration_policy = request_migration_policy
     instance_args.migration_backend = migration_backend
 
@@ -385,7 +385,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
     )
     id_rank_map = {"0":0, "1":1}
 
-    instance_args = InstanceArgs(enable_routine_migration=True)
+    instance_args = InstanceArgs(enable_routine_migration=True, enable_pre_stop_migration=False)
     instance_args.request_migration_policy = "SR"
     instance_args.migration_backend = migration_backend
 

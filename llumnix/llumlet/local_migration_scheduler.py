@@ -47,7 +47,7 @@ class LocalMigrationScheduler:
 
     def get_required_migration_request(self, migration_type: Optional[MigrationType] = None):
         required_migration_requests = []
-        if migration_type != MigrationType.FAILOVER_MIGRATION:
+        if migration_type != MigrationType.PRE_STOP_MIGRATION:
             # The function is used to retrieve requests on the backend that have already met the expected_steps.
             # Currently, the code below is only used for Prefill-decode disaggregation, and only selects request
             # that migrates from the prefill instance to the decode instance.

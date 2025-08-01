@@ -506,14 +506,6 @@ class BackendVLLMV1(BackendBaseInterface):
     ) -> None:
         await self.engine.add_request_async(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
-    def _run_workers(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs):
-        # pylint: disable=protected-access
-        return self.engine.model_executor._run_workers(*args, timeout=timeout, **kwargs)
-
-    async def _run_workers_async(self, *args, timeout=RAY_RPC_TIMEOUT, **kwargs) -> List[Any]:
-        # pylint: disable=protected-access
-        return await make_async(self.engine.model_executor._run_workers)(*args, timeout=timeout, **kwargs)
-
     async def is_ready(self):
         return True
 
@@ -560,7 +552,7 @@ class BackendVLLMV1(BackendBaseInterface):
 
         migrate_out_request = None
         for req in self.engine.scheduler.running:
-            if "hybridsched" not in req.request_id and not is_migrating(req):
+            if "hybridsched" not in req.request_id and not is_migrating(req) and len(req.output_token_ids) > 0:
                 migrate_out_request = req
                 if req.sampling_params.extra_args is None:
                     req.sampling_params.extra_args = dict()

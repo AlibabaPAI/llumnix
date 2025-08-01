@@ -92,7 +92,7 @@ class Llumlet:
         asyncio.create_task(self._check_engine_state_loop())
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]},type={self.instance_type.value})"
 
     @classmethod
     def from_args(

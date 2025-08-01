@@ -288,6 +288,8 @@ class MockMigrationScheduler(MigrationScheduler):
             target_store = self.decode_unit_pre_stop_migration_pairs
         migrate_instance_pairs = super()._pair_migration(instance_info, migration_filter_pipeline, migration_policy)
         target_store.extend(migrate_instance_pairs)
+        return migrate_instance_pairs
+
 
 @pytest.mark.parametrize("enable_pd_disagg, enable_engine_pd_disagg, enable_engine_semi_pd_disagg",
                          [(True, False, False), (False, True, False), (False, False, True), (False, False, False)])
@@ -300,7 +302,8 @@ def test_migration_scheduler(enable_pd_disagg, enable_engine_pd_disagg, enable_e
             dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
         )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 enable_engine_pd_disagg, enable_engine_semi_pd_disagg, False, dispatch_load_metric_config)
+                                                 enable_engine_pd_disagg, enable_engine_semi_pd_disagg,
+                                                 False, dispatch_load_metric_config, False)
     all_instance_infos: Dict[str, InstanceInfo] = {}
     if not migration_scheduler._enable_pd():
         for idx in range(INSTANCE_NUM):
@@ -361,7 +364,8 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_engine_semi_pd_di
             dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
         )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 False, enable_engine_semi_pd_disagg, True, dispatch_load_metric_config)
+                                                 False, enable_engine_semi_pd_disagg,
+                                                 True, dispatch_load_metric_config, False)
     KvBlocksRatioLoad.BUSY_THRESHOLD = 5
     RemainingStepsLoad.BUSY_THRESHOLD = 5
     AdaptiveDecodeBatchLoad.DECODE_COMPUTE_BOUND_BATCH_SIZE = 5
@@ -487,7 +491,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
         dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
     )
     migration_scheduler = MockMigrationScheduler('defrag', -3.0, False, enable_pd_disagg,
-                                                 False, False, False, dispatch_load_metric_config)
+                                                 False, False, False, dispatch_load_metric_config, True)
     all_instance_infos: Dict[str, InstanceInfo] = {}
     if not migration_scheduler._enable_pd():
         for idx in range(INSTANCE_NUM):
@@ -496,6 +500,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
             instance_info.instance_id = f"instance_id_{idx}"
             instance_info.unit_id = idx
             instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.migration_load_metric = None
             all_instance_infos[instance_info.instance_id] = instance_info
     else:
         for idx in range(INSTANCE_NUM):
@@ -504,6 +509,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
             instance_info.instance_id = f"prefill_instance_id_{idx}"
             instance_info.unit_id = idx
             instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.migration_load_metric = None
             all_instance_infos[instance_info.instance_id] = instance_info
 
         for idx in range(INSTANCE_NUM):
@@ -512,11 +518,12 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
             instance_info.instance_id = f"decode_instance_id_{idx}"
             instance_info.unit_id = idx
             instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.migration_load_metric = None
             all_instance_infos[instance_info.instance_id] = instance_info
 
     migration_scheduler.push_migrations(all_instance_infos)
 
-    if enable_pd_disagg:
+    if not enable_pd_disagg:
         assert len(migration_scheduler.unit_pre_stop_migration_pairs) > 0
     else:
         assert len(migration_scheduler.prefill_unit_pre_stop_migration_pairs) > 0

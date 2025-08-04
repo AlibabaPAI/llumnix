@@ -31,6 +31,8 @@ from vllm.v1.request import Request, RequestStatus
 from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
 from vllm.v1.engine.dpcoord import Participant
 from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc, _core_init
+from vllm.v1.core.sched.output import ScheduledDPMetaData
+from vllm.v1.utils import sync_dp_metadata
 
 from llumnix.arg_utils import InstanceArgs, LlumnixEngineArgs
 from llumnix.logging.logger import init_logger

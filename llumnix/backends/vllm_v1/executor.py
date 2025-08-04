@@ -32,7 +32,6 @@ from vllm.v1.outputs import ModelRunnerOutput
 
 from llumnix.internal_config import MigrationConfig
 from llumnix.logging.logger import init_logger
-from llumnix.constants import NUM_GPUS_VLLM_V1_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -125,8 +124,6 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
                     placement_group_bundle_index=bundle_id,
                 )
                 num_gpus = 1
-                if rank == 0:
-                    num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
                 if current_platform.ray_device_key == "GPU":
                     # NV+AMD GPUs, and Intel XPUs
                     worker = ray.remote(
@@ -155,8 +152,6 @@ class LlumnixRayDistributedExecutor(RayDistributedExecutor):
                     placement_group_bundle_index=dp_rank,
                 )
                 num_gpus = 1
-                if rank == 0:
-                    num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
                 if current_platform.ray_device_key == "GPU":
                     # NV+AMD GPUs, and Intel XPUs
                     worker = ray.remote(

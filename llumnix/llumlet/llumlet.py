@@ -36,7 +36,7 @@ from llumnix.ray_utils import (
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
-from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -54,8 +54,9 @@ class Llumlet:
     ) -> None:
         log_actor_ray_info(actor_class_name=self.__class__.__name__)
         self.instance_id = instance_id
+        self.instance_type = instance_args.instance_type
         logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
-            self.instance_id, llumnix_engine_args.backend_type, instance_args.instance_type))
+            self.instance_id, llumnix_engine_args.backend_type, self.instance_type))
         self.instance_args: InstanceArgs = instance_args
         self.placement_group = placement_group
         self.actor_handle = get_llumnix_actor_handle(LlumnixActor.INSTANCE, instance_id)
@@ -109,7 +110,7 @@ class Llumlet:
         if backend_type == BackendType.VLLM:
             num_gpus = NUM_GPUS_VLLM_GPU_ACTOR
         elif backend_type == BackendType.VLLM_V1:
-            num_gpus = NUM_GPUS_VLLM_V1_GPU_ACTOR
+            num_gpus = engine_args.get_world_size()
             if dp_rank > 0:
                 bundle_index = dp_rank
         elif backend_type == BackendType.BLADELLM:
@@ -228,8 +229,8 @@ class Llumlet:
         return await executor(*args, **kwargs)
 
     async def call_engine_utility_async(self, method: str, *args) -> Any:
-        # As per the hint, the target object containing utility functions
-        # is self.backend_engine.engine.
+        """Call engine utility function for backend vLLM v1."""
+        # As per the hint, the target object containing utility functions is self.backend_engine.engine.
         target_engine = self.backend_engine.engine
 
         try:

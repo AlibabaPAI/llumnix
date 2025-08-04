@@ -43,11 +43,7 @@ from llumnix.ray_utils import (
     get_llumnix_actor_handle,
 )
 from llumnix.queue.queue_type import QueueType
-from llumnix.constants import (
-    NUM_GPUS_VLLM_V1_GPU_ACTOR,
-    NUM_GPUS_BLADELLM_GPU_ACTOR,
-    HEARTBEAT_INTERVAL,
-)
+from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, HEARTBEAT_INTERVAL
 from llumnix.utils import (
     run_coroutine_in_new_thread,
     InstanceType,
@@ -277,7 +273,7 @@ class DPManager:
             from llumnix.entrypoints.vllm_v1.api_server_actor import APIServerActorVLLMV1
             # To avoid triton runtime error, assign GPU to api server.
             server = APIServerActorVLLMV1.from_args(
-                NUM_GPUS_VLLM_V1_GPU_ACTOR,
+                0,
                 instance_id,
                 placement_group,
                 entrypoints_args,
@@ -286,7 +282,7 @@ class DPManager:
                 scaler,
                 manager,
                 instance,
-                bundle_index=dp_rank
+                bundle_index=dp_rank,
             )
         elif backend_type == BackendType.BLADELLM:
             # pylint: disable=import-outside-toplevel

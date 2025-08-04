@@ -146,6 +146,9 @@ def make_async(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
 
     return _async_wrapper
 
+async def async_wrapper(func, *args, **kwargs):
+    return func(*args, **kwargs)
+
 def get_service_resouces(service_name: str, num_gpus: int) -> Dict[str, float]:
     assert service_name in ["prefill", "decode", "neutral", None], \
         "Only support prefill, decode, neutral, and None service name currently."

@@ -61,6 +61,7 @@ from llumnix.ray_utils import (
     LlumnixActor,
     list_actor_names_by_actor_type,
     get_llumnix_actor_id,
+    BundlingStrategy,
 )
 from llumnix.internal_config import PDDConfig
 from llumnix.constants import (
@@ -335,6 +336,7 @@ class Scaler:
                 detached=True,
                 block=block,
                 node_id=node_id,
+                bundling_strategy=BundlingStrategy.INSTANCE,
             )
         elif not BackendType.is_sim_backend(backend_type):
             # num_cpus=2+(0/1), for Llumlet + ActorOutputForwarder + (ApiServerActor) + dp_manager
@@ -349,6 +351,7 @@ class Scaler:
                 block=block,
                 node_id=node_id,
                 resources=resources,
+                bundling_strategy=BundlingStrategy.WORKER,
             )
         else:
             placement_group = initialize_placement_group(
@@ -358,6 +361,7 @@ class Scaler:
                 detached=True,
                 block=block,
                 node_id=node_id,
+                bundling_strategy=BundlingStrategy.WORKER,
             )
 
         return placement_group

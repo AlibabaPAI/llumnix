@@ -154,6 +154,7 @@ class ThreadOutputForwarder(BaseOutputForwarder):
         abort_request_callback: Coroutine,
         actor_forwarder: ray.actor.ActorHandle = None,
     ):
+        self.instance_id = instance_id
         self.request_output_queue_type = request_output_queue_type
         self.request_output_queue_client = init_request_output_queue_client(self.request_output_queue_type)
         self.request_output_forwarding_mode = request_output_forwarding_mode
@@ -164,7 +165,7 @@ class ThreadOutputForwarder(BaseOutputForwarder):
         self.abort_request_callback = abort_request_callback
         self.server_request_outputs_queue = queue.Queue()
         self.put_queue_loop_thread = threading.Thread(
-            target=self._start_put_queue_loop, args=(), daemon=True, name=f"TheadOutputForwarder_{instance_id}"
+            target=self._start_put_queue_loop, args=(), daemon=True, name="thread_output_forwarder"
         )
         self.put_queue_loop_thread.start()
 
@@ -252,7 +253,7 @@ class OutputForwarder:
                 num_cpus=1,
                 num_gpus=num_gpus,
                 scheduling_strategy=scheduling_strategy,
-                name=f"ActorOutputForwarder_{instance_id}"
+                name=f"actor_output_forwarder_{instance_id}"
             )(ActorOutputForwarder).remote(instance_id, request_output_queue_type)
         self.thread_forwarder: ThreadOutputForwarder = ThreadOutputForwarder(
             instance_id,

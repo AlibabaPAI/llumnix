@@ -13,6 +13,7 @@
 
 import socket
 from dataclasses import fields
+import os
 
 import uvloop
 import ray.actor
@@ -36,6 +37,8 @@ class APIServerActorVLLMV1(APIServerActor):
                  scaler: ray.actor.ActorHandle,
                  manager: ray.actor.ActorHandle,
                  instance: ray.actor.ActorHandle):
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
         self.client_index = entrypoints_args.client_index
         super().__init__(instance_id, entrypoints_args, instance_args, engine_args,
                          scaler, manager, instance)

@@ -144,6 +144,10 @@ def list_actor_names_by_actor_type(actor_type: LlumnixActor) -> List[str]:
 
 # ================== creation/deletion placement_group/actor api ==================
 
+class BundlingStrategy(str, Enum):
+    INSTANCE = "instance"
+    WORKER = "worker"
+
 # pylint: disable=dangerous-default-value
 def initialize_placement_group(
     placement_group_name: str,
@@ -153,24 +157,9 @@ def initialize_placement_group(
     block: bool = True,
     node_id: str = None,
     dp_size: int = 1,
+    bundling_strategy: BundlingStrategy = BundlingStrategy.WORKER,
     resources: Dict[str, float] = {}
 ) -> PlacementGroup:
-    """Initialize the distributed cluster probably with Ray.
-
-    Args:
-        placement_group_name: The name of placement group.
-        num_cpus: The number of cpus in placement group.
-        num_gpus: The number of gpus in placement group.
-        gpu_bundling_strategy: GPU bundle st.
-        detached: Whether the lifetime of the placement group being detached.
-        block: If True, the function will block until the placement group is ready.
-        node_id: The node id of node. If specified, placement group will be created on the specified node.
-        resources: The addtional resources requirements of placement group.
-
-    Returns:
-        `placement_group`. `placement_group` includes the specification
-        of the resources for each distributed worker.
-    """
     if ray is None:
         raise ImportError(
             "Ray is not installed. Please install Ray to use distributed "
@@ -186,7 +175,7 @@ def initialize_placement_group(
 
     try:
         # Create a new placement group
-        if dp_size > 1:
+        if bundling_strategy == BundlingStrategy.INSTANCE:
             num_cpu_per_dp = (num_cpus - 1) // dp_size
             world_size = num_gpus // dp_size
             # bundle_0: DPManager + CPU Actors + Worker * world_size

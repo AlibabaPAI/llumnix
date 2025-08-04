@@ -261,7 +261,6 @@ class DPEngineCoreProcLlumnix(EngineCoreProcLlumnix, DPEngineCoreProc):
         self.dp_group = vllm_config.parallel_config.stateless_init_dp_group()
 
 
-
 class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
     def __init__(
         self,
@@ -448,7 +447,6 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
 
     def _process_engine_step(self) -> bool:
         """Overloading super()._process_engine_step() to update instance info and forward outputs."""
-
         # Step the engine core.
         self.step_begin_time = time.time()
         outputs, model_executed = self.step_fn()
@@ -571,6 +569,65 @@ class DPEngineCoreProcWrapperLlumnix(DPEngineCoreProcLlumnix, EngineCoreProcWrap
             dp_rank=dp_rank,
         )
         return engine
+
+    def _process_engine_step(self):
+        """
+        The original codes of vLLM (commit id: 6ffc9896eb3c9e2ecdaa779c5d54ac16b1c93f62):
+
+        forward_executed = super()._process_engine_step()
+        self._maybe_publish_request_counts()
+        if forward_executed:
+            return
+
+        if self.engines_running and not self.scheduler.has_unfinished_requests(
+        ):
+            self._dppart.new_step()
+            dp_metadata = None
+            if self.vllm_config.scheduler_config.async_scheduling:
+                num_pad, num_tokens_across_dp, is_prompt_batch, _, skip_cuda_graphs, all_prefill, all_decode = sync_dp_metadata(
+                    self.dp_group,
+                    1,
+                    0,
+                    False,
+                    dp_size=self.vllm_config.parallel_config.data_parallel_size
+                )
+                dp_metadata = ScheduledDPMetaData(
+                    num_pad=num_pad,
+                    num_tokens_across_dp=num_tokens_across_dp,
+                    is_prompt_batch=is_prompt_batch,
+                    skip_cuda_graphs=skip_cuda_graphs,
+                    all_prefill=all_prefill,
+                    all_decode=all_decode)
+            self.execute_dummy_batch(dp_metadata=dp_metadata)
+        return
+
+        """
+        forward_executed = EngineCoreProcWrapperLlumnix._process_engine_step(self)
+        self._maybe_publish_request_counts()
+        if forward_executed:
+            return
+
+        if self.engines_running and not self.scheduler.has_unfinished_requests(
+        ):
+            self._dppart.new_step()
+            dp_metadata = None
+            if self.vllm_config.scheduler_config.async_scheduling:
+                num_pad, num_tokens_across_dp, is_prompt_batch, _, skip_cuda_graphs, all_prefill, all_decode = sync_dp_metadata(
+                    self.dp_group,
+                    1,
+                    0,
+                    False,
+                    dp_size=self.vllm_config.parallel_config.data_parallel_size
+                )
+                dp_metadata = ScheduledDPMetaData(
+                    num_pad=num_pad,
+                    num_tokens_across_dp=num_tokens_across_dp,
+                    is_prompt_batch=is_prompt_batch,
+                    skip_cuda_graphs=skip_cuda_graphs,
+                    all_prefill=all_prefill,
+                    all_decode=all_decode)
+            self.execute_dummy_batch(dp_metadata=dp_metadata)
+        return
 
 
 class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):

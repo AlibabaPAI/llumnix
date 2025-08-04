@@ -36,7 +36,7 @@ from llumnix.ray_utils import (
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
-from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_VLLM_V1_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
+from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
 
@@ -89,7 +89,7 @@ class Llumlet:
         asyncio.create_task(self._check_engine_state_loop())
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(iid={self.instance_id[:5]},type={self.instance_type.value})"
+        return f"{self.__class__.__name__}(iid={self.instance_id[:5]})"
 
     @classmethod
     def from_args(
@@ -110,7 +110,7 @@ class Llumlet:
         if backend_type == BackendType.VLLM:
             num_gpus = NUM_GPUS_VLLM_GPU_ACTOR
         elif backend_type == BackendType.VLLM_V1:
-            num_gpus = engine_args.get_world_size() - NUM_GPUS_VLLM_V1_GPU_ACTOR
+            num_gpus = engine_args.get_world_size()
             if dp_rank > 0:
                 bundle_index = dp_rank
         elif backend_type == BackendType.BLADELLM:

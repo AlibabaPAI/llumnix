@@ -48,7 +48,7 @@ from llumnix.internal_config import MigrationConfig
 from llumnix.queue.utils import QueueType
 from llumnix.backends.utils import EngineState
 from llumnix.backends.output_forwarder import RequestOutputForwardingMode, OutputForwarder
-from llumnix.utils import get_ip_address, make_async
+from llumnix.utils import get_ip_address, make_async, async_wrapper
 from llumnix.ray_utils import LlumnixActor, get_llumnix_actor_handle
 from llumnix.llumlet.request import LlumnixRequest
 from llumnix.metrics.timestamps import set_timestamp
@@ -456,7 +456,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         outputs, model_executed = self.step_fn()
         self.step_end_time = time.time()
         # Update instance info after step
-        asyncio.run_coroutine_threadsafe(self._update_instance_info(), self._main_loop)
+        asyncio.run_coroutine_threadsafe(async_wrapper(self._update_instance_info), self._main_loop)
         # Put EngineCoreOutputs into output_mediator
         self._put_engine_core_outputs(outputs)
         return model_executed
@@ -478,7 +478,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
 
     def update_instance_info_threadsafe(self, instance_info):
         return asyncio.run_coroutine_threadsafe(
-            self.update_instance_info(instance_info),
+            async_wrapper(self.update_instance_info, instance_info),
             self._main_loop,
         )
 

@@ -206,12 +206,12 @@ def test_pre_stop_migration_policy():
     all_instance_infos: Dict[str, InstanceInfo] = {}
 
     src_instance_infos = []
-    for idx in range(INSTANCE_NUM//2):
+    for idx in range(INSTANCE_NUM // 2):
         instance_info = InstanceInfo()
         instance_info.instance_id = f"src_instance_id_{idx}"
         all_instance_infos[instance_info.instance_id] = instance_info
         instance_info.unit_id = idx
-        instance_info.unit_status = UnitStatus.BROKEN
+        instance_info.unit_status = UnitStatus.TERMINATING
         src_instance_infos.append(instance_info)
 
     dst_instance_infos = []
@@ -499,7 +499,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
             instance_info.instance_type = InstanceType.NEUTRAL
             instance_info.instance_id = f"instance_id_{idx}"
             instance_info.unit_id = idx
-            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.TERMINATING
             instance_info.migration_load_metric = None
             all_instance_infos[instance_info.instance_id] = instance_info
     else:
@@ -508,7 +508,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
             instance_info.instance_type = InstanceType.PREFILL
             instance_info.instance_id = f"prefill_instance_id_{idx}"
             instance_info.unit_id = idx
-            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.TERMINATING
             instance_info.migration_load_metric = None
             all_instance_infos[instance_info.instance_id] = instance_info
 
@@ -517,7 +517,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
             instance_info.instance_type = InstanceType.DECODE
             instance_info.instance_id = f"decode_instance_id_{idx}"
             instance_info.unit_id = idx
-            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.BROKEN
+            instance_info.unit_status = UnitStatus.HEALTHY if idx % 2 == 0 else UnitStatus.TERMINATING
             instance_info.migration_load_metric = None
             all_instance_infos[instance_info.instance_id] = instance_info
 

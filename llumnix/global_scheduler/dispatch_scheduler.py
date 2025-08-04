@@ -75,7 +75,7 @@ class DispatchScheduler:
                   secondary_instance_num_requests: Optional[Dict[str, int]],
                   dispatch_context: Dict,
                   ) -> str:
-        # Filter out broken primary instances
+        # Filter out unhealthy primary instances
         self.unhealthy_unit_filter.filter(primary_instance_infos, primary_instance_num_requests)
         # Filter primary instances based on dispatch policy
         candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
@@ -88,7 +88,7 @@ class DispatchScheduler:
         # Adaptive PD fallback: try secondary instance type if primary unavailable
         if not candidate_instance_infos and self.enable_adaptive_pd:
             fallback_type = InstanceType.DECODE if instance_type == InstanceType.PREFILL else InstanceType.PREFILL
-            # Filter out broken secondary instances
+            # Filter out unhealthy secondary instances
             self.unhealthy_unit_filter.filter(secondary_instance_infos, secondary_instance_num_requests)
             candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
                 fallback_type, secondary_instance_infos, secondary_instance_num_requests)

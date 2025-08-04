@@ -44,7 +44,7 @@ class MetricBasedFilter(DispatchFilter):
 
 
 class UnhealthyUnitFilter(DispatchFilter):
-    """Filter out instances whose unit is broken"""
+    """Filter out instances whose unit is unhealthy"""
     def filter(self,
                instance_infos: Dict[str, InstanceInfo],
                instance_num_requests: Dict[str, int],

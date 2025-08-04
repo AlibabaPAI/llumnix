@@ -16,6 +16,7 @@ from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any, Cor
 from collections import defaultdict
 import queue
 import threading
+import asyncio
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -298,7 +299,8 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
             backend_type,
             dp_rank,
         )
-        self.scheduler.add_update_instance_info_callback(self.update_instance_info)
+        self._main_loop = asyncio.get_event_loop()
+        self.scheduler.add_update_instance_info_callback(self.update_instance_info_threadsafe)
         self.disable_async_output_proc = disable_async_output_proc
         self.reqeust_processing_context_table = {}
 
@@ -454,7 +456,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         outputs, model_executed = self.step_fn()
         self.step_end_time = time.time()
         # Update instance info after step
-        self._update_instance_info()
+        asyncio.run_coroutine_threadsafe(self._update_instance_info(), self._main_loop)
         # Put EngineCoreOutputs into output_mediator
         self._put_engine_core_outputs(outputs)
         return model_executed
@@ -473,6 +475,12 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         if self.instance_info is None:
             instance_info.instance_id = self.instance_id
         self.instance_info = instance_info
+
+    def update_instance_info_threadsafe(self, instance_info):
+        return asyncio.run_coroutine_threadsafe(
+            self.update_instance_info(instance_info),
+            self._main_loop,
+        )
 
     # pylint: disable=invalid-overridden-method,unused-argument
     # NOTE(s5u13b): fake async function to avoid overwriting the add_request function in engine core.

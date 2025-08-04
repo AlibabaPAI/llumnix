@@ -175,7 +175,7 @@ class Llumlet:
 
     async def is_ready(self):
         await self.backend_engine.is_ready()
-        return True
+        return self.unit_status == UnitStatus.HEALTHY
 
     def set_unit_status(self, status: UnitStatus) -> None:
         if status in (UnitStatus.BROKEN, UnitStatus.TERMINATING) and not self.enable_pre_stop_migration:

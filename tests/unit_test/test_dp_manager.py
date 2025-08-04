@@ -7,9 +7,10 @@ import torch
 from vllm import EngineArgs
 
 from llumnix.dp_manager import DPManager
-from llumnix.utils import random_uuid, InstanceType, BackendType
+from llumnix.utils import random_uuid, InstanceType, BackendType, UnitStatus
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
+from llumnix.constants import HEARTBEAT_INTERVAL
 from llumnix.ray_utils import (
     initialize_placement_group,
     get_placement_group_name,
@@ -44,6 +45,12 @@ class MockInstance:
 
     def stop(self):
         return True
+
+    def set_unit_status(self, status: UnitStatus):
+        return True
+
+    def get_unit_status(self):
+        return UnitStatus.STOPPED
 
 
 @ray.remote(num_cpus=0)
@@ -168,7 +175,7 @@ def test_connect_to_instances_and_servers(ray_env):
     assert len(curr_pgs) == 1 and len(curr_instances) == 1 and len(curr_servers) == 1
 
     # test _scale_up and stop
-    dp_manager.stop.remote()
+    dp_manager.stop.remote(HEARTBEAT_INTERVAL)
     time.sleep(5.0)
     curr_pgs, curr_instances, curr_servers = list_curr_cluster_deployments()
     assert len(curr_pgs) == 0 and len(curr_instances) == 0 and len(curr_servers) == 0
@@ -188,7 +195,7 @@ def test_connect_to_instances_and_servers(ray_env):
     assert len(curr_pgs) == 1 and len(curr_instances) == 1 and len(curr_servers) == 1
 
     # test _scale_up and stop
-    dp_manager.stop.remote()
+    dp_manager.stop.remote(HEARTBEAT_INTERVAL)
     time.sleep(5.0)
     curr_pgs, curr_instances, curr_servers = list_curr_cluster_deployments()
     assert len(curr_pgs) == 0 and len(curr_instances) == 0 and len(curr_servers) == 0

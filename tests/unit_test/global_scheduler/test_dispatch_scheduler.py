@@ -535,9 +535,7 @@ def test_unhealthy_unit_filter():
         instance_info_dict[instance_id].unit_status = UnitStatus.BROKEN
 
     unhealthy_unit_filter = UnhealthyUnitFilter()
-    print(f"[sjr] before, {instance_info_dict=}")
     unhealthy_unit_filter.filter(instance_info_dict, instance_num_requests)
-    print(f"[sjr] after, {instance_info_dict=}")
 
     # Check that all BROKEN instances are filtered out
     for instance_id in broken_instance_ids:

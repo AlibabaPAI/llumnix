@@ -455,6 +455,9 @@ async def check_actors_health(actors: Dict[str, ray.actor.ActorHandle]) -> List[
         if isinstance(ret, Exception):
             log_instance_exception(ret, actor_id, "check_actor_health")
             dead_actor_ids.append(actor_id)
+        if not ret:
+            # If llumlet.unit_status is not HEALTHY, consider it as dead.
+            dead_actor_ids.append(actor_id)
 
     tasks = []
     dead_actor_ids = []

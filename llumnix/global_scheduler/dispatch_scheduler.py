@@ -81,8 +81,6 @@ class DispatchScheduler:
         # Filter primary instances based on dispatch policy
         candidate_instance_infos, candidate_instance_num_requests = self.dispatch_policy.filter(
             instance_type, available_instance_infos, available_instance_num_requests)
-        if instance_type == InstanceType.DECODE:
-            print(f"candidate_instance_infos: {candidate_instance_infos}\n")
 
         is_fallback_to_secondary = False
 

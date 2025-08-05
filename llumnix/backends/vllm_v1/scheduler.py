@@ -12,7 +12,12 @@
 # limitations under the License.
 
 from typing import Dict, List, Optional, Tuple, Deque
+import time
+from collections import defaultdict
 
+import ray
+
+from vllm.utils import Counter
 from vllm.v1.core.sched.scheduler import Scheduler
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.v1.request import Request
@@ -22,6 +27,7 @@ from llumnix.logging.logger import init_logger
 from llumnix.llumlet.request import LlumnixRequest, RequestInferenceType, RequestStatus
 from llumnix.backends.vllm_v1.request import LlumnixRequestVLLMV1
 from llumnix.utils import MigrationResponse
+from llumnix.ray_utils import get_llumnix_actor_id, LlumnixActor
 
 logger = init_logger(__name__)
 
@@ -29,6 +35,9 @@ logger = init_logger(__name__)
 class SchedulerLlumnix(Scheduler):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        actor_name = ray.get_runtime_context().get_actor_name()
+        self.instance_id = get_llumnix_actor_id(LlumnixActor.INSTANCE, actor_name)
+        self.step_counter = Counter()
         self.migrating_out_request_last_stage: Dict[str, Request] = {}
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
@@ -111,6 +120,8 @@ class SchedulerLlumnix(Scheduler):
             num_blocks_all_waiting_requests = 0
 
         instance_info = InstanceInfo(
+            instance_id=self.instance_id,
+            step_id=next(self.step_counter),
             num_total_gpu_blocks=num_total_gpu_blocks, # type: ignore
             num_watermark_blocks=0, # NOTE(zhaozhiyu): there is no watermark_blocks in vllm v1
             num_used_gpu_blocks=num_used_gpu_blocks,
@@ -142,8 +153,34 @@ class SchedulerLlumnix(Scheduler):
                 instance_info.inference_type = RequestInferenceType.PREFILL_AND_DECODE
             else:
                 instance_info.inference_type = RequestInferenceType.UNKNOWN
-
             instance_info.num_batched_tokens = scheduler_output.total_num_scheduled_tokens # type: ignore
+
+        instance_info.profiling_data = (
+            instance_info.inference_type.value if instance_info.inference_type else "",
+            instance_info.num_seqs,
+            sum(instance_info.running_seq_lens),
+            0.0,
+        )
+
+        num_blocks_last_running_request = 0
+        reqs: List[Request] = self.running
+        if reqs:
+            tot_blocks = defaultdict(list)
+            for req in reqs:
+                if req.status != RequestStatus.RUNNING:
+                    continue
+                # block_ids (List[List[int]]): A two-level list where
+                # the outer list corresponds to KV cache groups
+                # each inner list contains the block_ids of the blocks in that group
+                block_ids: List[List[int]] = self.kv_cache_manager.get_block_ids(req.request_id)
+                for group_id, group in enumerate(block_ids):
+                    tot_blocks[group_id].extend(group)
+            for group_id, group in tot_blocks.items():
+                num_blocks_last_running_request += len(set(group))
+            instance_info.num_blocks_last_running_request = num_blocks_last_running_request
+
+        instance_info.timestamp = time.time()
+
         return instance_info
 
     def schedule(self) -> SchedulerOutput:

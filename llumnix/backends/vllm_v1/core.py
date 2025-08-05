@@ -13,7 +13,6 @@
 
 import time
 from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any, Coroutine
-from collections import defaultdict
 import queue
 import threading
 import asyncio
@@ -24,11 +23,9 @@ import ray.actor
 
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.config import VllmConfig
-from vllm.utils import Counter
 from vllm import envs as vllm_envs
 from vllm.v1.engine import EngineCoreRequest, EngineCoreRequestType, EngineCoreOutputs, EngineCoreOutput
 from vllm.v1.executor.abstract import Executor
-from vllm.v1.request import Request, RequestStatus
 from vllm.v1.hybrid_connector.kvtbackend import D_DISAGG
 from vllm.v1.engine.dpcoord import Participant
 from vllm.v1.engine.core import EngineCore, EngineCoreProc, DPEngineCoreProc, _core_init
@@ -288,8 +285,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         super().__init__(vllm_config, on_head_node, handshake_address, executor_class, log_stats, engine_index)
         self.instance_id = instance_id
         self.instance_type = instance_type
-        self.step_counter = Counter()
-        self.instance_info = None
+        self.instance_info = InstanceInfo(instance_id=instance_id, instance_type=instance_type)
         self.output_forwarder = OutputForwarder(
             instance_id,
             request_output_queue_type,
@@ -299,7 +295,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
             backend_type,
             dp_rank,
         )
-        self._main_loop = asyncio.get_event_loop()
+        self.main_loop = asyncio.get_event_loop()
         self.scheduler.add_update_instance_info_callback(self.update_instance_info_threadsafe)
         self.disable_async_output_proc = disable_async_output_proc
         self.reqeust_processing_context_table = {}
@@ -419,44 +415,12 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
 
         return server_request_outputs, server_info_dict
 
-    def _update_instance_info(self):
-        """Update instance info from executor and scheduler after step"""
-        instance_info: InstanceInfo = self.instance_info # type: ignore
-        instance_info.instance_id = self.instance_id
-        instance_info.step_id = next(self.step_counter)
-        instance_info.timestamp = time.time()
-        instance_info.profiling_data=(instance_info.inference_type.value if instance_info.inference_type else "",
-                                      instance_info.num_seqs,
-                                      sum(instance_info.running_seq_lens),
-                                      0.0)
-        reqs: List[Request] = self.scheduler.running
-        if reqs:
-            tot_blocks = defaultdict(list)
-            for req in reqs:
-                if req.status != RequestStatus.RUNNING:
-                    continue
-                # block_ids (List[List[int]]): A two-level list where
-                # the outer list corresponds to KV cache groups
-                # each inner list contains the block_ids of the blocks in that group
-                block_ids: List[List[int]] = self.scheduler.kv_cache_manager.get_block_ids(req.request_id)
-                for group_id, group in enumerate(block_ids):
-                    tot_blocks[group_id].extend(group)
-
-            num_blocks_last_running_request = 0
-            for group_id, group in tot_blocks.items():
-                num_blocks_last_running_request += len(set(group))
-            instance_info.num_blocks_last_running_request = num_blocks_last_running_request
-
-        self.instance_info = instance_info
-
     def _process_engine_step(self) -> bool:
         """Overloading super()._process_engine_step() to update instance info and forward outputs."""
         # Step the engine core.
         self.step_begin_time = time.time()
         outputs, model_executed = self.step_fn()
         self.step_end_time = time.time()
-        # Update instance info after step
-        asyncio.run_coroutine_threadsafe(async_wrapper(self._update_instance_info), self._main_loop)
         # Put EngineCoreOutputs into output_mediator
         self._put_engine_core_outputs(outputs)
         return model_executed
@@ -465,21 +429,13 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         super().shutdown()
 
     def update_instance_info(self, instance_info: InstanceInfo) -> None:
-        # These fields are updated after step.
-        if self.instance_info is not None:
-            instance_info.instance_id = self.instance_info.instance_id
-            instance_info.step_id = self.instance_info.step_id
-            instance_info.timestamp = self.instance_info.timestamp
-            instance_info.profiling_data = self.instance_info.profiling_data
-            instance_info.num_blocks_last_running_request = self.instance_info.num_blocks_last_running_request
-        if self.instance_info is None:
-            instance_info.instance_id = self.instance_id
         self.instance_info = instance_info
 
-    def update_instance_info_threadsafe(self, instance_info):
-        return asyncio.run_coroutine_threadsafe(
+    def update_instance_info_threadsafe(self, instance_info: InstanceInfo):
+        # Read and write instance_info in main process asyncio loop.
+        asyncio.run_coroutine_threadsafe(
             async_wrapper(self.update_instance_info, instance_info),
-            self._main_loop,
+            self.main_loop,
         )
 
     # pylint: disable=invalid-overridden-method,unused-argument
@@ -506,7 +462,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
             request.sampling_params.extra_args['kv_transfer_params'] = kv_transfer_params
 
             if prefill_instance_id == decode_instance_id:
-                if self.instance_info.instance_type == InstanceType.DECODE:
+                if self.instance_type == InstanceType.DECODE:
                     kv_transfer_params[D_DISAGG] = False
             else:
                 kv_transfer_params["remote_host"] = kwargs["prefill_engine_host"]
@@ -514,6 +470,9 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
 
         self.reqeust_processing_context_table[request.request_id] = request_processing_context
         self.input_queue.put_nowait((request_type, request))
+
+    def abort_requests(self, request_ids: List[str]) -> None:
+        self.input_queue.put_nowait((EngineCoreRequestType.ABORT, request_ids))
 
 
 class DPEngineCoreProcWrapperLlumnix(DPEngineCoreProcLlumnix, EngineCoreProcWrapperLlumnix):

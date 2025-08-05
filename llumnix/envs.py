@@ -29,6 +29,7 @@ from llumnix.constants import (
     UNIT_READY_TIMEOUT,
     SERVER_START_TIMEOUT,
     UNIT_FAILOVER_TIMEOUT,
+    RAY_RPC_TIMEOUT,
 )
 
 if TYPE_CHECKING:
@@ -77,6 +78,8 @@ if TYPE_CHECKING:
     UNIT_FAILOVER_TIMEOUT: float = 0.0
 
     RAY_TASK_RETRY_DELAY_MS: int = 0
+
+    RAY_RPC_TIMEOUT: float = 0.0
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -174,6 +177,9 @@ environment_variables: Dict[str, Callable[[], Any]] = {
 
     "RAY_TASK_RETRY_DELAY_MS":
     lambda: os.getenv("LLUMNIX_RAY_TASK_RETRY_DELAY_MS", str(RAY_TASK_RETRY_DELAY_MS)),
+
+    "RAY_RPC_TIMEOUT":
+    lambda: os.getenv("LLUMNIX_RAY_RPC_TIMEOUT", str(RAY_RPC_TIMEOUT)),
 }
 
 

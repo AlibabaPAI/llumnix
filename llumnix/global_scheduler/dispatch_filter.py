@@ -48,12 +48,10 @@ class UnhealthyUnitFilter(DispatchFilter):
     def filter(self,
                instance_infos: Dict[str, InstanceInfo],
                instance_num_requests: Dict[str, int],
-               ) -> None:
-        instances_to_remove = []
-        for ins_id, ins_info in instance_infos.items():
-            if ins_info.unit_status != UnitStatus.HEALTHY:
-                instances_to_remove.append(ins_id)
-
-        for ins_id in instances_to_remove:
-            instance_infos.pop(ins_id, None)
-            instance_num_requests.pop(ins_id, None)
+               ) -> Tuple[Dict[str, InstanceInfo], Dict[str, int]]:
+        available_instance_infos, available_instance_num_requests = {}, {}
+        for ins_info, ins_num_requests in zip(instance_infos.values(), instance_num_requests.values()):
+            if ins_info.unit_status == UnitStatus.HEALTHY:
+                available_instance_infos[ins_info.instance_id] = ins_info
+                available_instance_num_requests[ins_info.instance_id] = ins_num_requests
+        return available_instance_infos, available_instance_num_requests

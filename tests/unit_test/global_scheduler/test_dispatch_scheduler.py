@@ -535,20 +535,21 @@ def test_unhealthy_unit_filter():
         instance_info_dict[instance_id].unit_status = UnitStatus.TERMINATING
 
     unhealthy_unit_filter = UnhealthyUnitFilter()
-    unhealthy_unit_filter.filter(instance_info_dict, instance_num_requests)
+    filtered_instance_info_dict, filtered_instance_num_requests = unhealthy_unit_filter.filter(
+        instance_info_dict, instance_num_requests)
 
     # Check that all TERMINATING instances are filtered out
     for instance_id in terminating_instance_ids:
-        assert instance_id not in instance_info_dict
-        assert instance_id not in instance_num_requests
+        assert instance_id not in filtered_instance_info_dict
+        assert instance_id not in filtered_instance_num_requests
 
     # Check that all remaining instances are HEALTH
-    for instance_info in instance_info_dict.values():
+    for instance_info in filtered_instance_info_dict.values():
         assert instance_info.unit_status == UnitStatus.HEALTHY
 
     # Check that the number of remaining instances is correct
-    assert len(instance_info_dict) == instance_num - terminating_instance_num
-    assert len(instance_num_requests) == instance_num - terminating_instance_num
+    assert len(filtered_instance_info_dict) == instance_num - terminating_instance_num
+    assert len(filtered_instance_num_requests) == instance_num - terminating_instance_num
 
 @pytest.mark.parametrize("topk_random_dispatch", [1, 2, 3])
 def test_dispatch_topk_random_dispatch(topk_random_dispatch):
@@ -573,3 +574,25 @@ def test_dispatch_topk_random_dispatch(topk_random_dispatch):
             instance_infos=instance_info_dict, instance_num_requests=instance_num_requests, dispatch_context={})
         instance_id_set.add(target_instance_id)
     assert len(instance_id_set) == topk_random_dispatch
+
+# TODO(shejiarui): add a rr test
+def test_dispatch_rr_with_broken():
+    instance_num = 7
+    dispatch_scheduler = init_dispatch_scheduler('rr')
+    instance_info_dict, instance_num_requests = init_instances(instance_num)
+
+    num_request = 2 * instance_num + 1
+    for idx in range(0, num_request):
+        instance_id = dispatch_scheduler.dispatch_no_constrains(
+            instance_infos=instance_info_dict, instance_num_requests=instance_num_requests, dispatch_context={})
+        target_instance_id = idx % instance_num
+        assert instance_id == f'instance_{InstanceType.NEUTRAL.value}_{target_instance_id}'
+
+    terminating_instance_id = f"instance_{InstanceType.NEUTRAL.value}_{random.randint(0, instance_num - 1)}"
+    terminating_instance_ori_num_requests = instance_num_requests[terminating_instance_id]
+    instance_info_dict[terminating_instance_id].unit_status = UnitStatus.TERMINATING
+    num_request = 2 * instance_num + 1
+    for idx in range(0, num_request):
+        instance_id = dispatch_scheduler.dispatch_no_constrains(
+            instance_infos=instance_info_dict, instance_num_requests=instance_num_requests, dispatch_context={})
+    assert instance_num_requests[terminating_instance_id] == terminating_instance_ori_num_requests

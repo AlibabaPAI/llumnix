@@ -169,7 +169,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             model=model,
                                             pd_ratio=pd_ratio,
                                             enable_routine_migration="vLLM_v1" not in engine,
-                                            enable_pre_stop_migration="vLLM_v1" not in engine,
+                                            enable_pre_stop_migration=False,
                                             dispatch_policy="load",
                                             enable_pd_disagg=enable_pd_disagg,
                                             enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,

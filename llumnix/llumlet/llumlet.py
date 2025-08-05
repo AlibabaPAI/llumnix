@@ -179,7 +179,7 @@ class Llumlet:
 
     def set_unit_status(self, status: UnitStatus) -> None:
         if status == UnitStatus.TERMINATING and not self.enable_pre_stop_migration:
-            logger.info("Instance will be {} and pre-stop migration is disabled, so directly stop it.")
+            logger.info("Instance will be TERMINATING and pre-stop migration is disabled, so directly stop it.")
             status = UnitStatus.STOPPED
         logger.info("Llumlet(instance_id={}, instance_type={}) change unit_status {} -> {}.".format(
             self.instance_id, self.instance_args.instance_type, self.unit_status, status))

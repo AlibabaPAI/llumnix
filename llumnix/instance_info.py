@@ -43,9 +43,7 @@ INSTANCE_TYPE_TO_METRIC_FIELD: Dict[InstanceType, str] = {
 @dataclass
 class InstanceInfo:
     instance_id: str = ""
-    unit_id: str = ""
     instance_type: InstanceType = None
-    unit_status: UnitStatus = None
 
     step_id: int = None
     timestamp: float = None
@@ -94,7 +92,8 @@ class InstanceInfo:
     # instance level info for load computation
     enable_defrag: bool = False
 
-    # unit level info for failover
+    # unit level info
+    unit_id: str = ""
     unit_status: UnitStatus = UnitStatus.HEALTHY
 
     def __post_init__(self) -> None:

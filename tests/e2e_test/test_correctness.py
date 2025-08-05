@@ -83,12 +83,13 @@ def run_vllm(model):
         vllm_output[output.prompt] = output.prompt + output.outputs[0].text
     return vllm_output
 
-async def run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_migration):
+async def run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_routine_migration, enable_pre_stop_migration):
     ip = get_ip_address()
     base_port = 35000 + test_times * 100
 
     assert enable_pd_disagg is False, "PD disaggregation is not supported in v1"
-    assert enable_migration is False, "Migration is not supported in v1"
+    assert enable_routine_migration is False, "Migration is not supported in v1"
+    assert enable_pre_stop_migration is False, "Migration is not supported in v1"
 
     raw_serve_command = generate_raw_vllm_v1_serve_command(
         model=model,
@@ -176,14 +177,14 @@ async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
 
     return bladellm_outputs
 
-config_schema = "engine, migration_backend, tensor_parallel_size, enable_migration, enable_simulator," \
+config_schema = "engine, migration_backend, tensor_parallel_size, enable_routine_migration, enable_pre_stop_migration, enable_simulator," \
 "enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_engine_semi_pd_disagg, enable_adaptive_pd"
 
 generate_special_correctness_test_config = partial(generate_special_test_config, schema=config_schema)
 
 
 def generate_correctness_test_config():
-    vllm_base_config = ["engine_vLLM", "gloo", 1, True, False, False, "global", "thread", False, False]
+    vllm_base_config = ["engine_vLLM", "gloo", 1, True, False, False, False, "global", "thread", False, False]
 
     vllm_config = [
         vllm_base_config,
@@ -202,7 +203,7 @@ def generate_correctness_test_config():
             vllm_base_config),
 
         # disable migration
-        generate_special_correctness_test_config([("enable_migration", False)], vllm_base_config),
+        generate_special_correctness_test_config([("enable_routine_migration", False)], vllm_base_config),
 
         # simulation
         generate_special_correctness_test_config([("enable_simulator", False)], vllm_base_config),
@@ -218,7 +219,7 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("enable_pd_disagg", True), ("enable_adaptive_pd", True)], vllm_base_config),
     ]
 
-    vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, "global", "thread", False, False]
+    vllm_v1_base_config = ["engine_vLLM_v1", "gloo", 1, False, False, False, False, "global", "thread", False, False]
 
     vllm_v1_config = [
         vllm_v1_base_config,
@@ -227,7 +228,7 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("tensor_parallel_size", 2)], vllm_v1_base_config),
     ]
 
-    bladellm_base_config = ["engine_BladeLLM", "grpc", 1, True, False, False, "global", "thread", False, False]
+    bladellm_base_config = ["engine_BladeLLM", "grpc", 1, True, False, False, False, "global", "thread", False, False]
 
     bladellm_config = [
         bladellm_base_config,
@@ -236,7 +237,7 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("tensor_parallel_size", 2)], bladellm_base_config),
 
         # disable migration
-        generate_special_correctness_test_config([("enable_migration", False)], bladellm_base_config),
+        generate_special_correctness_test_config([("enable_routine_migration", False)], bladellm_base_config),
 
         # engine pd
         generate_special_correctness_test_config([("enable_pd_disagg", True)], bladellm_base_config),
@@ -269,7 +270,8 @@ async def test_correctness(
     engine,
     migration_backend,
     tensor_parallel_size,
-    enable_migration,
+    enable_routine_migration,
+    enable_pre_stop_migration,
     enable_simulator,
     enable_pd_disagg,
     launch_mode,
@@ -320,7 +322,7 @@ async def test_correctness(
         generate_serve_command_func = generate_vllm_v1_serve_command
         url = f'http://{ip}:{base_port}/v1/chat/completions'
 
-        engine_prompt_output = await run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_migration)
+        engine_prompt_output = await run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_routine_migration, enable_pre_stop_migration)
     elif engine == "BladeLLM":
         generate_request_func = generate_bladellm_request
         process_api_server_output_func = process_bladellm_api_server_output
@@ -358,7 +360,8 @@ async def test_correctness(
                     enable_simulator=enable_simulator,
                     request_output_forwarding_mode=request_output_forwarding_mode,
                     instance_type="prefill",
-                    enable_migration=enable_migration,
+                    enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                     tensor_parallel_size=tensor_parallel_size,
                 )
             )
@@ -380,7 +383,8 @@ async def test_correctness(
                     request_output_forwarding_mode=request_output_forwarding_mode,
                     enable_pd_disagg=enable_pd_disagg,
                     instance_type="decode",
-                    enable_migration=enable_migration,
+                    enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                     tensor_parallel_size=tensor_parallel_size,
                 )
             )
@@ -399,7 +403,8 @@ async def test_correctness(
                     enforce_eager=True,
                     enable_simulator=enable_simulator,
                     request_output_forwarding_mode=request_output_forwarding_mode,
-                    enable_migration=enable_migration,
+                    enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                     tensor_parallel_size=tensor_parallel_size,
                 )
             )
@@ -421,7 +426,8 @@ async def test_correctness(
                 enable_simulator=enable_simulator,
                 request_output_forwarding_mode=request_output_forwarding_mode,
                 tensor_parallel_size=tensor_parallel_size,
-                enable_migration=enable_migration,
+                enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                 max_units=instance_count,
                 )
         )

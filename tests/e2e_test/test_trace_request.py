@@ -115,7 +115,8 @@ async def test_request_trace(
             enable_pd_disagg=False,
             enable_simulator=False,
             tensor_parallel_size=tensor_parallel_size,
-            enable_migration=False,
+            enable_routine_migration=False,
+            enable_pre_stop_migration=False,
             max_units=instance_count,
         )
     )

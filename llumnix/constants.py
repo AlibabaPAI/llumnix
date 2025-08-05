@@ -116,3 +116,7 @@ LLUMNIX_TRACE_HEADER = 'X-Llumnix-Trace'
 # llumnix/global_scheduler/dispatch_policy.py
 CACHE_TRANSFER_THRESHOLD: int = 1000
 CACHE_TRANSFER_PENALTY_FACTOR: float = 0.7
+
+# llumnix/dp_manager.py
+UNIT_FAILOVER_TIMEOUT: float = 300.0
+WAIT_UNIT_MIGRATION_DONE_INTERVAL: float = 1.0

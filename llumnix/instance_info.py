@@ -27,7 +27,7 @@ from llumnix.load_computation import (
 )
 from llumnix.llumlet.request import RequestInferenceType
 from llumnix.arg_utils import InstanceArgs
-from llumnix.utils import InstanceType
+from llumnix.utils import InstanceType, UnitStatus
 
 logger = init_logger(__name__)
 
@@ -92,6 +92,10 @@ class InstanceInfo:
     # instance level info for load computation
     enable_defrag: bool = False
 
+    # unit level info
+    unit_id: str = ""
+    unit_status: UnitStatus = UnitStatus.HEALTHY
+
     def __post_init__(self) -> None:
         self.num_available_gpu_blocks = self.num_total_gpu_blocks - self.num_used_gpu_blocks
         self.num_available_gpu_blocks_waiting = self.num_available_gpu_blocks - self.num_blocks_all_waiting_requests
@@ -100,7 +104,11 @@ class InstanceInfo:
         return hash(self.instance_id)
 
     def __repr__(self):
-        return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type})"
+        return f"InstanceInfo(instance_id={self.instance_id}, instance_type={self.instance_type}, unit_status={self.unit_status})"
+
+    def is_unit_healthy(self):
+        return self.unit_status == UnitStatus.HEALTHY
+
 
 def sort_instance_infos(available_instance_infos: Iterable[InstanceInfo],
                         key_attr: str,

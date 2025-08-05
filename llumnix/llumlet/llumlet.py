@@ -12,7 +12,7 @@
 # limitations under the License.
 
 import asyncio
-from typing import List, Union, Iterable, Any, Optional
+from typing import List, Tuple, Union, Iterable, Any, Optional
 
 import ray
 import ray.actor
@@ -35,7 +35,8 @@ from llumnix.ray_utils import (
 )
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
-from llumnix.utils import MigrationType, RequestIDType, BackendType, InstanceType
+from llumnix.utils import (MigrationType, RequestIDType, BackendType, InstanceContext,
+                           InstanceType, UnitStatus)
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -73,8 +74,9 @@ class Llumlet:
             dp_rank_local,
         )
 
-        self.enable_migration = instance_args.enable_migration
-        if self.enable_migration:
+        self.enable_routine_migration = instance_args.enable_routine_migration
+        self.enable_pre_stop_migration = instance_args.enable_pre_stop_migration
+        if self.enable_routine_migration or self.enable_pre_stop_migration:
             self.migration_coordinator = MigrationCoordinator(
                 self.instance_id,
                 self.backend_engine,
@@ -85,6 +87,7 @@ class Llumlet:
                 instance_args.migration_max_stages,
             )
         self.llumlet_metrics = LlumletMetrics()
+        self.unit_status = UnitStatus.HEALTHY
 
         asyncio.create_task(self._check_engine_state_loop())
 
@@ -161,24 +164,42 @@ class Llumlet:
     def get_instance_info(self) -> InstanceInfo:
         instance_info: InstanceInfo = self.backend_engine.get_instance_info()
         instance_info.instance_type = self.instance_args.instance_type
+        instance_info.unit_status = self.unit_status
+        instance_info.unit_id = self.instance_id.split("_")[0]
         instance_info.enable_defrag = self.instance_args.enable_defrag
         self.instance_load_calculator.compute_instance_load(instance_info)
-        if self.enable_migration:
+        if self.enable_routine_migration or self.enable_pre_stop_migration:
             instance_info.has_migration_slot = self.migration_coordinator.has_migration_slot()
             instance_info.is_migrating = self.migration_coordinator.is_migrating()
         return instance_info
 
     async def is_ready(self):
         await self.backend_engine.is_ready()
-        return True
+        return self.unit_status == UnitStatus.HEALTHY
+
+    def set_unit_status(self, status: UnitStatus) -> None:
+        if status == UnitStatus.TERMINATING and not self.enable_pre_stop_migration:
+            logger.info("Instance will be TERMINATING and pre-stop migration is disabled, so directly stop it.")
+            status = UnitStatus.STOPPED
+        logger.info("Llumlet(instance_id={}, instance_type={}) change unit_status {} -> {}.".format(
+            self.instance_id, self.instance_args.instance_type, self.unit_status, status))
+        self.unit_status = status
+
+    def get_unit_status(self) -> UnitStatus:
+        return self.unit_status
 
     async def get_instance_type(self) -> InstanceType:
         await self.backend_engine.is_ready()
         return self.instance_args.instance_type
 
-    async def get_engine_context(self) -> str:
+    async def get_engine_context(self) -> InstanceContext:
         await self.backend_engine.is_ready()
         return self.backend_engine.get_engine_context()
+
+    async def get_engine_context_and_instance_info(self) -> Tuple[InstanceContext, InstanceInfo]:
+        instance_context = await self.get_engine_context()
+        instance_info = self.backend_engine.get_instance_info()
+        return instance_context, instance_info
 
     async def generate(
         self,
@@ -208,9 +229,19 @@ class Llumlet:
         dst_instance_id: str,
         migration_type: Optional[MigrationType] = None
     ) -> List[RequestIDType]:
-        return await self.migration_coordinator.migrate_out(
-            dst_instance_actor, dst_instance_id, migration_type
-        )
+        migrated_request_ids = await self.migration_coordinator.migrate_out(
+            dst_instance_actor, dst_instance_id, migration_type)
+
+        if migration_type == MigrationType.PRE_STOP_MIGRATION:
+            if self.unit_status != UnitStatus.MIGRATING:
+                self.set_unit_status(UnitStatus.MIGRATING)
+            instance_info: InstanceInfo = self.backend_engine.get_instance_info()
+            num_running_requests = instance_info.num_running_requests
+            num_waiting_requests = instance_info.num_waiting_requests
+            if num_running_requests == 0 and num_waiting_requests == 0:
+                self.set_unit_status(UnitStatus.STOPPED)
+
+        return migrated_request_ids
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

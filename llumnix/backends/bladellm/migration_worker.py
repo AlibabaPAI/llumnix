@@ -139,7 +139,8 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
     def __init__(self, rank: int, serving_args: ServingArgs, instance_id: str,
                  migration_config: MigrationConfig, worker_ray_name: str) -> None:
         LocalWorker.__init__(self, rank, serving_args)
-        self.enable_migration = migration_config.enable_migration
+        self.enable_routine_migration = migration_config.enable_routine_migration
+        self.enable_pre_stop_migration = migration_config.enable_pre_stop_migration
         if self.enable_migration:
             self.worker_ray_name = worker_ray_name
             migration_config.grpc_migration_server_port = get_free_port()
@@ -184,3 +185,7 @@ class MigrationLocalWorker(LocalWorker, MigrationWorker):
                 self.request_sync_group.remove_backup_request_group(
                     [finish_info.request_id for finish_info in request.step.latest_finished_ids])
             return rpc_response
+
+    @property
+    def enable_migration(self):
+        return self.enable_routine_migration or self.enable_pre_stop_migration

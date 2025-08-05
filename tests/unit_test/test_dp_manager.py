@@ -7,7 +7,7 @@ import torch
 from vllm import EngineArgs
 
 from llumnix.dp_manager import DPManager
-from llumnix.utils import random_uuid, InstanceType, BackendType
+from llumnix.utils import random_uuid, InstanceType, BackendType, UnitStatus
 from llumnix.arg_utils import EntrypointsArgs, InstanceArgs
 from llumnix.entrypoints.vllm.arg_utils import VLLMEngineArgs
 from llumnix.ray_utils import (
@@ -44,6 +44,12 @@ class MockInstance:
 
     def stop(self):
         return True
+
+    def set_unit_status(self, status: UnitStatus):
+        return True
+
+    def get_unit_status(self):
+        return UnitStatus.STOPPED
 
 
 @ray.remote(num_cpus=0)

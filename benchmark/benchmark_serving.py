@@ -805,7 +805,8 @@ def main():
     parser.add_argument('--print_generation_lens_and_exit',
                         action='store_true')
 
-    parser.add_argument('--enable_migration', type=int ,default=0)
+    parser.add_argument('--enable_routine_migration', type=int, default=0)
+    parser.add_argument('--enable_pre_stop_migration', type=int, default=0)
     parser.add_argument('--priority_ratio', type=float ,default=0.0)
 
     args = parser.parse_args()

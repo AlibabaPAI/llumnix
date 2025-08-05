@@ -42,6 +42,7 @@ class GlobalSchedulerConfig:
             is_group_kind_migration_backend: bool,
             dispatch_load_metric_config: DispatchLoadMetricConfig,
             cache_meta_client_config_path: str=None,
+            enable_pre_step_migration: bool=False,
             ) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy
@@ -64,11 +65,14 @@ class GlobalSchedulerConfig:
         self.dispatch_load_metric_config = dispatch_load_metric_config
         self.cache_meta_client_config_path = cache_meta_client_config_path
 
+        self.enable_pre_step_migration = enable_pre_step_migration
+
 
 class MigrationConfig:
     def __init__(
             self,
-            enable_migration: bool,
+            enable_routine_migration: bool,
+            enable_pre_stop_migration: bool,
             request_migration_policy: str,
             migration_backend: str,
             migration_buffer_blocks: int,
@@ -79,7 +83,8 @@ class MigrationConfig:
             kvtransfer_migration_backend_transfer_type: str = "",
             kvtransfer_migration_backend_naming_url: str = "",
             ) -> None:
-        self.enable_migration = enable_migration
+        self.enable_routine_migration = enable_routine_migration
+        self.enable_pre_stop_migration = enable_pre_stop_migration
         self.request_migration_policy = request_migration_policy
         self.migration_backend = migration_backend
         self.kvtransfer_migration_backend_transfer_type = kvtransfer_migration_backend_transfer_type
@@ -92,6 +97,10 @@ class MigrationConfig:
 
         # lazy init in MigrationLocalWorker constructor
         self.grpc_migration_server_port: List = None
+
+    @property
+    def enable_migration(self):
+        return self.enable_routine_migration or self.enable_pre_stop_migration
 
 
 class PDDConfig:

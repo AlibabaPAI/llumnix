@@ -32,7 +32,8 @@ import ray.exceptions
 
 from llumnix.logging.logger import init_logger
 from llumnix.constants import WAIT_PLACEMENT_GROUP_TIMEOUT
-from llumnix.utils import log_instance_exception, asyncio_wait_for_ray_remote_call_with_timeout, InstanceType
+from llumnix.utils import (InstanceType, log_instance_exception,
+                           asyncio_wait_for_ray_remote_call_with_timeout)
 
 logger = init_logger(__name__)
 
@@ -453,6 +454,9 @@ async def check_actors_health(actors: Dict[str, ray.actor.ActorHandle]) -> List[
         ret = fut.result()[0]
         if isinstance(ret, Exception):
             log_instance_exception(ret, actor_id, "check_actor_health")
+            dead_actor_ids.append(actor_id)
+        if not ret:
+            # If llumlet.unit_status is not HEALTHY, consider it as dead.
             dead_actor_ids.append(actor_id)
 
     tasks = []

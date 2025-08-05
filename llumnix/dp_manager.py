@@ -11,9 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Dict, Union, Iterable
+from functools import partial
+from typing import List, Dict, Optional, Union, Iterable
 from enum import Enum
 import asyncio
+import time
 
 import ray
 import ray.actor
@@ -41,13 +43,16 @@ from llumnix.ray_utils import (
     get_llumnix_actor_name,
     get_llumnix_actor_id,
     get_llumnix_actor_handle,
+    log_instance_exception
 )
 from llumnix.queue.queue_type import QueueType
-from llumnix.constants import NUM_GPUS_BLADELLM_GPU_ACTOR, HEARTBEAT_INTERVAL
+from llumnix.constants import (NUM_GPUS_BLADELLM_GPU_ACTOR, HEARTBEAT_INTERVAL,
+                               WAIT_UNIT_MIGRATION_DONE_INTERVAL)
 from llumnix.utils import (
     run_coroutine_in_new_thread,
     InstanceType,
     BackendType,
+    UnitStatus,
     asyncio_wait_for_ray_remote_call_with_timeout,
 )
 import llumnix.envs as llumnix_envs
@@ -94,10 +99,11 @@ class DPManager:
         self.servers: Dict[str, ray.actor.ActorHandle] = {}
         self.cached_cluster_servers: Dict[str, ray.actor.ActorHandle] = {}
 
+        self.unit_failover_timeout = float(llumnix_envs.UNIT_FAILOVER_TIMEOUT)
+
         dp_group_status = self._connect_to_instances_and_servers()
         logger.info("DPManager starts, dp_group_status: {}".format(dp_group_status))
         if dp_group_status == DPGroupStatus.PARTIAL:
-            run_coroutine_in_new_thread(self._clear_instance_ray_resources(), blocking=True)
             run_coroutine_in_new_thread(self.stop(), blocking=True)
         elif dp_group_status == DPGroupStatus.EMPTY:
             instances, servers = self._init_instances_and_servers(
@@ -116,7 +122,8 @@ class DPManager:
             if dp_group_ready:
                 self._scale_up(instance_id_list, instances, servers)
             else:
-                run_coroutine_in_new_thread(self.stop(), blocking=True)
+                # no need to call stop since there is no request to migrate
+                run_coroutine_in_new_thread(self._clear_unit(), blocking=True)
         else: # DPGroupStatus.COMPLETE
             logger.info("Restart dp manager successfully, dp group is complete.")
 
@@ -351,13 +358,36 @@ class DPManager:
                     )
             return False
 
-    async def stop(self):
-        logger.info("DPManager {} stops.".format(self.unit_id))
+    async def _clear_unit(self):
         await self._broadcast_dead_instances_to_cluster_servers(list(self.instances.keys()))
         await self._scale_down()
         # Detached actor will not be killed when the placement group is removed.
         remove_placement_group(self.unit_id)
         ray.kill(self.actor_handle)
+
+    async def stop(self, interval: float = WAIT_UNIT_MIGRATION_DONE_INTERVAL):
+        await self._set_unit_status(UnitStatus.TERMINATING)
+        stop_time = time.time()
+        logger.info("Trigger DPManager {} stop.".format(self.unit_id))
+        # wait for all instances to do pre-stop migration
+        while True:
+            try:
+                await asyncio.sleep(interval)
+                all_stopped = await self.check_instance_failover_status()
+                failover_timeout = time.time() - stop_time > self.unit_failover_timeout
+                if all_stopped or failover_timeout:
+                    if all_stopped:
+                        logger.info("All instances are stopped, DPManager {} stops.".format(self.unit_id))
+                    elif failover_timeout:
+                        logger.warning("Failover migration timeout, DPManager {} stops.".format(self.unit_id))
+                    break
+            # pylint: disable=broad-except
+            except Exception:
+                logger.critical(
+                    "DPManager get error in stop loop, please check the cause!",
+                    exc_info=True, stack_info=True
+                )
+        await self._clear_unit()
 
     def _scale_up(
         self,
@@ -387,10 +417,13 @@ class DPManager:
 
         return self.num_instances
 
-    async def _scale_down(self) -> None:
-        await self._clear_instance_ray_resources(list(self.instances.keys()))
-        self.servers.clear()
-        self.instances.clear()
+    async def _scale_down(self, instance_ids: Optional[List[str]] = None) -> None:
+        if instance_ids is None:
+            instance_ids = set(self.instances.keys()).union(self.servers.keys())
+        await self._clear_instance_ray_resources(instance_ids)
+        for ins_id in instance_ids:
+            self.servers.pop(ins_id, None)
+            self.instances.pop(ins_id, None)
 
     async def _clear_instance_ray_resources(self, instance_id: Union[str, Iterable[str]] = None) -> None:
         if instance_id is not None:
@@ -460,6 +493,17 @@ class DPManager:
             return DPGroupStatus.EMPTY
 
         if len(instance_names) < self.dp_size or len(server_names) < self.dp_size:
+            try:
+                for instance_name in instance_names:
+                    instance_id = get_llumnix_actor_id(LlumnixActor.INSTANCE, instance_name)
+                    self.instances[instance_id] = ray.get_actor(instance_name, namespace="llumnix")
+                for server_name in server_names:
+                    server_id = get_llumnix_actor_id(LlumnixActor.SERVER, server_name)
+                    self.servers[server_id] = ray.get_actor(server_name, namespace="llumnix")
+            # pylint: disable=broad-except
+            except Exception:
+                # In PARTIAL case, all actors will be scale down, so we don't handle exceptions here.
+                pass
             return DPGroupStatus.PARTIAL
 
         instance_ids = [get_llumnix_actor_id(LlumnixActor.INSTANCE, instance_name) for instance_name in instance_names]
@@ -489,3 +533,46 @@ class DPManager:
         self._scale_up(instance_ids, instances, servers)
 
         return DPGroupStatus.COMPLETE
+
+    async def _set_unit_status(self, status: UnitStatus) -> None:
+        def instance_set_unit_status_callback(fut, instance_id: str) -> None:
+            ret = fut.result()[0]
+            if isinstance(ret, Exception):
+                log_instance_exception(ret, instance_id, "set_unit_status")
+
+        tasks = []
+        for ins_id, ins_handle in self.instances.items():
+            task = asyncio.gather(
+                asyncio_wait_for_ray_remote_call_with_timeout(ins_handle.set_unit_status, status),
+                return_exceptions=True
+            )
+            task.add_done_callback(
+                partial(instance_set_unit_status_callback, instance_id=ins_id)
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def check_instance_failover_status(self) -> bool:
+        def check_instance_failover_status_callback(fut, instance_id: str):
+            ret = fut.result()[0]
+            if isinstance(ret, Exception):
+                log_instance_exception(ret, instance_id, "get_unit_status")
+                stopped_instances.append(instance_id)
+            elif ret == UnitStatus.STOPPED:
+                stopped_instances.append(instance_id)
+
+        tasks = []
+        stopped_instances = []
+        for instance_id, instance in self.instances.items():
+            task = asyncio.gather(
+                asyncio_wait_for_ray_remote_call_with_timeout(instance.get_unit_status),
+                return_exceptions=True
+            )
+            task.add_done_callback(
+                partial(check_instance_failover_status_callback, instance_id=instance_id)
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_stopped = len(self.instances) == 0 or len(self.instances) == len(stopped_instances)
+        return all_stopped

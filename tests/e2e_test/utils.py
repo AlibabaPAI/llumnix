@@ -75,7 +75,8 @@ def generate_vllm_launch_command(
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
     config_file: str = "configs/vllm.yml",
-    enable_migration: bool = True,
+    enable_routine_migration: bool = True,
+    enable_pre_stop_migration: bool = False,
     enforce_eager: bool = False,
     request_output_forwarding_mode: str = "thread",
     **kwargs
@@ -88,7 +89,8 @@ def generate_vllm_launch_command(
         f"--initial-instances {instances_num} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
-        f"{'--enable-migration' if enable_migration else ''} "
+        f"{'--enable-routine-migration' if enable_routine_migration else ''} "
+        f"{'--enable-pre-stop-migration' if enable_pre_stop_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
         f"{'--enforce-eager' if enforce_eager else ''} "
@@ -133,7 +135,8 @@ def generate_vllm_serve_command(
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm.yml",
     tensor_parallel_size: int = 1,
-    enable_migration: bool = True,
+    enable_routine_migration: bool = True,
+    enable_pre_stop_migration: bool = False,
     enforce_eager: bool = False,
     max_units: int = 4,
     request_output_forwarding_mode: str = "thread",
@@ -146,7 +149,8 @@ def generate_vllm_serve_command(
         f"--port {port} "
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
-        f"{'--enable-migration' if enable_migration else ''} "
+        f"{'--enable-routine-migration' if enable_routine_migration else ''} "
+        f"{'--enable-pre-stop-migration' if enable_pre_stop_migration else ''} "
         f"--model {model} "
         f"--worker-use-ray "
         f"--max-num-seqs 512 "
@@ -225,7 +229,8 @@ def generate_vllm_v1_launch_command(
     enable_simulator: bool = False,
     request_output_queue_type: str = "zmq",
     config_file: str = "configs/vllm.yml",
-    enable_migration: bool = True,
+    enable_routine_migration: bool = True,
+    enable_pre_stop_migration: bool = False,
     enforce_eager: bool = False,
     request_output_forwarding_mode: str = "thread",
     **kwargs
@@ -251,7 +256,8 @@ def generate_vllm_v1_serve_command(
     request_output_queue_type: str = "zmq",
     config_path: str = "configs/vllm_v1.yml",
     tensor_parallel_size: int = 1,
-    enable_migration: bool = True,
+    enable_routine_migration: bool = True,
+    enable_pre_stop_migration: bool = False,
     enforce_eager: bool = False,
     max_units: int = 4,
     request_output_forwarding_mode: str = "thread",
@@ -266,7 +272,8 @@ def generate_vllm_v1_serve_command(
         f"{'--log-filename manager ' if log_instance_info else ''}"
         f"{'--log-instance-info ' if log_instance_info else ''}"
         f"{'--log-request-timestamps ' if log_request_timestamps else ''}"
-        f"{'--enable-migration' if enable_migration else ''} "
+        f"{'--enable-routine-migration' if enable_routine_migration else ''} "
+        f"{'--enable-pre-stop-migration' if enable_pre_stop_migration else ''} "
         f"--model {model} "
         f"--distributed-executor-backend mp "
         f"{'--enforce-eager' if enforce_eager else ''} "
@@ -307,7 +314,8 @@ def generate_bladellm_launch_command(
     enable_llumnix: bool = True,
     enable_pd_disagg: bool = False,
     enable_adaptive_pd: bool = False,
-    enable_migration: bool = True,
+    enable_routine_migration: bool = True,
+    enable_pre_stop_migration: bool = False,
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
     engine_disagg_transfer_type: str = "rdma",
@@ -352,7 +360,8 @@ def generate_bladellm_launch_command(
         f"SERVER.REQUEST_OUTPUT_QUEUE_TYPE {request_output_queue_type} "
         f"MANAGER.ENABLE_ENGINE_PD_DISAGG {enable_pd_disagg} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
-        f"MANAGER.ENABLE_MIGRATION {enable_migration and not enable_pd_disagg} "
+        f"MANAGER.ENABLE_ROUTINE_MIGRATION {enable_routine_migration and not enable_pd_disagg} "
+        f"MANAGER.ENABLE_PRE_STOP_MIGRATION {enable_pre_stop_migration and not enable_pd_disagg} "
         f"INSTANCE.MIGRATION_BACKEND {migration_backend} "
         f"MANAGER.ENABLE_ADAPTIVE_PD {enable_adaptive_pd} "
         f"MANAGER.PD_RATIO {pd_ratio} "
@@ -372,7 +381,8 @@ def generate_bladellm_serve_command(
     enable_llumnix: bool = True,
     enable_pd_disagg: bool = False,
     enable_adaptive_pd: bool = False,
-    enable_migration: bool = True,
+    enable_routine_migration: bool = True,
+    enable_pre_stop_migration: bool = False,
     dispatch_policy: str = "load",
     instance_type: str = "prefill",
     engine_disagg_transfer_type: str = "rdma",
@@ -415,7 +425,8 @@ def generate_bladellm_serve_command(
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"--dispatch-policy {dispatch_policy} "
         f"--pd-ratio {pd_ratio} "
-        f"{'--enable-migration' if enable_migration and not enable_pd_disagg else ''} "
+        f"{'--enable-routine-migration' if enable_routine_migration and not enable_pd_disagg else ''} "
+        f"{'--enable-pre-stop-migration' if enable_pre_stop_migration and not enable_pd_disagg else ''} "
         f"--migration-backend {migration_backend} "
         f"--request-output-queue-type {request_output_queue_type} "
         f"--request-output-forwarding-mode {request_output_forwarding_mode} "
@@ -613,7 +624,7 @@ def generate_vllm_serve_service_command_func(
         f"--host {ip} "
         f"--port {port} "
         f"--enable-pd-disagg "
-        f"--enable-migration "
+        f"--enable-routine-migration "
         f"--pd-ratio 1:1 "
         f"--max-units {max_units} "
         f"--enable-port-increment "

@@ -381,7 +381,8 @@ class ManagerArgs:
     scaling_load_metric: str = None
     topk_random_dispatch: int = None
 
-    enable_migration: bool = None
+    enable_routine_migration: bool = None
+    enable_pre_stop_migration: bool = None
     pair_migration_frequency: int = None
     pair_migration_policy: str = None
     migrate_out_threshold: float = None
@@ -461,7 +462,7 @@ class ManagerArgs:
                 "in global launch mode."
 
         if args.enable_pd_disagg:
-            assert args.enable_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
+            assert args.enable_routine_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
 
         assert sum([bool(args.enable_engine_pd_disagg), bool(args.enable_pd_disagg), bool(args.enable_engine_semi_pd_disagg)]) <= 1, \
             f"Engine-based prefill-decode disaggregation (enable={args.enable_engine_pd_disagg})," \
@@ -497,7 +498,8 @@ class ManagerArgs:
                                                         self.enable_adaptive_pd,
                                                         self.is_group_kind_migration_backend,
                                                         dispatch_load_metric_config,
-                                                        self.cache_meta_client_config_path)
+                                                        self.cache_meta_client_config_path,
+                                                        self.enable_pre_stop_migration)
         return global_scheduler_config
 
     def create_pdd_config(self) -> PDDConfig:
@@ -535,9 +537,12 @@ class ManagerArgs:
                             'The candidate instances are first selected according to the load'
                             '(including factors such as load, queue size, etc.) based on the dispatch policy,'
                             'and then one of them is randomly chosen to receive the request for better load balancing.')
-        parser.add_argument('--enable-migration',
+        parser.add_argument('--enable-routine-migration',
                             action='store_true',
                             help='enable migrate requests between instances')
+        parser.add_argument('--enable-pre-stop-migration',
+                            action='store_true',
+                            help='enable migrate requests between instances in pre-stop way like failover and scale down')
         parser.add_argument('--pair-migration-frequency',
                             type=int,
                             help='pair migration frequency')
@@ -645,6 +650,9 @@ class ManagerArgs:
                             help='[Experimental] decode instance dispatch load metric when prefilling')
         return parser
 
+    @property
+    def enable_migration(self):
+        return self.enable_routine_migration or self.enable_pre_stop_migration
 
 @dataclass
 class LaunchArgs:
@@ -681,7 +689,8 @@ class InstanceArgs:
     enable_engine_semi_pd_disagg: bool = None
 
     # init from manager args
-    enable_migration: bool = None
+    enable_routine_migration: bool = None
+    enable_pre_stop_migration: bool = None
     enable_adaptive_pd: bool = None
 
     def __post_init__(self):
@@ -723,11 +732,13 @@ class InstanceArgs:
             self.enable_engine_pd_disagg = False
 
     def init_from_manager_args(self, manager_args: ManagerArgs):
-        self.enable_migration = manager_args.enable_migration
+        self.enable_routine_migration = manager_args.enable_routine_migration
+        self.enable_pre_stop_migration = manager_args.enable_pre_stop_migration
         self.enable_adaptive_pd = manager_args.enable_adaptive_pd
 
     def create_migration_config(self) -> MigrationConfig:
-        migration_config = MigrationConfig(self.enable_migration,
+        migration_config = MigrationConfig(self.enable_routine_migration,
+                                           self.enable_pre_stop_migration,
                                            self.request_migration_policy,
                                            self.migration_backend,
                                            self.migration_buffer_blocks,
@@ -830,6 +841,10 @@ class InstanceArgs:
         next_instance_args.instance_type = instance_type
 
         return next_instance_args
+
+    @property
+    def enable_migration(self):
+        return self.enable_routine_migration or self.enable_pre_stop_migration
 
 
 @dataclass

@@ -36,7 +36,7 @@ from tests.unit_test.test_dp_manager import init_dp_manager
 
 def init_scaler(manager_args = None):
     try:
-        manager_args = ManagerArgs(enable_migration=True)
+        manager_args = ManagerArgs(enable_routine_migration=True, enable_pre_stop_migration=False)
         manager_args.log_instance_info = False
         scaler = Scaler.from_args(
             entrypoints_args=None,
@@ -364,7 +364,7 @@ async def test_pd_disagg_gloal_launch_deployment_and_auto_scale_up_loop(ray_env)
 @pytest.mark.asyncio
 @pytest.mark.skipif(torch.cuda.device_count() < 4, reason="at least 4 gpus required")
 async def test_pd_disagg_deployment_states(ray_env):
-    manager_args = ManagerArgs(enable_migration=True, enable_pd_disagg=True, pd_ratio="1:2")
+    manager_args = ManagerArgs(enable_routine_migration=True, enable_pre_stop_migration=True, enable_pd_disagg=True, pd_ratio="1:2")
     engine_args = VLLMEngineArgs(
         engine_args=EngineArgs(
             model=try_convert_to_local_path("facebook/opt-125m"),

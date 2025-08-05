@@ -203,7 +203,7 @@ def generate_correctness_test_config():
             vllm_base_config),
 
         # disable migration
-        generate_special_correctness_test_config([("enable_routine_migration", False), ("enable_pre_stop_migration", False)], vllm_base_config),
+        generate_special_correctness_test_config([("enable_routine_migration", False)], vllm_base_config),
 
         # simulation
         generate_special_correctness_test_config([("enable_simulator", False)], vllm_base_config),
@@ -237,7 +237,7 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("tensor_parallel_size", 2)], bladellm_base_config),
 
         # disable migration
-        generate_special_correctness_test_config([("enable_routine_migration", False), ("enable_pre_stop_migration", False)], bladellm_base_config),
+        generate_special_correctness_test_config([("enable_routine_migration", False)], bladellm_base_config),
 
         # engine pd
         generate_special_correctness_test_config([("enable_pd_disagg", True)], bladellm_base_config),
@@ -270,7 +270,8 @@ async def test_correctness(
     engine,
     migration_backend,
     tensor_parallel_size,
-    enable_migration,
+    enable_routine_migration,
+    enable_pre_stop_migration,
     enable_simulator,
     enable_pd_disagg,
     launch_mode,
@@ -359,7 +360,8 @@ async def test_correctness(
                     enable_simulator=enable_simulator,
                     request_output_forwarding_mode=request_output_forwarding_mode,
                     instance_type="prefill",
-                    enable_migration=enable_migration,
+                    enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                     tensor_parallel_size=tensor_parallel_size,
                 )
             )
@@ -381,7 +383,8 @@ async def test_correctness(
                     request_output_forwarding_mode=request_output_forwarding_mode,
                     enable_pd_disagg=enable_pd_disagg,
                     instance_type="decode",
-                    enable_migration=enable_migration,
+                    enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                     tensor_parallel_size=tensor_parallel_size,
                 )
             )
@@ -400,7 +403,8 @@ async def test_correctness(
                     enforce_eager=True,
                     enable_simulator=enable_simulator,
                     request_output_forwarding_mode=request_output_forwarding_mode,
-                    enable_migration=enable_migration,
+                    enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                     tensor_parallel_size=tensor_parallel_size,
                 )
             )
@@ -422,7 +426,8 @@ async def test_correctness(
                 enable_simulator=enable_simulator,
                 request_output_forwarding_mode=request_output_forwarding_mode,
                 tensor_parallel_size=tensor_parallel_size,
-                enable_migration=enable_migration,
+                enable_migration=enable_routine_migration,
+                    enable_pre_stop_migration=enable_pre_stop_migration,
                 max_units=instance_count,
                 )
         )

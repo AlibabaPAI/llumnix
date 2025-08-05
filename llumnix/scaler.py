@@ -70,6 +70,7 @@ from llumnix.constants import (
     CHECK_DEPLOYMENT_STATES_INTERVAL,
     WATCH_DEPLOYMENT_INTERVAL,
     HEARTBEAT_INTERVAL,
+    DPMANAGER_RESTART_INTERVAL,
 )
 from llumnix import envs as llumnix_envs
 from llumnix.queue.utils import init_request_output_queue_server
@@ -454,27 +455,33 @@ class Scaler:
 
         return dp_manager
 
+    async def _check_dp_manager_exists(self, unit_id: str) -> bool:
+        try:
+            dp_manager: DPManager = get_llumnix_actor_handle(LlumnixActor.DP_MANAGER, unit_id)
+        except ValueError:
+            logger.warning("Dp manager {} not found.".format(unit_id))
+            return False
+        try:
+            await asyncio_wait_for_ray_remote_call_with_timeout(
+                dp_manager.is_ready, timeout=llumnix_envs.UNIT_READY_TIMEOUT
+            )
+            return True
+        except: # pylint: disable=bare-except
+            # Check states does not handle dp manager exception.
+            pass
+
+        return False
+
     async def _check_deployment_states_loop(self, interval: float) -> None:
         "Check if placement groups and dp managers in the cluster keep 1:1 deployment."
 
         async def watch_unit_deployment_states(unit_id: str, dp_manager_exists: bool):
-            try:
-                dp_manager: DPManager = get_llumnix_actor_handle(LlumnixActor.DP_MANAGER, unit_id)
-            except ValueError:
-                logger.warning("Dp manager {} not found.".format(unit_id))
-                dp_manager_exists = False
-            if dp_manager_exists:
-                try:
-                    await asyncio_wait_for_ray_remote_call_with_timeout(
-                        dp_manager.is_ready, timeout=llumnix_envs.UNIT_READY_TIMEOUT
-                    )
-                # Check states loop does not handle dp manager exception.
-                # pylint: disable=bare-except
-                except:
-                    pass
+            dp_manager_exists = await self._check_dp_manager_exists(unit_id)
             logger.info(
                 "Watch unit {} deployment states, dp_manager_exists: {}".format(unit_id, dp_manager_exists)
             )
+            if dp_manager_exists:
+                return
             await asyncio.sleep(WATCH_DEPLOYMENT_INTERVAL)
             pg_created, dp_manager_exists = self._get_unit_deployment_states(unit_id)
             if pg_created and not dp_manager_exists:
@@ -496,9 +503,7 @@ class Scaler:
                     dp_manager_exists = uid in curr_dp_manager_uids
                     if not dp_manager_exists:
                         tasks.append(
-                            asyncio.create_task(
-                                watch_unit_deployment_states(uid, dp_manager_exists)
-                            )
+                            asyncio.create_task(watch_unit_deployment_states(uid, dp_manager_exists))
                         )
                 await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except
@@ -587,12 +592,31 @@ class Scaler:
     async def _heartbeat_loop(self, interval: float) -> None:
         """Watch all cached dp manager actors health."""
 
+        async def _wait_dp_manager_heartbeat(unit_id: str) -> bool:
+            logger.warning(
+                "Heartbeat loop check dp_manager-{} not exists, wait it to restart".format(unit_id)
+            )
+            await asyncio.sleep(DPMANAGER_RESTART_INTERVAL)
+            dp_manager_exists = await self._check_dp_manager_exists(unit_id)
+            if dp_manager_exists:
+                logger.info("Heartbeat loop check dp_manager-{} exists after waiting".format(unit_id))
+                return
+            logger.warning(
+                "Heartbeat loop check dp_manager-{} not exists yet after waiting, scale down it.".format(unit_id)
+            )
+            await self._scale_down(unit_id)
+
         while True:
             try:
                 await asyncio.sleep(interval)
                 dead_unit_ids = await check_actors_health(self.dp_managers)
                 if len(dead_unit_ids) > 0:
-                    await self._scale_down(dead_unit_ids)
+                    tasks = []
+                    for unit_id in dead_unit_ids:
+                        tasks.append(
+                            asyncio.create_task(_wait_dp_manager_heartbeat(unit_id))
+                        )
+                    await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except
             except Exception:
                 logger.critical(

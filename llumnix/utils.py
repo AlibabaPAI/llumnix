@@ -172,6 +172,8 @@ def get_llumnix_env_vars():
         if key in llumnix_env_vars_keys:
             llumnix_env_vars[key] = value
 
+    print(f"[zzy][args] llumnix_env_vars: {llumnix_env_vars}")
+
     return llumnix_env_vars
 
 def get_service_instance_type(service_name: str) -> InstanceType:

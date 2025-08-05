@@ -39,6 +39,13 @@ if __name__ == "__main__":
     launch_args = LaunchArgs(launch_mode=LaunchMode.GLOBAL, backend_type=backend_type)
     vllm_engine_args = VLLMV1EngineArgs(engine_args, backend_type)
 
+    import os
+    engine_args = vllm_engine_args.load_engine_args()
+    vllm_config = engine_args.create_engine_config()
+    print(f"[zzy][args][llumnix] engine_args: {engine_args}")
+    print(f"[zzy][args][llumnix] vllm_config: {vllm_config}")
+    print(f"[zzy][args][llumnix] os.environ: {os.environ}")
+
     # magic actor to avoid fast api server actor initialization error
     request_output_queue = RayQueue(actor_options={"namespace": "llumnix",
                                                    "name": "magic_ray_queue"})

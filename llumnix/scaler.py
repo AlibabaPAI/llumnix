@@ -475,7 +475,7 @@ class Scaler:
     async def _check_deployment_states_loop(self, interval: float) -> None:
         "Check if placement groups and dp managers in the cluster keep 1:1 deployment."
 
-        async def watch_unit_deployment_states(unit_id: str, dp_manager_exists: bool):
+        async def watch_unit_deployment_states(unit_id: str):
             dp_manager_exists = await self._check_dp_manager_exists(unit_id)
             logger.info(
                 "Watch unit {} deployment states, dp_manager_exists: {}".format(unit_id, dp_manager_exists)
@@ -503,7 +503,7 @@ class Scaler:
                     dp_manager_exists = uid in curr_dp_manager_uids
                     if not dp_manager_exists:
                         tasks.append(
-                            asyncio.create_task(watch_unit_deployment_states(uid, dp_manager_exists))
+                            asyncio.create_task(watch_unit_deployment_states(uid))
                         )
                 await asyncio.gather(*tasks, return_exceptions=True)
             # pylint: disable=broad-except

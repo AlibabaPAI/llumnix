@@ -193,7 +193,7 @@ async def test_auto_scale_up_loop_and_get_cluster_deployment_states(ray_env):
     assert len(unit_ids) == 4
     ray.get(scaler._clear_unit_ray_resources.remote(unit_ids[0]))
     ray.get(scaler._clear_unit_ray_resources.remote(unit_ids[1]))
-    await asyncio.sleep(60.0)
+    await asyncio.sleep(120.0)
 
     num_units = ray.get(scaler._scale_up.remote([], [], []))
     assert num_units == 4

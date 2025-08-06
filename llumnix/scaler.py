@@ -465,12 +465,10 @@ class Scaler:
             await asyncio_wait_for_ray_remote_call_with_timeout(
                 dp_manager.is_ready, timeout=llumnix_envs.UNIT_READY_TIMEOUT
             )
-            return True
         except: # pylint: disable=bare-except
             # Check states does not handle dp manager exception.
-            pass
-
-        return False
+            return False
+        return True
 
     async def _check_deployment_states_loop(self, interval: float) -> None:
         "Check if placement groups and dp managers in the cluster keep 1:1 deployment."

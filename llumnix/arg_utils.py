@@ -18,7 +18,7 @@ import dataclasses
 from dataclasses import dataclass
 import os
 import pickle
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Any
 from abc import ABC, abstractmethod
 import copy
 
@@ -901,8 +901,22 @@ def load_registered_engine_args(manager_args: ManagerArgs):
         engine_args_list.append(engine_args_registered.load_engine_args())
     return engine_args_list
 
+def load_registered_env_vars(manager_args: ManagerArgs) -> Dict[str, Dict[str, Any]]:
+    if not manager_args.enable_pd_disagg and not manager_args.enable_engine_pd_disagg:
+        instance_type_list = ['neutral']
+    else:
+        instance_type_list = ['prefill', 'decode']
+    env_vars_dict = {}
+    for instance_type in instance_type_list:
+        env_vars_registered: Dict[str, Any] = load_llumlet_env_vars(instance_type, manager_args.load_registered_service_path)
+        env_vars_dict[instace_type] = env_vars_registered
+    return env_vars_dict
+
 def _get_engine_args_filename(engine_type: str) -> str:
     return f"engine_args_{engine_type}.pkl"
+
+def _get_env_vars_filename(engine_type: str) -> str:
+    return f"env_vars_{engine_type}.pkl"
 
 def _get_engine_args_filepath(save_path: str, save_key: str = None) -> str:
     if save_key is not None:
@@ -910,6 +924,9 @@ def _get_engine_args_filepath(save_path: str, save_key: str = None) -> str:
     else:
         save_filepath = save_path
     return save_filepath
+
+def _get_env_vars_filepath(save_path: str, save_key: str = None) -> str:
+    return _get_engine_args_filepath(save_path, save_key)
 
 def save_engine_args(engine_type: str, save_path: str, engine_args: LlumnixEngineArgs, save_key: str = None) -> None:
     engine_args_filename = _get_engine_args_filename(engine_type)
@@ -920,6 +937,20 @@ def save_engine_args(engine_type: str, save_path: str, engine_args: LlumnixEngin
         pickle.dump(engine_args, file)
     logger.info("Save engine arguments of {} engine type as file: {}".format(engine_type, save_filename))
 
+def save_llumlet_env_vars(engine_type: str, save_path: str, env_vars: Dict[str, Any], save_key: str = None) -> None:
+    from llumnix.llumlet import envs as llumlet_envs
+    llumlet_env_vars = {}
+    llumlet_env_vars_keys = list(llumlet_envs.environment_variables.keys())
+    for key, value in env_vars.items():
+        if key in llumlet_env_vars_keys:
+            llumlet_env_vars[key] = value
+    env_vars_filename = _get_env_vars_filename(engine_type)
+    save_filepath = _get_env_vars_filepath(save_path, save_key)
+    save_filename = os.path.join(save_filepath, env_vars_filename)
+    os.makedirs(save_filepath, exist_ok=True)
+    with open(save_filename, 'wb') as file:
+        pickle.dump(llumlet_env_vars, file)
+    logger.info("Save env arguments of {} engine type as file: {}".format(engine_type, save_filename))
 def load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
     engine_args_filename = _get_engine_args_filename(engine_type)
     load_filename = os.path.join(load_path, engine_args_filename)
@@ -927,3 +958,11 @@ def load_engine_args(engine_type: str, load_path: str) -> LlumnixEngineArgs:
         engine_args =  pickle.load(file)
     logger.info("Load engine arguments of {} engine type from path: {}".format(engine_type, load_path))
     return engine_args
+
+def load_llumlet_env_vars(engine_type: str, load_path: str) -> Dict[str, Any]:
+    env_vars_filename = _get_env_vars_filename(engine_type)
+    load_filename = os.path.join(load_path, env_vars_filename)
+    with open(load_filename, 'rb') as file:
+        env_vars =  pickle.load(file)
+    logger.info("Load env arguments of {} engine type from path: {}".format(engine_type, load_path))
+    return env_vars

@@ -11,7 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Dict, Union, Iterable
+from functools import partial
+from typing import List, Dict, Optional, Union, Iterable, Any
 from enum import Enum
 import asyncio
 
@@ -74,6 +75,7 @@ class DPManager:
         entrypoints_args_list: List[EntrypointsArgs],
         instance_args_list: List[InstanceArgs],
         engine_args_list: List[LlumnixEngineArgs],
+        env_vars: Dict[str, Any],
         placement_group: PlacementGroup,
         backend_type: BackendType,
         scaler: ray.actor.ActorHandle,
@@ -107,6 +109,7 @@ class DPManager:
                 entrypoints_args_list,
                 instance_args_list,
                 engine_args_list,
+                env_vars,
                 placement_group,
                 backend_type,
                 scaler,
@@ -139,6 +142,7 @@ class DPManager:
         entrypoints_args_list: List[EntrypointsArgs],
         instance_args_list: List[InstanceArgs],
         engine_args_list: List[LlumnixEngineArgs],
+        env_vars: Dict[str, Any],
         placement_group: PlacementGroup,
         backend_type: BackendType,
         scaler: ray.actor.ActorHandle,
@@ -166,6 +170,7 @@ class DPManager:
             entrypoints_args_list,
             instance_args_list,
             engine_args_list,
+            env_vars,
             placement_group,
             backend_type,
             scaler,
@@ -181,6 +186,7 @@ class DPManager:
         entrypoints_args_list: List[EntrypointsArgs],
         instance_args_list: List[InstanceArgs],
         engine_args_list: List[LlumnixEngineArgs],
+        env_vars: Dict[str, Any],
         placement_group: PlacementGroup,
         backend_type: BackendType,
         scaler: ray.actor.ActorHandle,
@@ -202,6 +208,7 @@ class DPManager:
                 placement_group,
                 instance_args,
                 engine_args,
+                env_vars,
                 dp_rank,
                 dp_rank_local,
                 request_output_queue_type,
@@ -239,6 +246,7 @@ class DPManager:
         placement_group: PlacementGroup,
         instance_args: InstanceArgs,
         engine_args: LlumnixEngineArgs,
+        env_vars: Dict[str, Any],
         dp_rank: int,
         dp_rank_local: int,
         request_output_queue_type: QueueType,
@@ -249,6 +257,7 @@ class DPManager:
             placement_group,
             request_output_queue_type,
             engine_args,
+            env_vars,
             dp_rank=dp_rank,
             dp_rank_local=dp_rank_local,
         )

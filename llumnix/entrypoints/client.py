@@ -125,7 +125,7 @@ class LlumnixClient(ABC):
                 self.instance_requests[instance_id].remove(request_id)
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
-        instance_ids = list(self.request_instances.get(request_id))
+        instance_ids = list(self.request_instances.get(request_id, []))
         available_instances = []
         available_instance_ids = []
         for instance_id in instance_ids:

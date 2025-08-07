@@ -77,7 +77,6 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
         )
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
-        # TODO(chenghao): Support self.request_instances update for vLLM v1.
         try:
             prefill_instance_id, decode_instance_id = await self._generate_by_manager(
                 request_id,
@@ -194,8 +193,10 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
                 request_id = engine_core_output.request_id
                 # update the lastest instance_id for adapting migration scene
-                if self.request_instances.get(request_id):
+                if self.request_instances[request_id]:
                     self.request_instances[request_id][-1] = llumnix_request_outputs.instance_id
+                else:
+                    self.request_instances[request_id].append(llumnix_request_outputs.instance_id)
                 processed_output = self._process_output_order(
                     request_id, engine_core_output,
                 )

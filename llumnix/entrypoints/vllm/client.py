@@ -193,8 +193,10 @@ class LlumnixClientVLLM(LlumnixClient):
                         continue
                     instance_id = request_response.instance_id
                     # update the lastest instance_id for adapting migration scene
-                    if self.request_instances.get(request_id):
+                    if self.request_instances[request_id]:
                         self.request_instances[request_id][-1] = instance_id
+                    else:
+                        self.request_instances[request_id].append(instance_id)
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue

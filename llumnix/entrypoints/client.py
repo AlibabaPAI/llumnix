@@ -12,7 +12,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Set, Tuple, Any
 import asyncio
 from collections import defaultdict
 
@@ -53,8 +53,8 @@ class LlumnixClient(ABC):
         self.server_info: ServerInfo = entrypoints_context.server_info
         self.log_requests: bool = entrypoints_context.log_requests
 
-        self.instance_requests: Dict[str, set[RequestIDType]] = defaultdict(set)
-        self.request_instances: Dict[RequestIDType, list[str]] = defaultdict(list)
+        self.instance_requests: Dict[str, Set[RequestIDType]] = defaultdict(set)
+        self.request_instances: Dict[RequestIDType, List[str]] = defaultdict(list)
         self.cached_cluster_instances: Dict[str, Llumlet] = entrypoints_context.instances
         self.instance_num_requests: Dict[str, int] = {}
         for ins_id in self.instances.keys():
@@ -125,7 +125,7 @@ class LlumnixClient(ABC):
                 self.instance_requests[instance_id].remove(request_id)
 
     def _get_instance_for_abort(self, request_id: RequestIDType) -> Tuple[str, Llumlet]:
-        instance_ids = list(self.request_instances.get(request_id, []))
+        instance_ids = list(self.request_instances.get(request_id))
         available_instances = []
         available_instance_ids = []
         for instance_id in instance_ids:

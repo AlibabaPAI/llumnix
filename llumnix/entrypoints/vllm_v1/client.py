@@ -194,7 +194,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
                 request_id = engine_core_output.request_id
                 # update the lastest instance_id for adapting migration scene
-                if self.request_instances.get(request_id, []):
+                if self.request_instances.get(request_id):
                     self.request_instances[request_id][-1] = llumnix_request_outputs.instance_id
                 processed_output = self._process_output_order(
                     request_id, engine_core_output,

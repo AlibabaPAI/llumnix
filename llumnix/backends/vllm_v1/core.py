@@ -439,8 +439,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         )
 
     # pylint: disable=invalid-overridden-method,unused-argument
-    # NOTE(s5u13b): fake async function to avoid overwriting the add_request function in engine core.
-    async def add_request_async(
+    def core_add_request(
         self,
         request_id: str,
         request_processing_context: RequestProcessingContext,
@@ -471,8 +470,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         self.reqeust_processing_context_table[request.request_id] = request_processing_context
         self.input_queue.put_nowait((request_type, request))
 
-    # NOTE(s5u13b): fake async function to avoid overwriting the add_request function in engine core.
-    async def abort_requests_async(self, request_ids: List[str]) -> None:
+    def core_abort_requests(self, request_ids: List[str]) -> None:
         self.input_queue.put_nowait((EngineCoreRequestType.ABORT, request_ids))
 
 
@@ -690,7 +688,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         *args,
         **kwargs,
     ) -> None:
-        await self.engine.add_request_async(request_id, request_processing_context, expected_steps, *args, **kwargs)
+        self.engine.core_add_request(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
     async def commit_dst_request(self,
                                  request_id: RequestIDType,
@@ -728,7 +726,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids: List[str] = list(request_id)
-        await self.engine.abort_requests_async(request_ids)
+        self.engine.core_abort_requests(request_ids)
 
     def get_running_queue(self) -> List[LlumnixRequestVLLMV1]:
         return self.engine.scheduler.running

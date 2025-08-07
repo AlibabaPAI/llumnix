@@ -89,23 +89,15 @@ class BaseOutputForwarder(ABC):
                     logger.debug("request output queue ip: {}, port: {}".format(server_info.request_output_queue_ip,
                                                                                 server_info.request_output_queue_port))
                 req_outputs = list(server_request_outputs.values())[idx]
-                req_outputs: Union[List[LlumnixRequestOutputs], List[LlumnixRequestOuput]] = (
-                    [req_outputs]
-                    if not isinstance(req_outputs, Iterable)
-                    else req_outputs
-                )
                 for req_output in req_outputs:
-                    aborted_request_ids.append(req_output.get_request_ids())
+                    aborted_request_ids.append(req_output.request_id)
 
         return aborted_request_ids
 
     def add_trace_timeline(self, req_outputs: LlumnixRequestOutputsType, trace_name: str):
-        req_outputs: Union[List[LlumnixRequestOutputs], List[LlumnixRequestOuput]] = (
-            [req_outputs] if not isinstance(req_outputs, Iterable) else req_outputs
-        )
         for req_output in req_outputs:
             # Set the timestamp for each request output.
-            req_output.add_trace_timeline(trace_name)
+            req_output.request_processing_context.add_trace_timeline(trace_name)
 
 
 class ActorOutputForwarder(BaseOutputForwarder):

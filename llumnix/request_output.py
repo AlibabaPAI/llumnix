@@ -11,24 +11,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict
 import copy
 
 from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import RequestIDType
 
-class LlumnixRequestInterface(ABC):
 
-    @abstractmethod
-    def get_request_ids(self) -> List[RequestIDType]:
-        pass
-
-    @abstractmethod
-    def add_trace_timeline(self, trace_name: str) -> None:
-        pass
-
-class LlumnixRequestOuput(LlumnixRequestInterface):
+class LlumnixRequestOuput():
     def __init__(self, request_id: RequestIDType, instance_id: str,
                  engine_output: Any, request_processing_context: RequestProcessingContext = None):
         self.request_id = request_id
@@ -43,12 +33,6 @@ class LlumnixRequestOuput(LlumnixRequestInterface):
     def get_engine_output(self):
         return self.engine_output
 
-    def get_request_ids(self):
-        return [self.request_id]
-
-    def add_trace_timeline(self, trace_name:str):
-        self.request_processing_context.add_trace_timeline(trace_name)
-
 class LlumnixRequestOutputs:
     """Wrapper of vLLM v1 EngineCoreOutputs"""
     def __init__(self, instance_id: str, engine_outputs: Any,
@@ -62,9 +46,6 @@ class LlumnixRequestOutputs:
                 new_context.request_output_queue = None
                 self.request_processing_context_dict[request_id] = new_context
 
-    def get_request_ids(self):
-        return list(self.request_processing_context_dict.keys())
-
-    def add_trace_timeline(self, trace_name:str):
-        for request_processing_context in self.request_processing_context_dict.values():
-            request_processing_context.add_trace_timeline(trace_name)
+    def __iter__(self):
+        for output in self.engine_outputs.outputs:
+            yield LlumnixRequestOuput(output.request_id, self.instance_id, output, self.request_processing_context_dict[output.request_id])

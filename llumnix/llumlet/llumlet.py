@@ -61,10 +61,10 @@ class Llumlet:
         logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
             self.instance_id, llumnix_engine_args.backend_type, self.instance_type))
         
-        for k, v in env_vars.items():
-            if k in os.environ and os.environ[k] != v:
-                print(f"[zzy][args] Overwriting environment variable {k} from '{os.environ[k]}' to '{v}'")
-                os.environ[k] = v
+        # for k, v in env_vars.items():
+        #     if k in os.environ and os.environ[k] != v:
+        #         print(f"[zzy][args] Overwriting environment variable {k} from '{os.environ[k]}' to '{v}'")
+        #         os.environ[k] = v
         
         self.instance_args: InstanceArgs = instance_args
         self.placement_group = placement_group
@@ -111,6 +111,7 @@ class Llumlet:
         request_output_queue_type: QueueType,
         engine_args: LlumnixEngineArgs,
         env_vars: Dict[str, Any],
+        nsys_config: Optional[Dict[str, Any]] = None,
         dp_rank: int = 0,
         dp_rank_local: Optional[int] = None
     ) -> ray.actor.ActorHandle:
@@ -129,13 +130,17 @@ class Llumlet:
             num_gpus = NUM_GPUS_BLADELLM_GPU_ACTOR
         else: # backend_type == BackendType.SIM_VLLM
             num_gpus = 0
+
+        if nsys_config:
+            env_vars = env_vars | nsys_config
+
         llumlet_class = ray.remote(
             num_cpus=1,
             num_gpus=num_gpus,
             name=get_llumnix_actor_name(LlumnixActor.INSTANCE, instance_id),
             namespace='llumnix',
             lifetime="detached",
-            runtime_env=env_vars,
+            # runtime_env=env_vars,
         )(cls).options(
             scheduling_strategy=PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,

@@ -257,6 +257,19 @@ class DPManager:
         dp_rank_local: int,
         request_output_queue_type: QueueType,
     ) -> ray.actor.ActorHandle:
+        nsys_config = None
+        # if self.instance_type == InstanceType.DECODE:
+        #     nsys_config={
+        #         "nsight": {
+        #             "t": "cuda,osrt,nvtx",
+        #             "cuda-memory-usage": "true",
+        #             "cuda-graph-trace": "graph",
+        #             "cuda-event-trace": "false",
+        #             "capture-range": "cudaProfilerApi",
+        #             "capture-range-end": "stop",
+        #             "force-overwrite": "true",
+        #         }
+        #     }
         instance = Llumlet.from_args(
             instance_id,
             instance_args,
@@ -264,6 +277,7 @@ class DPManager:
             request_output_queue_type,
             engine_args,
             env_vars,
+            nsys_config,
             dp_rank=dp_rank,
             dp_rank_local=dp_rank_local,
         )

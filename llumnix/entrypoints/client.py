@@ -12,7 +12,6 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from typing import Dict, List, Tuple, Any
 import asyncio
 from collections import defaultdict

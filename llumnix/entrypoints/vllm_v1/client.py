@@ -130,6 +130,7 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                                     *args,
                                     **kwargs) -> AsyncStream:
         try:
+            # pylint: disable=no-else-return
             if self.instance_num_requests:
                 instance_id = min(self.instance_num_requests, key=self.instance_num_requests.get)
                 self.instance_num_requests[instance_id] += 1

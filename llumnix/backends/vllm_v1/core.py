@@ -471,7 +471,8 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         self.reqeust_processing_context_table[request.request_id] = request_processing_context
         self.input_queue.put_nowait((request_type, request))
 
-    def abort_requests(self, request_ids: List[str]) -> None:
+    # NOTE(s5u13b): fake async function to avoid overwriting the add_request function in engine core.
+    async def abort_requests_async(self, request_ids: List[str]) -> None:
         self.input_queue.put_nowait((EngineCoreRequestType.ABORT, request_ids))
 
 
@@ -727,7 +728,7 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids: List[str] = list(request_id)
-        return self.engine.abort_requests(request_ids)
+        await self.engine.abort_requests_async(request_ids)
 
     def get_running_queue(self) -> List[LlumnixRequestVLLMV1]:
         return self.engine.scheduler.running

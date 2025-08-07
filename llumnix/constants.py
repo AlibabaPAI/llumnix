@@ -42,6 +42,7 @@ WATCH_DEPLOYMENT_INTERVAL: float = 30.0
 INSTANCE_READY_TIMEOUT: float = 300.0
 SERVER_READY_TIMEOUT: float = 30.0
 UNIT_READY_TIMEOUT: float = 300.0
+DPMANAGER_RESTART_INTERVAL: float = 30.0
 
 # llumnix/global_scheduler/dispatch_scheduler.py
 DISPATCH_LOG_FREQUENCY: int = 100

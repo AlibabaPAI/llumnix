@@ -250,9 +250,10 @@ class Llumlet:
                         "left waiting requests: {}.".format(self.instance_id, self.instance_args.instance_type,
                         migration_type, num_running_requests, num_waiting_requests))
                 if num_running_requests == 0 and num_waiting_requests == 0:
-                    logger.info("Llumlet(instance_id={}, instance_type={}) is stopped.".format(
-                        self.instance_id, self.instance_args.instance_type))
-                    self.set_unit_status(UnitStatus.STOPPED)
+                    if self.unit_status != UnitStatus.STOPPED:
+                        self.set_unit_status(UnitStatus.STOPPED)
+                        logger.info("Llumlet(instance_id={}, instance_type={}) is stopped.".format(
+                            self.instance_id, self.instance_args.instance_type))
 
             return migrated_request_ids
 

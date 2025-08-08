@@ -536,12 +536,12 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
             if migration_type == MigrationType.PRE_STOP_MIGRATION:
                 for req in itertools.chain(self.scheduler.waiting, self.scheduler.running):
                     if "hybridsched" not in req.request_id and not is_migrating(req):
-                        migrated_out_request = copy.deepcopy(req)
+                        migrated_out_request.append(copy.deepcopy(req))
                         set_migrating_status(req)
             else:
                 for req in self.scheduler.running:
-                    if "hybridsched" not in req.request_id and not is_migrating(req):
-                        migrated_out_request = copy.deepcopy(req)
+                    if "hybridsched" not in req.request_id and not is_migrating(req) and len(req.output_token_ids) > 0:
+                        migrated_out_request.append(copy.deepcopy(req))
                         set_migrating_status(req)
                         break
         # pylint: disable=broad-except
@@ -907,8 +907,8 @@ class BackendVLLMV1(BackendBaseInterface):
             self.is_migrating = False
             return []
 
-        logger.info("Migrate out requests {} from {} to {}, migration_type: {}.".format(
-            migrated_out_requests, self.instance_id, dst_instance_context.local_engine_id,
+        logger.info("Migrate out {} requests from {} to {}, migration_type: {}.".format(
+            len(migrated_out_requests), self.instance_id, dst_instance_context.local_engine_id,
             migration_type
         ))
 

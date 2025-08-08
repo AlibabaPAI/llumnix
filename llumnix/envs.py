@@ -30,6 +30,7 @@ from llumnix.constants import (
     SERVER_START_TIMEOUT,
     UNIT_FAILOVER_TIMEOUT,
     RAY_RPC_TIMEOUT,
+    UTILITY_CALL_TIMEOUT
 )
 
 if TYPE_CHECKING:
@@ -80,6 +81,8 @@ if TYPE_CHECKING:
     RAY_TASK_RETRY_DELAY_MS: int = 0
 
     RAY_RPC_TIMEOUT: float = 0.0
+
+    UTILITY_CALL_TIMEOUT: float = 0.0
 
 
 environment_variables: Dict[str, Callable[[], Any]] = {
@@ -180,6 +183,10 @@ environment_variables: Dict[str, Callable[[], Any]] = {
 
     "RAY_RPC_TIMEOUT":
     lambda: os.getenv("LLUMNIX_RAY_RPC_TIMEOUT", str(RAY_RPC_TIMEOUT)),
+
+    # used in vLLM-V1
+    "UTILITY_CALL_TIMEOUT":
+    lambda: os.getenv("LLUMNIX_UTILITY_CALL_TIMEOUT", str(UTILITY_CALL_TIMEOUT)),
 }
 
 

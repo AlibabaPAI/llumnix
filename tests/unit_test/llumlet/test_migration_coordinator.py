@@ -58,12 +58,13 @@ def init_migration_coordinator(backend_engine,
         request_migration_policy="SR",
         migration_last_stage_max_blocks=migration_last_stage_max_blocks,
         migration_max_stages=migration_max_stages,
+        enable_engine_migration_interface=False
     )
     return migration_coordinator
 
 
 class MockMigrationCoordinator(MigrationCoordinator):
-    async def migrate_out(self, dst_instance_actor, dst_instance_id, migration_type = None):
+    async def migrate_out(self, dst_instance_actor, dst_instance_context, migration_type = None):
         if not self.has_migration_slot():
             logger.debug(
                 "Max migration concurrency ({}) reached, reject new migrate out request attempt.".format(
@@ -73,7 +74,7 @@ class MockMigrationCoordinator(MigrationCoordinator):
             return []
 
         migrate_out_request = MockRequest("0", 1, math.inf)
-        await self._migrate_out_one_request(dst_instance_actor, dst_instance_id, migrate_out_request)
+        await self._migrate_out_one_request(dst_instance_actor, dst_instance_context.instance_id, migrate_out_request)
         return [migrate_out_request]
 
     @update_migrating_out_request_id_set_decorator
@@ -128,6 +129,7 @@ def init_mock_migration_coordinator(backend_engine,
         request_migration_policy="SR",
         migration_last_stage_max_blocks=migration_last_stage_max_blocks,
         migration_max_stages=migration_max_stages,
+        enable_engine_migration_interface=False,
     )
     return migration_coordinator
 

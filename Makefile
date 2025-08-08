@@ -73,7 +73,7 @@ bladellm_unit_test: check_pytest_installed
 
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed
-	@pytest -v --timer-top-n=999 --ignore=third_party --ignore-glob="tests/**/bladellm" --disable-warnings ./tests/unit_test/
+	@pytest -v --timer-top-n=999 --ignore=third_party --ignore-glob="tests/**/bladellm" --ignore-glob="tests/**/vllm_v1" --disable-warnings ./tests/unit_test/
 
 .PHONY: vllm_offline_test
 vllm_offline_test:

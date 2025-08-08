@@ -12,13 +12,13 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Iterable, List, Union, Deque, Tuple, Any
+from typing import Iterable, List, Union, Deque, Tuple, Any, Optional
 
 import ray.actor
 
 from llumnix.llumlet.request import LlumnixRequest, RequestStatus
 from llumnix.request_processing_context import RequestProcessingContext
-from llumnix.utils import RequestIDType, MigrationResponse, InstanceContext
+from llumnix.utils import RequestIDType, MigrationResponse, InstanceContext, MigrationType
 from llumnix.constants import RAY_RPC_TIMEOUT
 from llumnix.instance_info import InstanceInfo
 
@@ -83,9 +83,17 @@ class BackendBaseInterface(ABC):
         """
         raise NotImplementedError
 
+    async def migrate_out(
+        self,
+        dst_instance_actor: ray.actor.ActorHandle,
+        dst_instance_context: InstanceContext,
+        migration_type: Optional[MigrationType] = None
+    ) -> List[LlumnixRequest]:
+        raise NotImplementedError
+
 
 class BackendMigrationInterface(ABC):
-    # Methods for migration
+    @abstractmethod
     async def get_request_incremental_blocks(self,
                                              backend_request: LlumnixRequest,
                                              pre_stage_num_blocks: int) -> Tuple[List[int], List[int]]:

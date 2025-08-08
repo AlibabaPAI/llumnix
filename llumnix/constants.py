@@ -121,3 +121,6 @@ CACHE_TRANSFER_PENALTY_FACTOR: float = 0.7
 # llumnix/dp_manager.py
 UNIT_FAILOVER_TIMEOUT: float = 300.0
 WAIT_UNIT_MIGRATION_DONE_INTERVAL: float = 1.0
+
+# llumnix/backends/vllm_v1/core.py
+UTILITY_CALL_TIMEOUT: float = 30.0

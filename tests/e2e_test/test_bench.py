@@ -80,7 +80,7 @@ def parse_log_file(title: str):
     )
 
 
-config_schema = "engine, enable_pd_disagg, request_output_queue_type, enable_engine_semi_pd_disagg, enable_adaptive_pd"
+config_schema = "engine, enable_pd_disagg, request_output_queue_type, enable_bladellm_engine_semi_pd_disagg, enable_adaptive_pd"
 
 generate_special_bench_test_config = partial(generate_special_test_config, schema=config_schema)
 
@@ -116,10 +116,10 @@ def generate_bench_test_config():
         generate_special_bench_test_config([("request_output_queue_type", "rayqueue")], bladellm_base_config),
 
         # semi-pd
-        generate_special_bench_test_config([("enable_engine_semi_pd_disagg", True)], bladellm_base_config),
+        generate_special_bench_test_config([("enable_bladellm_engine_semi_pd_disagg", True)], bladellm_base_config),
 
         # adaptive-pd
-        generate_special_bench_test_config([("enable_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)],
+        generate_special_bench_test_config([("enable_bladellm_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)],
                                            bladellm_base_config),
     ]
 
@@ -130,14 +130,14 @@ def generate_bench_test_config():
 @pytest.mark.parametrize("model", [try_convert_to_local_path('Qwen/Qwen2.5-7B')])
 @pytest.mark.parametrize(config_schema, generate_bench_test_config())
 async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, check_log_exception, model,
-                                engine, enable_pd_disagg, request_output_queue_type, enable_engine_semi_pd_disagg,
+                                engine, enable_pd_disagg, request_output_queue_type, enable_bladellm_engine_semi_pd_disagg,
                                 enable_adaptive_pd):
     engine = "_".join(engine.split("_")[1:])
 
     global test_times
 
-    qps = 5 if not (enable_pd_disagg or enable_engine_semi_pd_disagg) else 0.5
-    num_prompts = 300 if not (enable_pd_disagg or enable_engine_semi_pd_disagg) else 50
+    qps = 5 if not (enable_pd_disagg or enable_bladellm_engine_semi_pd_disagg) else 0.5
+    num_prompts = 300 if not (enable_pd_disagg or enable_bladellm_engine_semi_pd_disagg) else 50
     ip = get_ip_address()
     base_port = 20000 + random.randint(0, 96) + test_times * 100
     if "BladeLLM" in engine:
@@ -172,7 +172,7 @@ async def test_simple_benchmark(request, ray_env, shutdown_llumnix_service, chec
                                             enable_pre_stop_migration=False,
                                             dispatch_policy="load",
                                             enable_pd_disagg=enable_pd_disagg,
-                                            enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+                                            enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
                                             enable_adaptive_pd=enable_adaptive_pd,
                                             request_output_queue_type=request_output_queue_type,
                                             max_units=num_instances)

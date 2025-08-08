@@ -22,4 +22,4 @@ nvidia-docker run --rm -t \
   -w /test_workspace \
   $docker_options \
   --shm-size=24g \
-  "$image" sh -c "date && pip install setuptools_scm==7.1.0 && $install_command > /dev/null && date && make $test_mode"
+  "$image" sh -c "date && pip install  -i https://mirrors.aliyun.com/pypi/simple/ setuptools_scm==7.1.0 && $install_command > /dev/null && date && make $test_mode"

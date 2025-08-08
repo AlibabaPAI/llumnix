@@ -27,7 +27,7 @@ def init_global_scheduler(
         enable_pd_disagg: bool = False,
         enable_engine_pd_disagg: bool = False,
         enable_adaptive_pd: bool = False,
-        enable_engine_semi_pd_disagg = False):
+        enable_bladellm_engine_semi_pd_disagg = False):
     dispatch_load_metric_config = DispatchLoadMetricConfig(
         dispatch_load_metric="remaining_steps",
         dispatch_prefill_load_metric="kv_blocks_ratio",
@@ -46,8 +46,9 @@ def init_global_scheduler(
         scale_up_threshold=10,
         scale_down_threshold=60,
         enable_pd_disagg=enable_pd_disagg,
-        enable_engine_pd_disagg=enable_engine_pd_disagg,
-        enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+        enable_bladellm_engine_pd_disagg=enable_engine_pd_disagg,
+        enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
+        enable_vllm_v1_engine_pd_disagg=False,
         enable_adaptive_pd=enable_adaptive_pd,
         is_group_kind_migration_backend=False,
         dispatch_load_metric_config=dispatch_load_metric_config)

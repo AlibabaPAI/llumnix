@@ -58,6 +58,7 @@ class InstanceType(str, Enum):
 
 @dataclass
 class InstanceContext:
+    instance_id: str
     # used for blade_llm
     local_engine_id: Optional[str] = None
     # used for vllm_v1 pd

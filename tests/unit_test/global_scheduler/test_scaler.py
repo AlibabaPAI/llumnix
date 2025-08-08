@@ -228,7 +228,7 @@ async def test_check_deployment_states_loop_and_auto_scale_up_loop(ray_env):
 def test_pd_disagg_gloal_launch_instance_type(ray_env):
     manager_args = ManagerArgs(
         enable_pd_disagg=True,
-        enable_engine_pd_disagg=False,
+        enable_bladellm_engine_pd_disagg=False,
         pd_ratio="1:2",
         enable_pdd_node_affinity_scheduling=False,
         enable_port_increment=True,
@@ -282,7 +282,7 @@ def test_load_registered_service(ray_env, load_registered_service, enable_pd_dis
             save_engine_args(instance_type, save_path, put_engine_args, save_key)
     manager_args = ManagerArgs(
         enable_pd_disagg=enable_pd_disagg,
-        enable_engine_pd_disagg=False,
+        enable_bladellm_engine_pd_disagg=False,
         pd_ratio="1:2",
         enable_pdd_node_affinity_scheduling=False,
         enable_port_increment=True,

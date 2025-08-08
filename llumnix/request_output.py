@@ -18,7 +18,7 @@ from llumnix.request_processing_context import RequestProcessingContext
 from llumnix.utils import RequestIDType
 
 
-class LlumnixRequestOuput:
+class LlumnixRequestOuput():
     def __init__(self, request_id: RequestIDType, instance_id: str,
                  engine_output: Any, request_processing_context: RequestProcessingContext = None):
         self.request_id = request_id
@@ -45,3 +45,7 @@ class LlumnixRequestOutputs:
                 new_context = copy.copy(context)
                 new_context.request_output_queue = None
                 self.request_processing_context_dict[request_id] = new_context
+
+    def __iter__(self):
+        for output in self.engine_outputs.outputs:
+            yield LlumnixRequestOuput(output.request_id, self.instance_id, output, self.request_processing_context_dict[output.request_id])

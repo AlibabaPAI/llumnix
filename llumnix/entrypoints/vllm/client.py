@@ -13,7 +13,7 @@
 
 import math
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import ray.actor
 
 from vllm.engine.async_llm_engine import AsyncStream
@@ -85,11 +85,11 @@ class LlumnixClientVLLM(LlumnixClient):
                     **kwargs
                 )
 
-            self.request_instances[request_id].add(prefill_instance_id)
-            self.instance_requests.setdefault(prefill_instance_id, set()).add(request_id)
-            if decode_instance_id:
-                self.request_instances[request_id].add(decode_instance_id)
-                self.instance_requests.setdefault(decode_instance_id, set()).add(request_id)
+            self.request_instances[request_id].append(prefill_instance_id)
+            self.instance_requests[prefill_instance_id].add(request_id)
+            if decode_instance_id and decode_instance_id == prefill_instance_id:
+                self.request_instances[request_id].append(decode_instance_id)
+                self.instance_requests[decode_instance_id].add(request_id)
             return results_generator
         except Exception as e: # pylint: disable=broad-except
             logger.error("Unexpected error in llumnix client generate.{}".format(e))
@@ -105,7 +105,7 @@ class LlumnixClientVLLM(LlumnixClient):
                                    prompt: str,
                                    sampling_params: SamplingParams,
                                    *args,
-                                   **kwargs) -> AsyncStream:
+                                   **kwargs) -> Tuple[str, str]:
         request_processing_context.add_trace_timeline("api_server_generate_timestamp")
         return await asyncio_wait_for_ray_remote_call_with_timeout(
             self.manager.generate, request_id, request_processing_context, prompt, sampling_params, *args, **kwargs
@@ -192,7 +192,11 @@ class LlumnixClientVLLM(LlumnixClient):
                     if request_id not in self.request_stream:
                         continue
                     instance_id = request_response.instance_id
-                    self.request_instances[request_id].add(instance_id)
+                    # update the lastest instance_id for adapting migration scene
+                    if self.request_instances[request_id]:
+                        self.request_instances[request_id][-1] = instance_id
+                    else:
+                        self.request_instances[request_id].append(instance_id)
                     if self.request_generate_by_instance_dict.get(request_id, instance_id) != instance_id:
                         # avoid return duplicative response from different instance
                         continue

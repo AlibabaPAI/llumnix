@@ -14,6 +14,7 @@
 import socket
 from dataclasses import fields
 import os
+from typing import List
 
 import uvloop
 import ray.actor
@@ -102,3 +103,11 @@ class APIServerActorVLLMV1(APIServerActor):
 
         if self.loop.is_running():
             self.loop.call_soon_threadsafe(stop_server)
+
+    def _wait_server(self):
+        super()._wait_server()
+        self.llumnix_client = self.entrypoints_context.llumnix_client
+
+    def cancel_dead_instance_requests(self, dead_instance_ids: List[str]) -> None:
+        logger.info("Api server actor clear dead instances: {}".format(dead_instance_ids))
+        self.llumnix_client.cancel_dead_instance_requests(dead_instance_ids)

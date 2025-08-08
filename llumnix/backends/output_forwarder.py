@@ -95,12 +95,6 @@ class BaseOutputForwarder(ABC):
         return aborted_request_ids
 
     def add_trace_timeline(self, req_outputs: LlumnixRequestOutputsType, trace_name: str):
-        if isinstance(req_outputs, LlumnixRequestOutputs):
-            # for vllm_v1
-            for request_processing_context in req_outputs.request_processing_context_dict.values():
-                request_processing_context.add_trace_timeline(trace_name)
-            return
-        # for blade and vllm_v0
         for req_output in req_outputs:
             # Set the timestamp for each request output.
             req_output.request_processing_context.add_trace_timeline(trace_name)

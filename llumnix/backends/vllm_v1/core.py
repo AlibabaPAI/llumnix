@@ -21,7 +21,6 @@ import threading
 import asyncio
 import itertools
 
-import msgspec
 import pickle
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -419,12 +418,13 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         elif request_type == EngineCoreRequestType.ABORT:
             self.abort_requests(request)
         elif request_type == EngineCoreRequestType.UTILITY:
-            client_idx, call_id, method_name, args = request
+            _, call_id, method_name, args = request
             output = UtilityOutput(call_id)
             try:
                 method = getattr(self, method_name)
                 output.result = method(
                     *self._convert_msgspec_args(method, args))
+            # pylint: disable=broad-except
             except BaseException as e:
                 logger.exception("Invocation of %s method failed", method_name)
                 output.failure_message = (f"Call to {method_name} method"
@@ -544,6 +544,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
                         migrated_out_request = copy.deepcopy(req)
                         set_migrating_status(req)
                         break
+        # pylint: disable=broad-except
         except Exception:
             logger.exception("Failed to get migrated out request, migration_type: {}".format(migration_type))
             migrated_out_request = []
@@ -771,7 +772,7 @@ class BackendVLLMV1(BackendBaseInterface):
     def _get_next_call_id(self) -> int:
         self.call_id += 1
         return self.call_id
-    
+
     def _process_utility_output_loop(self, loop: asyncio.AbstractEventLoop):
         async def process_utility_output(output: UtilityOutput):
             utility_output_handle = self.utility_output_handlers[output.call_id]
@@ -841,11 +842,11 @@ class BackendVLLMV1(BackendBaseInterface):
     async def is_ready(self):
         return True
 
-    async def core_abort_requests(self, request_id: Union[str, Iterable[str]]) -> None:
+    async def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         if isinstance(request_id, str):
             request_id = (request_id,)
         request_ids: List[str] = list(request_id)
-        self.engine.abort_requests_wrapper(request_ids)
+        self.engine.core_abort_requests(request_ids)
 
     def get_instance_info(self):
         return self.engine.instance_info
@@ -879,32 +880,13 @@ class BackendVLLMV1(BackendBaseInterface):
                                                 timeout=llumnix_envs.UTILITY_CALL_TIMEOUT)
         except asyncio.TimeoutError:
             logger.error('Timeout waiting for utility call: {}'.format(self.utility_output_handlers[call_id]))
-        # pylint: disable=broad-except
-        except Exception:
+        except Exception: # pylint: disable=broad-except
             logger.exception('Failed to waiting for utility output call {}.'.format(
                 self.utility_output_handlers[call_id]))
             return None
         output = self.utility_output_handlers[call_id].result
         self.utility_output_handlers.pop(call_id, None)
         return output
-
-    async def _get_migrated_requests(self, migration_type: Optional[MigrationType] = None) -> List[Request]:
-        call_id = self._get_next_call_id()
-        utility_output_ready_event = asyncio.Event()
-        self.utility_output_handlers[call_id] = UtilityOutputHandler(
-            ready_event=utility_output_ready_event,
-        )
-        self.engine.utility_call(call_id, )
-        try:
-            await asyncio_wait_for_with_timeout(utility_output_ready_event.wait(),
-                                                timeout=llumnix_envs.UTILITY_CALL_TIMEOUT)
-        except asyncio.TimeoutError:
-            logger.error('Timeout waiting for utility output for call_id {}, migration_type {}'.format(
-                call_id, migration_type))
-            return []
-        migrated_out_requests = self.utility_output_handlers[call_id].result
-        self.utility_output_handlers.pop(call_id, None)
-        return migrated_out_requests
 
     # pylint: disable=unused-argument
     async def migrate_out(
@@ -947,8 +929,8 @@ class BackendVLLMV1(BackendBaseInterface):
                                             return_exceptions=True)
             migration_task.add_done_callback(partial(do_migration_callback, migrate_out_request.request_id))
             migration_tasks.append(migration_task)
-    
-        await asyncio.gather(*migration_tasks)    
+
+        await asyncio.gather(*migration_tasks)
         self.is_migrating = False
 
         return finish_request_ids

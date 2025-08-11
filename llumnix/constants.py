@@ -123,4 +123,4 @@ UNIT_FAILOVER_TIMEOUT: float = 300.0
 WAIT_UNIT_MIGRATION_DONE_INTERVAL: float = 1.0
 
 # llumnix/backends/vllm_v1/core.py
-UTILITY_CALL_TIMEOUT: float = 30.0
+UTILITY_CALL_TIMEOUT: float = 5.0

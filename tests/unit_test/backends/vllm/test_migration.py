@@ -59,6 +59,9 @@ TEST_PROMPTS = [
 # seems duplicated.
 @ray.remote
 class MockLlumletTestMigration(Llumlet):
+    async def migrate_out(self, dst_instance_actor, dst_instance_context, migration_type = None):
+        return await self._migrate_out(dst_instance_actor, dst_instance_context, migration_type)
+
     def get_pre_alloc_cache_dict(self):
         return self.backend_engine.engine.scheduler[0].pre_alloc_cache_dict
 

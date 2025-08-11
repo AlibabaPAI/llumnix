@@ -36,7 +36,7 @@ from llumnix.ray_utils import (
 from llumnix.constants import CHECK_ENGINE_STATE_INTERVAL
 from llumnix.metrics.llumlet_metrics import LlumletMetrics
 from llumnix.utils import (MigrationType, RequestIDType, BackendType, InstanceContext,
-                           InstanceType, UnitStatus)
+                           InstanceType, UnitStatus, exception_wrapper_async)
 from llumnix.constants import NUM_GPUS_VLLM_GPU_ACTOR, NUM_GPUS_BLADELLM_GPU_ACTOR
 
 logger = init_logger(__name__)
@@ -224,43 +224,39 @@ class Llumlet:
         request_ids = set(request_id)
         await self.backend_engine.abort_request(request_ids)
 
-    async def migrate_out(
+    async def _migrate_out(
         self,
         dst_instance_actor: ray.actor.ActorHandle,
         dst_instance_context: InstanceContext,
         migration_type: Optional[MigrationType] = None,
-        blocking: bool = True
+    ) -> List[RequestIDType]:
+        migrated_request_ids = await self.migration_coordinator.migrate_out(
+            dst_instance_actor, dst_instance_context, migration_type)
+
+        if migration_type == MigrationType.PRE_STOP_MIGRATION:
+            instance_info: InstanceInfo = self.backend_engine.get_instance_info()
+            num_running_requests = instance_info.num_running_requests
+            num_waiting_requests = instance_info.num_waiting_requests
+
+            if len(migrated_request_ids) > 0:
+                logger.info("Llumlet(instance_id={}, instance_type={}) is processing {}, left running requests: {}, " \
+                    "left waiting requests: {}.".format(self.instance_id, self.instance_args.instance_type,
+                    migration_type, num_running_requests, num_waiting_requests))
+            if num_running_requests == 0 and num_waiting_requests == 0:
+                if self.unit_status != UnitStatus.STOPPED:
+                    self.set_unit_status(UnitStatus.STOPPED)
+                    logger.info("Llumlet(instance_id={}, instance_type={}) is stopped.".format(
+                        self.instance_id, self.instance_args.instance_type))
+        return migrated_request_ids
+
+    async def migrate_out(
+        self,
+        dst_instance_actor: ray.actor.ActorHandle,
+        dst_instance_context: InstanceContext,
+        migration_type: Optional[MigrationType] = None
     ) -> None:
-        async def _inner_migrate_out(
-            dst_instance_actor: ray.actor.ActorHandle,
-            dst_instance_context: InstanceContext,
-            migration_type: Optional[MigrationType] = None,
-        ) -> List[RequestIDType]:
-            migrated_request_ids = await self.migration_coordinator.migrate_out(
-                dst_instance_actor, dst_instance_context, migration_type)
-
-            if migration_type == MigrationType.PRE_STOP_MIGRATION:
-                if self.unit_status not in [UnitStatus.MIGRATING, UnitStatus.STOPPED]:
-                    self.set_unit_status(UnitStatus.MIGRATING)
-                instance_info: InstanceInfo = self.backend_engine.get_instance_info()
-                num_running_requests = instance_info.num_running_requests
-                num_waiting_requests = instance_info.num_waiting_requests
-
-                if len(migrated_request_ids) > 0:
-                    logger.info("Llumlet(instance_id={}, instance_type={}) is doing {}, left ruuning requests: {}, " \
-                        "left waiting requests: {}.".format(self.instance_id, self.instance_args.instance_type,
-                        migration_type, num_running_requests, num_waiting_requests))
-                if num_running_requests == 0 and num_waiting_requests == 0:
-                    if self.unit_status != UnitStatus.STOPPED:
-                        self.set_unit_status(UnitStatus.STOPPED)
-                        logger.info("Llumlet(instance_id={}, instance_type={}) is stopped.".format(
-                            self.instance_id, self.instance_args.instance_type))
-            return migrated_request_ids
-
-        if not blocking:
-            asyncio.create_task(_inner_migrate_out(dst_instance_actor, dst_instance_context, migration_type))
-        else:
-            return await _inner_migrate_out(dst_instance_actor, dst_instance_context, migration_type)
+        asyncio.create_task(exception_wrapper_async(
+            self._migrate_out(dst_instance_actor, dst_instance_context, migration_type)))
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

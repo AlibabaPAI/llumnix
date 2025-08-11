@@ -691,8 +691,7 @@ class DPEngineCoreProcWrapperLlumnix(DPEngineCoreProcLlumnix, EngineCoreProcWrap
 
 @dataclass
 class UtilityOutputHandler:
-    result: Any = None
-    ready_event: asyncio.Event = None
+    result_future: asyncio.Future = None
 
     method: str = None
     method_args: Any = None
@@ -775,9 +774,12 @@ class BackendVLLMV1(BackendBaseInterface):
 
     def _process_utility_output_loop(self, loop: asyncio.AbstractEventLoop):
         async def process_utility_output(output: UtilityOutput):
-            utility_output_handle = self.utility_output_handlers[output.call_id]
-            utility_output_handle.result = output.result
-            utility_output_handle.ready_event.set()
+            if output.call_id in self.utility_output_handlers:
+                utility_output_handle = self.utility_output_handlers[output.call_id]
+                utility_output_handle.result_future.set_result(output.result)
+            else:
+                logger.warning("Utility output handler for call_id {} not found, maybe timeout already.".format(
+                    output.call_id))
 
         while True:
             output: UtilityOutput = self.utility_output_queue.get()
@@ -864,9 +866,8 @@ class BackendVLLMV1(BackendBaseInterface):
 
     def untility_call(self, method: str, *args) -> int:
         call_id = self._get_next_call_id()
-        utility_output_ready_event = asyncio.Event()
         self.utility_output_handlers[call_id] = UtilityOutputHandler(
-            ready_event=utility_output_ready_event,
+            result_future=asyncio.Future(),
             method=method,
             method_args=args,
         )
@@ -874,18 +875,18 @@ class BackendVLLMV1(BackendBaseInterface):
         return call_id
 
     async def wait_untility_call_output(self, call_id: int):
+        output = None
         try:
-            utility_output_ready_event = self.utility_output_handlers[call_id].ready_event
-            await asyncio_wait_for_with_timeout(utility_output_ready_event.wait(),
-                                                timeout=llumnix_envs.UTILITY_CALL_TIMEOUT)
+            output = await asyncio_wait_for_with_timeout(
+                self.utility_output_handlers[call_id].result_future,
+                timeout=llumnix_envs.UTILITY_CALL_TIMEOUT)
         except asyncio.TimeoutError:
             logger.error('Timeout waiting for utility call: {}'.format(self.utility_output_handlers[call_id]))
         except Exception: # pylint: disable=broad-except
             logger.exception('Failed to waiting for utility output call {}.'.format(
                 self.utility_output_handlers[call_id]))
-            return None
-        output = self.utility_output_handlers[call_id].result
-        self.utility_output_handlers.pop(call_id, None)
+        finally:
+            self.utility_output_handlers.pop(call_id, None)
         return output
 
     # pylint: disable=unused-argument

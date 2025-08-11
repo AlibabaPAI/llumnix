@@ -111,7 +111,6 @@ def ray_env():
     global SKIP_REASON
     try:
         env_vars = get_llumnix_env_vars()
-        env_vars['VLLM_USE_V1'] = '1'
         ray.init(ignore_reinit_error=True, namespace="llumnix", runtime_env={"env_vars": env_vars})
         SKIP_REASON = None
         yield

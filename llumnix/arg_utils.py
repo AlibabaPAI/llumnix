@@ -619,6 +619,9 @@ class ManagerArgs:
         parser.add_argument('--enable-vllm-v1-engine-pd-disagg',
                             action='store_true',
                             help='enable vLLM-V1 engine-based prefill-decode disaggregation')
+        parser.add_argument('--enable-bladellm-engine-pd-disagg',
+                            action='store_true',
+                            help='enable BladeLLM engine-based prefill-decode disaggregation')
         parser.add_argument('--pd-ratio',
                             type=str,
                             help='the prefill decode ratio used in gloabl launch mode e.g. "1:1"')

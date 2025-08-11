@@ -728,6 +728,7 @@ def generate_bladellm_serve_service_command_func(
         f"--port {port} " # must set, for server
         f"--pd-ratio 1:1 "
         f"--max-units {max_units} "
+        "--enable-bladellm-engine-pd-disagg "
         f"--enable-port-increment "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )

@@ -137,6 +137,7 @@ _C.MANAGER.ENABLE_PD_DISAGG = False
 _C.MANAGER.ENABLE_ADAPTIVE_PD = False
 # Enable engine-based prefill-decode disaggregation
 _C.MANAGER.ENABLE_VLLM_V1_ENGINE_PD_DISAGG = False
+_C.MANAGER.ENABLE_BLADELLM_ENGINE_PD_DISAGG = False
 # The p:d ratio used in gloabl launch mode
 _C.MANAGER.PD_RATIO = "1:1"
 # Load engine arguments from storage

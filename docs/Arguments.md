@@ -58,7 +58,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
             [--enable-adaptive-pd]
             [--enable-pd-disagg]
-            [--enable-engine-pd-disagg]
+            [--enable-vllm-v1-engine-pd-disagg]
+            [--enable-bladellm-engine-pd-disagg]
             [--pd-ratio PD_RATIO]
             [--load-registered-service]
             [--load-registered-service-path]
@@ -275,7 +276,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-pd-disagg`
 - Enable prefill decode disaggregation (for vLLM).
 
-`--enable-engine-pd-disagg`
+`--enable-vllm-v1-engine-pd-disagg`
+- Enable engine-based prefill decode disaggregation (for vLLM-V1).
+
+`--enable-bladellm-engine-pd-disagg`
 - Enable engine-based prefill decode disaggregation (for BladeLLM).
 
 `--enable-adaptive-pd`

@@ -550,7 +550,9 @@ class Scaler:
                     new_pending_pg_infos = list_placement_group_infos_by_state(state="PENDING")
                     all_new_penging_pg_names = [pg["name"] for pg in new_pending_pg_infos]
                     if len(set(previous_penging_pg_names).difference(set(all_new_penging_pg_names))) == 0:
-                        await self._check_pd_deployment_states()
+                        scale_down_unit_id = await self._check_pd_deployment_states()
+                        if scale_down_unit_id is not None:
+                            await self._scale_down(scale_down_unit_id)
                     previous_penging_pg_names = all_new_penging_pg_names
                 else:
                     previous_penging_pg_names = all_penging_pg_names

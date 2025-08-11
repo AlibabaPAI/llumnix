@@ -291,7 +291,8 @@ class Manager:
                     asyncio.create_task(
                         asyncio_wait_for_ray_remote_call_with_timeout(
                             self.instances[src_instance_id].migrate_out,
-                            dst_instance_actor, self.instance_context[dst_instance_id], migration_type
+                            dst_instance_actor, self.instance_context[dst_instance_id], migration_type,
+                            blocking=False
                         )
                     )
         # pylint: disable=broad-except

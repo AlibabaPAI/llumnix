@@ -228,12 +228,13 @@ class Llumlet:
         self,
         dst_instance_actor: ray.actor.ActorHandle,
         dst_instance_context: InstanceContext,
-        migration_type: Optional[MigrationType] = None
+        migration_type: Optional[MigrationType] = None,
+        blocking: bool = True
     ) -> None:
         async def _inner_migrate_out(
             dst_instance_actor: ray.actor.ActorHandle,
             dst_instance_context: InstanceContext,
-            migration_type: Optional[MigrationType] = None
+            migration_type: Optional[MigrationType] = None,
         ) -> List[RequestIDType]:
             migrated_request_ids = await self.migration_coordinator.migrate_out(
                 dst_instance_actor, dst_instance_context, migration_type)
@@ -254,10 +255,12 @@ class Llumlet:
                         self.set_unit_status(UnitStatus.STOPPED)
                         logger.info("Llumlet(instance_id={}, instance_type={}) is stopped.".format(
                             self.instance_id, self.instance_args.instance_type))
-
             return migrated_request_ids
 
-        asyncio.create_task(_inner_migrate_out(dst_instance_actor, dst_instance_context, migration_type))
+        if not blocking:
+            asyncio.create_task(_inner_migrate_out(dst_instance_actor, dst_instance_context, migration_type))
+        else:
+            return await _inner_migrate_out(dst_instance_actor, dst_instance_context, migration_type)
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

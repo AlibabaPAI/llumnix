@@ -65,7 +65,7 @@ def test_gen_next_engine_args_vllm_from_registered_service():
             enable_port_increment=True,
             load_registered_service=True,
             load_registered_service_path="",
-            pdd_config=PDDConfig(True, False, False, [1, 2], False),
+            pdd_config=PDDConfig(True, False, False, False, [1, 2], False),
         )
 
     engine_args = None

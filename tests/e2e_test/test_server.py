@@ -92,7 +92,7 @@ def generate_bladellm_pdd_serve_args(
         f"--disagg_pd.inst_role=prefill", # useless, setted in scaler
         f"--disagg_pd.disagg_transfer_type=rdma",
         f"--naming_url={NAMING_URL}",
-        f"--enable-engine-pd-disagg",
+        f"--enable-bladellm-engine-pd-disagg",
         f"--pd-ratio=1:1",
         f"--max-units={max_units}",
         f"--enable-port-increment",

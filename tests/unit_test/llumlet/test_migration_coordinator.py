@@ -24,7 +24,7 @@ from llumnix.llumlet.migration_coordinator import MigrationCoordinator
 from llumnix.backends.backend_interface import BackendBaseInterface, BackendMigrationInterface
 from llumnix.llumlet.migration_coordinator import MigrationStatus
 from llumnix.constants import PENDING_MIGRATE_IN_TIMEOUT
-from llumnix.utils import random_uuid, MigrationResponse, BackendType
+from llumnix.utils import random_uuid, MigrationResponse, BackendType, InstanceContext
 from llumnix.llumlet.request import RequestStatus
 from llumnix.llumlet.migration_coordinator import (
     update_migrating_out_request_id_set_decorator,
@@ -362,10 +362,10 @@ async def test_migration_lock():
 
     # test migrate out lock
     assert len(migration_coordinator.migrating_out_request_id_set) == 0
-    asyncio.create_task(migration_coordinator.migrate_out(None, None))
+    asyncio.create_task(migration_coordinator.migrate_out(None, InstanceContext(instance_id="0")))
     await asyncio.sleep(0.5)
     assert len(migration_coordinator.migrating_out_request_id_set) == 1
-    migrated_request_list = await migration_coordinator.migrate_out(None, None)
+    migrated_request_list = await migration_coordinator.migrate_out(None, InstanceContext(instance_id="0"))
     assert len(migrated_request_list) == 0
     migration_response = migration_coordinator.pre_alloc_cache("1", None, None, None, None, True)
     assert migration_response.success is False
@@ -380,7 +380,7 @@ async def test_migration_lock():
     assert len(migration_coordinator.migrating_in_request_id_set) == 1
     migration_response = migration_coordinator.pre_alloc_cache("3", None, None, None, None, True)
     assert migration_response.success is False
-    migrated_request_list = await migration_coordinator.migrate_out(None, None)
+    migrated_request_list = await migration_coordinator.migrate_out(None, InstanceContext(instance_id="0"))
     assert len(migrated_request_list) == 0
     await asyncio.sleep(5.0)
     assert len(migration_coordinator.migrating_in_request_id_set) == 0

@@ -91,7 +91,7 @@ class MockLlumlet:
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 
-    def migrate_out(self, dst_instance_actor, dst_instance_id, instance_type):
+    def migrate_out(self, dst_instance_actor, dst_instance_id, instance_type, blocking):
         self.num_migrate_out += 1
         ray.get(dst_instance_actor.migrate_in.remote(self.actor_name))
         time.sleep(0.1)
@@ -353,7 +353,7 @@ def test_poll_instance_info_loop_and_migrate(ray_env, manager: Manager):
         assert num_migrate_out == 0
 
     ray.get(manager.scale_up.remote(instance_ids, instances, [InstanceType("neutral")]*len(instance_ids)))
-    time.sleep(3)
+    time.sleep(5)
 
     for i in range(num_instances):
         num_migrate_out = ray.get(instances[i].get_num_migrate_out.remote())

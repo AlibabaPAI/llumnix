@@ -358,7 +358,6 @@ def generate_bladellm_launch_command(
         f"--disagg_pd.inst_role={instance_type} "
         f"--naming_url={NAMING_URL} "
         f"SERVER.REQUEST_OUTPUT_QUEUE_TYPE {request_output_queue_type} "
-        f"MANAGER.ENABLE_ENGINE_PD_DISAGG {enable_pd_disagg} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_ROUTINE_MIGRATION {enable_routine_migration and not enable_pd_disagg} "
         f"MANAGER.ENABLE_PRE_STOP_MIGRATION {enable_pre_stop_migration and not enable_pd_disagg} "
@@ -420,7 +419,7 @@ def generate_bladellm_serve_command(
         f"--disagg_pd.disagg_transfer_type {engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role {instance_type} "
         f"--naming_url {NAMING_URL} "
-        f"{'--enable-engine-pd-disagg' if enable_pd_disagg else ''} "
+        f"{'--enable-bladellm-engine-pd-disagg ' if enable_pd_disagg else ''} "
         f"{enable_bladellm_engine_semi_pd_disagg_option if enable_bladellm_engine_semi_pd_disagg else ''} "
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"--dispatch-policy {dispatch_policy} "
@@ -679,7 +678,7 @@ def generate_vllm_v1_serve_service_command_func(
         f"--load-registered-service-path ./service_test/vllm_v1 "
         f"--host {ip} "
         f"--port {port} "
-        f"--enable-engine-pd-disagg "
+        f"--enable-bladellm-engine-pd-disagg "
         f"--pd-ratio 1:1 "
         f"--max-units {max_units} "
         f"--enable-port-increment "
@@ -728,7 +727,7 @@ def generate_bladellm_serve_service_command_func(
         f"--model {model} " # must set, checked when parse args
         f"--host {ip} " # must set, for server
         f"--port {port} " # must set, for server
-        f"--enable-engine-pd-disagg "
+        f"--enable-bladellm-engine-pd-disagg "
         f"--pd-ratio 1:1 "
         f"--max-units {max_units} "
         f"--enable-port-increment "

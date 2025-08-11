@@ -37,7 +37,7 @@ def test_gen_next_engine_args_baldellm():
         enable_port_increment=False,
         load_registered_service=False,
         load_registered_service_path="",
-        pdd_config=PDDConfig(False, False, False, [1, 2], False),
+        pdd_config=PDDConfig(False, False, False, False, [1, 2], False),
     )
     serving_args = ServingArgs(
         load_model_options=LoadModelOptions(model="./"), disagg_options=DisaggOptions()
@@ -59,7 +59,7 @@ def test_gen_next_engine_args_baldellm_from_registered_service():
             enable_port_increment=True,
             load_registered_service=True,
             load_registered_service_path="",
-            pdd_config=PDDConfig(True, False, False, [1, 2], False),
+            pdd_config=PDDConfig(True, False, False, False, [1, 2], False),
         )
 
     engine_args = None
@@ -90,7 +90,7 @@ def test_gen_next_engine_args_baldellm_enable_port_increment():
             enable_port_increment=True,
             load_registered_service=False,
             load_registered_service_path="",
-            pdd_config=PDDConfig(False, False, True, [1, 2], False),
+            pdd_config=PDDConfig(False, False, False, True, [1, 2], False),
         )
 
     serving_args = ServingArgs(
@@ -116,7 +116,7 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
             enable_port_increment=True,
             load_registered_service=False,
             load_registered_service_path="",
-            pdd_config=PDDConfig(False, True, False, [1, 2], False),
+            pdd_config=PDDConfig(False, False, True, False, [1, 2], False),
         )
 
     serving_args = ServingArgs(
@@ -136,7 +136,4 @@ def test_gen_next_engine_args_baldellm_enable_pdd():
         engine_args, InstanceArgs(instance_type=InstanceType.DECODE), 0
     )
     assert next_engine_args is not engine_args
-    assert (
-        next_engine_args.load_engine_args().disagg_options.inst_role
-        == "decode"
-    )
+    assert next_engine_args.load_engine_args().disagg_options.inst_role == "decode"

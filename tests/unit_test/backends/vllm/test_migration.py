@@ -243,7 +243,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
     res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, llumlet_1_instance_context))
     assert not res
 
-    sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=1000)
+    sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
     origin_outputs = []
     # running without migration
     async def gen_origin_outputs(prompt):

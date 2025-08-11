@@ -278,7 +278,7 @@ async def test_correctness(
     enable_pd_disagg,
     launch_mode,
     request_output_forwarding_mode,
-    enable_engine_semi_pd_disagg,
+    enable_bladellm_engine_semi_pd_disagg,
     enable_adaptive_pd,
 ):
     engine = "_".join(engine.split("_")[1:])
@@ -424,7 +424,7 @@ async def test_correctness(
                 migration_backend=migration_backend,
                 enable_pd_disagg=enable_pd_disagg,
                 enable_adaptive_pd=enable_adaptive_pd,
-                enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+                enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
                 enable_simulator=enable_simulator,
                 request_output_forwarding_mode=request_output_forwarding_mode,
                 tensor_parallel_size=tensor_parallel_size,

@@ -12,7 +12,7 @@
 # limitations under the License.
 
 
-from typing import Dict, List, Tuple, Union, Iterable, Set
+from typing import Dict, List, Optional, Tuple, Union, Iterable, Set
 import math
 
 from llumnix.logging.logger import init_logger
@@ -21,7 +21,7 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 from llumnix.metrics.global_scheduler_metrics import GlobalSchedulerMetrics
-from llumnix.utils import RequestIDType, InstanceType
+from llumnix.utils import BackendType, RequestIDType, InstanceType
 from llumnix.instance_info import InstanceInfo
 
 logger = init_logger(__name__)
@@ -108,7 +108,12 @@ class GlobalScheduler:
                     request_id, self.instance_info[prefill_instance_id].instance_type,
                     self.instance_info[decode_instance_id].instance_type, prefill_instance_id, decode_instance_id))
 
-    def dispatch(self, request_id: RequestIDType, dispatch_context: Dict) -> Tuple[str, str, int]:
+    def dispatch(
+        self,
+        request_id: RequestIDType,
+        dispatch_context: Dict,
+        backend_type: Optional[BackendType] = None
+    ) -> Tuple[str, str, int]:
         # instance_num_requests will be updated inplace in dispatch_scheduler.dispatch
         if not self._enable_pd():
             no_constrains_instance_id = self.dispatch_scheduler.dispatch_no_constrains(
@@ -133,6 +138,10 @@ class GlobalScheduler:
                 self.decode_instance_num_requests,
                 dispatch_context,
             )
+
+            if backend_type == BackendType.VLLM_V1:
+                if decode_instance_id in self.prefill_instance_info:
+                    decode_instance_id = prefill_instance_id
 
             self.global_scheduler_metrics.dispatch_counter.increase(
                 labels={"instance_id": prefill_instance_id}

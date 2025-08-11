@@ -173,7 +173,7 @@ class Manager:
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
         prefill_instance_id, decode_instance_id, request_expected_steps = \
-            self.global_scheduler.dispatch(request_id, dispatch_context=kwargs)
+            self.global_scheduler.dispatch(request_id, dispatch_context=kwargs, backend_type=self.backend_type)
         target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id, kwargs)
         request_processing_context.add_trace_timeline('manager_generate_timestamp')
         asyncio.create_task(

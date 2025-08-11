@@ -1,0 +1,5 @@
+{
+    "metadata_backend": "mock",
+    "chunk_size": 256,
+    "save_unfull_chunk": false
+}

@@ -176,9 +176,6 @@ class DispatchScheduler:
                         prefill_instance_num_requests,
                         dispatch_context
                     )
-                    # For vLLM-V1, pd disagg in prefill pool is not supported
-                    if decode_instance_id in prefill_instance_infos:
-                        decode_instance_id = prefill_instance_id
             instance_num_requests[decode_instance_id] += 1
             self._log_instance_dispatch_info(InstanceType.DECODE, decode_instance_num_requests)
 

@@ -11,9 +11,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import asyncio
 import random
-from typing import List, Tuple, Union, Iterable, Dict
+from typing import List, Tuple, Union, Iterable, Dict, Any
 
 import ray
 from ray.util.placement_group import PlacementGroup
@@ -31,6 +32,7 @@ from llumnix.arg_utils import (
     LlumnixEngineArgs,
     LlumnixEngineArgsFactory,
     load_engine_args,
+    load_llumlet_env_vars,
 )
 from llumnix.utils import (
     get_service_resouces,
@@ -134,12 +136,17 @@ class Scaler:
         )
         if self.load_registered_service:
             self.engine_args_dict: Dict[str, LlumnixEngineArgs] = {}
+            self.env_vars_dict: Dict[str, Dict[str, Any]] = {}
             if not self.enable_pd:
                 instance_type_list = ["neutral"]
             else:
                 instance_type_list = ["prefill", "decode"]
             for instance_type in instance_type_list:
                 self.engine_args_dict[instance_type] = load_engine_args(
+                    instance_type, self.load_registered_service_path
+                )
+
+                self.env_vars_dict[instance_type] = load_llumlet_env_vars(
                     instance_type, self.load_registered_service_path
                 )
 
@@ -247,8 +254,10 @@ class Scaler:
                 instance_type = get_service_instance_type(service_name) if service_name in ["prefill", "decode"] else None
                 next_instance_type = self._get_next_instance_type() if instance_type is None else instance_type
                 engine_args = self.engine_args
+                env_vars = dict(os.environ)
                 if self.load_registered_service:
                     engine_args = self.engine_args_dict[next_instance_type]
+                    env_vars = self.env_vars_dict[next_instance_type]
 
                 if self.last_timeout_unit_id is not None:
                     last_timeout_pg_name = get_placement_group_name(self.last_timeout_unit_id)
@@ -303,6 +312,7 @@ class Scaler:
                     self.entrypoints_args,
                     self.instance_args,
                     engine_args,
+                    env_vars,
                     new_pg,
                     next_instance_type,
                     self.backend_type,
@@ -373,6 +383,7 @@ class Scaler:
         entrypoints_args: EntrypointsArgs,
         instance_args: InstanceArgs,
         engine_args: LlumnixEngineArgs,
+        env_vars: Dict[str, Any],
         placement_group: PlacementGroup,
         next_instance_type: InstanceType,
         backend_type: BackendType,
@@ -440,6 +451,7 @@ class Scaler:
             entrypoints_args_list,
             instance_args_list,
             engine_args_list,
+            env_vars,
             placement_group,
             backend_type,
             self.scaler,

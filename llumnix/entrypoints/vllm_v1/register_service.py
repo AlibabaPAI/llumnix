@@ -11,7 +11,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from llumnix.arg_utils import RegisterServiceArgs, save_engine_args
+import os
+
+from llumnix.arg_utils import RegisterServiceArgs, save_engine_args, save_llumlet_env_vars
 from llumnix.entrypoints.vllm_v1.arg_utils import (
     add_engine_cli_args,
     get_engine_args,
@@ -30,3 +32,4 @@ if __name__ == "__main__":
     vllm_v1_engine_args = VLLMV1EngineArgs(engine_args)
 
     save_engine_args(cli_args.engine_type, cli_args.save_path, vllm_v1_engine_args, cli_args.save_key)
+    save_llumlet_env_vars(cli_args.engine_type, cli_args.save_path, dict(os.environ), cli_args.save_key)

@@ -67,6 +67,9 @@ vllm_test: check_pytest_installed vllm_unit_test vllm_offline_test vllm_correctn
 .PHONY: bladellm_test
 bladellm_test: check_pytest_installed bladellm_correctness_test bladellm_bench_test bladellm_migration_test bladellm_register_service_test bladellm_server_test
 
+.PHONY: vllm_v1_test
+vllm_v1_test: check_pytest_installed vllm_v1_unit_test vllm_v1_correctness_test vllm_v1_bench_test vllm_v1_register_service_test
+
 .PHONY: bladellm_unit_test
 bladellm_unit_test: check_pytest_installed
 	@pytest -v --timer-top-n=999 --ignore=third_party --disable-warnings ./tests/unit_test/**/bladellm/
@@ -74,6 +77,10 @@ bladellm_unit_test: check_pytest_installed
 .PHONY: vllm_unit_test
 vllm_unit_test: check_pytest_installed
 	@pytest -v --timer-top-n=999 --ignore=third_party --ignore-glob="tests/**/bladellm" --ignore-glob="tests/**/vllm_v1" --disable-warnings ./tests/unit_test/
+
+.PHONY: vllm_v1_unit_test
+vllm_v1_unit_test: check_pytest_installed
+	@pytest -v --timer-top-n=999 --ignore=third_party --disable-warnings ./tests/unit_test/**/vllm_v1
 
 .PHONY: vllm_offline_test
 vllm_offline_test:

@@ -726,7 +726,6 @@ def generate_bladellm_serve_service_command_func(
         f"--model {model} " # must set, checked when parse args
         f"--host {ip} " # must set, for server
         f"--port {port} " # must set, for server
-        f"--enable-bladellm-engine-pd-disagg "
         f"--pd-ratio 1:1 "
         f"--max-units {max_units} "
         f"--enable-port-increment "

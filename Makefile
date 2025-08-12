@@ -80,7 +80,7 @@ vllm_unit_test: check_pytest_installed
 
 .PHONY: vllm_v1_unit_test
 vllm_v1_unit_test: check_pytest_installed
-	@pytest -v --timer-top-n=999 --ignore=third_party --disable-warnings ./tests/unit_test/**/vllm_v1
+	@VLLM_USE_V1=1 pytest -v --timer-top-n=999 --ignore=third_party --disable-warnings ./tests/unit_test/**/vllm_v1
 
 .PHONY: vllm_offline_test
 vllm_offline_test:

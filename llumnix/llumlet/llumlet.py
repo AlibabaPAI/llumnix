@@ -255,8 +255,8 @@ class Llumlet:
         dst_instance_context: InstanceContext,
         migration_type: Optional[MigrationType] = None
     ) -> None:
-        asyncio.create_task(exception_wrapper_async(
-            self._migrate_out(dst_instance_actor, dst_instance_context, migration_type)))
+        migrate_out_func = exception_wrapper_async(self._migrate_out)
+        asyncio.create_task(migrate_out_func(dst_instance_actor, dst_instance_context, migration_type))
 
     def execute_engine_method(self, method, *args, **kwargs):
         executor = getattr(self.backend_engine, method)

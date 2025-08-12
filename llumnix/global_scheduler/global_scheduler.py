@@ -29,10 +29,10 @@ logger = init_logger(__name__)
 
 class GlobalScheduler:
     def __init__(
-            self,
-            global_scheduler_config: GlobalSchedulerConfig,
-            backend_type: BackendType = None
-        ) -> None:
+        self,
+        global_scheduler_config: GlobalSchedulerConfig,
+        backend_type: BackendType = None
+    ) -> None:
         self.backend_type = backend_type
         self.global_scheduler_config = global_scheduler_config
         self.num_instances = 0
@@ -144,7 +144,7 @@ class GlobalScheduler:
                 dispatch_context,
             )
 
-            if backend_type == BackendType.VLLM_V1:
+            if self.backend_type == BackendType.VLLM_V1:
                 if decode_instance_id in self.prefill_instance_info:
                     decode_instance_id = prefill_instance_id
 

@@ -117,6 +117,10 @@ class Load(DispatchPolicy):
                   metric=getattr(dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[InstanceType.NEUTRAL])
               ),
         }
+        print(f"[zzy][debug] dispatch_load_metric_config: {dispatch_load_metric_config}")
+        print(f"[zzy][debug] prefill filter metric: {self.filters[InstanceType.PREFILL].metric}")
+        print(f"[zzy][debug] decode filter metric: {self.filters[InstanceType.DECODE].metric}")
+        print(f"[zzy][debug] neutral filter metric: {self.filters[InstanceType.NEUTRAL].metric}")
 
     def filter(self,
                instance_type: InstanceType,
@@ -134,6 +138,7 @@ class Load(DispatchPolicy):
                  ) -> str:
         dispatch_load_metric=getattr(self.dispatch_load_metric_config, INSTANCE_TYPE_TO_METRIC_FIELD[instance_type])
         sorted_instance_infos = sort_instance_infos(available_instance_infos.values(), dispatch_load_metric)
+        print(f"[zzy][debug] dispatch_load_metric, : {dispatch_load_metric}, sorted_instance_infos: {sort_instance_infos}")
         instance_info_chosen = self.random_choice_from_top_k(sorted_instance_infos)
         instance_id = instance_info_chosen.instance_id
         logger.info("dispatch request to {}, load: {}".format(instance_id, getattr(instance_info_chosen, dispatch_load_metric)))

@@ -48,7 +48,7 @@ class MockLlumlet:
         self.instance_info = None
         self.num_migrate_out = 0
         self.num_migrate_in = 0
-        self.instance_context = InstanceContext(local_engine_id=self.instance_id)
+        self.instance_context = InstanceContext(instance_id=self.instance_id, local_engine_id=self.instance_id)
 
     def get_instance_id(self) -> str:
         return self.instance_id
@@ -114,14 +114,14 @@ class MockLlumlet:
 def init_manager(
         enable_pd_disagg: bool = False,
         enable_engine_pd_disagg: bool = False,
-        enable_engine_semi_pd_disagg: bool = False):
+        enable_bladellm_engine_semi_pd_disagg: bool = False):
     manager_args = ManagerArgs(
         enable_routine_migration=True,
         enable_pre_stop_migration=False,
         enable_pd_disagg=enable_pd_disagg,
-        enable_engine_pd_disagg=enable_engine_pd_disagg,
-        enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg)
-    backend_type = BackendType.VLLM if not enable_engine_semi_pd_disagg else BackendType.BLADELLM
+        enable_bladellm_engine_pd_disagg=enable_engine_pd_disagg,
+        enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg)
+    backend_type = BackendType.VLLM if not enable_bladellm_engine_semi_pd_disagg else BackendType.BLADELLM
     manager_args.log_instance_info = False
     # manager is initialized by scaler
     scaler: Scaler = Scaler.from_args(
@@ -272,7 +272,7 @@ def test_generate_pdd(ray_env):
     assert num_requests == 1
 
 def test_generate_semi_pdd(ray_env):
-    manager = init_manager(enable_engine_semi_pd_disagg=True)
+    manager = init_manager(enable_bladellm_engine_semi_pd_disagg=True)
     prefill_llumlet: MockLlumlet = generate_llumlet()
     instance_id = ray.get(prefill_llumlet.get_instance_id.remote())
     prefill_instance_info = InstanceInfo(
@@ -353,7 +353,7 @@ def test_poll_instance_info_loop_and_migrate(ray_env, manager: Manager):
         assert num_migrate_out == 0
 
     ray.get(manager.scale_up.remote(instance_ids, instances, [InstanceType("neutral")]*len(instance_ids)))
-    time.sleep(3)
+    time.sleep(5)
 
     for i in range(num_instances):
         num_migrate_out = ray.get(instances[i].get_num_migrate_out.remote())

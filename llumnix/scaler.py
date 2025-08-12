@@ -658,7 +658,7 @@ class Scaler:
         for _ in range(self.manager_args.initial_instances):
             if (
                 backend_type == BackendType.BLADELLM
-                and self.manager_args.enable_engine_pd_disagg
+                and (self.manager_args.enable_bladellm_engine_pd_disagg or self.manager_args.enable_bladellm_engine_semi_pd_disagg)
                 and engine_args.instance_id
             ):
                 # use blade instance id as llumlet instance id
@@ -796,7 +796,7 @@ class Scaler:
 
     @property
     def enable_pd(self):
-        return self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg
+        return self.pdd_config.enable_pd
 
     def _get_next_instance_type(self) -> str:
         if not self.enable_pd:

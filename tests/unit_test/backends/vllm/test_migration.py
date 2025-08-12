@@ -59,6 +59,9 @@ TEST_PROMPTS = [
 # seems duplicated.
 @ray.remote
 class MockLlumletTestMigration(Llumlet):
+    async def migrate_out(self, dst_instance_actor, dst_instance_context, migration_type = None):
+        return await self._migrate_out(dst_instance_actor, dst_instance_context, migration_type)
+
     def get_pre_alloc_cache_dict(self):
         return self.backend_engine.engine.scheduler[0].pre_alloc_cache_dict
 
@@ -148,6 +151,9 @@ class MockLlumletTestMigrationDoNotSchedule(Llumlet):
             return request_outputs, server_infos
 
         self.backend_engine.engine.step_async = step_async_try_schedule
+
+    async def migrate_out(self, dst_instance_actor, dst_instance_context, migration_type = None):
+        return await self._migrate_out(dst_instance_actor, dst_instance_context, migration_type)
 
     def get_pre_alloc_cache_dict(self):
         return self.backend_engine.engine.scheduler[0].pre_alloc_cache_dict
@@ -239,7 +245,8 @@ async def test_migration_correctness(migration_backend, migration_request_status
              llumlet_1.execute_engine_method_async.remote("_run_workers_async", "rebuild_migration_backend", id_rank_map, "llumnix")])
 
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, "1"))
+    llumlet_1_instance_context = ray.get(llumlet_1.get_engine_context.remote())
+    res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, llumlet_1_instance_context))
     assert not res
 
     sampling_params = SamplingParams(top_k=1, temperature=0, ignore_eos=True, max_tokens=100)
@@ -270,7 +277,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
                 if len(running_queue) > 0 and running_queue[0].inference_type == RequestInferenceType.DECODE:
                     break
             # migrate request
-            res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, "1"))
+            res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, llumlet_1_instance_context))
             assert len(res) == 1
         else: # migration_request_status == 'waiting'
             request_id1 = random_uuid()
@@ -281,7 +288,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
                 if len(waiting_queue) > 0 and waiting_queue[0].try_schedule_times >= 1:
                     break
             # migrate request
-            res = ray.get(llumlet_2.migrate_out.remote(llumlet_1, "1"))
+            res = ray.get(llumlet_2.migrate_out.remote(llumlet_1, llumlet_1_instance_context))
             assert len(res) == 1
 
         request_output_queue = que
@@ -360,7 +367,7 @@ async def test_migration_correctness(migration_backend, migration_request_status
         id_rank_map = {"2": 0, "1": 1}
         ray.get([llumlet_2.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix"),
                  llumlet_1.execute_engine_method.remote("_run_workers", "rebuild_migration_backend", id_rank_map, "llumnix")])
-        res = ray.get(llumlet_2.migrate_out.remote(llumlet_1, "1"))
+        res = ray.get(llumlet_2.migrate_out.remote(llumlet_1, llumlet_1_instance_context))
         assert not res
 
     for i, prompt in enumerate(TEST_PROMPTS):
@@ -403,7 +410,8 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
     ray.get([llumlet_0.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix"),
              llumlet_1.execute_engine_method.remote("_run_workers","rebuild_migration_backend", id_rank_map, "llumnix")])
     # empty instance migrate out
-    res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, "1"))
+    llumlet_1_instance_context = await llumlet_1.get_engine_context.remote()
+    res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, llumlet_1_instance_context))
     assert not res
 
     # running without migration
@@ -428,7 +436,7 @@ async def test_pd_diaggregation_correctness(ray_env, migration_backend, disable_
         ray.get(llumlet_0.generate.remote(request_id1, request_processing_context, request_expected_steps_id1, prompt, sampling_params))
         # migrate request for decode
         while True:
-            res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, "1"))
+            res = ray.get(llumlet_0.migrate_out.remote(llumlet_1, llumlet_1_instance_context))
             if len(res) == 1:
                 break
         request_output_queue = que

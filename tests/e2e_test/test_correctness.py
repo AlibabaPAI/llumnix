@@ -117,12 +117,12 @@ async def run_vllm_v1(model, tensor_parallel_size, enable_pd_disagg, enable_rout
 
     return vllm_v1_outputs
 
-async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
+async def run_bladellm(model, enable_pd_disagg, enable_bladellm_engine_semi_pd_disagg):
     global test_times
     ip = get_ip_address()
     base_port = 35000 + test_times * 100
 
-    if not enable_pd_disagg and not enable_engine_semi_pd_disagg:
+    if not enable_pd_disagg and not enable_bladellm_engine_semi_pd_disagg:
         launch_command = generate_bladellm_launch_command(
             model=model,
             ip=ip,
@@ -137,7 +137,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
             port=base_port,
             enable_llumnix=False,
             enable_pd_disagg=enable_pd_disagg,
-            enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+            enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
             semi_pd_ins_id="prefill",
             instance_type="prefill",
             enforce_eager=True,
@@ -150,7 +150,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
             port=base_port+100,
             enable_llumnix=False,
             enable_pd_disagg=enable_pd_disagg,
-            enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+            enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
             semi_pd_ins_id="decode",
             instance_type="decode",
             enforce_eager=True,
@@ -178,7 +178,7 @@ async def run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg):
     return bladellm_outputs
 
 config_schema = "engine, migration_backend, tensor_parallel_size, enable_routine_migration, enable_pre_stop_migration, enable_simulator," \
-"enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_engine_semi_pd_disagg, enable_adaptive_pd"
+"enable_pd_disagg, launch_mode, request_output_forwarding_mode, enable_bladellm_engine_semi_pd_disagg, enable_adaptive_pd"
 
 generate_special_correctness_test_config = partial(generate_special_test_config, schema=config_schema)
 
@@ -250,10 +250,11 @@ def generate_correctness_test_config():
         generate_special_correctness_test_config([("request_output_forwarding_mode", "actor")], bladellm_base_config),
 
         # semi pd
-        generate_special_correctness_test_config([("enable_engine_semi_pd_disagg", True)], bladellm_base_config),
+        generate_special_correctness_test_config([("enable_bladellm_engine_semi_pd_disagg", True)], bladellm_base_config),
 
         # adaptive pd
-        generate_special_correctness_test_config([("enable_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)], bladellm_base_config),
+        generate_special_correctness_test_config([("enable_bladellm_engine_semi_pd_disagg", True), ("enable_adaptive_pd", True)],
+            bladellm_base_config),
     ]
 
     return vllm_config + vllm_v1_config + bladellm_config
@@ -277,7 +278,7 @@ async def test_correctness(
     enable_pd_disagg,
     launch_mode,
     request_output_forwarding_mode,
-    enable_engine_semi_pd_disagg,
+    enable_bladellm_engine_semi_pd_disagg,
     enable_adaptive_pd,
 ):
     engine = "_".join(engine.split("_")[1:])
@@ -331,14 +332,14 @@ async def test_correctness(
         generate_serve_command_func = generate_bladellm_serve_command
         url = f'http://{ip}:{base_port}/v1/chat/completions'
 
-        if not enable_pd_disagg and not enable_engine_semi_pd_disagg and len(engine_prompt_output) == 0:
-            engine_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
+        if not enable_pd_disagg and not enable_bladellm_engine_semi_pd_disagg and len(engine_prompt_output) == 0:
+            engine_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_bladellm_engine_semi_pd_disagg)
 
         if enable_pd_disagg and len(engine_pdd_prompt_output) == 0:
-            engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
+            engine_pdd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_bladellm_engine_semi_pd_disagg)
 
-        if enable_engine_semi_pd_disagg and len(engine_semi_pd_prompt_output) == 0:
-            engine_semi_pd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_engine_semi_pd_disagg)
+        if enable_bladellm_engine_semi_pd_disagg and len(engine_semi_pd_prompt_output) == 0:
+            engine_semi_pd_prompt_output = await run_bladellm(model, enable_pd_disagg, enable_bladellm_engine_semi_pd_disagg)
 
     ip_ports = []
 
@@ -423,14 +424,14 @@ async def test_correctness(
                 migration_backend=migration_backend,
                 enable_pd_disagg=enable_pd_disagg,
                 enable_adaptive_pd=enable_adaptive_pd,
-                enable_engine_semi_pd_disagg=enable_engine_semi_pd_disagg,
+                enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
                 enable_simulator=enable_simulator,
                 request_output_forwarding_mode=request_output_forwarding_mode,
                 tensor_parallel_size=tensor_parallel_size,
                 enable_migration=enable_routine_migration,
                     enable_pre_stop_migration=enable_pre_stop_migration,
                 max_units=instance_count,
-                )
+            )
         )
     for launch_command in launch_commands:
         subprocess.run(launch_command, shell=True, check=True)

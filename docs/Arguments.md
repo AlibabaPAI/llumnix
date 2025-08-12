@@ -29,6 +29,7 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--dispatch-policy {balanced,load,queue,rr}]
             [--topk-random-dispatch TOPK_RANDOM_DISPATCH]
             [--enable-routine-migration]
+            [--enable-engine-migration-interface]
             [--enable-defrag]
             [--pair-migration-frequency PAIR_MIGRATION_FREQUENCY]
             [--pair-migration-policy {balanced,defrag}]
@@ -57,7 +58,8 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
             [--migration-last-stage-max-blocks MIGRATION_LAST_STAGE_MAX_BLOCKS]
             [--enable-adaptive-pd]
             [--enable-pd-disagg]
-            [--enable-engine-pd-disagg]
+            [--enable-vllm-v1-engine-pd-disagg]
+            [--enable-bladellm-engine-pd-disagg]
             [--pd-ratio PD_RATIO]
             [--load-registered-service]
             [--load-registered-service-path]
@@ -167,6 +169,9 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-routine-migration`
 - Enable migrate requests between instances.
 
+`--enable-engine-migration-interface`
+- Enable engine migration interface.
+
 `--enable-defrag`
 - Enable defragmentation through migration based on virtual usage.
 
@@ -271,7 +276,10 @@ usage: -m llumnix.entrypoints.vllm.api_server [-h]
 `--enable-pd-disagg`
 - Enable prefill decode disaggregation (for vLLM).
 
-`--enable-engine-pd-disagg`
+`--enable-vllm-v1-engine-pd-disagg`
+- Enable engine-based prefill decode disaggregation (for vLLM-V1).
+
+`--enable-bladellm-engine-pd-disagg`
 - Enable engine-based prefill decode disaggregation (for BladeLLM).
 
 `--enable-adaptive-pd`

@@ -327,11 +327,11 @@ def generate_bladellm_launch_command(
     enforce_eager: bool = False,
     pd_ratio: str = "1:1",
     request_output_forwarding_mode: str = "thread",
-    enable_engine_semi_pd_disagg: bool = False,
+    enable_bladellm_engine_semi_pd_disagg: bool = False,
     semi_pd_ins_id: str = "test",
     **kwargs
 ):
-    enable_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id={semi_pd_ins_id} --semi_pd.transfer_type=rdma ' \
+    enable_bladellm_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id={semi_pd_ins_id} --semi_pd.transfer_type=rdma ' \
         f'--semi_pd.prefill_server_port={port+37}'
     command = (
         f"RAY_DEDUP_LOGS=0 HEAD_NODE_IP={HEAD_NODE_IP} HEAD_NODE=1 "
@@ -352,13 +352,12 @@ def generate_bladellm_launch_command(
         f"--max_gpu_memory_utilization {max_gpu_memory_utilization} "
         f"{'--disable_cuda_graph' if enforce_eager else ''} "
         f"{'--enable_disagg' if enable_pd_disagg else ''} "
-        f"{enable_engine_semi_pd_disagg_option if enable_engine_semi_pd_disagg else ''} "
+        f"{enable_bladellm_engine_semi_pd_disagg_option if enable_bladellm_engine_semi_pd_disagg else ''} "
         f"--disagg_pd.inst_id={str(uuid.uuid4().hex)[:8]} "
         f"--disagg_pd.disagg_transfer_type={engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role={instance_type} "
         f"--naming_url={NAMING_URL} "
         f"SERVER.REQUEST_OUTPUT_QUEUE_TYPE {request_output_queue_type} "
-        f"MANAGER.ENABLE_ENGINE_PD_DISAGG {enable_pd_disagg} "
         f"MANAGER.DISPATCH_POLICY {dispatch_policy} "
         f"MANAGER.ENABLE_ROUTINE_MIGRATION {enable_routine_migration and not enable_pd_disagg} "
         f"MANAGER.ENABLE_PRE_STOP_MIGRATION {enable_pre_stop_migration and not enable_pd_disagg} "
@@ -394,10 +393,10 @@ def generate_bladellm_serve_command(
     request_output_queue_type: str = "zmq",
     enforce_eager: bool = False,
     request_output_forwarding_mode: str = "thread",
-    enable_engine_semi_pd_disagg: bool = False,
+    enable_bladellm_engine_semi_pd_disagg: bool = False,
     **kwargs
 ):
-    enable_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id=test --semi_pd.transfer_type=rdma ' \
+    enable_bladellm_engine_semi_pd_disagg_option = f'--enable_semi_pd_mode  --semi_pd.inst_id=test --semi_pd.transfer_type=rdma ' \
         f'--semi_pd.prefill_server_port={port+37}'
     command = (
         f"RAY_DEDUP_LOGS=0 "
@@ -420,8 +419,7 @@ def generate_bladellm_serve_command(
         f"--disagg_pd.disagg_transfer_type {engine_disagg_transfer_type} "
         f"--disagg_pd.inst_role {instance_type} "
         f"--naming_url {NAMING_URL} "
-        f"{'--enable-engine-pd-disagg' if enable_pd_disagg else ''} "
-        f"{enable_engine_semi_pd_disagg_option if enable_engine_semi_pd_disagg else ''} "
+        f"{enable_bladellm_engine_semi_pd_disagg_option if enable_bladellm_engine_semi_pd_disagg else ''} "
         f"{'--enable-adaptive-pd ' if enable_adaptive_pd else ''}"
         f"--dispatch-policy {dispatch_policy} "
         f"--pd-ratio {pd_ratio} "
@@ -679,7 +677,7 @@ def generate_vllm_v1_serve_service_command_func(
         f"--load-registered-service-path ./service_test/vllm_v1 "
         f"--host {ip} "
         f"--port {port} "
-        f"--enable-engine-pd-disagg "
+        f"--enable-vllm-v1-engine-pd-disagg "
         f"--pd-ratio 1:1 "
         f"--max-units {max_units} "
         f"--enable-port-increment "
@@ -728,9 +726,9 @@ def generate_bladellm_serve_service_command_func(
         f"--model {model} " # must set, checked when parse args
         f"--host {ip} " # must set, for server
         f"--port {port} " # must set, for server
-        f"--enable-engine-pd-disagg "
         f"--pd-ratio 1:1 "
         f"--max-units {max_units} "
+        "--enable-bladellm-engine-pd-disagg "
         f"--enable-port-increment "
         f"{'> instance_'+result_filename if len(result_filename) > 0 else ''} 2>&1 &"
     )

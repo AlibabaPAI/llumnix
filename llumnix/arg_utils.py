@@ -21,6 +21,7 @@ import pickle
 from typing import List, Tuple, Union, Dict
 from abc import ABC, abstractmethod
 import copy
+import math
 
 from llumnix.internal_config import GlobalSchedulerConfig, MigrationConfig, PDDConfig, DispatchLoadMetricConfig
 from llumnix.config import LlumnixConfig, get_llumnix_config
@@ -165,7 +166,7 @@ class LlumnixEngineArgsFactory:
 
     @property
     def enable_pd(self) -> bool:
-        return self.pdd_config.enable_pd_disagg or self.pdd_config.enable_engine_pd_disagg or self.pdd_config.enable_engine_semi_pd_disagg
+        return self.pdd_config.enable_pd
 
 
 def ensure_args_default_none(args):
@@ -407,10 +408,12 @@ class ManagerArgs:
     load_registered_service_path: str = None
     enable_pdd_node_affinity_scheduling: bool = None
 
+    enable_vllm_v1_engine_pd_disagg: bool = None
+
     # init from instance args
     is_group_kind_migration_backend: bool = None
-    enable_engine_pd_disagg: bool = None
-    enable_engine_semi_pd_disagg: bool = None
+    enable_bladellm_engine_pd_disagg: bool = None
+    enable_bladellm_engine_semi_pd_disagg: bool = None
 
     # dispatch load metrics
     dispatch_load_metric: str = None
@@ -432,13 +435,22 @@ class ManagerArgs:
                 raise ValueError(f"Invalid format for --pd-ratio : '{ratio_str}'. Expected format 'a:b'.")
             num_prefill_instances, num_decode_instances = int(parts[0].strip()), int(parts[1].strip())
             assert num_prefill_instances > 0 and num_decode_instances > 0, "Both parts of --pd-ratio must be non-negative."
-            return [num_prefill_instances, num_decode_instances]
+
+            gcd = math.gcd(num_prefill_instances, num_decode_instances)
+            return [num_prefill_instances//gcd, num_decode_instances//gcd]
 
         self.pd_ratio = parse_ratio(self.pd_ratio)
 
     @classmethod
     def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'ManagerArgs':
         return from_llumnix_args_config(cls, cfg.MANAGER)
+
+    @property
+    def enable_pd(self):
+        return self.enable_pd_disagg \
+            or self.enable_vllm_v1_engine_pd_disagg \
+            or self.enable_bladellm_engine_pd_disagg \
+            or self.enable_bladellm_engine_semi_pd_disagg
 
     @classmethod
     def check_args(cls, args: 'ManagerArgs', launch_mode: LaunchMode, parser: argparse.ArgumentParser) -> None:
@@ -455,24 +467,31 @@ class ManagerArgs:
             "Only load registered service when enabling pd-disaggregation in global launch mode, " \
             "and the path of loading registered service is required to be specified when loading registered service from path."
 
-        enable_pd = args.enable_pd_disagg or args.enable_engine_pd_disagg or args.enable_engine_semi_pd_disagg
         if args.enable_pdd_node_affinity_scheduling:
-            assert enable_pd and launch_mode == LaunchMode.GLOBAL, \
+            assert args.enable_pd and launch_mode == LaunchMode.GLOBAL, \
                 "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
                 "in global launch mode."
 
         if args.enable_pd_disagg:
-            assert args.enable_routine_migration, "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
+            assert args.enable_routine_migration, \
+                "Migration must be enabled when enabling prefill-decode disaggregation (not engine-based)."
 
-        assert sum([bool(args.enable_engine_pd_disagg), bool(args.enable_pd_disagg), bool(args.enable_engine_semi_pd_disagg)]) <= 1, \
-            f"Engine-based prefill-decode disaggregation (enable={args.enable_engine_pd_disagg})," \
-            f"Semi-Engine-based prefill-decode disaggregation (enable={args.enable_engine_semi_pd_disagg}) and, " \
+        assert sum([
+                bool(args.enable_vllm_v1_engine_pd_disagg),
+                bool(args.enable_bladellm_engine_pd_disagg),
+                bool(args.enable_pd_disagg),
+                bool(args.enable_bladellm_engine_semi_pd_disagg)]) <= 1, \
+            f"Engine-based prefill-decode disaggregation (v1_enable={args.enable_vllm_v1_engine_pd_disagg}, " \
+            f"bladellm_enable={args.enable_bladellm_engine_pd_disagg})," \
+            f"Semi-Engine-based prefill-decode disaggregation (enable={args.enable_bladellm_engine_semi_pd_disagg}) and, " \
             f"Llumnix-based prefill-decode disaggregation (enable={args.enable_pd_disagg}) are mutually exclusive."
 
     def init_from_instance_args(self, instance_args: 'InstanceArgs'):
-        self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl']
-        self.enable_engine_pd_disagg = instance_args.enable_engine_pd_disagg
-        self.enable_engine_semi_pd_disagg = instance_args.enable_engine_semi_pd_disagg
+        self.is_group_kind_migration_backend = instance_args.migration_backend in ['gloo', 'nccl'] \
+            and not instance_args.enable_engine_migration_interface
+
+        self.enable_bladellm_engine_pd_disagg = instance_args.enable_bladellm_engine_pd_disagg
+        self.enable_bladellm_engine_semi_pd_disagg = instance_args.enable_bladellm_engine_semi_pd_disagg
 
     def create_global_scheduler_config(self) -> Tuple[GlobalSchedulerConfig]:
         # Create the GlobalScheduler Configuration.
@@ -493,8 +512,9 @@ class ManagerArgs:
                                                         self.scale_up_threshold,
                                                         self.scale_down_threshold,
                                                         self.enable_pd_disagg,
-                                                        self.enable_engine_pd_disagg,
-                                                        self.enable_engine_semi_pd_disagg,
+                                                        self.enable_vllm_v1_engine_pd_disagg,
+                                                        self.enable_bladellm_engine_pd_disagg,
+                                                        self.enable_bladellm_engine_semi_pd_disagg,
                                                         self.enable_adaptive_pd,
                                                         self.is_group_kind_migration_backend,
                                                         dispatch_load_metric_config,
@@ -504,8 +524,9 @@ class ManagerArgs:
 
     def create_pdd_config(self) -> PDDConfig:
         pdd_config = PDDConfig(self.enable_pd_disagg,
-                               self.enable_engine_pd_disagg,
-                               self.enable_engine_semi_pd_disagg,
+                               self.enable_vllm_v1_engine_pd_disagg,
+                               self.enable_bladellm_engine_pd_disagg,
+                               self.enable_bladellm_engine_semi_pd_disagg,
                                self.pd_ratio,
                                self.enable_pdd_node_affinity_scheduling)
         return pdd_config
@@ -596,9 +617,12 @@ class ManagerArgs:
         parser.add_argument('--enable-adaptive-pd',
                             action='store_true',
                             help='[Experimental] enable adaptive prefill-decode disaggregation')
-        parser.add_argument('--enable-engine-pd-disagg',
+        parser.add_argument('--enable-vllm-v1-engine-pd-disagg',
                             action='store_true',
-                            help='enable engine-based prefill-decode disaggregation')
+                            help='enable vLLM-V1 engine-based prefill-decode disaggregation')
+        parser.add_argument('--enable-bladellm-engine-pd-disagg',
+                            action='store_true',
+                            help='enable BladeLLM engine-based prefill-decode disaggregation')
         parser.add_argument('--pd-ratio',
                             type=str,
                             help='the prefill decode ratio used in gloabl launch mode e.g. "1:1"')
@@ -669,6 +693,7 @@ class InstanceArgs:
 
     enable_defrag: bool = None
 
+    enable_engine_migration_interface: bool = None
     max_migration_concurrency: int = None
     request_migration_policy: str = None
     migration_load_metric: str = None
@@ -685,13 +710,15 @@ class InstanceArgs:
     request_output_forwarding_mode: str = None
 
     # init from engine args
-    enable_engine_pd_disagg: bool = None
-    enable_engine_semi_pd_disagg: bool = None
+    enable_bladellm_engine_pd_disagg: bool = None
+    enable_bladellm_engine_semi_pd_disagg: bool = None
 
     # init from manager args
     enable_routine_migration: bool = None
     enable_pre_stop_migration: bool = None
     enable_adaptive_pd: bool = None
+    enable_vllm_v1_engine_pd_disagg: bool = None
+
 
     def __post_init__(self):
         ensure_args_default_none(self)
@@ -721,20 +748,17 @@ class InstanceArgs:
             # pylint: disable=import-outside-toplevel
             from blade_llm.service.args import ServingArgs
             assert isinstance(engine_args, ServingArgs)
-            self.enable_engine_pd_disagg = engine_args.enable_disagg
-            self.enable_engine_semi_pd_disagg = engine_args.enable_semi_pd_mode
+            self.enable_bladellm_engine_pd_disagg = engine_args.enable_disagg
+            self.enable_bladellm_engine_semi_pd_disagg = engine_args.enable_semi_pd_mode
             # for local launch mode
-            if self.enable_engine_pd_disagg:
+            if self.enable_bladellm_engine_pd_disagg:
                 self.instance_type = engine_args.disagg_options.inst_role
-        elif backend_type == BackendType.VLLM_V1:
-            self.enable_engine_pd_disagg = (engine_args.kv_transfer_config is not None)
-        else:
-            self.enable_engine_pd_disagg = False
 
     def init_from_manager_args(self, manager_args: ManagerArgs):
         self.enable_routine_migration = manager_args.enable_routine_migration
         self.enable_pre_stop_migration = manager_args.enable_pre_stop_migration
         self.enable_adaptive_pd = manager_args.enable_adaptive_pd
+        self.enable_vllm_v1_engine_pd_disagg = manager_args.enable_vllm_v1_engine_pd_disagg
 
     def create_migration_config(self) -> MigrationConfig:
         migration_config = MigrationConfig(self.enable_routine_migration,
@@ -779,6 +803,9 @@ class InstanceArgs:
         parser.add_argument('--enable-defrag',
                             type=bool,
                             help='enable defragmentation through migration based on virtual usage')
+        parser.add_argument('--enable-engine-migration-interface',
+                            action='store_true',
+                            help='enable engine migration interface')
         parser.add_argument('--max-migration-concurrency',
                             type=int,
                             help='max migration concurrency (including migrate in and migrate out), '
@@ -906,7 +933,7 @@ def post_init_llumnix_args(
     InstanceArgs.check_args(instance_args, manager_args, launch_mode, parser)
 
 def load_registered_engine_args(manager_args: ManagerArgs):
-    if not manager_args.enable_pd_disagg and not manager_args.enable_engine_pd_disagg:
+    if not manager_args.enable_pd:
         instance_type_list = ['neutral']
     else:
         instance_type_list = ['prefill', 'decode']

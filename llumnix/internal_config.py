@@ -36,8 +36,9 @@ class GlobalSchedulerConfig:
             scale_up_threshold: float,
             scale_down_threshold: float,
             enable_pd_disagg: bool,
-            enable_engine_pd_disagg: bool,
-            enable_engine_semi_pd_disagg: bool,
+            enable_vllm_v1_engine_pd_disagg: bool,
+            enable_bladellm_engine_pd_disagg: bool,
+            enable_bladellm_engine_semi_pd_disagg: bool,
             enable_adaptive_pd: bool,
             is_group_kind_migration_backend: bool,
             dispatch_load_metric_config: DispatchLoadMetricConfig,
@@ -57,8 +58,9 @@ class GlobalSchedulerConfig:
         self.scale_down_threshold = scale_down_threshold
 
         self.enable_pd_disagg = enable_pd_disagg
-        self.enable_engine_pd_disagg = enable_engine_pd_disagg
-        self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
+        self.enable_vllm_v1_engine_pd_disagg = enable_vllm_v1_engine_pd_disagg
+        self.enable_bladellm_engine_pd_disagg = enable_bladellm_engine_pd_disagg
+        self.enable_bladellm_engine_semi_pd_disagg = enable_bladellm_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
         self.is_group_kind_migration_backend = is_group_kind_migration_backend
 
@@ -107,15 +109,21 @@ class PDDConfig:
     def __init__(
             self,
             enable_pd_disagg: bool,
-            enable_engine_pd_disagg: bool,
-            enable_engine_semi_pd_disagg: bool,
+            enable_vllm_v1_engine_pd_disagg: bool,
+            enable_bladellm_engine_pd_disagg: bool,
+            enable_bladellm_engine_semi_pd_disagg: bool,
             pd_ratio: Union[str, List[int]],
             enable_pdd_node_affinity_scheduling: bool) -> None:
         self.enable_pd_disagg = enable_pd_disagg
-        self.enable_engine_pd_disagg = enable_engine_pd_disagg
-        self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
+        self.enable_vllm_v1_engine_pd_disagg = enable_vllm_v1_engine_pd_disagg
+        self.enable_bladellm_engine_pd_disagg = enable_bladellm_engine_pd_disagg
+        self.enable_bladellm_engine_semi_pd_disagg = enable_bladellm_engine_semi_pd_disagg
         self.pd_ratio = pd_ratio
         self.enable_pdd_node_affinity_scheduling = enable_pdd_node_affinity_scheduling
 
-        assert not (enable_engine_pd_disagg and enable_engine_semi_pd_disagg), \
-            "Cannot enable both engine_pd_disagg and engine_semi_pd"
+    @property
+    def enable_pd(self):
+        return self.enable_pd_disagg \
+            or self.enable_vllm_v1_engine_pd_disagg \
+            or self.enable_bladellm_engine_pd_disagg \
+            or self.enable_bladellm_engine_semi_pd_disagg

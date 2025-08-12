@@ -21,14 +21,19 @@ from llumnix.global_scheduler.dispatch_scheduler import DispatchScheduler
 from llumnix.global_scheduler.migration_scheduler import MigrationScheduler
 from llumnix.global_scheduler.scaling_scheduler import ScalingScheduler
 from llumnix.metrics.global_scheduler_metrics import GlobalSchedulerMetrics
-from llumnix.utils import RequestIDType, InstanceType
+from llumnix.utils import BackendType, RequestIDType, InstanceType
 from llumnix.instance_info import InstanceInfo
 
 logger = init_logger(__name__)
 
 
 class GlobalScheduler:
-    def __init__(self, global_scheduler_config: GlobalSchedulerConfig) -> None:
+    def __init__(
+        self,
+        global_scheduler_config: GlobalSchedulerConfig,
+        backend_type: BackendType = None
+    ) -> None:
+        self.backend_type = backend_type
         self.global_scheduler_config = global_scheduler_config
         self.num_instances = 0
 
@@ -47,8 +52,8 @@ class GlobalScheduler:
         self.dispatch_scheduler = DispatchScheduler(global_scheduler_config.dispatch_policy,
                                                     global_scheduler_config.topk_random_dispatch,
                                                     global_scheduler_config.enable_pd_disagg,
-                                                    global_scheduler_config.enable_engine_pd_disagg,
-                                                    global_scheduler_config.enable_engine_semi_pd_disagg,
+                                                    global_scheduler_config.enable_bladellm_engine_pd_disagg,
+                                                    global_scheduler_config.enable_bladellm_engine_semi_pd_disagg,
                                                     global_scheduler_config.enable_adaptive_pd,
                                                     global_scheduler_config.dispatch_load_metric_config,
                                                     self.global_scheduler_metrics.dispatch_latency,
@@ -58,8 +63,9 @@ class GlobalScheduler:
                                                       global_scheduler_config.migrate_out_load_threshold,
                                                       global_scheduler_config.is_group_kind_migration_backend,
                                                       global_scheduler_config.enable_pd_disagg,
-                                                      global_scheduler_config.enable_engine_pd_disagg,
-                                                      global_scheduler_config.enable_engine_semi_pd_disagg,
+                                                      global_scheduler_config.enable_vllm_v1_engine_pd_disagg,
+                                                      global_scheduler_config.enable_bladellm_engine_pd_disagg,
+                                                      global_scheduler_config.enable_bladellm_engine_semi_pd_disagg,
                                                       global_scheduler_config.enable_adaptive_pd,
                                                       global_scheduler_config.dispatch_load_metric_config,
                                                       global_scheduler_config.enable_pre_step_migration)
@@ -84,17 +90,19 @@ class GlobalScheduler:
                 if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NEUTRAL):
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
-    def _enable_pd(self):
+    @property
+    def enable_pd(self):
         return self.global_scheduler_config.enable_pd_disagg \
-            or self.global_scheduler_config.enable_engine_pd_disagg \
-            or self.global_scheduler_config.enable_engine_semi_pd_disagg
+            or self.global_scheduler_config.enable_vllm_v1_engine_pd_disagg \
+            or self.global_scheduler_config.enable_bladellm_engine_pd_disagg \
+            or self.global_scheduler_config.enable_bladellm_engine_semi_pd_disagg
 
     def _log_request_dispatch_info(self,
                                    request_id: str,
                                    prefill_instance_id: str,
                                    decode_instance_id: str,
                                    expected_steps: int):
-        if not self._enable_pd():
+        if not self.enable_pd:
             # when enable_pd_disagg is False, prefill_instance_id and decode_instance_id are the same
             logger.info("dispatch request {} to instance {}.".format(request_id, prefill_instance_id))
         else:
@@ -102,13 +110,17 @@ class GlobalScheduler:
                 logger.info("dispatch request {} to {} instance ({}), expected_steps: {}.".format(
                     request_id, self.instance_info[prefill_instance_id].instance_type, prefill_instance_id, expected_steps))
             else:
-                logger.info("dispatch request {} to {} instance ({}) for prefill, {} instance ({}) for decode.".format(
-                    request_id, self.instance_info[prefill_instance_id].instance_type, prefill_instance_id,
-                    self.instance_info[decode_instance_id].instance_type, decode_instance_id))
+                logger.info("dispatch request {} to {} for prefill, {} for decode, P: {}, D: {}.".format(
+                    request_id, self.instance_info[prefill_instance_id].instance_type,
+                    self.instance_info[decode_instance_id].instance_type, prefill_instance_id, decode_instance_id))
 
-    def dispatch(self, request_id: RequestIDType, dispatch_context: Dict) -> Tuple[str, str, int]:
+    def dispatch(
+        self,
+        request_id: RequestIDType,
+        dispatch_context: Dict,
+    ) -> Tuple[str, str, int]:
         # instance_num_requests will be updated inplace in dispatch_scheduler.dispatch
-        if not self._enable_pd():
+        if not self.enable_pd:
             no_constrains_instance_id = self.dispatch_scheduler.dispatch_no_constrains(
                 self.instance_info,
                 self.instance_num_requests,
@@ -131,6 +143,10 @@ class GlobalScheduler:
                 self.decode_instance_num_requests,
                 dispatch_context,
             )
+
+            if self.backend_type == BackendType.VLLM_V1:
+                if decode_instance_id in self.prefill_instance_info:
+                    decode_instance_id = prefill_instance_id
 
             self.global_scheduler_metrics.dispatch_counter.increase(
                 labels={"instance_id": prefill_instance_id}
@@ -199,7 +215,7 @@ class GlobalScheduler:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
 
-        if self._enable_pd():
+        if self.enable_pd:
             instance_info = self.instance_info[instance_id]
             if instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                 self.prefill_instance_info[instance_id] = instance_info
@@ -214,7 +230,7 @@ class GlobalScheduler:
         if instance_id not in self.instance_info:
             logger.warning("instance {} is not in instance_info".format(instance_id))
         instance_info = self.instance_info.get(instance_id, None)
-        if instance_info and self._enable_pd():
+        if instance_info and self.enable_pd:
             if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                 self.prefill_instance_info.pop(instance_id, 0)
                 self.prefill_instance_num_requests.pop(instance_id, 0)

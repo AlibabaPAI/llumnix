@@ -28,15 +28,15 @@ class DispatchScheduler:
                  dispatch_policy: str,
                  topk_random_dispatch: int,
                  enable_pd_disagg: bool,
-                 enable_engine_pd_disagg: bool,
-                 enable_engine_semi_pd_disagg: bool,
+                 enable_bladellm_engine_pd_disagg: bool,
+                 enable_bladellm_engine_semi_pd_disagg: bool,
                  enable_adaptive_pd: bool,
                  dispatch_load_metric_config: DispatchLoadMetricConfig,
                  dispatch_latency_metric: Summary = Summary("dummy"),
                  cache_meta_client_config_path: str = None) -> None:
         self.enable_pd_disagg = enable_pd_disagg
-        self.enable_engine_pd_disagg = enable_engine_pd_disagg
-        self.enable_engine_semi_pd_disagg = enable_engine_semi_pd_disagg
+        self.enable_bladellm_engine_pd_disagg = enable_bladellm_engine_pd_disagg
+        self.enable_bladellm_engine_semi_pd_disagg = enable_bladellm_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
 
         self.dispatch_policy: DispatchPolicy = DispatchPolicyFactory.get_policy(
@@ -132,8 +132,8 @@ class DispatchScheduler:
         return target_instance_id
 
     # For llumnix-based pd (enable_pd_disagg), the decode instance is not selected in the dispatch scheduler,
-    # but rather based on the pair-migration-policy. For engine-based pd (enable_engine_pd_disagg), the decode
-    # instance is selected in the dispatch scheduler.
+    # but rather based on the pair-migration-policy. For engine-based pd, the decode instance is selected in
+    # the dispatch scheduler.
     # pylint: disable=unused-argument
     def dispatch_pd(self,
                     instance_infos: Dict[str, InstanceInfo],

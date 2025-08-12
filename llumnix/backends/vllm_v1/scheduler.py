@@ -180,6 +180,8 @@ class SchedulerLlumnix(Scheduler):
             instance_info.num_blocks_last_running_request = num_blocks_last_running_request
 
         instance_info.timestamp = time.time()
+        
+        print(f"[zzy][load] scheduler _get_instance_info: {instance_info}")
 
         return instance_info
 

@@ -121,6 +121,7 @@ class PDDConfig:
         self.pd_ratio = pd_ratio
         self.enable_pdd_node_affinity_scheduling = enable_pdd_node_affinity_scheduling
 
+    @property
     def enable_pd(self):
         return self.enable_pd_disagg \
             or self.enable_vllm_v1_engine_pd_disagg \

@@ -794,7 +794,7 @@ class Scaler:
 
     @property
     def enable_pd(self):
-        return self.pdd_config.enable_pd()
+        return self.pdd_config.enable_pd
 
     def _get_next_instance_type(self) -> str:
         if not self.enable_pd:

@@ -313,7 +313,7 @@ def test_migration_scheduler(enable_pd_disagg, enable_bladellm_engine_pd_disagg,
         dispatch_load_metric_config=dispatch_load_metric_config,
         enable_pre_step_migration=False)
     all_instance_infos: Dict[str, InstanceInfo] = {}
-    if not migration_scheduler._enable_pd():
+    if not migration_scheduler.enable_pd:
         for idx in range(INSTANCE_NUM):
             instance_info = InstanceInfo()
             instance_info.instance_type = InstanceType.NEUTRAL
@@ -357,7 +357,7 @@ def test_migration_scheduler(enable_pd_disagg, enable_bladellm_engine_pd_disagg,
         assert len(migration_scheduler.pd_migration_pairs) == 0
         assert len(migration_scheduler.dd_migration_pairs) == 0
 
-    if not migration_scheduler._enable_pd():
+    if not migration_scheduler.enable_pd:
         assert len(migration_scheduler.no_constraints_pairs) > 0
         assert len(migration_scheduler.pd_migration_pairs) == 0
         assert len(migration_scheduler.dd_migration_pairs) == 0
@@ -517,7 +517,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
         dispatch_load_metric_config=dispatch_load_metric_config,
         enable_pre_step_migration=True)
     all_instance_infos: Dict[str, InstanceInfo] = {}
-    if not migration_scheduler._enable_pd():
+    if not migration_scheduler.enable_pd:
         for idx in range(INSTANCE_NUM):
             instance_info = InstanceInfo()
             instance_info.instance_type = InstanceType.NEUTRAL

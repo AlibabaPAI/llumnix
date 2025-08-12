@@ -143,11 +143,6 @@ def check_engine_args(engine_args: "AsyncEngineArgs") -> None:
     detect_unsupported_engine_feature(engine_args)
 
 def check_instance_args(instance_args: InstanceArgs) -> None:
-    # pylint: disable=import-outside-toplevel
-    import vllm.envs as vllm_env
-
-    assert len(vllm_env.VLLM_HOST_IP) == 0, "For Llumnix, please set VLLM_HOST_IP to empty string."
-
     assert not instance_args.request_output_forwarding_mode == RequestOutputForwardingMode.ACTOR, \
         "Llumnix does not support actor request output forwarding mode for vLLM v1 temporalily."
 

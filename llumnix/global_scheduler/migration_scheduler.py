@@ -55,7 +55,8 @@ class MigrationScheduler:
         self._set_migration_filter()
         self._set_migration_policy()
 
-    def _enable_pd(self):
+    @property
+    def enable_pd(self):
         return self.enable_bladellm_engine_pd_disagg \
             or self.enable_bladellm_engine_semi_pd_disagg \
             or self.enable_pd_disagg \
@@ -94,7 +95,7 @@ class MigrationScheduler:
             dst_filter=lambda instance_info: instance_info.is_unit_healthy(),
         )
 
-        if not self._enable_pd():
+        if not self.enable_pd:
             self.unit_failover_pipeline = MigrationFilterPipeline(self.filter_config)
             self.unit_failover_pipeline.add_filter("unit_broken_filter", unit_broken_filter)
         else:
@@ -153,7 +154,7 @@ class MigrationScheduler:
     def _set_migration_filter(self):
         self.load_filter = MigrationFilterFactory.get_filter("load")
 
-        if not self._enable_pd():
+        if not self.enable_pd:
             self.no_constraints_load_balance_filter_pipeline = MigrationFilterPipeline(self.filter_config)
             self.no_constraints_load_balance_filter_pipeline.add_filter(
                 "no_constraints_load_balance_filter", self.load_filter)
@@ -169,7 +170,7 @@ class MigrationScheduler:
             self.p2d_transfer_filter_pipeline.add_filter("pd_instance_filter", self.p_d_filter)
 
         # migration for engine-based pd in BladeLLM is not supported temporarily
-        if self._enable_pd() and not self.enable_bladellm_engine_pd_disagg:
+        if self.enable_pd and not self.enable_bladellm_engine_pd_disagg:
             self.d_d_filter: CustomFilter = MigrationFilterFactory.get_filter("custom")
             self.d_d_filter.set_filter_condtition(
                 src_filter=lambda instance_info: instance_info.instance_type == InstanceType.DECODE,
@@ -207,7 +208,7 @@ class MigrationScheduler:
     ) -> List[Tuple[MigrationType, List[Tuple[str, str]]]]:
         if self.enable_pre_step_migration:
             pre_stop_migration_tasks = []
-            if not self._enable_pd():
+            if not self.enable_pd:
                 pre_stop_migration_tasks.append((
                     MigrationType.PRE_STOP_MIGRATION,
                     self._pair_migration(instance_info, self.unit_failover_pipeline, self.unit_failover_policy)
@@ -233,7 +234,7 @@ class MigrationScheduler:
                 self._pair_migration(instance_info, self.p2d_transfer_filter_pipeline, self.defrag_policy)
             ))
 
-        if not self._enable_pd():
+        if not self.enable_pd:
             routine_migration_tasks.append((
                 MigrationType.NEUTRAL_LOAD_BALANCE,
                 self._pair_migration(instance_info, self.no_constraints_load_balance_filter_pipeline,

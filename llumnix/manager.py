@@ -111,7 +111,7 @@ class Manager:
         self.instance_context: Dict[str, InstanceContext] = {}
         self.polling_interval = manager_args.polling_interval
         global_scheduler_config = manager_args.create_global_scheduler_config()
-        self.global_scheduler = GlobalScheduler(global_scheduler_config)
+        self.global_scheduler = GlobalScheduler(global_scheduler_config, self.backend_type)
 
         # log args
         self.log_instance_info = manager_args.log_instance_info
@@ -173,7 +173,7 @@ class Manager:
             await asyncio.sleep(NO_INSTANCE_RETRY_GENERATE_INTERVAL)
 
         prefill_instance_id, decode_instance_id, request_expected_steps = \
-            self.global_scheduler.dispatch(request_id, dispatch_context=kwargs, backend_type=self.backend_type)
+            self.global_scheduler.dispatch(request_id, dispatch_context=kwargs)
         target_instance_id = choose_destination_instance(prefill_instance_id, decode_instance_id, kwargs)
         request_processing_context.add_trace_timeline('manager_generate_timestamp')
         asyncio.create_task(

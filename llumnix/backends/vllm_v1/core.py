@@ -273,7 +273,6 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         instance_type: InstanceType,
         placement_group: PlacementGroup,
         request_output_queue_type: QueueType,
-        disable_async_output_proc: bool,
         backend_type: BackendType,
         request_output_forwarding_mode: RequestOutputForwardingMode,
         abort_request_callback: Coroutine,
@@ -282,7 +281,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         handshake_address: str,
         executor_class: type[Executor],
         log_stats: bool,
-        utility_output_queue: queue.Queue,
+        utility_output_handler: Coroutine,
         engine_index: int = 0,
         dp_rank: int = 0,
     ) -> None:
@@ -303,12 +302,11 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         )
         self.main_loop = asyncio.get_event_loop()
         self.scheduler.add_update_instance_info_callback(self.update_instance_info_threadsafe)
-        self.disable_async_output_proc = disable_async_output_proc
 
         self.reqeust_processing_context_table: Dict[str, RequestProcessingContext] = {}
 
         # used in UTILITY call
-        self.utility_output_queue: queue.Queue = utility_output_queue
+        self.utility_output_handler = utility_output_handler
 
     # pylint: disable=W0221
     @classmethod
@@ -323,7 +321,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         backend_type: BackendType,
         request_output_forwarding_mode: RequestOutputForwardingMode,
         abort_request_callback: Coroutine,
-        utility_output_queue: queue.Queue,
+        utility_output_handler: Coroutine,
         latency_mem: Optional[LatencyMemData] = None,
     ) -> "EngineCoreProcWrapperLlumnix":
         """Creates an EngineCoreProc from the engine arguments."""
@@ -353,7 +351,6 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
             instance_type=instance_type,
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
-            disable_async_output_proc=engine_args.disable_async_output_proc,
             backend_type=backend_type,
             request_output_forwarding_mode=request_output_forwarding_mode,
             abort_request_callback=abort_request_callback,
@@ -362,7 +359,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
             handshake_address=None, # handshake is removed in llumnix
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
-            utility_output_queue=utility_output_queue
+            utility_output_handler=utility_output_handler
         )
         return engine
 
@@ -433,7 +430,10 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
                 # Not interested in the result
                 return
 
-            self.utility_output_queue.put_nowait(output)
+            asyncio.run_coroutine_threadsafe(
+                self.utility_output_handler(output),
+                self.main_loop
+            )
 
         elif request_type == EngineCoreRequestType.EXECUTOR_FAILED:
             raise RuntimeError("Executor failed.")
@@ -581,7 +581,7 @@ class DPEngineCoreProcWrapperLlumnix(DPEngineCoreProcLlumnix, EngineCoreProcWrap
         backend_type: BackendType,
         request_output_forwarding_mode: RequestOutputForwardingMode,
         abort_request_callback: Coroutine,
-        utility_output_queue: queue.Queue,
+        utility_output_handler: Coroutine,
         latency_mem: Optional[LatencyMemData] = None,
         dp_rank: int = 0,
         dp_rank_local: Optional[int] = None,
@@ -615,7 +615,6 @@ class DPEngineCoreProcWrapperLlumnix(DPEngineCoreProcLlumnix, EngineCoreProcWrap
             instance_type=instance_type,
             placement_group=placement_group,
             request_output_queue_type=request_output_queue_type,
-            disable_async_output_proc=engine_args.disable_async_output_proc,
             backend_type=backend_type,
             request_output_forwarding_mode=request_output_forwarding_mode,
             abort_request_callback=abort_request_callback,
@@ -625,7 +624,7 @@ class DPEngineCoreProcWrapperLlumnix(DPEngineCoreProcLlumnix, EngineCoreProcWrap
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
             dp_rank=dp_rank,
-            utility_output_queue=utility_output_queue,
+            utility_output_handler=utility_output_handler,
         )
         return engine
 
@@ -715,14 +714,8 @@ class BackendVLLMV1(BackendBaseInterface):
         self.migration_config = instance_args.create_migration_config()
         self.enable_vllm_v1_engine_pd_disagg = instance_args.enable_vllm_v1_engine_pd_disagg
 
-        self.utility_output_queue = queue.Queue()
-        self.utility_output_handlers: Dict[int, UtilityOutputHandler] = {}
+        self.utility_output_handlerrs: Dict[int, UtilityOutputHandler] = {}
         self.call_id = 0
-        self.process_utility_output_loop_thread = threading.Thread(
-            target=self._process_utility_output_loop, args=(asyncio.get_event_loop(),),
-            daemon=True, name="process_utility_output_loop_thread"
-        )
-        self.process_utility_output_loop_thread.start()
 
         if engine_args.data_parallel_size > 1:
             self.engine: DPEngineCoreProcWrapperLlumnix = DPEngineCoreProcWrapperLlumnix.from_engine_args(
@@ -737,7 +730,7 @@ class BackendVLLMV1(BackendBaseInterface):
                 abort_request_callback=self.abort_request,
                 dp_rank=dp_rank,
                 dp_rank_local=dp_rank_local,
-                utility_output_queue=self.utility_output_queue,
+                utility_output_handler=self.process_utility_output,
             )
         else:
             self.engine: EngineCoreProcWrapperLlumnix = EngineCoreProcWrapperLlumnix.from_engine_args(
@@ -750,7 +743,7 @@ class BackendVLLMV1(BackendBaseInterface):
                 backend_type=BackendType.VLLM_V1,
                 request_output_forwarding_mode=instance_args.request_output_forwarding_mode,
                 abort_request_callback=self.abort_request,
-                utility_output_queue=self.utility_output_queue,
+                utility_output_handler=self.process_utility_output,
             )
         self.run_busy_loop_thread = threading.Thread(
             target=self.engine.run_busy_loop, args=(), daemon=True, name="run_busy_loop_thread"
@@ -764,26 +757,17 @@ class BackendVLLMV1(BackendBaseInterface):
         self.state = EngineState.INIT
         logger.info("engine {} current state: {}".format(self.instance_id, self.state))
 
-        self._step_done_event_queue = queue.Queue()
-        self._remove_running_request_ret: Dict[str] = {}
-        self.use_ray_spmd_worker = vllm_envs.VLLM_USE_RAY_SPMD_WORKER
+    async def process_utility_output(self, output: UtilityOutput):
+        if output.call_id in self.utility_output_handlerrs:
+            utility_output_handler = self.utility_output_handlerrs[output.call_id]
+            utility_output_handler.result_future.set_result(output.result)
+        else:
+            logger.warning("Utility output handler for call_id {} not found, maybe timeout already.".format(
+                output.call_id))
 
     def _get_next_call_id(self) -> int:
         self.call_id += 1
         return self.call_id
-
-    def _process_utility_output_loop(self, loop: asyncio.AbstractEventLoop):
-        async def process_utility_output(output: UtilityOutput):
-            if output.call_id in self.utility_output_handlers:
-                utility_output_handle = self.utility_output_handlers[output.call_id]
-                utility_output_handle.result_future.set_result(output.result)
-            else:
-                logger.warning("Utility output handler for call_id {} not found, maybe timeout already.".format(
-                    output.call_id))
-
-        while True:
-            output: UtilityOutput = self.utility_output_queue.get()
-            asyncio.run_coroutine_threadsafe(process_utility_output(output), loop)
 
     def _load_and_reconfig_engine_args(self, llumnix_engine_args: LlumnixEngineArgs):
         engine_args: AsyncEngineArgs = llumnix_engine_args.load_engine_args()
@@ -864,29 +848,31 @@ class BackendVLLMV1(BackendBaseInterface):
             kvt_engine_available_port=kvt_engine_available_port,
             engine_host=self.host)
 
-    def untility_call(self, method: str, *args) -> int:
-        call_id = self._get_next_call_id()
-        self.utility_output_handlers[call_id] = UtilityOutputHandler(
-            result_future=asyncio.Future(),
-            method=method,
-            method_args=args,
-        )
+    def utility_call(self, ignore_result: bool, method: str, *args) -> int:
+        call_id = None
+        if not ignore_result:
+            call_id = self._get_next_call_id()
+            self.utility_output_handlerrs[call_id] = UtilityOutputHandler(
+                result_future=asyncio.Future(),
+                method=method,
+                method_args=args,
+            )
         self.engine.utility_call(call_id, method, *args)
         return call_id
 
-    async def wait_untility_call_output(self, call_id: int):
+    async def wait_utility_call_output(self, call_id: int):
         output = None
         try:
             output = await asyncio_wait_for_with_timeout(
-                self.utility_output_handlers[call_id].result_future,
+                self.utility_output_handlerrs[call_id].result_future,
                 timeout=llumnix_envs.UTILITY_CALL_TIMEOUT)
         except asyncio.TimeoutError:
-            logger.error('Timeout waiting for utility call: {}'.format(self.utility_output_handlers[call_id]))
+            logger.error('Timeout waiting for utility call: {}'.format(self.utility_output_handlerrs[call_id]))
         except Exception: # pylint: disable=broad-except
             logger.exception('Failed to waiting for utility output call {}.'.format(
-                self.utility_output_handlers[call_id]))
+                self.utility_output_handlerrs[call_id]))
         finally:
-            self.utility_output_handlers.pop(call_id, None)
+            self.utility_output_handlerrs.pop(call_id, None)
         return output
 
     # pylint: disable=unused-argument
@@ -901,26 +887,26 @@ class BackendVLLMV1(BackendBaseInterface):
 
         self.is_migrating = True
 
-        call_id = self.untility_call('get_migrated_requests', migration_type)
-        migrated_out_requests = await self.wait_untility_call_output(call_id)
+        call_id = self.utility_call(False, 'get_migrated_requests', migration_type)
+        migrated_out_requests = await self.wait_utility_call_output(call_id)
 
         if migrated_out_requests is None or len(migrated_out_requests) == 0:
             self.is_migrating = False
             return []
 
         logger.info("Migrate out {} requests from {} to {}, migration_type: {}.".format(
-            len(migrated_out_requests), self.instance_id, dst_instance_context.local_engine_id,
+            len(migrated_out_requests), self.instance_id, dst_instance_context.instance_id,
             migration_type
         ))
 
         migration_tasks = []
         finish_request_ids = []
 
-        def do_migration_callback(request_id: RequestIDType, fut):
+        def migration_done_callback(request_id: RequestIDType, fut):
             ret = fut.result()[0]
             if isinstance(ret, Exception):
                 log_instance_exception(ret, self.instance_id, "frontend_migration", request_id)
-                self.untility_call('reset_request_migrating_state', request_id)
+                self.utility_call(True, 'reset_request_migrating_state', request_id)
             else:
                 finish_request_ids.append(request_id)
 
@@ -928,7 +914,7 @@ class BackendVLLMV1(BackendBaseInterface):
             target_request: EngineCoreRequest = req2corereq(migrate_out_request)
             migration_task = asyncio.gather(self.migration_frontend.migrate(target_request, dst_instance_context),
                                             return_exceptions=True)
-            migration_task.add_done_callback(partial(do_migration_callback, migrate_out_request.request_id))
+            migration_task.add_done_callback(partial(migration_done_callback, migrate_out_request.request_id))
             migration_tasks.append(migration_task)
 
         await asyncio.gather(*migration_tasks)

@@ -12,7 +12,7 @@
 # limitations under the License.
 
 
-from typing import Dict, List, Optional, Tuple, Union, Iterable, Set
+from typing import Dict, List, Tuple, Union, Iterable, Set
 import math
 
 from llumnix.logging.logger import init_logger
@@ -28,7 +28,12 @@ logger = init_logger(__name__)
 
 
 class GlobalScheduler:
-    def __init__(self, global_scheduler_config: GlobalSchedulerConfig) -> None:
+    def __init__(
+            self,
+            global_scheduler_config: GlobalSchedulerConfig,
+            backend_type: BackendType = None
+        ) -> None:
+        self.backend_type = backend_type
         self.global_scheduler_config = global_scheduler_config
         self.num_instances = 0
 
@@ -85,7 +90,8 @@ class GlobalScheduler:
                 if instance_info.instance_type in (InstanceType.DECODE, InstanceType.NEUTRAL):
                     self.decode_instance_info[instance_info.instance_id] = instance_info
 
-    def _enable_pd(self):
+    @property
+    def enable_pd(self):
         return self.global_scheduler_config.enable_pd_disagg \
             or self.global_scheduler_config.enable_vllm_v1_engine_pd_disagg \
             or self.global_scheduler_config.enable_bladellm_engine_pd_disagg \
@@ -96,7 +102,7 @@ class GlobalScheduler:
                                    prefill_instance_id: str,
                                    decode_instance_id: str,
                                    expected_steps: int):
-        if not self._enable_pd():
+        if not self.enable_pd:
             # when enable_pd_disagg is False, prefill_instance_id and decode_instance_id are the same
             logger.info("dispatch request {} to instance {}.".format(request_id, prefill_instance_id))
         else:
@@ -112,10 +118,9 @@ class GlobalScheduler:
         self,
         request_id: RequestIDType,
         dispatch_context: Dict,
-        backend_type: Optional[BackendType] = None
     ) -> Tuple[str, str, int]:
         # instance_num_requests will be updated inplace in dispatch_scheduler.dispatch
-        if not self._enable_pd():
+        if not self.enable_pd:
             no_constrains_instance_id = self.dispatch_scheduler.dispatch_no_constrains(
                 self.instance_info,
                 self.instance_num_requests,
@@ -210,7 +215,7 @@ class GlobalScheduler:
         self.instance_id_set.add(instance_id)
         self.num_instances = len(self.instance_id_set)
 
-        if self._enable_pd():
+        if self.enable_pd:
             instance_info = self.instance_info[instance_id]
             if instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                 self.prefill_instance_info[instance_id] = instance_info
@@ -225,7 +230,7 @@ class GlobalScheduler:
         if instance_id not in self.instance_info:
             logger.warning("instance {} is not in instance_info".format(instance_id))
         instance_info = self.instance_info.get(instance_id, None)
-        if instance_info and self._enable_pd():
+        if instance_info and self.enable_pd:
             if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                 self.prefill_instance_info.pop(instance_id, 0)
                 self.prefill_instance_num_requests.pop(instance_id, 0)

@@ -166,7 +166,7 @@ class LlumnixEngineArgsFactory:
 
     @property
     def enable_pd(self) -> bool:
-        return self.pdd_config.enable_pd()
+        return self.pdd_config.enable_pd
 
 
 def ensure_args_default_none(args):
@@ -445,6 +445,7 @@ class ManagerArgs:
     def from_llumnix_config(cls, cfg: LlumnixConfig = get_llumnix_config()) -> 'ManagerArgs':
         return from_llumnix_args_config(cls, cfg.MANAGER)
 
+    @property
     def enable_pd(self):
         return self.enable_pd_disagg \
             or self.enable_vllm_v1_engine_pd_disagg \
@@ -467,7 +468,7 @@ class ManagerArgs:
             "and the path of loading registered service is required to be specified when loading registered service from path."
 
         if args.enable_pdd_node_affinity_scheduling:
-            assert args.enable_pd() and launch_mode == LaunchMode.GLOBAL, \
+            assert args.enable_pd and launch_mode == LaunchMode.GLOBAL, \
                 "Prefill-decode disaggregation node affinity scheduling can only be used when enabling prefill-decode disaggregation " \
                 "in global launch mode."
 
@@ -932,7 +933,7 @@ def post_init_llumnix_args(
     InstanceArgs.check_args(instance_args, manager_args, launch_mode, parser)
 
 def load_registered_engine_args(manager_args: ManagerArgs):
-    if not manager_args.enable_pd():
+    if not manager_args.enable_pd:
         instance_type_list = ['neutral']
     else:
         instance_type_list = ['prefill', 'decode']

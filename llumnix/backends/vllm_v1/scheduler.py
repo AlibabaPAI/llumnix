@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Optional, Deque
+from typing import List, Optional
 import time
 from collections import defaultdict
 
@@ -36,17 +36,10 @@ class SchedulerLlumnix(Scheduler):
         actor_name = ray.get_runtime_context().get_actor_name()
         self.instance_id = get_llumnix_actor_id(LlumnixActor.INSTANCE, actor_name)
         self.step_counter = Counter()
-        self.migrating_out_request_last_stage: Dict[str, Request] = {}
 
     def add_update_instance_info_callback(self, update_instance_info_callback):
         self.update_instance_info_callback = update_instance_info_callback
         self.update_instance_info_callback(self._get_instance_info())
-
-    def get_running_queue(self) -> List[Request]:
-        return self.running
-
-    def get_waiting_queue(self) -> Deque[Request]:
-        return self.waiting
 
     def _get_instance_info(self, scheduler_output: Optional[SchedulerOutput] = None) -> InstanceInfo:
         num_total_gpu_blocks = self.cache_config.num_gpu_blocks

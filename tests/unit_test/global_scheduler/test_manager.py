@@ -91,7 +91,7 @@ class MockLlumlet:
                 self.num_requests = len(self.request_id_set)
         return self.num_requests
 
-    def migrate_out(self, dst_instance_actor, dst_instance_id, instance_type, blocking):
+    def migrate_out(self, dst_instance_actor, dst_instance_id, instance_type):
         self.num_migrate_out += 1
         ray.get(dst_instance_actor.migrate_in.remote(self.actor_name))
         time.sleep(0.1)

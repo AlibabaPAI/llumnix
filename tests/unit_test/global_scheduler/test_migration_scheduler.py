@@ -51,7 +51,7 @@ def init_migration_scheduler(
             dispatch_prefill_as_decode_load_metric='adaptive_decode',
             dispatch_decode_as_prefill_load_metric='kv_blocks_ratio',
         ),
-        enable_pre_step_migration=False
+        enable_pre_stop_migration=False
     )
     return migration_scheduler
 
@@ -311,7 +311,7 @@ def test_migration_scheduler(enable_pd_disagg, enable_bladellm_engine_pd_disagg,
         enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
         enable_adaptive_pd=False,
         dispatch_load_metric_config=dispatch_load_metric_config,
-        enable_pre_step_migration=False)
+        enable_pre_stop_migration=False)
     all_instance_infos: Dict[str, InstanceInfo] = {}
     if not migration_scheduler.enable_pd:
         for idx in range(INSTANCE_NUM):
@@ -380,7 +380,7 @@ def test_adaptive_migration_scheduler(enable_pd_disagg, enable_bladellm_engine_s
         enable_bladellm_engine_semi_pd_disagg=enable_bladellm_engine_semi_pd_disagg,
         enable_adaptive_pd=True,
         dispatch_load_metric_config=dispatch_load_metric_config,
-        enable_pre_step_migration=False)
+        enable_pre_stop_migration=False)
     KvBlocksRatioLoad.BUSY_THRESHOLD = 5
     RemainingStepsLoad.BUSY_THRESHOLD = 5
     AdaptiveDecodeBatchLoad.DECODE_COMPUTE_BOUND_BATCH_SIZE = 5
@@ -515,7 +515,7 @@ def test_unit_pre_stop_migration_scheduler(enable_pd_disagg):
         enable_bladellm_engine_semi_pd_disagg=False,
         enable_adaptive_pd=False,
         dispatch_load_metric_config=dispatch_load_metric_config,
-        enable_pre_step_migration=True)
+        enable_pre_stop_migration=True)
     all_instance_infos: Dict[str, InstanceInfo] = {}
     if not migration_scheduler.enable_pd:
         for idx in range(INSTANCE_NUM):

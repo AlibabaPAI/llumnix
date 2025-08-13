@@ -36,7 +36,7 @@ class MigrationScheduler:
                  enable_bladellm_engine_semi_pd_disagg: bool,
                  enable_adaptive_pd: bool,
                  dispatch_load_metric_config: DispatchLoadMetricConfig,
-                 enable_pre_step_migration: bool) -> None:
+                 enable_pre_stop_migration: bool) -> None:
         self.pair_migration_policy = pair_migration_policy
         self.enable_pd_disagg = enable_pd_disagg
         self.enable_vllm_v1_engine_pd_disagg = enable_vllm_v1_engine_pd_disagg
@@ -44,7 +44,7 @@ class MigrationScheduler:
         self.enable_bladellm_engine_semi_pd_disagg = enable_bladellm_engine_semi_pd_disagg
         self.enable_adaptive_pd = enable_adaptive_pd
         self.dispatch_load_metric_config = dispatch_load_metric_config
-        self.enable_pre_step_migration = enable_pre_step_migration
+        self.enable_pre_stop_migration = enable_pre_stop_migration
 
         self.filter_config = MigrationFilterConfig(migrate_out_load_threshold=migrate_out_load_threshold)
         self.migration_base_filter = MigrationFilterPipeline(self.filter_config)
@@ -206,7 +206,7 @@ class MigrationScheduler:
         self,
         instance_info: Dict[str, InstanceInfo]
     ) -> List[Tuple[MigrationType, List[Tuple[str, str]]]]:
-        if self.enable_pre_step_migration:
+        if self.enable_pre_stop_migration:
             pre_stop_migration_tasks = []
             if not self.enable_pd:
                 pre_stop_migration_tasks.append((

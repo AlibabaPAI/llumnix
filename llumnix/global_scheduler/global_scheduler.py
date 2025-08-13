@@ -68,7 +68,7 @@ class GlobalScheduler:
                                                       global_scheduler_config.enable_bladellm_engine_semi_pd_disagg,
                                                       global_scheduler_config.enable_adaptive_pd,
                                                       global_scheduler_config.dispatch_load_metric_config,
-                                                      global_scheduler_config.enable_pre_step_migration)
+                                                      global_scheduler_config.enable_pre_stop_migration)
 
         self.scaling_scheduler = ScalingScheduler(global_scheduler_config.scale_up_threshold,
                                                   global_scheduler_config.scale_down_threshold,

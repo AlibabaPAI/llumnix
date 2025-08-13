@@ -43,7 +43,7 @@ class GlobalSchedulerConfig:
             is_group_kind_migration_backend: bool,
             dispatch_load_metric_config: DispatchLoadMetricConfig,
             cache_meta_client_config_path: str=None,
-            enable_pre_step_migration: bool=False,
+            enable_pre_stop_migration: bool=False,
             ) -> None:
         self.initial_instances = initial_instances
         self.dispatch_policy = dispatch_policy
@@ -67,7 +67,7 @@ class GlobalSchedulerConfig:
         self.dispatch_load_metric_config = dispatch_load_metric_config
         self.cache_meta_client_config_path = cache_meta_client_config_path
 
-        self.enable_pre_step_migration = enable_pre_step_migration
+        self.enable_pre_stop_migration = enable_pre_stop_migration
 
 
 class MigrationConfig:

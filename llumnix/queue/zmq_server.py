@@ -152,7 +152,9 @@ class ZmqServer(QueueServerBase):
             for obj in obj_list:
                 if isinstance(obj, LlumnixRequestOuput):
                     obj.request_processing_context.add_trace_timeline('queue_client_send_timestamp', send_time)
+                    obj.request_processing_context.add_decode_trace_timeline('decode_queue_client_send_timestamp', send_time)
                     obj.request_processing_context.add_trace_timeline('queue_server_receive_timestamp', now_time)
+                    obj.request_processing_context.add_decode_trace_timeline('decode_queue_server_receive_timestamp', now_time)
         if request == RPCUtilityRequest.IS_SERVER_READY:
             return self._is_server_ready(identity)
         if isinstance(request, RPCPutNoWaitQueueRequest):

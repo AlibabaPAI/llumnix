@@ -98,6 +98,11 @@ class BaseOutputForwarder(ABC):
         for req_output in req_outputs:
             # Set the timestamp for each request output.
             req_output.request_processing_context.add_trace_timeline(trace_name)
+            
+    def add_decode_trace_timeline(self, req_outputs: LlumnixRequestOutputsType, trace_name: str):
+        for req_output in req_outputs:
+            # Set the timestamp for each request output.
+            req_output.request_processing_context.add_decode_trace_timeline(trace_name)
 
 
 class ActorOutputForwarder(BaseOutputForwarder):
@@ -124,6 +129,7 @@ class ActorOutputForwarder(BaseOutputForwarder):
         # fake metric, for alignment
         for req_outputs in server_request_outputs.values():
             self.add_trace_timeline(req_outputs, trace_name="engine_thread_put_queue_timestamp")
+            self.add_decode_trace_timeline(req_outputs, trace_name="decode_engine_actor_put_queue_timestamp")
         if self.engine_actor_handle is None:
             # The lifetime of ActorOutputForwarder is the same as the lifetime of the instance actor,
             # so we do not handling exception here.

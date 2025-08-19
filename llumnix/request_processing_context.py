@@ -63,6 +63,11 @@ class RequestProcessingContext():
         if not self.enable_trace:
             return
         self.trace_timeline.set_timestamp(timestamp_attr, timestamp)
+        
+    def add_decode_trace_timeline(self, timestamp_attr: str, timestamp: float = None):
+        if not self.enable_trace:
+            return
+        self.trace_timeline.set_decode_timestamp(timestamp_attr, timestamp)
 
     def get_server_info(self) -> ServerInfo:
         return ServerInfo(

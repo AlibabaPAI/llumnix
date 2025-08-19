@@ -222,10 +222,12 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 self.request_stream_last_completion_tokens[request_id] = get_completion_tokens(last_output)
                 if last_output.finished:
                     logger.info("Client finished request {}.".format(request_id))
+                    
                     request_processing_context = llumnix_request_outputs.request_processing_context_dict[request_id]
                     lantency_dict = request_processing_context.trace_timeline.to_latency_breakdown_dict()
                     print(f"[zzy][trace] lantency of request {request_id}: {lantency_dict}")
                     print(f"[zzy][trace] trace_timeline of request {request_id}: {request_processing_context.trace_timeline}")
+                    
                     self._clear_client_request_states(request_id)
             llumnix_request_outputs.engine_outputs.outputs = outputs
             if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:

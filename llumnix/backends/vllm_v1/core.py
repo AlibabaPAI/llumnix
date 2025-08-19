@@ -299,7 +299,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         self.main_loop = asyncio.get_event_loop()
         self.scheduler.add_update_instance_info_callback(self.update_instance_info_threadsafe)
         self.disable_async_output_proc = disable_async_output_proc
-        self.reqeust_processing_context_table = {}
+        self.reqeust_processing_context_table: Dict[str, RequestProcessingContext] = {}
 
     # pylint: disable=W0221
     @classmethod
@@ -359,29 +359,31 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         self,
         outputs: Dict[int, EngineCoreOutputs]
     ) -> None:
-        # collects engine_core_output from all clients
-        t_queue = time.perf_counter()
-        engine_core_output_all = []
-        for engine_core_outputs in outputs.values():
-            for engine_core_output in engine_core_outputs.outputs:
-                engine_core_output_all.append(engine_core_output)
-
-                current_completion_tokens = engine_core_output.kv_transfer_params.get("num_output_tokens", None)
-                # print(f"[zzy][trace] {engine_core_output.request_id}_{current_completion_tokens} -1 put_to_output_queue {t_queue}")
-
-                if engine_core_output.finished:
-                    logger.info("Engine finished request {}".format(engine_core_output.request_id))
-
-        set_timestamp(engine_core_output_all, 'engine_step_timestamp_begin', self.step_begin_time)
-        set_timestamp(engine_core_output_all, 'engine_step_timestamp_end', self.step_end_time)
-        set_timestamp(engine_core_output_all, 'engine_put_queue_timestamp', time.time())
-
         if outputs:
+            # collects engine_core_output from all clients
+            # engine_core_output_all = []
+            for engine_core_outputs in outputs.values():
+                for engine_core_output in engine_core_outputs.outputs:
+                    # engine_core_output_all.append(engine_core_output)
+
+                    # current_completion_tokens = engine_core_output.kv_transfer_params.get("num_output_tokens", None)
+                    # print(f"[zzy][trace] {engine_core_output.request_id}_{current_completion_tokens} -1 put_to_output_queue {t_queue}")
+                    
+            
+                    
+
+                    if engine_core_output.finished:
+                        logger.info("Engine finished request {}".format(engine_core_output.request_id))
+                        
+
+            # set_timestamp(engine_core_output_all, 'engine_step_timestamp_begin', self.step_begin_time)
+            # set_timestamp(engine_core_output_all, 'engine_step_timestamp_end', self.step_end_time)
+            # set_timestamp(engine_core_output_all, 'engine_put_queue_timestamp', time.time())
             server_request_outputs, server_info_dict = self._gen_server_request_outputs(outputs)
             if server_request_outputs:
                 self.output_forwarder.put_request_outputs_to_server(server_request_outputs, server_info_dict)
 
-        set_timestamp(engine_core_output_all, 'engine_step_postprocess_timestamp_end', time.time())
+        # set_timestamp(engine_core_output_all, 'engine_step_postprocess_timestamp_end', time.time())
 
     def _gen_server_request_outputs(
         self,
@@ -389,6 +391,7 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
     ) -> Tuple[Dict[str, LlumnixRequestOutputs], Dict[str, ServerInfo]]:
         server_request_outputs = {}
         server_info_dict = {}
+        put_queue_time = time.perf_counter()
 
         for _, engine_core_outputs in engine_core_outputs_dict.items():
             request_processing_context_dict: Dict[str, RequestProcessingContext] = {}
@@ -403,6 +406,11 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
                     continue
 
                 new_engine_core_outputs.append(engine_core_output)
+                
+                self.reqeust_processing_context_table[request_id].add_decode_trace_timeline("decode_engine_step_timestamp_begin", self.step_begin_time)
+                self.reqeust_processing_context_table[request_id].add_decode_trace_timeline("decode_engine_step_timestamp_end", self.step_end_time)
+                self.reqeust_processing_context_table[request_id].add_decode_trace_timeline("decode_engine_put_queue_timestamp", put_queue_time)
+                
                 request_processing_context: RequestProcessingContext = self.reqeust_processing_context_table[request_id]
                 request_processing_context_dict[request_id] = request_processing_context
 
@@ -424,9 +432,9 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
     def _process_engine_step(self) -> bool:
         """Overloading super()._process_engine_step() to update instance info and forward outputs."""
         # Step the engine core.
-        self.step_begin_time = time.time()
+        self.step_begin_time = time.perf_counter()
         outputs, model_executed = self.step_fn()
-        self.step_end_time = time.time()
+        self.step_end_time = time.perf_counter()
         # Put EngineCoreOutputs into output_mediator
         debug_tag = uuid.uuid4()
         t0 = time.perf_counter()
@@ -699,8 +707,6 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         *args,
         **kwargs,
     ) -> None:
-        if request_processing_context.enable_trace:
-            request_processing_context.add_trace_timeline('engine_add_request_timestamp')
         self.engine.core_add_request(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
     async def commit_dst_request(self,

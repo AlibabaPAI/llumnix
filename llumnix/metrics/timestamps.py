@@ -13,7 +13,7 @@
 
 import time
 from dataclasses import dataclass
-from typing import Dict, Any, Iterable
+from typing import Dict, Any, Iterable, List
 from llumnix.constants import REQUEST_TIMESTAMPS_ATTR_STR
 from llumnix.logging.logger import init_logger
 
@@ -45,6 +45,11 @@ def get_timestamp(item: Any, timestamp_attr: str):
     return False
 
 @dataclass
+class DecodeTimestamps:
+    
+    
+
+@dataclass
 class RequestTimestamps:
     api_server_generate_timestamp: float = 0.0
     manager_generate_timestamp: float = 0.0
@@ -62,7 +67,17 @@ class RequestTimestamps:
     queue_server_receive_timestamp: float = 0.0
     api_server_get_queue_timestamp: float = 0.0
     api_server_generate_timestamp_end: float = 0.0
-
+    
+    decode_engine_step_timestamp_begin: List[float] = []
+    decode_engine_step_timestamp_end: List[float] = []
+    decode_engine_process_model_outputs_timestamp_begin: List[float] = []
+    decode_engine_process_model_outputs_timestamp_end: List[float] = []
+    decode_engine_put_queue_timestamp: List[float] = []
+    decode_engine_thread_put_queue_timestamp: List[float] = []
+    decode_engine_actor_put_queue_timestamp: List[float] = []
+    decode_queue_client_send_timestamp: List[float] = []
+    decode_queue_server_receive_timestamp: List[float] = []
+    
     def to_latency_breakdown_dict(self) -> Dict[str, float]:
         latency_dict = {
             "across_manager_latency": (self.manager_generate_timestamp - self.api_server_generate_timestamp) * 1000,
@@ -95,3 +110,10 @@ class RequestTimestamps:
         if timestamp is None:
             timestamp = time.perf_counter()
         setattr(self, timestamp_attr, timestamp)
+        
+    def set_decode_timestamp(self, timestamp_attr: str, timestamp: float = None):
+        if not hasattr(self, timestamp_attr):
+            logger.warning("Timestamp attribute {} not found in RequestTimestamps.".format(timestamp_attr))
+        if timestamp is None:
+            timestamp = time.perf_counter()
+        getattr(self, timestamp_attr).append(timestamp)

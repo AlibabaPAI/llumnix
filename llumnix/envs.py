@@ -217,18 +217,32 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     lambda: int(os.getenv("DEEPEP_LL_DISPATCH_USE_NVL")),
     "DG_CACHE_DIR":
     lambda: os.getenv("DG_CACHE_DIR"),
+    "MAX_JOBS":
+    lambda: int(os.getenv("MAX_JOBS")),
+    "NVCC_THREADS":
+    lambda: int(os.getenv("NVCC_THREADS")),
 
     # NCCL and NVSHMEM and CUDA
     "NCCL_CUMEM_ENABLE":
     lambda: int(os.getenv("NCCL_CUMEM_ENABLE")),
     "NCCL_DEBUG":
     lambda: os.getenv("NCCL_DEBUG"),
+    "NCLL_IB_GID_INDEX":
+    lambda: int(os.getenv("NCCL_IB_GID_INDEX")),
+    "NCCL_IB_HCA":
+    lambda: os.getenv("NCCL_IB_HCA"),
     "NCCL_IB_QPS_PER_CONNECTION":
     lambda: int(os.getenv("NCCL_IB_QPS_PER_CONNECTION")),
+    "NCCL_IB_SL":
+    lambda: int(os.getenv("NCCL_IB_SL")),
     "NCCL_IB_TC":
     lambda: int(os.getenv("NCCL_IB_TC")),
+    "NCCL_IB_TIMEOUT":
+    lambda: int(os.getenv("NCCL_IB_TIMEOUT")),
     "NCCL_MIN_NCHANNELS":
     lambda: int(os.getenv("NCCL_MIN_NCHANNELS")),
+    "NCCL_NET_PLUGIN":
+    lambda: os.getenv("NCCL_NET_PLUGIN"),
     "NCCL_NVLS_ENABLE":
     lambda: int(os.getenv("NCCL_NVLS_ENABLE")),
     "NCCL_SOCKET_FAMILY":
@@ -251,6 +265,10 @@ environment_variables: Dict[str, Callable[[], Any]] = {
     # other
     "SHLVL":
     lambda: int(os.getenv("SHLVL")),
+    "LD_LIBRARY_PATH":
+    lambda: os.getenv("LD_LIBRARY_PATH"),
+    "LIBRARY_PATH":
+    lambda: os.getenv("LIBRARY_PATH"),
 
     # torch
     "TORCH_CUDA_ARCH_LIST":

@@ -61,6 +61,8 @@ class Llumlet:
         logger.info("Llumlet(instance_id={}, backend_type={}, instance_type={})".format(
             self.instance_id, llumnix_engine_args.backend_type, self.instance_type))
         
+        print(f"[zzy][debug] env_vars: {dict(os.environ)}")
+
         # for k, v in env_vars.items():
         #     if k in os.environ and os.environ[k] != v:
         #         print(f"[zzy][args] Overwriting environment variable {k} from '{os.environ[k]}' to '{v}'")
@@ -179,7 +181,7 @@ class Llumlet:
     # TODO(KuilongCui): only the metrics-related information needs to be synchronously loaded for the manager
     def get_instance_info(self) -> InstanceInfo:
         instance_info: InstanceInfo = self.backend_engine.get_instance_info()
-        print(f"[zzy][load] llumlet get_instance_info: {instance_info}")
+        # print(f"[zzy][load] llumlet get_instance_info: {instance_info}")
         instance_info.instance_type = self.instance_args.instance_type
         instance_info.unit_status = self.unit_status
         instance_info.unit_id = self.instance_id.split("_")[0]

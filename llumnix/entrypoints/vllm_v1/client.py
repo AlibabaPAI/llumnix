@@ -74,33 +74,44 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
         # pylint: disable=unexpected-keyword-arg
         request_processing_context: RequestProcessingContext = RequestProcessingContext.deepcopy_from_server_info(
             server_info=self.server_info,
-            enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, False),
+            enable_trace=kwargs.get(LLUMNIX_TRACE_REQUEST, True),
         )
+
+        # force generate by instance
+        prefill_instance_id, decode_instance_id = await self._generate_by_instance(
+            request_id,
+            request_processing_context,
+            prompt,
+            sampling_params,
+            *args,
+            **kwargs
+        )
+
         # If manager is unavailable, request will be directly added to the llumlet held by api server.
-        try:
-            prefill_instance_id, decode_instance_id = await self._generate_by_manager(
-                request_id,
-                request_processing_context,
-                prompt,
-                sampling_params,
-                *args,
-                **kwargs
-            )
-            self.manager_available = True
-        # pylint: disable=broad-except
-        except Exception as e:
-            self._handle_generate_by_manager_error(request_id, e)
-            # Do not re-generate the request to avoid duplicate requests.
-            if self.manager_available:
-                self.manager_available = False
-            prefill_instance_id, decode_instance_id = await self._generate_by_instance(
-                request_id,
-                request_processing_context,
-                prompt,
-                sampling_params,
-                *args,
-                **kwargs
-            )
+        # try:
+        #     prefill_instance_id, decode_instance_id = await self._generate_by_manager(
+        #         request_id,
+        #         request_processing_context,
+        #         prompt,
+        #         sampling_params,
+        #         *args,
+        #         **kwargs
+        #     )
+        #     self.manager_available = True
+        # # pylint: disable=broad-except
+        # except Exception as e:
+        #     self._handle_generate_by_manager_error(request_id, e)
+        #     # Do not re-generate the request to avoid duplicate requests.
+        #     if self.manager_available:
+        #         self.manager_available = False
+        #     prefill_instance_id, decode_instance_id = await self._generate_by_instance(
+        #         request_id,
+        #         request_processing_context,
+        #         prompt,
+        #         sampling_params,
+        #         *args,
+        #         **kwargs
+        #     )
         self.request_instances[request_id].append(prefill_instance_id)
         self.instance_requests[prefill_instance_id].add(request_id)
         if decode_instance_id and decode_instance_id == prefill_instance_id:
@@ -191,6 +202,10 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
             outputs: List[EngineCoreOutput] = []
             for engine_core_output in llumnix_request_outputs.engine_outputs.outputs:
                 set_timestamp(engine_core_output, 'api_server_get_queue_timestamp', time.time())
+
+                # current_completion_tokens = engine_core_output.kv_transfer_params.get("num_output_tokens", None)
+                # print(f"[zzy][trace] {engine_core_output.request_id}_{current_completion_tokens} -1 get_from_output_queue {time.perf_counter()}")
+
                 request_id = engine_core_output.request_id
                 # update the lastest instance_id for adapting migration scene
                 if self.request_instances[request_id]:
@@ -207,6 +222,10 @@ class LlumnixClientVLLMV1(LlumnixClient, AsyncMPClient):
                 self.request_stream_last_completion_tokens[request_id] = get_completion_tokens(last_output)
                 if last_output.finished:
                     logger.info("Client finished request {}.".format(request_id))
+                    request_processing_context = llumnix_request_outputs.request_processing_context_dict[request_id]
+                    lantency_dict = request_processing_context.trace_timeline.to_latency_breakdown_dict()
+                    print(f"[zzy][trace] lantency of request {request_id}: {lantency_dict}")
+                    print(f"[zzy][trace] trace_timeline of request {request_id}: {request_processing_context.trace_timeline}")
                     self._clear_client_request_states(request_id)
             llumnix_request_outputs.engine_outputs.outputs = outputs
             if llumnix_request_outputs.engine_outputs.outputs or llumnix_request_outputs.engine_outputs.scheduler_stats:

@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import time
+import uuid
 from typing import List, Optional, Union, Iterable, Deque, Tuple, Dict, Any, Coroutine
 import queue
 import threading
@@ -359,10 +360,15 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         outputs: Dict[int, EngineCoreOutputs]
     ) -> None:
         # collects engine_core_output from all clients
+        t_queue = time.perf_counter()
         engine_core_output_all = []
         for engine_core_outputs in outputs.values():
             for engine_core_output in engine_core_outputs.outputs:
                 engine_core_output_all.append(engine_core_output)
+
+                current_completion_tokens = engine_core_output.kv_transfer_params.get("num_output_tokens", None)
+                # print(f"[zzy][trace] {engine_core_output.request_id}_{current_completion_tokens} -1 put_to_output_queue {t_queue}")
+
                 if engine_core_output.finished:
                     logger.info("Engine finished request {}".format(engine_core_output.request_id))
 
@@ -422,7 +428,12 @@ class EngineCoreProcWrapperLlumnix(EngineCoreProcLlumnix):
         outputs, model_executed = self.step_fn()
         self.step_end_time = time.time()
         # Put EngineCoreOutputs into output_mediator
+        debug_tag = uuid.uuid4()
+        t0 = time.perf_counter()
         self._put_engine_core_outputs(outputs)
+        t1 = time.perf_counter()
+        # print(f"[zzy][trace] {debug_tag} -1 before_put_engine_core_outputs {t0}")
+        # print(f"[zzy][trace] {debug_tag} -1 after_put_engine_core_outputs {t1}")
         return model_executed
 
     def stop(self) -> None:
@@ -688,6 +699,8 @@ class BackendVLLMV1(BackendBaseInterface, BackendMigrationInterface):
         *args,
         **kwargs,
     ) -> None:
+        if request_processing_context.enable_trace:
+            request_processing_context.add_trace_timeline('engine_add_request_timestamp')
         self.engine.core_add_request(request_id, request_processing_context, expected_steps, *args, **kwargs)
 
     async def commit_dst_request(self,

@@ -181,8 +181,6 @@ class SchedulerLlumnix(Scheduler):
 
         instance_info.timestamp = time.time()
         
-        print(f"[zzy][load] scheduler _get_instance_info: {instance_info}")
-
         return instance_info
 
     def schedule(self) -> SchedulerOutput:

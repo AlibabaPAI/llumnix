@@ -78,7 +78,6 @@ class GlobalScheduler:
                 labels={"instance_id": instance_info.instance_id},
             )
             if instance_info.instance_id in self.instance_id_set:
-                print(f"[zzy][load] updating instance_info: {instance_info}")
                 self.instance_info[instance_info.instance_id] = instance_info
                 if instance_info.instance_type in (InstanceType.PREFILL, InstanceType.NEUTRAL):
                     self.prefill_instance_info[instance_info.instance_id] = instance_info
